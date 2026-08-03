@@ -58,6 +58,11 @@ export interface PreviewCardProps {
    *  `ownershipNote` when not. ⚠ Never a count for an anonymous rider — a fresh account's grant does
    *  not exist until after signup, so any number here would be a guess printed as a fact. */
   disclosure?: string
+  /** One in-persona line when the drive drifted materially from the duration the rider asked for, or
+   *  omitted when it didn't. Chosen by the SCREEN for the same reason `disclosure` is: the rider's
+   *  stated target rides on the PlannedRoute and is dropped before `/propose`, so this card never
+   *  sees it. `durationDrift` (src/lib/planner-route.ts) is the rule. */
+  durationNote?: string
   /** Step 8a's slot: the one presigned preview clip from the rider's own route. Renders NOTHING when
    *  omitted, and nothing in step 7 may occupy this space — 8a drops a transport in here without
    *  touching any other state of this card. */
@@ -76,6 +81,7 @@ export function PreviewCard({
   proposal,
   mapEnabled = true,
   disclosure,
+  durationNote,
   previewClip,
   errorMessage,
   ctaLabel,
@@ -91,32 +97,39 @@ export function PreviewCard({
   // puck is hidden outright (below).
   const mapProgress = useAnimatedValue(0)
 
-  // A loop echoes back `via` (end === start) — mark the start + each midpoint instead of start→end.
+  // The pins: start, every via midpoint, and — unless this is a loop — the end.
+  //
+  // ⚠ A LOOP IS `startId === endId`, NOT "it has a via". A loop echoes its start back as the end, so
+  // pinning both would stack two markers on one spot; its turnaround is the LAST via. But keying that
+  // on `via.length` (as this did until 2026-08-03) silently dropped the DESTINATION pin from every
+  // ONE-WAY route that happened to carry a midpoint — "Emerald Bay to Incline Village, via Tahoe
+  // City" would have drawn a route to a place with no marker on it. The ids are the honest test and
+  // the DTO carries them for exactly this kind of question.
   const endpoints = useMemo<DriveMapStop[]>(() => {
     if (!proposal) return []
     const viaShown = proposal.viaResolved ?? []
-    const start: DriveMapStop = {
-      seq: 0,
-      name: cleanPlaceName(proposal.start.name),
-      lat: proposal.start.lat,
-      lng: proposal.start.lng,
-      state: 'upcoming',
-    }
-    if (proposal.via && proposal.via.length)
-      return [
-        start,
-        ...viaShown.map((v, i) => ({
-          seq: i + 1,
-          name: cleanPlaceName(v.name),
-          lat: v.lat,
-          lng: v.lng,
-          state: 'active' as const,
-        })),
-      ]
-    return [
-      start,
+    const isLoop = proposal.startId === proposal.endId
+    const pins: DriveMapStop[] = [
       {
-        seq: 1,
+        seq: 0,
+        name: cleanPlaceName(proposal.start.name),
+        lat: proposal.start.lat,
+        lng: proposal.start.lng,
+        state: 'upcoming',
+      },
+      ...viaShown.map((v, i) => ({
+        seq: i + 1,
+        name: cleanPlaceName(v.name),
+        lat: v.lat,
+        lng: v.lng,
+        state: 'active' as const,
+      })),
+    ]
+    if (isLoop) return pins
+    return [
+      ...pins,
+      {
+        seq: viaShown.length + 1,
         name: cleanPlaceName(proposal.end.name),
         lat: proposal.end.lat,
         lng: proposal.end.lng,
@@ -249,6 +262,16 @@ export function PreviewCard({
         ) : null}
       </View>
 
+      {/* The skipper owning up when the drive doesn't match the duration the rider named. Sits UNDER
+          the badge it is reconciling, so the number and the acknowledgement are read together. The
+          screen decides whether there is anything to say (it holds the rider's ask; this card only
+          ever sees the materialized proposal). `inkDim` — it is an aside, not a warning. */}
+      {durationNote ? (
+        <Text variant="dim" color="inkDim" style={styles.durationNote}>
+          {durationNote}
+        </Text>
+      ) : null}
+
       {/* Step 8a's slot — see `previewClip`. Empty in step 7, and the dividers only exist when it does. */}
       {previewClip ? (
         <>
@@ -306,5 +329,6 @@ const styles = StyleSheet.create({
   routeLine: { gap: space.xs },
   arrowRow: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   statRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  durationNote: { marginTop: space.sm },
   ctaGroup: { gap: space.sm },
 })

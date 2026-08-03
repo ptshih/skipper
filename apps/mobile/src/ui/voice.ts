@@ -1,6 +1,28 @@
 // The skipper's voice, in the UI. Microcopy is brand-critical here — the persona
 // is the product, so loading/empty/error/CTA strings stay in character. Keep them
 // warm, corny, and SHORT (glanceable). Facts never live here; this is delivery.
+
+const SPELLED = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'] as const
+
+/**
+ * A duration the way the skipper would SAY it, not the way a form would print it.
+ *
+ * ⚠ This exists because the first cut read "You said about 120 minutes" back to a rider who had said
+ * "about two hours" — technically the same number and completely out of character. The rider's stated
+ * duration is always a ROUND, casual figure ("a couple of hours"), so echoing it in raw minutes is the
+ * one place this card can sound like a receipt. Only the ASK goes through here; the materialized
+ * duration stays in exact minutes, because that one is a measurement and precision is the point.
+ */
+export function spokenDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes} minutes`
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  const hours = h === 1 ? 'an hour' : `${SPELLED[h] ?? h} hours`
+  if (m === 0) return hours
+  if (m === 30) return h === 1 ? 'an hour and a half' : `${SPELLED[h] ?? h} and a half hours`
+  return `${hours} ${m} minutes`
+}
+
 export const voice = {
   loading: {
     drives: 'Charting the good roads…',
@@ -119,6 +141,16 @@ export const voice = {
     // Fallback ONLY. The server's own 403 names the limit and the way past it; show that when it comes.
     capReached: 'That’s the last of your free drives, friend.',
     openMade: 'Open the drive',
+    // The skipper owning up when the drive doesn't match the time the rider named. ⚠ IN PERSONA and
+    // never an error: the route is perfectly good and they may well still want it. It exists because
+    // the alternative is worse — he agrees to "about two hours" in the transcript and the card prints
+    // 54 MIN right above the CTA, which reads as him not listening. Naming it costs one line and
+    // turns a contradiction into candour. ⚠ Says nothing about WHY (that would be a place fact, D9)
+    // and offers no fix — "Change it up" is already the affordance directly below.
+    durationShort: (asked: number, actual: number) =>
+      `You said about ${spokenDuration(asked)} — this one runs closer to ${actual} minutes. Still worth the trip.`,
+    durationLong: (asked: number, actual: number) =>
+      `You said about ${spokenDuration(asked)} — this one runs closer to ${actual} minutes. Longer road than you asked for.`,
     // ONE real clip from the rider's OWN route, before the wall (D14/INV-5). ⚠ The whole charm of it
     // is that it is not a generic sample — it is the first thing they will actually hear on this drive
     // — so the copy has to say "yours" without naming the place (that is a FACT, served by the API).

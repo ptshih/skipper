@@ -17,6 +17,18 @@ import { baseMapProps, puckStyles, RecenterChip, toLatLng } from './mapChrome'
 import { border, radius, space } from '../theme/tokens'
 import { useReducedMotion, useTheme } from '../theme'
 
+// THE UNTRAVELED LINE ON A STATIC OVERVIEW (`hidePuck`) IS DRAWN HEAVIER THAN IN A LIVE DRIVE, and
+// the reason is that it is doing a different job. In the drive it is a BACKDROP — the traveled pine
+// grows over it and the puck says where you are, so a sparse 2-on-10 dash reads as "road ahead"
+// without competing. On the proposal card and the detail preview there is no puck and no traveled
+// overlay, so this line IS the route: at card size (a whole lake in ~375×200pt) a 2-on-10 dash is
+// ~17% ink and reads as an EMPTY map. Observed on device 2026-08-03 — the route was mistaken for
+// missing entirely, which is the strongest possible evidence it was too faint.
+// Still dashed, not solid: the dashed track is the design language (RouteTrack uses it too). Denser
+// and thicker, not a different mark.
+const STATIC_ROUTE_DASH = [6, 6]
+const STATIC_ROUTE_W = 5
+
 /** A map stop = a place to pin, with its current drive state (mirrors the StopList rows). */
 export interface DriveMapStop {
   seq: number
@@ -217,6 +229,14 @@ function DriveMapBase({
         style={styles.fill}
         initialRegion={routeRegion}
         onPanDrag={() => following && setFollowing(false)}
+        // ⚠ LABELLED BECAUSE THE NATIVE VIEW NAMES ITSELF BADLY. Observed on device 2026-08-03: the
+        // Google Maps iOS view surfaces to VoiceOver as a **slider with no label** — the single
+        // largest element on the proposal card announced as an unnamed control. A label is the whole
+        // fix; the role is the vendor's and not worth fighting.
+        // ⚠ Deliberately NOT `accessible` — setting that collapses the subtree into ONE element and
+        // would swallow the stop markers, which are already exposed individually with real place
+        // names (and are the only way a VoiceOver rider can enumerate the route at all).
+        accessibilityLabel="Map of the route, with a marker for each stop"
       >
         {/* Untraveled base: the FULL route, dashed tan — static (identity stable), so it isn't
             re-serialized to native each tick; the traveled pine grows over it. NOTE: lineDashPattern
@@ -226,8 +246,8 @@ function DriveMapBase({
           <Polyline
             coordinates={latlngs}
             strokeColor={colors.trackInactive}
-            strokeWidth={4}
-            lineDashPattern={[2, 10]}
+            strokeWidth={hidePuck ? STATIC_ROUTE_W : 4}
+            lineDashPattern={hidePuck ? STATIC_ROUTE_DASH : [2, 10]}
           />
         ) : null}
         {traveled.length > 1 ? (

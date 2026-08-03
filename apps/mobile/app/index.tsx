@@ -43,7 +43,7 @@ import { listDownloadedDrives } from '@/lib/offline'
 import { cleanPlaceName } from '@/lib/labels'
 import { isPlanAborted, planTurn } from '@/lib/planner'
 import { buildExampleAsks, type ExampleAsk } from '@/lib/planner-examples'
-import { toCreateRequest, toProposeRequest } from '@/lib/planner-route'
+import { durationDrift, toCreateRequest, toProposeRequest } from '@/lib/planner-route'
 import {
   appendRider,
   appendSkipper,
@@ -832,6 +832,18 @@ export default function HomeScreen() {
     )
   }
 
+  /** The skipper's line when the drawn drive doesn't match the duration the rider named, or undefined
+   *  when it does (or when they never named one, which is the common case). The RULE is pure and
+   *  tested — `durationDrift` in @/lib/planner-route; this only picks the words. */
+  const durationNoteFor = (c: PreviewItem): string | undefined => {
+    if (!c.proposal) return undefined
+    const drift = durationDrift(c.route.targetMinutes, c.proposal.durationSeconds)
+    if (!drift) return undefined
+    return drift.direction === 'short'
+      ? voice.proposal.durationShort(drift.askedMinutes, drift.actualMinutes)
+      : voice.proposal.durationLong(drift.askedMinutes, drift.actualMinutes)
+  }
+
   const renderCard = (c: PreviewItem, newest: boolean): ReactNode => (
     <PreviewCard
       key={c.id}
@@ -840,6 +852,10 @@ export default function HomeScreen() {
       // Only the newest card instantiates a native MapView — and wears the one amber glow.
       mapEnabled={newest}
       disclosure={signedIn ? voice.proposal.costNote : voice.proposal.ownershipNote}
+      // ⚠ Computed HERE because this screen is the only place both halves exist: the rider's stated
+      // target rides on `c.route` (the PlannedRoute) and is dropped before `/propose`, so `c.proposal`
+      // — all the card ever sees — cannot know what was asked for.
+      durationNote={durationNoteFor(c)}
       previewClip={renderClipRow(c)}
       errorMessage={c.errorMessage}
       ctaLabel={voice.proposal.cta}

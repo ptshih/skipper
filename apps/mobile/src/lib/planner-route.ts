@@ -50,3 +50,61 @@ export const toCreateRequest = (
   ...(p.via?.length ? { via: p.via } : {}),
   idempotencyKey,
 })
+
+/* -------------------------------------------------------------------------- */
+/*  Reconciling the rider's stated duration with the route Google returned      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How far the drive may drift from the duration the rider asked for before the card mentions it.
+ *
+ * BOTH conditions must hold. The RATIO alone nags on short asks (a 20-minute ask answered by a
+ * 26-minute route is a fine answer); the ABSOLUTE alone nags on long ones (15 minutes off a
+ * four-hour ask is nothing). Together they fire only when a rider would actually feel misled.
+ */
+const DRIFT_RATIO = 0.25
+const DRIFT_MIN_MINUTES = 15
+
+export interface DurationDrift {
+  askedMinutes: number
+  actualMinutes: number
+  /** `short` = the drive is briefer than they asked for; `long` = it runs over. */
+  direction: 'short' | 'long'
+}
+
+/**
+ * Did the materialized route come back materially different from what the rider asked for?
+ *
+ * ⚠ WHY THIS EXISTS AT ALL — nothing downstream compares these two numbers. `targetMinutes` is
+ * dropped on the way to `/propose` (see `toProposeRequest` above): it steers which ENDPOINTS the
+ * model picks and has no other effect, and Google decides the real duration from the route it
+ * materializes. That is a sound design, but it leaves a gap the rider sees: when a rider names both
+ * the endpoints AND a duration that cannot both be true — "Emerald Bay to Incline Village" and "about
+ * two hours" — the skipper agrees to both in prose and the card then prints 54 MIN directly above the
+ * CTA. Observed on device 2026-08-03. Nothing was wrong with the number; what was missing was anyone
+ * noticing the promise.
+ *
+ * Returns null when there is nothing to say: no stated target (the rider never named one — the
+ * common case), or a drive close enough to the ask that mentioning it would be noise.
+ *
+ * ⚠ Deliberately ADVISORY and never a block. The drive is legitimate and the rider may well want it;
+ * this only stops the screen from silently contradicting the conversation.
+ */
+export function durationDrift(
+  targetMinutes: number | null | undefined,
+  durationSeconds: number,
+): DurationDrift | null {
+  if (targetMinutes == null || !Number.isFinite(targetMinutes) || targetMinutes <= 0) return null
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return null
+
+  const actualMinutes = Math.round(durationSeconds / 60)
+  const deltaMinutes = Math.abs(actualMinutes - targetMinutes)
+  if (deltaMinutes < DRIFT_MIN_MINUTES) return null
+  if (deltaMinutes / targetMinutes < DRIFT_RATIO) return null
+
+  return {
+    askedMinutes: targetMinutes,
+    actualMinutes,
+    direction: actualMinutes < targetMinutes ? 'short' : 'long',
+  }
+}

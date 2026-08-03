@@ -39,7 +39,17 @@ export function TurnBubble({ role, text, streaming, announceOnSettle }: TurnBubb
   // The settle transition: a turn that was asked to announce and is no longer streaming. A turn
   // seeded already-complete (the cold open, an example reply) settles on its first render, which
   // is correct — it appeared, so it should be spoken.
-  const settled = role === 'skipper' && !!announceOnSettle && !streaming
+  // ⚠ AN EMPTY TURN RENDERS NOTHING, and empty is a NORMAL outcome rather than an error: the
+  // planner's route turn is TOOL USE, so the model may legitimately return a `PlannedRoute` with no
+  // prose at all. Rendered anyway, a skipper turn with no text left an orphaned 2pt pine rule
+  // floating above the route card — and, because the row is `accessible`, an interactive element
+  // with NO accessible name, which VoiceOver announces as a nameless button. Observed on device
+  // 2026-08-03: every drawn route produced one.
+  const isEmpty = text.trim().length === 0
+
+  // `isEmpty` also gates the ANNOUNCE — a settled-but-empty turn would otherwise push an empty
+  // string to VoiceOver, which reads as a stutter with nothing said.
+  const settled = role === 'skipper' && !!announceOnSettle && !streaming && !isEmpty
   const announcedRef = useRef(false)
 
   useEffect(() => {
@@ -57,6 +67,10 @@ export function TurnBubble({ role, text, streaming, announceOnSettle }: TurnBubb
   // screen asked to announce; a polite region on every historical bubble would re-speak the whole
   // transcript on a re-render. The rider's own bubble never announces: they just typed it.
   const liveRegion = settled ? 'polite' : 'none'
+
+  // AFTER the hooks, never before — an early return above them would change the hook order between
+  // renders as a streaming turn goes from empty to its first sentence.
+  if (isEmpty) return null
 
   if (role === 'rider') {
     return (
