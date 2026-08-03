@@ -415,6 +415,31 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
               {dropped > 0 && ` ${dropped} couldn’t be pinned in-region (skipped).`}
               {errored > 0 && ` ${errored} errored.`}
             </Callout>
+            {/* ⚠ NAME the ones that did not land. The server has always returned a per-draft `results`
+                row for every skip and error, and this panel used to render only the counts — so an
+                operator was told "7 couldn't be pinned" with no way to learn WHICH 7 or why, on the
+                paid step that seeds the planner's allowlist. The counts are the summary; these are the
+                evidence. A skip is nearly always the Details-coords guard (Autocomplete only BIASES
+                toward the bbox, so a place resolves and is then rejected for landing outside it),
+                which is exactly the feedback that tells you the drafting prompt is reaching past the
+                box. */}
+            {results.filter((r) => r.status !== 'resolved').length > 0 && (
+              <div className="space-y-0.5 rounded-lg border p-1.5">
+                {results
+                  .filter((r) => r.status !== 'resolved')
+                  .map((r, i) => (
+                    <div key={i} className="flex items-start gap-2 px-2 py-1 text-xs">
+                      <Badge variant={r.status === 'error' ? 'destructive' : 'secondary'} className="shrink-0">
+                        {r.status === 'error' ? 'error' : 'skipped'}
+                      </Badge>
+                      <span className="text-foreground">{r.name}</span>
+                      <span className="text-muted-foreground">
+                        {r.message ?? 'no in-region match — Google pinned it outside the bbox, or not at all'}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            )}
             <Button variant="outline" size="sm" onClick={reset}>
               <Sparkles className="h-4 w-4" /> Curate again
             </Button>

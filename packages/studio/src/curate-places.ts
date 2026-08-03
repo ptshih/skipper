@@ -151,6 +151,16 @@ const DRAFT_TOOL: Anthropic.Tool = {
  * nobody could route to. The name is prose and is routinely NARROWER than the geometry; a region IS a
  * bbox (geometry-first regions), so the bounds do the scoping and the name is demoted to flavour.
  *
+ * ⚠ THE NAME ANCHORS HARDER THAN IT LOOKS — MEASURED, not theorised. The first bbox-scoped run
+ * (2026-08-03, target 100 → 103 drafted, 93 written) reached NORTH into the Donner corridor (Truckee,
+ * Donner Lake, Soda Springs, Norden, Sugar Bowl) but NOT EAST: no survivor landed past lng -119.90,
+ * so Reno (-119.81), Carson City (-119.77) and Virginia City (-119.65) were all still missed — the
+ * exact towns holding the orphaned fused tellings. Stating the bounds was not enough while the opening
+ * line still read "a driving audio tour of ${regionName}": Truckee reads as Tahoe, Reno reads as
+ * somewhere else. Hence the current shape — the region name is NEVER the subject of the tour, it
+ * appears once, explicitly labelled a NICKNAME, after the box has already been given as the area.
+ * If you reintroduce the name as the tour's subject, expect the east side to empty out again.
+ *
  * ⚠ The "never a latitude or longitude" clause is load-bearing now that coordinates appear in this
  * prompt at all. The model's job is still to NAME places; `resolveCuratedPlace` is what turns a name
  * into a canonical pin, and a drafted coordinate would route around that resolve entirely.
@@ -161,9 +171,17 @@ const DRAFT_TOOL: Anthropic.Tool = {
  * into the mobile bundle and this is operator-only prose.
  */
 function draftSystem(regionName: string, bbox: RegionBbox, targetN: number): string {
-  return `You are curating the set of real-world PLACES a rider can pick to start, end, or break a self-guided driving audio tour of ${regionName}, narrated by a charming Jungle-Cruise-style skipper.
+  return `You are curating the set of real-world PLACES a rider can pick to start, end, or break a self-guided driving audio tour, narrated by a charming Jungle-Cruise-style skipper.
 
-Optimize for CHARM: every place must be intentional, recognizable, and a real place a visitor would actually name — never a gazetteer of everything with a signpost. Length is not the virtue here; being real and recognizable is. Spread the set across the WHOLE box rather than clustering it in one corner. But never pad to reach the number: if the box honestly holds fewer good ones, return fewer.
+== The area you are curating ==
+
+The tour area is a BOX on the map: southwest corner ${bbox.swLat}, ${bbox.swLng} to northeast corner ${bbox.neLat}, ${bbox.neLng} (decimal degrees). The box is the area — all of it, and nothing beyond it.
+
+Riders call this area "${regionName}". That is a NICKNAME, not a boundary. A box this size routinely covers ground nobody would file under that name: a neighboring city, the next valley over, a mountain pass, another state line. Those places are in scope exactly as much as the ones the nickname obviously covers, and they are the ones most often left out. Work the WHOLE box, corner to corner — if your list only contains what the nickname brings to mind, you have missed most of the area.
+
+A place just OUTSIDE the box is the one thing that cannot be used at all, so never spend a slot on one.
+
+== What to draft ==
 
 Draft roughly ${targetN} places:
 - ENDPOINT hubs (most of the list): towns and villages, marinas and boat launches, famous scenic lookouts and state-park gateways, major trailheads — the kind of place someone says "let's drive from ___ to ___".
@@ -171,7 +189,7 @@ Draft roughly ${targetN} places:
 - Mark role="both" for a hub that is also a natural pitstop.
 - Mark featured=true for ONLY the few most iconic, popular start points (think 4–8).
 
-Stay inside this region's BOUNDS — southwest corner ${bbox.swLat}, ${bbox.swLng} to northeast corner ${bbox.neLat}, ${bbox.neLng} (decimal degrees). The BOUNDS are the region. "${regionName}" is only what riders call this area, and that name is usually narrower than the box: include every recognizable town, hub and lookout inside those corners, including ones a visitor would file under a neighboring name. If it is in the box, it is in scope.
+Optimize for CHARM: every place must be intentional, recognizable, and a real place a visitor would actually name — never a gazetteer of everything with a signpost. Length is not the virtue here; being real and recognizable is. But never pad to reach the number: if the box honestly holds fewer good ones, return fewer.
 
 For each place give a precise Google Places \`query\` that uniquely identifies it (add the town/state when the name alone is ambiguous), so it resolves to the right pin. Do NOT invent coordinates — name the place, never a latitude or longitude; resolution happens separately.`
 }

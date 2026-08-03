@@ -22,6 +22,15 @@
 > together. ⚠ The "every one Tahoe-basin" measurement above is HISTORY on both counts — the rule changed,
 > and a `Truckee` endpoint was added by hand on 2026-08-03. Trust the DB for live counts, never this line.
 >
+> ⚠ **FIRST BBOX-SCOPED RUN, MEASURED (2026-08-03): it fixed the NORTH and missed the EAST.** Target 100
+> → 103 drafted → 96 resolved → **93 written**; 7 unpinnable (Autocomplete only BIASES to the bbox, so
+> the Details-coords guard drops what lands outside). It reached the Donner corridor — Truckee, Donner
+> Lake, Soda Springs, Norden, Sugar Bowl — but **no survivor landed east of lng −119.90**, so Reno,
+> Carson City and Virginia City were still missed: the very towns holding the orphaned tellings.
+> Cause: stating the bounds was not enough while the prompt still opened "a driving audio tour of
+> `<display_name>`" — Truckee reads as Tahoe, Reno reads as somewhere else. The prompt was restructured
+> so the BOX is given first as the area and the name appears once, explicitly labelled a NICKNAME.
+> ⚠ **That second pass is UNMEASURED** — it needs another paid draft to confirm the east side fills in.
 > ⚠ **The draft COUNT was picker-era sizing too, and moved 30 → 100 (2026-08-03).** §Rationale below
 > argues curated-over-autocomplete partly on "a short curated list is mostly *tapping*" and "curating
 > ~30 places is trivial" — the CONCLUSION still holds, but that premise is gone: the tap-to-pick form
