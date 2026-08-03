@@ -173,6 +173,53 @@ instructive way.
 publicly fetchable and was read from a founder-supplied screenshot. Navan likewise from a screenshot.
 Treat both as observed, not documented.
 
+### Widening the scope beyond travel (founder ask, 2026-08-03)
+
+The sharpest source in the whole pass argues that the pattern Skipper half-adopted **is itself a
+design failure**, and its top recommendation is something Skipper already owns and has buried.
+
+- ⚠ **"A prompt box violates recognition by definition. The user is asked to recall what the product
+  can do, in their own words, before they have seen what the product can do."** And on the convention
+  as a whole: *"We called this minimalism. It isn't minimalism. It is the absence of design."*
+  Leviim's alternatives in his own order: **worked examples** (show an actual answer, don't ask for a
+  question) · **starting verbs** ("Create your first issue", not "Ask me anything") · **exposed
+  limits** (name what it cannot do) · **action before speech**. He holds up Notion and Linear —
+  2019-era products — as better designed than every 2023+ AI app.
+- ★ **THIS INVERTS NOTE 3, and resolves it better than demoting does.** Recommendation #1 is a WORKED
+  EXAMPLE, and **Skipper owns the perfect one while ranking it below three pills as a ghost text
+  link**: `GET /sample`, one curated Tahoe clip, permission-free, one tap — the product's actual
+  output. **For an audio product whose entire value is a voice, an empty state that asks you to type
+  is backwards.** The fix for "too prominent" is therefore NOT to shrink it: it is to stop it being a
+  fourth *text CTA* and make it the one piece of real *content* — a small playable card. Different
+  object class, so it stops competing; and the rider hears the skipper before being asked to talk to
+  him. This is the most on-doctrine idea in the pass ("the persona is the product").
+- **Exposed limits, in persona.** Riders WILL hit the Tahoe-only corpus. Today it surfaces as "Not
+  near Tahoe? Hear a quick sample" — a fallback offered before the boundary has been named. Naming it
+  is warmer and more honest: *"I only know the roads around Lake Tahoe so far."* It also sets the
+  sample up naturally instead of making it an apology.
+- **Starting verbs sharpen option H.** Linear's "Create your first issue" and Navan's "Plan & book a
+  trip" are VERBS; Skipper's asks are sentences. H's short titles should be verb-shaped ("Drive
+  somewhere", "Take a loop", "Let me pick") with the literal utterance as the subtitle.
+- **Notion gave its assistant a character deliberately** — it hired an animation studio to turn its AI
+  "from a static drawing into a fluid, dynamic character". The best non-travel precedent for a product
+  whose doctrine is *the persona is the product*; and Skipper's character is AUDIBLE, a stronger asset
+  than Notion's.
+- ★ **VOICE INPUT is the one real capability gap.** 2026 voice-first guidance is a persistent mic in
+  the PRIMARY action bar, not a buried icon; Mindtrip's composer carries a waveform beside send.
+  Skipper's composer is **typing-only** — in a car, for a persona you talk to, where `Composer.tsx`
+  says it is "sized for a thumb in a parked car" and DESIGN §8 is *big thumbs, gloves, potholes*.
+  ⚠ **Out of scope for a declutter pass** (a new capability needing a real evaluation of on-device iOS
+  speech recognition), but recorded so it is not lost — it is the highest-value thing the widened
+  research surfaced.
+
+⚠ **Sourcing honesty on the one number here.** Leviim's "~70% of installs never return for a second
+session, with the empty state the single biggest reason" is **self-reported data from his own Chrome
+extension**, not industry research, and the causal attribution is his inference. Good argument, not
+evidence. I also went looking for real click-through rates on suggested prompts and **found none** —
+the analytics literature confirms such taps are tracked but publishes no rates. So **"do riders
+actually tap the asks?" is an open question PostHog could answer**, not something the research
+settles.
+
 ## 6. Nine options
 
 Founder asked for a wider set (2026-08-03). They separate on **two axes**, and everything else is a
@@ -205,6 +252,12 @@ colour decision (I keeps the cold open glow-free, so the amber invariant is neve
 poster survives as a sunburst watermark. **E remains available as a cheap add-on** if the founder
 wants the full poster on the very first launch for App Review's benefit.
 
+⚠ **Amended after the non-travel research: add the WORKED EXAMPLE.** Promote `GET /sample` from a
+ghost text link to a small playable card — the one piece of real content on the cold open. It answers
+note 3 better than demoting does (different object class, so it stops competing as a fourth text CTA)
+and it is the only way a newcomer experiences the product without first inventing a prompt. For an
+audio product, letting them hear the skipper should outrank asking them to type at him.
+
 ### ⚠ Option B moves the one amber, and that is an invariant, not a style
 
 `index.tsx`'s hero comment records that `RouteTrack glow` is the screen's ONE amber (DESIGN §8) and
@@ -236,19 +289,32 @@ layout problem.
   riders to `listDownloadedDrives()` — from disk. A rider who signed in, downloaded drives and later
   signed out still has content there, deliberately, as the offline-first fallback. The rule must key
   on **`drives.length === 0 && !signedIn`**, never on `!signedIn` alone.
-- ✅ **The code already contains the answer.** `index.tsx` implements a documented OFFLINE INVERSION —
-  when the network is dead MY DRIVES goes FIRST, because out there it "is not the archive, it is the
-  product — the only thing on the phone that still works". Generalise that from connectivity to
-  STATE:
-  - **anonymous or empty** → the section is absent entirely;
-  - **has drives** → MY DRIVES **first**, the planner below (a returning rider's likelier intent is
-    *resume*);
-  - **offline** → exactly today's behaviour, which is already correct.
-- ⚠ **Why NOT a tab or a header icon, despite both reference apps doing that.** Navan hides its second
-  section behind "Home | Loyalty", Mindtrip behind a 5-tab bar — but **their second section is loyalty
-  and search; ours is the thing the rider is about to do in a car.** Resuming a saved drive is the
-  in-car action, and an extra hop costs most at the exact moment the rider is holding a phone in a
-  mount (DESIGN §8). Reordering by state buys the decluttering without paying that.
+### ✅ DECIDED (founder, 2026-08-03): move it off home onto its own signed-in-only screen
+
+I had argued instead for reordering it in place (the in-car "resume" case costs an extra hop). That
+is settled — the founder biases to the move. What the move actually needs:
+
+- ✅ **The entry point already exists and is empty.**
+  `headerLeft: () => (signedIn ? undefined : signInButton)` — the header-left slot is **already
+  conditionally empty for exactly the signed-in riders who need a drives entry**. A `HeaderIconButton`
+  there costs **zero new chrome**: signed out the slot says "Sign in", signed in it says "Drives".
+- ⚠ **THE HAZARD — "signed-in only" taken literally ships a bug.** `load()` short-circuits for
+  anonymous riders to `listDownloadedDrives()`, reading from DISK. A rider who signed in, downloaded
+  drives and later signed out — or whose session merely expired — still has drives on the phone, by
+  design, as the offline-first fallback. **Gating the new screen on `signedIn` alone makes their own
+  downloaded audio unreachable.** Gate on **`signedIn || hasLocalDrives`**.
+- ⚠ **It breaks the documented OFFLINE INVERSION.** `index.tsx` deliberately hoists MY DRIVES to the
+  top when the network is dead — out there it "is not the archive, it is the product — the only thing
+  on the phone that still works" — and removes the composer entirely. Move the section away and **the
+  offline home becomes a "can't plan out here" card and nothing else**: a dead end, in a dead zone,
+  for a rider about to drive. Needs an explicit answer; cheapest is that `isOffline` still renders the
+  list inline on home (or redirects to the drives screen), preserving today's behaviour in the one
+  state it was designed for.
+- **Two smaller things ride along.** The **credit-balance hint** lives in the MY DRIVES section head
+  and needs a new home (the drives screen is the natural one). The new route is
+  `app/drives/index.tsx`, which makes `/drives → /drives/[id]` a real hierarchy with a proper back
+  affordance. ⚠ A new `app/*.tsx` breaks `typecheck` until `.expo/types/router.d.ts` regenerates —
+  expected, not a real error.
 
 ## Sources
 
