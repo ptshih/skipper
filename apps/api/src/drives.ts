@@ -365,14 +365,20 @@ interface NarrationRow {
    *  `candidateTriggerRadiusM` so selection and the manifest can never disagree. */
   triggerRadiusM?: number
   /** True when this fused telling's group is too spread out for any single point to represent it.
-   *  Carried here for ONE reason: `buildDrive` must be able to SEE that, so it can refuse it — a
-   *  drive's selection is frozen at create, and a wide group frozen as a mis-placed point is permanent
-   *  for that rider. ⚠ Dropping it at the mapper below silently re-admits the group as a capped 600 m
-   *  point — which is exactly what this code path did until 2026-07-30.
+   *  Carried here for ONE reason: `buildDrive` must be able to SEE that, so it can place the group on
+   *  its members instead of its centre — a drive's selection is frozen at create, and a wide group
+   *  frozen as a mis-placed point is permanent for that rider. ⚠ Dropping it at the mapper below
+   *  silently re-admits the group as a capped 600 m point at its off-road centre — which is exactly
+   *  what this code path did until 2026-07-30.
    *  ⚠ Keyed on the GEOMETRY, never on the presence of a served hull: the hull was one answer to this
-   *  condition and it WENT with roam (see the `area` tombstone in ./clusters), and a refusal that keys
-   *  on an answer flips to an admission the moment that answer is deleted. */
+   *  condition and it WENT with roam (see the `area` tombstone in ./clusters), and a branch that keys
+   *  on an answer flips the moment that answer is deleted. */
   tooWideForPoint?: boolean
+  /** A fused telling's member anchors — what a WIDE group is placed on (buildDrive takes the earliest
+   *  one the route can reach). ⚠ Required alongside `tooWideForPoint`: a wide candidate that arrives
+   *  without members is REFUSED, so dropping this at the mapper turns downtown Reno silent rather than
+   *  mis-placed. Undefined for a poi. */
+  memberPoints?: { lat: number; lng: number }[]
 }
 
 declare const releaseFiltered: unique symbol
@@ -469,9 +475,11 @@ function clusterRowsToCorpus(rows: ClusterTelling[], into: Map<string, Narration
       anchored: false,
       varietyKey: CLUSTER_VARIETY_KEY,
       triggerRadiusM: r.triggerRadiusM,
-      // Carried so buildDrive can REFUSE it — see NarrationRow.tooWideForPoint and the admission loop
-      // in @skipper/engine's drive-select. A wide group must not be frozen into a drive as a point.
+      // Carried so buildDrive can route it down the MEMBER placement rule — see
+      // NarrationRow.tooWideForPoint and the admission loop in @skipper/engine's drive-select. A wide
+      // group must not be frozen into a drive as its off-road centre.
       tooWideForPoint: r.tooWideForPoint,
+      memberPoints: r.memberPoints,
     })
   }
   return into
@@ -547,9 +555,13 @@ const candidateOf = (r: NarrationRow): DriveCandidate => ({
   varietyKey: r.varietyKey,
   // Only a cluster sets this; a poi leaves it undefined and keeps deriving from kind/anchored.
   ...(r.triggerRadiusM != null ? { triggerRadiusM: r.triggerRadiusM } : {}),
-  // Set only for a group too wide for a point. buildDrive refuses these outright rather than snapping
-  // the enclosing-circle centre to the route — see the second admission rule.
+  // Set only for a group too wide for a point. buildDrive places these on the earliest MEMBER the
+  // route reaches rather than snapping the enclosing-circle centre — see the second admission rule.
+  // ⚠ The two travel TOGETHER: the flag without the points is a refusal (fail-closed), so a mapper
+  // that carries one and drops the other silences the group instead of mis-placing it. Both are
+  // spread here from the same row for that reason.
   ...(r.tooWideForPoint ? { tooWideForPoint: true } : {}),
+  ...(r.memberPoints ? { memberPoints: r.memberPoints.map((p) => [p.lng, p.lat] as LngLat) } : {}),
 })
 
 /** Resolve a frozen `selection` into presigned, playable driveClips (narration content LIVE via the

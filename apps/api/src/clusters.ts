@@ -40,9 +40,15 @@ export interface ClusterTelling {
   /** From `clusterTrigger` — a cluster has no `kind`, so the radius vocabulary can't answer this and
    *  the floor has to be carried explicitly. */
   triggerRadiusM: number
+  /** The tellable members' anchors, the same `speakableLat ?? lat` points `clusterTrigger` was
+   *  derived from. Carried because a WIDE group is placed on its MEMBERS, not its centre — buildDrive
+   *  takes the earliest one the route comes close enough to trigger. ⚠ Always populated (not just for
+   *  wide groups): "which point represents this" is a question only the route can answer, and serving
+   *  it conditionally would make the drive path depend on a flag computed for a different reason. */
+  memberPoints: { lat: number; lng: number }[]
   /** GEOMETRY: `exceedsPointTrigger` on the UNCAPPED radius — "no single point can represent this
-   *  group honestly". The drive path REFUSES these rather than freezing a mis-placed point into a
-   *  selection (buildDrive's second admission rule).
+   *  group honestly". The drive path places these from `memberPoints` rather than freezing a
+   *  mis-placed centre into a selection (buildDrive's second admission rule).
    *  ⚠ Cannot be recomputed downstream — `triggerRadiusM` below is served CAPPED, so by then the
    *  evidence is gone and `exceedsPointTrigger` would answer `false` for exactly these groups.
    *  ⚠ There used to be a second field here, `area` — a served convex hull, so a roaming rider could
@@ -178,10 +184,11 @@ export async function loadClusterTellings(opts: {
     // Is this group too spread out to be told from a single point? `exceedsPointTrigger` is the same
     // predicate the generation gate asks, so what we SERVE and what we agreed to GENERATE can never
     // disagree about which groups are tellable.
-    // ⚠ A `true` here is a REFUSAL, not a mode switch. 1.1 removed AREA tellings entirely — there is
-    // no ring, no polygon and no area-aware client — so `buildDrive` simply declines a wide group
-    // (packages/engine/src/drive-select.ts). Do not read the old "gets an area instead of a fatter
-    // circle" framing back into this flag.
+    // ⚠ A `true` here selects a PLACEMENT RULE, not a mode. 1.1 removed AREA tellings entirely —
+    // there is no ring, no polygon and no area-aware client — and since 2026-08-03 `buildDrive`
+    // places a wide group on the earliest MEMBER the route reaches instead of its centre
+    // (packages/engine/src/drive-select.ts). That needs no polygon, so do not read the old "gets an
+    // area instead of a fatter circle" framing back into this flag — the route supplies the geometry.
     // ⚠ Computed HERE on purpose: `triggerRadiusM` below is served already CAPPED, so this is the
     // last place the group's true extent is known. A consumer that re-asked `exceedsPointTrigger`
     // downstream would read the cap and get `false` for exactly the groups that need refusing.
@@ -193,6 +200,8 @@ export async function loadClusterTellings(opts: {
     // down, in buildDrive, where the route geometry is known.
     out.push({
       tooWideForPoint,
+      // The points `trigger` was computed from — buildDrive re-snaps them to place a wide group.
+      memberPoints: pts,
       narrationId: r.narrationId,
       clusterId: r.clusterId,
       form: r.form,
@@ -209,10 +218,11 @@ export async function loadClusterTellings(opts: {
       // downtown everywhere EXCEPT downtown. The cap is the same line the generation gate uses, i.e.
       // "never looser than the loosest thing already shipping" (an un-anchored kindless POI's floor),
       // so the worst case degrades to today's worst case instead of past it.
-      // ⚠ Today `buildDrive` refuses a `tooWideForPoint` group outright, so this capped radius is what
-      // a wide group would fire on IF it were ever admitted — it is the safety floor behind that
-      // refusal, not a live code path. Keep them consistent: loosening one without the other is how a
-      // group starts firing at its uncapped extent.
+      // ⚠ This is a LIVE code path since 2026-08-03 — `buildDrive` now admits wide groups (placed on
+      // their members), so this capped radius is what downtown Reno actually fires on, not a dormant
+      // safety floor behind a refusal. It matters more than it used to, not less. Keep the cap and the
+      // generation gate consistent: loosening one without the other is how a group starts firing at
+      // its uncapped extent.
       triggerRadiusM: tooWideForPoint
         ? Math.min(trigger.radiusM, CLUSTER_MAX_TRIGGER_RADIUS_M)
         : trigger.radiusM,

@@ -65,27 +65,75 @@ describe('buildDrive', () => {
 
 
   // The SECOND admission rule. A too-wide group arrives with an off-road enclosing-circle CENTRE and a
-  // radius CAPPED below its true extent — so the point rule would place it wherever the centre happens
-  // to fall and freeze that into the drive forever. It must be refused outright, even when its centre
-  // sits squarely ON the route (which is exactly the case the point rule would admit).
+  // radius CAPPED below its true extent — so snapping that centre would place it wherever the centre
+  // happens to fall and freeze that into the drive forever. It is placed on its MEMBERS instead.
   //
-  // ⚠ The refusal keys on GEOMETRY (`tooWideForPoint`), never on a served hull. It keyed on the hull
-  // until 2026-07-31, which meant deleting the area MODE would have flipped this branch from REFUSE to
-  // ADMIT and shipped the frozen mis-fire — a deletion elsewhere silently un-writing this test's intent.
-  test('refuses a TOO-WIDE candidate even when its point would be admitted', () => {
+  // ⚠ The branch keys on GEOMETRY (`tooWideForPoint`), never on a served hull. It keyed on the hull
+  // until 2026-07-31, which meant deleting the area MODE would have flipped it and shipped the frozen
+  // mis-fire — a deletion elsewhere silently un-writing this test's intent.
+  //
+  // ⚠ Until 2026-08-03 this rule was a flat refusal, and these tests asserted the group was DROPPED.
+  // That refused three groups holding 8m13s of released audio no drive could play.
+  test('places a TOO-WIDE candidate on its members, not its centre', () => {
+    const stops = buildDrive({
+      polyline,
+      totalSec: TOTAL_SEC,
+      minGapSec: 1,
+      maxStops: 10,
+      candidates: [
+        // The CENTRE is 2.2 km east — far off-route, so a centre-snap could never admit this. The
+        // members are on the line, so the member rule must.
+        cand({
+          poiId: 'district',
+          lat: 38.05,
+          lng: 0.02,
+          tooWideForPoint: true,
+          memberPoints: [[0, 38.06], [0, 38.04]],
+        }),
+      ],
+    })
+    expect(stops).toHaveLength(1)
+    // ...and it is placed at the EARLIEST member (38.04, alongSec ≈ 26.4), not the latest and not the
+    // centre. ⚠ This is the assertion that makes "earliest, not closest" real: both members are
+    // equidistant from the route (0 m), so ONLY the along-route ordering can discriminate.
+    expect(stops[0]!.triggerLat).toBeCloseTo(38.04, 3)
+  })
+
+  test('a TOO-WIDE candidate whose members are all off-route is refused', () => {
     const stops = buildDrive({
       polyline,
       totalSec: TOTAL_SEC,
       minGapSec: 180,
       maxStops: 10,
       candidates: [
-        cand({ poiId: 'point', lat: 38.02 }),
-        // Dead on the line — the point rule admits this without the refusal.
+        cand({
+          poiId: 'district',
+          lat: 38.05,
+          tooWideForPoint: true,
+          // ~1.7 km east of the line — past any reach.
+          memberPoints: [[0.02, 38.05]],
+        }),
+      ],
+    })
+    expect(stops).toHaveLength(0)
+  })
+
+  // FAIL-CLOSED, and it guards the mapper from the other side. `memberPoints` is optional at every
+  // hop, so a mapper that carries `tooWideForPoint` and drops the points compiles clean — and the
+  // tempting fallback (use the centre) is precisely the frozen mis-placement the flag exists to stop.
+  // Silence is the correct failure here; a mis-placed stop is not.
+  test('a TOO-WIDE candidate with NO members is refused, never fallen back to its centre', () => {
+    const stops = buildDrive({
+      polyline,
+      totalSec: TOTAL_SEC,
+      minGapSec: 180,
+      maxStops: 10,
+      candidates: [
+        // Dead on the line: a centre fallback would admit this, which is the bug.
         cand({ poiId: 'district', lat: 38.05, tooWideForPoint: true }),
       ],
     })
-    expect(stops.some((s) => s.poiId === 'point')).toBe(true)
-    expect(stops.some((s) => s.poiId === 'district')).toBe(false)
+    expect(stops).toHaveLength(0)
   })
 
   // Guards the mapper: `tooWideForPoint` is optional at every hop, so an omitted field compiles clean

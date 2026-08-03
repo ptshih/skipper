@@ -1,6 +1,10 @@
 # Fused cluster generation — phase 4 of the legibility layer
 
 > **Status:** ✅ **BUILT, GENERATED AND RELEASED for Tahoe/Reno — 2026-07-30, re-counted 2026-08-02.**
+> ✅ **§4.3 FIXED 2026-08-03 — the last three groups are reachable.** Downtown Reno (914 m), Reno's
+> Historic Homes (698 m) and the UNR campus (903 m, a CLUSTER) held **8m13s of released audio no drive
+> could play**; `buildDrive` now places a wide group on the earliest MEMBER the route reaches instead
+> of refusing it. No generation, no migration, no spend. The unit is RADIUS, not treatment.
 > ⚠ **One detail superseded 2026-08-03:** each member now contributes its **grounding** hash
 > (`coalesce(sheet_hash, facts_hash)`) to the fused fingerprint, not `pois.facts_hash`. The single
 > polymorphic column was split in migration `0043`, so §6's "raw-article churn that storyFactsHash's
@@ -244,6 +248,88 @@ the same shape argument that removed parks and ranges from the corpus.
   and both halves of the rule proposed here were WRONG on the measurement** (see §4.1b).
 - **DISTRICT** — needs an AREA trigger, not a proximity one. ✅ **The engine half is BUILT
   (2026-07-30, founder go: "this will help when we open up new regions").** See §10.
+
+> ⚠ **Both bullets are superseded — read §4.3.** The area trigger was deleted with roam, and the
+> DISTRICT/CLUSTER split above is not the axis that matters: the refusal in `buildDrive` is keyed on
+> RADIUS, and it catches a cluster too.
+
+### 4.3 ⚠ 8m13s of released audio that no drive can play (measured 2026-08-03)
+
+**`buildDrive` refuses every group whose trigger radius exceeds `CLUSTER_MAX_TRIGGER_RADIUS_M` (600 m)
+— and all three of them already have RELEASED tellings.** Counted read-only against the live DB
+2026-08-03 (67 groups, 37 tellings, all 37 released, 5 of 5 districts told):
+
+| group | treatment | extent | telling | released |
+| --- | --- | --- | --- | --- |
+| Downtown Reno Casinos and Landmarks | district | 914 m | **3:05** | yes |
+| Reno's Historic Homes Neighborhood | district | 698 m | **2:28** | yes |
+| University of Nevada, Reno Campus | **cluster** | 903 m | **2:40** | yes |
+
+`drive-select.ts:170` is `if (cand.tooWideForPoint) continue`, where `tooWideForPoint` is
+`exceedsPointTrigger(trigger) → radiusM > CLUSTER_MAX_TRIGGER_RADIUS_M`
+(`packages/engine/src/cluster.ts:203`). So **8m13s of paid-for, released audio is unreachable in the
+only mode that still exists.** This is the "wiring nobody landed" shape: content with no production
+reader, and green tests either side of it.
+
+⚠ **The unit is RADIUS, not treatment.** UNR is a **cluster** and is refused; three of the five
+districts are under the cap and are admitted normally. §4.1's own reversal note already measured this
+(2 district+area, 3 district+point, 1 cluster+area, 61 cluster+point) — do not describe this work as
+"the district half", or UNR gets dropped from it again.
+
+⚠ **A regeneration would REFUSE these three.** `generate-cluster-narrations.ts:182` gates on
+`clusterGenerationBlock`, which is the same 600 m geometry test — so if any of the three ever goes
+stale, the generator will decline to refresh it and the released clip stays stale permanently. How
+they came to be generated in the first place is not recorded; the gate would not pass them today.
+Worth resolving before anyone relies on a regen path here.
+
+#### ✅ BUILT 2026-08-03 (founder go) — $0, no generation, no migration
+
+The blanket refusal is replaced by the real rule. It needs **no polygon** — the route is the rails —
+so the deleted `area.ts` was never a prerequisite and does not need reviving for drives.
+
+- **`DriveCandidate.memberPoints`** (`packages/engine/src/drive-select.ts`) carries the group's
+  tellable member anchors; `placeWideGroup()` snaps each one and picks the placement.
+- **Placement is EARLIEST, not closest — and the difference is audible.** A district is somewhere you
+  drive INTO and its telling runs 2–3 minutes, so anchoring on the closest approach starts him talking
+  from the middle of the group and the rider is already leaving as he introduces it. ⚠ Closest
+  approach is still the right rule for the REACHABILITY half ("is this group on the drive at all"),
+  which is why every member is tested against `reachM` before the earliest is chosen. The spec text
+  above (and `drive-select.ts`'s old comment) proposed "closest" for both; that was the sketch, and
+  only the reachability half survived contact.
+- **Fail-closed:** a wide candidate arriving with no members is REFUSED, never fallen back to its
+  centre. Absent members are a mapper bug, and the centre fallback is the exact frozen mis-placement
+  the flag exists to prevent — silence is the correct failure here, a mis-placed stop is not.
+- **The co-located dedupe now compares PLACED anchors**, not `cand.lat/lng`. Identical for a poi; a
+  wide group's centre can sit ~1 km from where the route meets it, so comparing centres would collapse
+  a district against a stop it is nowhere near.
+- **Server half:** `memberPoints` threads `clusters.ts` (`ClusterTelling`, always populated) →
+  `drives.ts` (`NarrationRow` → `candidateOf`, converted to `[lng, lat]`). ⚠ The flag and the points
+  must travel TOGETHER — carrying one and dropping the other silences the group.
+
+**Verification:** `bun run check` green (all lints, 10 typechecks, every suite). Engine 128 tests, and
+the two new rules are **MUTATION-CHECKED**: flipping earliest→latest fails exactly 1 test; removing
+the fail-closed guard fails 2. ⚠ The wide-group path has **not** been heard on a device — it is
+verified by construction and by test, not by ear, and the three clips are 2:28–3:05 against a district
+you cross in well under a minute (the §4.3 "a clip that outlives its place" measurement applies here
+more than anywhere).
+
+⚠ **Do NOT "fix" this by raising `CLUSTER_MAX_TRIGGER_RADIUS_M`.** `cluster.ts:198` calls the 600 "a
+policy about what we are willing to ship", and the capped radius is exactly why *"every member is
+within the enclosing radius"* holds — that guarantee is only true UNCAPPED. Raising the cap ships the
+frozen mis-fire the refusal exists to prevent, in the one function whose output is FROZEN against a
+non-refundable credit.
+
+⚠ **Risk to weigh before touching it:** this is admission logic in `buildDrive`, whose `selection` is
+frozen at create against a credit that never refunds, and 1.1 is mid-submission. A wrong placement is
+baked in per-rider permanently. That is the argument for doing it after the submission sweep, not
+during it.
+
+**Session note:** raised in Skipper Hours 2026-08-03, which opened on a different question ("how do we
+fill the gaps when two POIs are far apart") and landed here via the founder's own reframe — *tell
+stories about the area/district that doesn't necessarily pin to one specific POI*. ⚠ Note the two are
+opposite motions: this makes dense areas **sparser and richer**, and fills no empty stretch. The
+gap-filling half of that session is recorded in
+[scenic-filler-and-the-empty-stretch](../decisions/scenic-filler-and-the-empty-stretch.md).
 
 ### 4.1b The CLUSTER rule as BUILT — measured over the 30 generatable clusters
 
