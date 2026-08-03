@@ -27,7 +27,7 @@ import { inArray, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, poiClusters } from '@skipper/db/schema'
 import type { FactSheetEntry } from '@skipper/db/schema'
-import { announce, assertReady, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
+import { announce, assertReady, day, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { regionLabel } from './pipeline/geo'
 import { synthesizeWithTailRetake, type TailOutcome } from './pipeline/tts'
@@ -37,7 +37,12 @@ import { factSheetToAttribution } from './pipeline/persist'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { runJob } from './pipeline/job-progress'
-import { ensurePoiOverridesLoaded, overrideStaleFor, poiOverrideFor } from './pipeline/poi-overrides'
+import {
+  ensurePoiOverridesLoaded,
+  OVERRIDE_STALE_LIST_CAP,
+  overrideStaleFor,
+  poiOverrideFor,
+} from './pipeline/poi-overrides'
 import { personaFromKey } from './persona'
 import { lengthForRegister, ttsStyleFor } from './models'
 import { buildGroundingWell } from './eval/grounding'
@@ -71,9 +76,6 @@ import type { DeliveryRegister } from '@skipper/shared'
  *  comfortable, a 120 s one naming 9 is a recital — so the aim grows with the names, capped by the
  *  register's own researched ceiling. */
 const SECONDS_PER_EXTRA_NAME = 20
-
-/** How many override-stale members to name before collapsing to a count — a wall of them helps nobody. */
-const OVERRIDE_STALE_LIST_CAP = 10
 
 interface Fused {
   id: string
@@ -251,7 +253,6 @@ async function main(): Promise<void> {
   // written over. ADVISORY: it warns and does not block, matching the solo generator — halting a
   // legitimate paid run on a stamp comparison is the worse failure, and re-fetching inside a
   // generator is a mutation nobody asked for.
-  const day = (d: Date | null | undefined): string => d?.toISOString().slice(0, 10) ?? 'never'
   const staleMembers = picked.flatMap((f) =>
     f.tellable
       .filter((m) => overrideStaleFor(m.source, m.sourceId, m.factsFetchedAt))
@@ -475,7 +476,7 @@ async function main(): Promise<void> {
   if (maxCostUsd !== Infinity && unpriced.length > 0) {
     await recordRun(true) // the gating work is done and paid for — keep its scorecard
     throw new Error(
-      `⛔ --max-cost is set but these models are UNPRICED (their spend reads $0, defeating the cap): ${unpriced.join(', ')}. Add them to MODEL_PRICING (pipeline/spend.ts) or re-run without --max-cost.`,
+      `⛔ --max-cost is set but these models are UNPRICED (their spend reads $0, defeating the cap): ${unpriced.join(', ')}. Add them to MODEL_PRICING (@skipper/shared) or re-run without --max-cost.`,
     )
   }
 

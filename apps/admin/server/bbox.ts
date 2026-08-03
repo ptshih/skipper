@@ -16,11 +16,15 @@ export const MAX_BBOX_SPAN_DEG = 15
  * (swLng<neLng, swLat<neLat — catches the Nominatim lat/lng reorder swap), and a sane span.
  */
 export function bboxError(raw: string): string | null {
-  const parts = raw.split(',').map((s) => Number(s.trim()))
-  if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) {
+  // ⚠ Parses through the ONE reader (see the footer) rather than re-splitting. A validator that
+  // parses differently from the reader is the worst version of this bug: it approves a string the
+  // reader will later resolve differently, or rejects one the reader handles fine — and the FOUR
+  // parsers this sweep collapsed are exactly how that happened before.
+  const box = parseRegionBbox(raw)
+  if (!box) {
     return 'bbox must be "swLng,swLat,neLng,neLat" — 4 decimal-degree numbers'
   }
-  const [swLng, swLat, neLng, neLat] = parts as [number, number, number, number]
+  const { swLng, swLat, neLng, neLat } = box
   if (swLng < -180 || swLng > 180 || neLng < -180 || neLng > 180) {
     return 'bbox longitude out of range (expected -180..180)'
   }

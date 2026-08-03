@@ -1,20 +1,12 @@
 // Screen container: paints the `surface` background and respects safe-area. Top
 // inset is owned by the expo-router Stack header, so default edges skip 'top'.
-import { useState, type ReactNode } from 'react'
-import {
-  ScrollView,
-  StyleSheet,
-  View,
-  type LayoutChangeEvent,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native'
+import { type ReactNode } from 'react'
+import { ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import { SafeAreaView, useSafeAreaInsets, type Edge } from 'react-native-safe-area-context'
 import { space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { EdgeFade } from './EdgeFade'
+import { useScrollEdgeFades } from './useScrollEdgeFades'
 
 export interface ScreenProps {
   children: ReactNode
@@ -42,31 +34,9 @@ export function Screen({
   const insets = useSafeAreaInsets()
   const bg = { backgroundColor: theme.colors.surface }
 
-  // Overflow-aware scroll-edge fades: a fade should only appear where content is actually
-  // clipped, never over a short non-overflowing screen (which would dissolve real content at
-  // rest). We track the viewport height, the content height, and the scroll offset, then show
-  // the TOP fade only once scrolled past the top and the BOTTOM fade only while more content
-  // remains below. Values are ROUNDED to whole px before comparing so an onScroll stream
-  // collapses to at most a couple of setStates per edge crossing (no per-frame storm).
-  const [viewportH, setViewportH] = useState(0)
-  const [contentH, setContentH] = useState(0)
-  const [scrollY, setScrollY] = useState(0)
-  const overflows = contentH > viewportH + 1
-  // 1px slack absorbs sub-pixel rounding so the bottom fade clears cleanly at the true end.
-  const showTopFade = fadeEdges && overflows && scrollY > 1
-  const showBottomFade = fadeEdges && overflows && scrollY + viewportH < contentH - 1
-  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const y = Math.round(e.nativeEvent.contentOffset.y)
-    setScrollY((prev) => (prev === y ? prev : y))
-  }
-  const onLayout = (e: LayoutChangeEvent) => {
-    const h = Math.round(e.nativeEvent.layout.height)
-    setViewportH((prev) => (prev === h ? prev : h))
-  }
-  const onContentSizeChange = (_w: number, h: number) => {
-    const rounded = Math.round(h)
-    setContentH((prev) => (prev === rounded ? prev : rounded))
-  }
+  // Overflow-aware scroll-edge fades — the rule and the reason live in ./useScrollEdgeFades, which
+  // ConversationScreen shares. Change it there.
+  const { showTopFade, showBottomFade, onScroll, onLayout, onContentSizeChange } = useScrollEdgeFades(fadeEdges)
 
   if (scroll) {
     // The bottom safe-area inset rides the SCROLL CONTENT, never the SafeAreaView frame: a

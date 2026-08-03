@@ -54,7 +54,7 @@ import {
   type Turn,
 } from '@/lib/planner-transcript'
 import { readCachedRegion, writeCachedRegion } from '@/lib/region-cache'
-import { emptySayBuffer, pushDelta, settle, tickHold } from '@/lib/say-buffer'
+import { emptySayBuffer, pushDelta, settle, tickHold, type SayBuffer } from '@/lib/say-buffer'
 import { useRoutePreview } from '@/lib/useRoutePreview'
 import { uuidV4 } from '@/lib/uuid'
 import { useTheme } from '@/theme'
@@ -103,15 +103,19 @@ const HOLD_TICK_MS = 100
  *  turns. Cards are held apart from `Turn[]` deliberately: a transcript is what the model is re-sent
  *  (`toWire`), and a card is a local artifact of a Routes call the model never sees.
  *
- *  ⚠ `idempotencyKey` and the in-flight guard are PER-CARD (see the header). The key is minted once
- *  per card and REUSED across retries of that same create so a lost-ACK retry dedupes server-side; a
- *  new route is a new card, and therefore a new key. */
+ *  ⚠ `idempotencyKey` and the in-flight guard are both PER-CARD (see the header) — a screen-level
+ *  guard would let card #1 block card #2, or worse, let card #2 dedupe against card #1's key. */
 interface PreviewItem {
   id: string
   afterTurn: number
   route: PlannedRoute
   state: PreviewCardState
   proposal: DriveProposal | null
+  /** The create key for THIS card, minted with it. ⚠ A FIELD, not a side table: it was a parallel
+   *  `Map<cardId, key>` ref that had to be torn down in lockstep with `cards` (and this very comment
+   *  described it as if it already lived here). One lifetime, one structure — a card cannot now exist
+   *  without its key, and clearing the cards cannot leave a key behind. */
+  idempotencyKey: string
   errorMessage?: string
   driveId?: string
 }
@@ -153,7 +157,22 @@ export default function HomeScreen() {
   const [cards, setCards] = useState<PreviewItem[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
-  const [buf, setBuf] = useState(emptySayBuffer)
+  // ⚠ THE BUFFER IS A REF; ONLY ITS VISIBLE STRING IS STATE. `pushDelta` runs once per streamed
+  // TOKEN, but of the four fields it maintains only `shown` is ever rendered, and `shown` advances
+  // only at a sentence boundary (or the max hold). Holding the whole buffer in state therefore
+  // re-rendered this entire screen — the full transcript array, every TurnBubble, every PreviewCard,
+  // and the newest card's native MapView — ~10x more often than the output actually changed, for the
+  // whole duration of every turn. Writing `shown` through a second setState costs nothing when it is
+  // unchanged: React bails out on an Object.is-equal value, so a token that only moves `pending`
+  // re-renders nothing. This is the same rule say-buffer.ts's header states for TalkBack, now true of
+  // the render pass as well as the announcement.
+  const bufRef = useRef(emptySayBuffer())
+  const [shown, setShown] = useState('')
+  /** Apply a pure say-buffer transition and publish only what changed on screen. */
+  const applyBuf = useCallback((next: (b: SayBuffer) => SayBuffer) => {
+    bufRef.current = next(bufRef.current)
+    setShown(bufRef.current.shown)
+  }, [])
   const [done, setDone] = useState(false)
   // A TRANSPORT-class failure of a turn. ⚠ NOT a model outage: the server catches every planner
   // failure and answers 200 with its own in-persona line (INV-13 keeps the vendor error away from the
@@ -170,7 +189,6 @@ export default function HomeScreen() {
   // React re-rendered — on POST /drives that is two non-refundable credits.
   const sendingRef = useRef(false)
   const creatingRef = useRef<Set<string>>(new Set())
-  const cardKeysRef = useRef<Map<string, string>>(new Map())
 
   // Monotonic conversation id, bumped by "Start fresh". ⚠ A SPEND CONTROL, not bookkeeping, and
   // `turnAbortRef.current?.abort()` is not enough on its own: abort() on an already-settled fetch is a
@@ -353,9 +371,9 @@ export default function HomeScreen() {
   // mid-clause freezes on screen while tokens are visibly still arriving.
   useEffect(() => {
     if (!sending) return
-    const iv = setInterval(() => setBuf((b) => tickHold(b, Date.now())), HOLD_TICK_MS)
+    const iv = setInterval(() => applyBuf((b) => tickHold(b, Date.now())), HOLD_TICK_MS)
     return () => clearInterval(iv)
-  }, [sending])
+  }, [sending, applyBuf])
 
   // Leaving the screen cancels the turn — a spend control, not tidiness (see turnAbortRef).
   useEffect(() => () => turnAbortRef.current?.abort(), [])
@@ -436,7 +454,12 @@ export default function HomeScreen() {
   const drawUp = useCallback(
     (route: PlannedRoute, afterTurn: number) => {
       const id = uuidV4()
-      setCards((cs) => [...cs, { id, afterTurn, route, state: 'proposing', proposal: null }])
+      // Minted WITH the card and reused across every retry of that same create, so a lost-ACK retry
+      // dedupes server-side; a new route is a new card and therefore a new key.
+      setCards((cs) => [
+        ...cs,
+        { id, afterTurn, route, state: 'proposing', proposal: null, idempotencyKey: uuidV4() },
+      ])
       bumpScroll()
       void doPropose(id, route)
     },
@@ -445,14 +468,9 @@ export default function HomeScreen() {
 
   /** THE ONE CALL THAT SPENDS A CREDIT. Non-refundable, and a delete never refunds it. */
   const doCreate = useCallback(
-    async (cardId: string, proposal: DriveProposal) => {
+    async (cardId: string, proposal: DriveProposal, key: string) => {
       if (creatingRef.current.has(cardId)) return // a double-tap must not double-POST
       creatingRef.current.add(cardId)
-      let key = cardKeysRef.current.get(cardId)
-      if (!key) {
-        key = uuidV4()
-        cardKeysRef.current.set(cardId, key)
-      }
       patchCard(cardId, { state: 'creating', errorMessage: undefined })
       try {
         const m = await createDrive(toCreateRequest(proposal, key))
@@ -540,7 +558,7 @@ export default function HomeScreen() {
       sendingRef.current = true
       setSending(true)
       setPlannerOutage(false)
-      setBuf(emptySayBuffer())
+      applyBuf(emptySayBuffer)
       const ctrl = new AbortController()
       turnAbortRef.current = ctrl
       // Captured BEFORE the await; every write below is gated on it still being current. See convSeq.
@@ -550,7 +568,7 @@ export default function HomeScreen() {
         const resp = await planTurn(
           { turns: wire, regionId },
           {
-            onDelta: (d) => setBuf((b) => pushDelta(b, d, Date.now())),
+            onDelta: (d) => applyBuf((b) => pushDelta(b, d, Date.now())),
             signal: ctrl.signal,
           },
         )
@@ -560,7 +578,7 @@ export default function HomeScreen() {
         // ⚠ The terminal frame is AUTHORITATIVE and its `say` may differ from the deltas — a refusal
         // REPLACES, a truncation APPENDS. `settle` assigns verbatim, which covers both without this
         // screen ever having to know which happened.
-        setBuf((b) => settle(b, resp.say))
+        applyBuf((b) => settle(b, resp.say))
         const withSkipper = appendSkipper(next, resp.say, {
           wire: true,
           route: resp.route ?? null,
@@ -573,7 +591,7 @@ export default function HomeScreen() {
         // ⚠ D-M: the partial `say` is DROPPED — from the transcript AND from the screen. It is a
         // record of something the model never finished saying; keeping it would poison the next
         // turn's prompt prefix and show the rider half an instruction as if it were advice.
-        setBuf(emptySayBuffer())
+        applyBuf(emptySayBuffer)
         // The rider's own cancel. They left; they do not need an apology for it.
         if (isPlanAborted(e)) return
         if (e instanceof ApiError && e.status < 500) {
@@ -597,7 +615,7 @@ export default function HomeScreen() {
         }
       }
     },
-    [drawUp, regionId],
+    [applyBuf, drawUp, regionId],
   )
 
   const send = useCallback(() => {
@@ -659,14 +677,13 @@ export default function HomeScreen() {
     // clip whose card no longer exists is audio the rider can only stop by killing the app.
     preview.stop()
     setCards([])
-    cardKeysRef.current.clear()
     creatingRef.current.clear()
-    setBuf(emptySayBuffer())
+    applyBuf(emptySayBuffer)
     setDone(false)
     setPlannerOutage(false)
     setInput('')
     focusComposer()
-  }, [focusComposer, preview.stop])
+  }, [applyBuf, focusComposer, preview.stop])
 
   const exampleAsks: ExampleAsk[] = useMemo(
     () =>
@@ -826,7 +843,7 @@ export default function HomeScreen() {
       previewClip={renderClipRow(c)}
       errorMessage={c.errorMessage}
       ctaLabel={voice.proposal.cta}
-      onMake={() => c.proposal && void doCreate(c.id, c.proposal)}
+      onMake={() => c.proposal && void doCreate(c.id, c.proposal, c.idempotencyKey)}
       onAdjust={focusComposer}
       onOpenDrive={() =>
         c.driveId &&
@@ -887,7 +904,7 @@ export default function HomeScreen() {
       {transcript}
       {sending ? (
         <>
-          {buf.shown ? <TurnBubble role="skipper" text={buf.shown} streaming /> : null}
+          {shown ? <TurnBubble role="skipper" text={shown} streaming /> : null}
           <View style={styles.thinking}>
             <TypingDots label={voice.plan.thinkingA11y} />
             <Text variant="dim" color="inkDim">

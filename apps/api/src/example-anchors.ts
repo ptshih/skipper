@@ -11,7 +11,8 @@
 // ⚠ The one import, and it keeps this file's env-free property: @skipper/engine is zero-dep and
 // RN-safe by design, so importing it needs no secret, no DB and no network — which is what lets this
 // selection be tested without booting index.ts.
-import { parseRegionBbox } from '@skipper/engine'
+import { parseRegionBbox, pointInRegionBbox } from '@skipper/engine'
+import { byAnchorRank, flatten } from './anchor-format'
 
 /** How many names a region publishes. A DISPLAY count: it prices nothing and bounds no request body,
  *  which is why it is here and not in ./limits (that file is the ONE home for rider-facing SPEND and
@@ -51,29 +52,11 @@ export interface ExampleAnchorPlace {
   featured: boolean
 }
 
-/** Collapse whitespace — the same `flatten` the planner's roster block applies. A name carrying a
- *  newline renders as a broken two-line chip. */
-const flatten = (s: string): string => s.replace(/\s+/g, ' ').trim()
-
-/** Featured first, then by name, then by id.
- *
- *  ⚠ CODEPOINT comparison, NOT `localeCompare` — mirrors `buildRosterBlock` (apps/api/src/planner.ts).
- *  There the payoff is a byte-stable cached prompt prefix; here it is that the example chips must not
- *  reshuffle between app launches or between Cloud Run instances, which is exactly what an ICU/locale
- *  difference between processes would do. `id` is a TIEBREAK ONLY (it makes the order total) and is
- *  never emitted.
- *
- *  `featured` is the curator's "float the popular ones to the top" judgment, which is precisely what
- *  should seed an example ask — but it ORDERS, it does not FILTER: filtering would hand a region with
- *  nothing flagged an empty list and kill the example asks for the launch region.
- *  ⚠ Product hazard with no code fix: featured-then-alphabetical can return six names clustered in one
- *  corner, which makes a poor "from X to Y" example. The lever is the curator's flag (an admin
- *  surface), not a heuristic here — this stays deterministic. */
-function byRank(a: ExampleAnchorPlace, b: ExampleAnchorPlace): number {
-  if (a.featured !== b.featured) return a.featured ? -1 : 1
-  if (a.name !== b.name) return a.name < b.name ? -1 : 1
-  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
-}
+/** ⚠ Product hazard with no code fix, and the reason `byAnchorRank` is worth reading before changing:
+ *  featured-then-alphabetical can return six names clustered in one corner of the region, which makes a
+ *  poor "from X to Y" example. The lever is the curator's `featured` flag (an admin surface), not a
+ *  heuristic here — this stays deterministic. */
+const byRank = byAnchorRank<ExampleAnchorPlace>
 
 /**
  * regionId → up to `EXAMPLE_ANCHORS_PER_REGION` display names.
@@ -101,17 +84,17 @@ export function pickExampleAnchors(
       out.set(r.id, [])
       continue
     }
-    // ⚠ The engine's parser is the ONE reader of `regions.bbox` (1.1 sweep) — this file used to carry
-    // its own, and a region IS a bbox rather than a stored FK, so two parsers disagreeing about axis
-    // order would put a region's example anchors on the wrong side of the lake.
-    const { swLng: lngMin, swLat: latMin, neLng: lngMax, neLat: latMax } = box
+    // ⚠ The engine owns BOTH halves of "is this poi in this region" (1.1 sweep) — this file used to
+    // carry its own parser AND its own containment test, and a region IS a bbox rather than a stored
+    // FK, so two readers disagreeing about axis order or edge-inclusivity would put a region's example
+    // anchors on the wrong side of the lake. `pointInRegionBbox` is inclusive on all four edges, which
+    // is what matches the `between()` in loadRegionAnchors — a place is in exactly the same region
+    // here as it is in the planner's allowlist.
     const names: string[] = []
     const seen = new Set<string>()
     for (const p of ranked) {
       if (names.length >= EXAMPLE_ANCHORS_PER_REGION) break
-      // Inclusive on both edges — matches the `between()` in loadRegionAnchors, so a place is in
-      // exactly the same region here as it is in the planner's allowlist.
-      if (p.lat < latMin || p.lat > latMax || p.lng < lngMin || p.lng > lngMax) continue
+      if (!pointInRegionBbox(box, p.lat, p.lng)) continue
       const name = flatten(p.name)
       // Two curated rows can legitimately share a display name; a duplicate chip reads as a bug, and a
       // blank one reads as a broken render.

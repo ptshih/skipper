@@ -168,6 +168,16 @@ export type RegionAnchor = z.infer<typeof regionAnchor>
  */
 const anchorId = z.uuid()
 
+/** The most intermediate waypoints a route may carry — the bound on the single billed Routes call.
+ *
+ *  ⚠ ONE HOME, because three places must agree and only one of them fails loudly. The wire schema
+ *  rejects an over-long `via`, but `translateRoute` (apps/api/src/plan-route.ts) drops a route that
+ *  exceeds it AFTER the round-trip append, and a mismatch there is silent: the rider asks, the model
+ *  answers, and the route dies as a `route_untranslatable` line nobody is watching. The planner
+ *  tool's own `maxItems` is deliberately LOWER than this and is not derived from it — that one is
+ *  model-facing headroom for the round-trip append, not a cap. */
+export const MAX_ROUTE_VIA = 8
+
 /** Ordered intermediate waypoints between start and end — the route is materialized as
  *  [start, ...via, end]. A LOOP is `end === start` with one `via` midpoint (a turnaround), so a
  *  round trip is a real out-and-back (start==end alone is a degenerate zero-distance route). Capped
@@ -176,7 +186,7 @@ const anchorId = z.uuid()
  *  being hardened, which satisfied "reject a non-anchor ENDPOINT" exactly while still shipping 8
  *  arbitrary billable coordinates. Guarding both ends of a route and leaving the middle open is not a
  *  partial guarantee — it is none. */
-const via = z.array(anchorId).max(8).optional()
+const via = z.array(anchorId).max(MAX_ROUTE_VIA).optional()
 
 /** POST /drives/propose — preview the route for a picked START→END (+ optional via midpoints) before
  *  spending a credit. The endpoints were chosen from the region's anchors (GET /drives/anchors), so we
@@ -233,7 +243,7 @@ export const driveProposal = z.object({
   endId: anchorId,
   /** The via ANCHOR IDS as sent; `viaResolved` carries the same midpoints for display. */
   via,
-  viaResolved: z.array(resolvedEndpoint).max(8).optional(),
+  viaResolved: z.array(resolvedEndpoint).max(MAX_ROUTE_VIA).optional(),
   polyline,
   distanceMeters: z.number().int(),
   durationSeconds: z.number().int(),

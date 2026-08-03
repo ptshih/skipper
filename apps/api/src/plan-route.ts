@@ -35,15 +35,15 @@ import { streamSSE, type SSEMessage } from 'hono/streaming'
 import { eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { regions } from '@skipper/db/schema'
-import { drivePlanRequest, type DrivePlanResponse, type PlannedRoute } from '@skipper/shared'
-import { loadRegionAnchors } from './drives'
-import type { ApiEnv } from './entitlements'
 import {
-  checkTranscript,
-  MAX_PLAN_BODY_BYTES,
-  PLAN_WRAP_UP_AFTER_MESSAGES,
-  readBoundedText,
-} from './limits'
+  drivePlanRequest,
+  MAX_ROUTE_VIA,
+  type DrivePlanResponse,
+  type PlannedRoute,
+} from '@skipper/shared'
+import { loadRegionAnchors, readJsonBody } from './drives'
+import type { ApiEnv } from './entitlements'
+import { checkTranscript, MAX_PLAN_BODY_BYTES, PLAN_WRAP_UP_AFTER_MESSAGES } from './limits'
 import { PlannerTurnError, runPlannerTurn, type PlannerModelArgs, type PlannerTurn } from './planner'
 import { PLANNER_WRAP_UP_NOTICE } from './planner-prompt'
 import { withRetry } from './retry'
@@ -104,10 +104,10 @@ function toPlannedRoute(raw: unknown): PlannedRoute | null {
     ? { start, end: start, via: [...via, end], ...(minutes != null ? { targetMinutes: minutes } : {}) }
     : { start, end, ...(via.length ? { via } : {}), ...(minutes != null ? { targetMinutes: minutes } : {}) }
 
-  // ⚠ The wire caps `via` at 8 to bound the single billed Routes call. A round trip appends one, so a
+  // ⚠ The wire caps `via` to bound the single billed Routes call. A round trip appends one, so a
   // model that filled `via` to the brim would push it over — drop the route rather than ship a request
   // the next endpoint will reject anyway.
-  if ((wire.via?.length ?? 0) > 8) return null
+  if ((wire.via?.length ?? 0) > MAX_ROUTE_VIA) return null
   return wire
 }
 
@@ -191,31 +191,25 @@ function toResponse(turn: PlannerTurn): DrivePlanResponse {
 }
 
 planRoutes.post('/', async (c) => {
-  const read = await readBoundedText(c.req.raw, MAX_PLAN_BODY_BYTES)
-  if (!read.ok) {
-    return c.json({ error: 'payload_too_large', message: 'That is a lot of talking. Start a fresh one?' }, 413)
-  }
-  let body: unknown
-  try {
-    body = JSON.parse(read.text)
-  } catch {
-    return c.json({ error: 'bad_request', message: 'Invalid JSON body.' }, 400)
-  }
-  const parsed = drivePlanRequest.safeParse(body)
-  if (!parsed.success) {
-    return c.json({ error: 'bad_request', message: 'turns[] and regionId are required.' }, 400)
-  }
+  const read = await readJsonBody(
+    c,
+    drivePlanRequest,
+    'turns[] and regionId are required.',
+    MAX_PLAN_BODY_BYTES,
+    'That is a lot of talking. Start a fresh one?',
+  )
+  if (!read.ok) return read.res
 
   // ⚠ The caps are enforced HERE, not in the Zod schema: they price MODEL TOKENS, so their home is
   // ./limits, and @skipper/shared cannot import apps/api. Failing in persona rather than with a bare
   // 400 — a rider who has been chatting with a character should not suddenly meet a validator.
-  const capFailure = checkTranscript(parsed.data.turns)
+  const capFailure = checkTranscript(read.data.turns)
   if (capFailure) {
     return c.json({ say: "We have been at this a while — let's start fresh and I'll get you rolling.", done: true }, 200)
   }
 
   const [region] = await withRetry(
-    () => db.select({ bbox: regions.bbox, name: regions.displayName }).from(regions).where(eq(regions.id, parsed.data.regionId)).limit(1),
+    () => db.select({ bbox: regions.bbox, name: regions.displayName }).from(regions).where(eq(regions.id, read.data.regionId)).limit(1),
     { label: 'plan.region' },
   )
   if (!region) return c.json({ say: VOICE.noRegion, done: true } satisfies DrivePlanResponse, 200)
@@ -223,7 +217,7 @@ planRoutes.post('/', async (c) => {
   const anchors = await loadRegionAnchors(region.bbox)
 
   const args: PlannerModelArgs = {
-    turns: parsed.data.turns,
+    turns: read.data.turns,
     regionName: region.name,
     anchors,
     // D12 — the in-persona wrap-up, and THIS IS THE PRODUCER. It has three halves and they only work
@@ -240,7 +234,7 @@ planRoutes.post('/', async (c) => {
     // ⚠ SPREAD, so the key is ABSENT rather than `undefined` on a normal turn. ./planner branches on
     // truthiness so either would work today, but an absent key cannot be accidentally rendered as an
     // empty third system block, which would cost the cache breakpoint's benefit for nothing.
-    ...(parsed.data.turns.length > PLAN_WRAP_UP_AFTER_MESSAGES ? { wrapUpNotice: PLANNER_WRAP_UP_NOTICE } : {}),
+    ...(read.data.turns.length > PLAN_WRAP_UP_AFTER_MESSAGES ? { wrapUpNotice: PLANNER_WRAP_UP_NOTICE } : {}),
     // ⚠ The rider's connection, threaded all the way to the model call. This ONE line is the whole
     // cancellation feature: without it, a rider who backgrounds the app bills Opus to completion on a
     // turn nobody will read (INV-11). It is also exactly the kind of line a refactor drops silently,

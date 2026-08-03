@@ -32,23 +32,16 @@ import type { SQL } from 'drizzle-orm'
 import { PgDialect } from 'drizzle-orm/pg-core'
 import { places } from '@skipper/db/schema'
 import type { Waypoint } from '@skipper/routing'
+import { ACCOUNT, ANON, type FakeSession } from './fixtures'
 
 /** True only while a test in THIS file is driving; every mock delegates to the real module otherwise. */
 let driving = false
 
 /* ------------------------------- the session ------------------------------ */
 
-type FakeSession = { user: { id: string; isAnonymous: boolean; role: string | null } }
-
-/** The anonymous front door is the surface INV-1 actually protects, so it is the default fixture. */
-const ANON: FakeSession = {
-  user: { id: 'anon-00000000-0000-4000-8000-000000000000', isAnonymous: true, role: 'user' },
-}
-/** `POST /drives` carries its own copy of the check, and only an ACCOUNT can reach it (D15/INV-15). */
-const ACCOUNT: FakeSession = {
-  user: { id: 'acct-00000000-0000-4000-8000-000000000000', isAnonymous: false, role: 'user' },
-}
-
+// The session fixtures are shared (./fixtures) — the anonymous front door is the surface INV-1
+// actually protects, so ANON is the default here. The mocks below stay in THIS file: they are
+// process-wide.
 let session: FakeSession = ANON
 
 const realSession = { ...(await import('../src/session')) }

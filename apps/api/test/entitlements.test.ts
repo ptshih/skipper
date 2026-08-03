@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { isAdmin, tierOf, type TierSession } from '../src/tiers'
+import { isAdmin, tierOf, type AccessSession as TierSession } from '@skipper/shared'
 
 // Minimal session shape — the access helpers read user.isAnonymous (+ user.role). There is no tier
 // column anymore (premium = credits); any real account is `free`.

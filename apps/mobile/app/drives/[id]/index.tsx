@@ -8,13 +8,12 @@ import { useStopPreview } from '@/lib/useStopPreview'
 import { DriveMap, type DriveMapStop } from '@/ui/DriveMap'
 import {
   deleteDriveDownload,
-  downloadDirState,
   downloadDrive,
   InsufficientStorageError,
   isDownloadExpired,
   isDownloadStale,
   loadManifest,
-  offlineStatus,
+  offlineSnapshot,
   repairDownload,
   topUpDrive,
   type DownloadDirState,
@@ -385,7 +384,9 @@ export default function DriveDetailScreen() {
   // without waiting for the rider to leave and come back.
   const refreshOfflineState = useCallback(() => {
     if (!id) return
-    const status = offlineStatus(id)
+    // ONE manifest read for all three answers — they are three readings of the same file, and asking
+    // them separately re-parsed it three times per refresh (see `offlineSnapshot`).
+    const { status, expired: isExpired, dirState: dir } = offlineSnapshot(id)
     setDownloaded(status != null)
     // Re-derive PARTIAL from disk so a half-download surfaces as partial after an app restart
     // (when the in-memory download result is gone) instead of as a clean "Saved offline". (audit #1)
@@ -394,8 +395,8 @@ export default function DriveDetailScreen() {
         ? { failed: status.missingSeqs.length, total: status.expectedCount }
         : null,
     )
-    setExpired(isDownloadExpired(id)) // offline-safe (reads savedAt) — fires even in a dead zone
-    setDirState(downloadDirState(id))
+    setExpired(isExpired) // offline-safe (reads savedAt) — fires even in a dead zone
+    setDirState(dir)
   }, [id])
 
   const load = useCallback(async () => {

@@ -26,21 +26,14 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { createDriveRequest, driveProposeRequest } from '@skipper/shared'
 import { MAX_DRIVE_BODY_BYTES } from '../src/limits'
+import { ACCOUNT, ANON, type FakeSession } from './fixtures'
 
 /** True only while a test in THIS file is driving; every mock delegates to the real module otherwise. */
 let driving = false
 
 /* ------------------------------- the session ------------------------------ */
 
-type FakeSession = { user: { id: string; isAnonymous: boolean; role: string | null } }
-
-const ANON: FakeSession = {
-  user: { id: 'anon-00000000-0000-4000-8000-000000000000', isAnonymous: true, role: 'user' },
-}
-const ACCOUNT: FakeSession = {
-  user: { id: 'acct-00000000-0000-4000-8000-000000000000', isAnonymous: false, role: 'user' },
-}
-
+// Session fixtures are shared (./fixtures); the mocks below stay here — they are process-wide.
 let session: FakeSession = ANON
 
 const realSession = { ...(await import('../src/session')) }

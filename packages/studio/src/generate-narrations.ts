@@ -33,10 +33,15 @@ import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, pois } from '@skipper/db/schema'
 import type { FactSheetEntry, PoiFacts } from '@skipper/db/schema'
-import { announce, assertReady, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
+import { announce, assertReady, day, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { runJob, type FinishOutcome } from './pipeline/job-progress'
-import { ensurePoiOverridesLoaded, overrideStaleFor, poiOverrideFor } from './pipeline/poi-overrides'
+import {
+  ensurePoiOverridesLoaded,
+  OVERRIDE_STALE_LIST_CAP,
+  overrideStaleFor,
+  poiOverrideFor,
+} from './pipeline/poi-overrides'
 import { regionLabel } from './pipeline/geo'
 import { resolveStoryGrounding } from './pipeline/select'
 import { synthesizeWithTailRetake, type TailOutcome } from './pipeline/tts'
@@ -80,11 +85,6 @@ import { recordEvalRun, type ClipIdentity } from './eval/record'
  *  poi plus this many others. Two hand-maintained numbers with a comment promising they match is
  *  exactly how generation and evaluation end up disagreeing about what counts as worn out. */
 const SHARED_FACT_MIN_OTHERS = SHARED_NGRAM_MIN_CLIPS - 1
-
-/** How many override-stale places the pre-flight names before it says "…and N more". Long enough
- *  that the usual handful is fully actionable, short enough that a corpus-wide miss can't bury the
- *  spend estimate it sits above — the point of the warning is that the operator still READS it. */
-const OVERRIDE_STALE_LIST_CAP = 10
 
 const flags = parseFlags(process.argv.slice(2), {
   valueFlags: ['limit', 'region', 'max-cost', 'query', 'include-ids', 'exclude-ids'],
@@ -281,7 +281,6 @@ async function main(): Promise<FinishOutcome | void> {
   const queuedIds = new Set(queue.map((c) => c.poiId))
   const staleQueued = queue.filter(isOverrideStale)
   const staleUnqueued = candidates.filter((c) => !queuedIds.has(c.poiId) && isOverrideStale(c))
-  const day = (d: Date | null | undefined): string => d?.toISOString().slice(0, 10) ?? 'never'
   if (staleQueued.length > 0) {
     console.warn(
       `\n⚠ OVERRIDE-STALE: ${staleQueued.length}/${queue.length} queued place(s) carry a curated fact ` +
@@ -597,7 +596,7 @@ async function main(): Promise<FinishOutcome | void> {
   if (maxCostUsd !== Infinity && unpriced.length > 0) {
     await recordRun(true)
     throw new Error(
-      `⛔ --max-cost is set but these models are UNPRICED (their spend reads $0, defeating the cap): ${unpriced.join(', ')}. Add them to MODEL_PRICING (pipeline/spend.ts) or re-run without --max-cost.`,
+      `⛔ --max-cost is set but these models are UNPRICED (their spend reads $0, defeating the cap): ${unpriced.join(', ')}. Add them to MODEL_PRICING (@skipper/shared) or re-run without --max-cost.`,
     )
   }
 

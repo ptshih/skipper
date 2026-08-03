@@ -22,6 +22,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { CLAUDE_MODELS, recordModelUsage, usageUsd, type UsageLike } from '@skipper/shared'
+import { byAnchorRank, flatten } from './anchor-format'
 import { MAX_PLAN_ANCHORS, PLANNER_MAX_TOKENS, PLANNER_TIMEOUT_MS } from './limits'
 // ⚠ The tool comes from ./planner-prompt, not from here. Its name and every field description are prose
 // the MODEL reads, so it is prompt surface and changes under the prompt's review (INV-10) — a second copy
@@ -230,14 +231,10 @@ function plannerClient(): Anthropic {
  * network call.
  */
 export function buildRosterBlock(regionName: string, anchors: PlannerAnchor[]): string {
-  const printable = [...anchors].sort((a, b) => {
-    // Featured first (ordering only — never a printed field, which would be a place FACT).
-    if (a.featured !== b.featured) return a.featured ? -1 : 1
-    // ⚠ Codepoint comparison, NOT localeCompare: locale/ICU differences between processes would make
-    // the cached prefix differ between Cloud Run instances for the same region.
-    if (a.name !== b.name) return a.name < b.name ? -1 : 1
-    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
-  })
+  // ⚠ The comparator is SHARED (./anchor-format) and codepoint-based on purpose — locale/ICU
+  // differences between processes would make the cached prefix differ between Cloud Run instances for
+  // the same region. Read its doc before touching it; the expensive half of that rule is this one.
+  const printable = [...anchors].sort(byAnchorRank)
 
   if (printable.length > MAX_PLAN_ANCHORS) {
     // The cap is a ceiling far above any curated region today, so this firing is a product signal, not
@@ -263,8 +260,6 @@ export function buildRosterBlock(regionName: string, anchors: PlannerAnchor[]): 
     rows,
   ].join('\n')
 }
-
-const flatten = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
 /**
  * Domain roles -> vendor roles, with the two vendor-contract checks that belong at this seam.

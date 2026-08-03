@@ -255,3 +255,11 @@ export function reportMissedEdits(
     )
   }
 }
+
+/** How many override-stale places a generator's pre-flight names before it says "…and N more".
+ *
+ *  Long enough that the usual handful is fully actionable, short enough that a corpus-wide miss can't
+ *  bury the spend estimate it sits above — the point of the warning is that the operator still READS
+ *  it. Shared by both generators: this is a pre-PAID-RUN advisory, and one tuned in the solo CLI but
+ *  not the fused one is how an operator learns to trust a warning that is lying in the other. */
+export const OVERRIDE_STALE_LIST_CAP = 10

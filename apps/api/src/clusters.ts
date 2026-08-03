@@ -175,9 +175,13 @@ export async function loadClusterTellings(opts: {
     const pts = members.get(r.clusterId) ?? []
     const trigger = clusterTrigger(pts)
     if (!trigger) continue // nothing tellable left — drop it rather than fire it somewhere arbitrary
-    // A group too spread out for a point gets an AREA instead of a fatter circle. `exceedsPointTrigger`
-    // is the same predicate the generation gate asks, so what we SERVE and what we agreed to GENERATE
-    // can never disagree about which mode a group is in.
+    // Is this group too spread out to be told from a single point? `exceedsPointTrigger` is the same
+    // predicate the generation gate asks, so what we SERVE and what we agreed to GENERATE can never
+    // disagree about which groups are tellable.
+    // ⚠ A `true` here is a REFUSAL, not a mode switch. 1.1 removed AREA tellings entirely — there is
+    // no ring, no polygon and no area-aware client — so `buildDrive` simply declines a wide group
+    // (packages/engine/src/drive-select.ts). Do not read the old "gets an area instead of a fatter
+    // circle" framing back into this flag.
     // ⚠ Computed HERE on purpose: `triggerRadiusM` below is served already CAPPED, so this is the
     // last place the group's true extent is known. A consumer that re-asked `exceedsPointTrigger`
     // downstream would read the cap and get `false` for exactly the groups that need refusing.
@@ -199,13 +203,16 @@ export async function loadClusterTellings(opts: {
       name: r.name,
       lat: trigger.lat,
       lng: trigger.lng,
-      // ⚠ For an AREA telling this is the POINT FALLBACK, not the real trigger — an area-aware client
-      // uses the ring and ignores it. It is CAPPED rather than the true enclosing radius (914 m for
-      // downtown Reno) because an area-unaware client fires on it: uncapped, it hears the district a
-      // kilometre out on the approach, the recede gate retires it, and a long cooldown locks it — the
-      // rider hears about downtown everywhere EXCEPT downtown. The cap is the same line the generation
-      // gate uses, i.e. "never looser than the loosest thing already shipping" (an un-anchored kindless
-      // POI's floor), so the worst case degrades to today's worst case instead of past it.
+      // ⚠ CAPPED for a wide group rather than served at its true enclosing radius (914 m for downtown
+      // Reno). A client that fired on the uncapped value would hear the district a kilometre out on
+      // the approach, retire it on recede, and lock it behind a long cooldown — the rider hears about
+      // downtown everywhere EXCEPT downtown. The cap is the same line the generation gate uses, i.e.
+      // "never looser than the loosest thing already shipping" (an un-anchored kindless POI's floor),
+      // so the worst case degrades to today's worst case instead of past it.
+      // ⚠ Today `buildDrive` refuses a `tooWideForPoint` group outright, so this capped radius is what
+      // a wide group would fire on IF it were ever admitted — it is the safety floor behind that
+      // refusal, not a live code path. Keep them consistent: loosening one without the other is how a
+      // group starts firing at its uncapped extent.
       triggerRadiusM: tooWideForPoint
         ? Math.min(trigger.radiusM, CLUSTER_MAX_TRIGGER_RADIUS_M)
         : trigger.radiusM,

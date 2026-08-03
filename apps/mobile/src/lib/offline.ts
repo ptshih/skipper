@@ -34,7 +34,11 @@ import { getDrive, signDriveAudio } from './api'
 import {
   clipStoreDir,
   deleteAllStoredClips,
+  deleteQuietly,
+  driveDir,
+  hasBytes,
   hasStoredClip,
+  isSafeLocalName,
   migrateDriveV4,
   storedClipUri,
   sweepOrphanClips as sweepStore,
@@ -120,45 +124,13 @@ export interface OfflineManifest {
 // restores a device with every manifest and zero bytes — every drive listing as downloaded and playing
 // as silence, on a brand-new phone, with nothing to explain it. That is a data-shape bug, not a
 // storage optimization.
-function driveDir(driveId: string): Directory {
-  return new Directory(Paths.document, 'drives', driveId)
-}
+// ⚠ `driveDir`, `isSafeLocalName`, `hasBytes` and `deleteQuietly` come from `./clip-store` — it is the
+// LEAF of this pair (it never imports back), and all four were duplicated character-for-character here
+// until the 1.1 sweep. In THIS module `deleteQuietly` is only ever pointed at a file the module OWNS
+// (a drive-local byte, or its own `.part` temp) — NEVER at a shared store byte, which only the sweep
+// may reclaim.
 function manifestFile(driveId: string): File {
   return new File(driveDir(driveId), 'manifest.json')
-}
-
-/** A relative filename safe to address inside a drive dir. ⚠ A manifest read from disk is
- *  `JSON.parse`'d and shape-checked, NOT re-validated, so every name reaching a path builder is
- *  untrusted input: a `/` or a `..` would address bytes outside the dir — including its own
- *  `manifest.json`. (`./clip-store` applies the same guard on the store side.) */
-function isSafeLocalName(name: unknown): name is string {
-  return (
-    typeof name === 'string' &&
-    name.length > 0 &&
-    name !== '.' &&
-    name !== '..' &&
-    !name.includes('/') &&
-    !name.includes('\\') &&
-    !name.includes('\0')
-  )
-}
-
-/** `exists && size > 0`, never throwing. Both properties can throw on a path torn down mid-scan, and a
- *  throw there must read as "not present", never abort the caller's pass. (audit #843) */
-function hasBytes(f: File): boolean {
-  try {
-    return f.exists && (f.size ?? 0) > 0
-  } catch {
-    return false
-  }
-}
-
-/** Delete a file if it is there. `delete()` throws on a missing path. ⚠ Only ever called on a file this
- *  module OWNS (a drive-local byte, or its own `.part` temp) — NEVER on a shared store byte. */
-function deleteQuietly(f: File): void {
-  try {
-    if (f.exists) f.delete()
-  } catch {}
 }
 
 /** Are a manifest entry's bytes actually on disk? Resolves shared-vs-drive-local off `shared`. */
@@ -176,13 +148,6 @@ function clipUri(driveId: string, c: StoredClipRef): string | null {
   } catch {
     return null
   }
-}
-
-/** The player seq a clip maps to — every place narration under its own seq (V2 has no placeless
- *  framing; see docs/decisions/geometry-first-regions.md). Mirrors offline-util's
- *  urlMapFromDriveManifest so the on-disk keys line up with the online url map. */
-function clipSeq(c: DriveClip): number {
-  return c.seq
 }
 
 export interface DownloadProgress {
@@ -236,7 +201,10 @@ function planDriveClips(detail: DriveManifest): PlannedClip[] {
   const out: PlannedClip[] = []
   for (const c of detail.clips) {
     if (!hasDownloadableAudio(c)) continue // a silent beat (rest) carries no audio — nothing to fetch
-    const seq = clipSeq(c)
+    // Every place narration downloads under its OWN seq (V2 has no placeless framing; see
+    // docs/decisions/geometry-first-regions.md), which is what makes these on-disk keys line up with
+    // offline-util's `urlMapFromDriveManifest`.
+    const seq = c.seq
     const key = storeKeyForClip(c)
     let storeName: string | null = null
     if (key) {
@@ -965,6 +933,41 @@ export const OFFLINE_TTL_DAYS = 30
 export function isDownloadExpired(driveId: string): boolean {
   const m = loadManifest(driveId)
   return m != null && isPastTtl(m.savedAt, Date.now(), OFFLINE_TTL_DAYS)
+}
+
+/** Everything the detail screen needs to describe a drive's offline state, from ONE manifest read.
+ *
+ *  ⚠ WHY THIS EXISTS RATHER THAN THREE CALLS. `offlineStatus`, `isDownloadExpired` and
+ *  `downloadDirState` each independently `loadManifest`, and `loadManifest` is a SYNCHRONOUS
+ *  `textSync()` + `JSON.parse` + migration walk with no memo — so asking all three (which is what a
+ *  refresh does) paid three file reads and three parses on the JS thread, on focus, after every
+ *  download and after every top-up. The three answers are three readings of ONE file; taking it once
+ *  is both cheaper and the only way they cannot disagree about a manifest rewritten between reads.
+ *
+ *  Deliberately identical in outcome to calling the three: the directory check gates the read exactly
+ *  the way `downloadDirState` does, and an absent/unreadable manifest yields the same null status and
+ *  the same `false` expiry those functions return. */
+export function offlineSnapshot(driveId: string): {
+  status: OfflineStatus | null
+  expired: boolean
+  dirState: DownloadDirState
+} {
+  let dirExists = false
+  try {
+    dirExists = driveDir(driveId).exists
+  } catch {
+    dirExists = false
+  }
+  const m = dirExists ? loadManifest(driveId) : null
+  const dirState: DownloadDirState = !dirExists ? 'none' : m ? 'ok' : 'unreadable'
+  if (!m) return { status: null, expired: false, dirState }
+
+  const saved = presentSeqs(driveId, m)
+  const status: OfflineStatus | null =
+    saved.length === 0
+      ? null
+      : { downloaded: true, missingSeqs: missingAudioSeqs(m.audioSeqs, saved), expectedCount: m.audioSeqs.length }
+  return { status, expired: isPastTtl(m.savedAt, Date.now(), OFFLINE_TTL_DAYS), dirState }
 }
 
 /** A downloaded manifest projected to a drive list-card (the home "My Drives" shape). */

@@ -10,9 +10,10 @@
 // `file://` when downloaded, presigned https when streaming; we re-sign on a miss (a screen can sit open
 // past the ~1h presigned TTL) and give up gracefully when a seq is genuinely absent (a partial download).
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { PRE_START_STALL_MS } from '@skipper/engine'
 import { loadPlayback, resignPlayback } from './offline'
+import { applyPreviewAudioMode, releasePreviewAudioSession, useStartWatchdog } from './preview-audio'
 import { decideFail, decideToggle, sawFreshAudio } from './preview-util'
 
 export interface StopPreview {
@@ -62,17 +63,10 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
   // clip's error. Acting on that would light the unplayable hint under a clip playing fine.
   const handledErrorRef = useRef<string | null>(null)
   // ⚠ THE PRE-START WATCHDOG. Without it this surface has NO way to notice a clip that never produces
-  // audio: `replace()` and `play()` both succeed, the async 403 arrives (if at all) via `status.error`,
-  // and until 2026-08-02 nothing here read that either — so an expired presign left the row highlighted
-  // "now playing", silent, forever. A timer needs no cooperation from the vendor. Same shape and same
-  // constant as useRoutePreview and useDrive: it is the same clip over the same kind of url.
-  const startWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const clearStartWatchdog = useCallback(() => {
-    if (startWatchdog.current) {
-      clearTimeout(startWatchdog.current)
-      startWatchdog.current = null
-    }
-  }, [])
+  // audio. It and the exclusive-focus flip are SHARED with useRoutePreview (./preview-audio) — same
+  // shape, same constant, and the same rule useDrive keys on, because it is the same clip over the
+  // same kind of url. Change it there, not here.
+  const { arm: armStartWatchdog, clear: clearStartWatchdog } = useStartWatchdog()
 
   /** The ONE terminal state for a stop whose audio will not play, whatever the cause. */
   const failSeq = useCallback(
@@ -87,37 +81,13 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
         setActiveSeq((s) => (s === seq ? null : s))
         activeSeqRef.current = null
       }
-      if (act.releaseSession) void setIsAudioActiveAsync(false).catch(() => {})
+      if (act.releaseSession) releasePreviewAudioSession()
       setUnplayableSeq(seq)
     },
     [clearStartWatchdog],
   )
 
   const durSec = status.duration && status.duration > 0 ? status.duration : 0
-
-  // ⚠ D35 (1.1, founder): pre-drive skipper audio takes EXCLUSIVE focus, exactly like a drive — the
-  // skipper never talks over the rider's own music, on ANY surface. This block argued the OPPOSITE
-  // ("a couch preview is POLITE… mixWithOthers", and the old name `applyPoliteAudioMode` WAS the
-  // argument) until 1.1 step 8. Do not restore it: docs/decisions/drive-audio-exclusive-focus.md
-  // scoped itself to the DRIVING player and therefore never settled this surface, and its rationale
-  // (the drive supplies its own curated soundtrack, so there is nothing of the rider's left to duck)
-  // does not transfer to a single clip with no bed underneath it. That doc is now amended to cover
-  // every surface the skipper speaks on; CLAUDE.md's "In-car player landmines" audio line is the
-  // authority.
-  //
-  // ⚠ THE RE-ASSERT ON EVERY play() STAYS, AND ITS REASON MOVED — do NOT delete it as newly redundant
-  // now that both modes agree. It is no longer undoing a drive's `doNotMix`; it is undoing the drive's
-  // `shouldPlayInBackground: true`, which useDrive sets PROCESS-WIDE from a screen that PUSHES over
-  // this still-mounted one. Drop the re-assert and a preview clip keeps talking after the rider leaves
-  // the app. setAudioModeAsync is process-wide; last writer wins — which is also why a mount-only
-  // reset is not enough. (The natural await on resolveUri below gives the async call time to land.)
-  const applyPreviewAudioMode = useCallback(() => {
-    setAudioModeAsync({
-      playsInSilentMode: true,
-      shouldPlayInBackground: false,
-      interruptionMode: 'doNotMix',
-    }).catch(() => {})
-  }, [])
 
   const resolveUri = useCallback(
     async (seq: number): Promise<string | null> => {
@@ -143,24 +113,33 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
     [driveId],
   )
 
+  /** Toggle/replay the loaded clip. Shared by the row tap (via play() on the active stop) and the
+   *  screen's transport. The `atEnd` check inside `decideToggle` is why this is not a bare
+   *  `playing ? pause : play`: expo-audio parks a finished player at the end, so a second tap would
+   *  resume nothing. Declared ABOVE play() so play() can call it — useRoutePreview's `toggle` already
+   *  had this shape, and this one carried a verbatim second copy of the body until the 1.1 sweep. */
+  const togglePlay = useCallback(() => {
+    try {
+      const action = decideToggle({
+        playing: !!status.playing,
+        positionSec: status.currentTime ?? 0,
+        durationSec: durSec,
+        didJustFinish: !!status.didJustFinish,
+      })
+      if (action === 'pause') {
+        player.pause()
+        return
+      }
+      if (action === 'replay') player.seekTo(0)
+      player.play()
+    } catch {}
+  }, [player, durSec, status.playing, status.currentTime, status.didJustFinish])
+
   const play = useCallback(
     (seq: number) => {
       // Tap the already-loaded stop → toggle (or replay from the top if it finished).
       if (seq === activeSeq && activeSeqRef.current === seq) {
-        try {
-          const action = decideToggle({
-            playing: !!status.playing,
-            positionSec: status.currentTime ?? 0,
-            durationSec: durSec,
-            didJustFinish: !!status.didJustFinish,
-          })
-          if (action === 'pause') {
-            player.pause()
-          } else {
-            if (action === 'replay') player.seekTo(0)
-            player.play()
-          }
-        } catch {}
+        togglePlay()
         return
       }
       setUnplayableSeq(null)
@@ -192,11 +171,10 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
           playbackAttempted.current = true
           // Armed only once the clip is actually in the player. The guard inside is what makes a
           // superseded timer harmless if a later tap has already taken over.
-          startWatchdog.current = setTimeout(() => {
-            startWatchdog.current = null
+          armStartWatchdog(PRE_START_STALL_MS, () => {
             if (activeSeqRef.current !== seq) return
             failSeq(seq)
-          }, PRE_START_STALL_MS)
+          })
         } catch {
           // A synchronous throw is a malformed source; the presign 403 arrives asynchronously via
           // status.error or, if the vendor stays silent, via the watchdog above. Same terminal state.
@@ -205,37 +183,8 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
         }
       })()
     },
-    [
-      activeSeq,
-      applyPreviewAudioMode,
-      clearStartWatchdog,
-      durSec,
-      failSeq,
-      player,
-      resolveUri,
-      status.currentTime,
-      status.didJustFinish,
-      status.error,
-      status.playing,
-    ],
+    [activeSeq, armStartWatchdog, clearStartWatchdog, failSeq, player, resolveUri, status.error, togglePlay],
   )
-
-  const togglePlay = useCallback(() => {
-    try {
-      const action = decideToggle({
-        playing: !!status.playing,
-        positionSec: status.currentTime ?? 0,
-        durationSec: durSec,
-        didJustFinish: !!status.didJustFinish,
-      })
-      if (action === 'pause') {
-        player.pause()
-        return
-      }
-      if (action === 'replay') player.seekTo(0)
-      player.play()
-    } catch {}
-  }, [player, durSec, status.playing, status.currentTime, status.didJustFinish])
 
   // Real audio arrived ⇒ disarm the watchdog. Mirrors useDrive's `sawFresh` and useRoutePreview's.
   const sawFresh = sawFreshAudio({ playing: !!status.playing, positionSec: status.currentTime ?? 0 })
@@ -263,7 +212,7 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
   // reading the drive — the one that left their podcast dead until they navigated away.
   useEffect(() => {
     if (!status.didJustFinish) return
-    void setIsAudioActiveAsync(false).catch(() => {})
+    releasePreviewAudioSession()
   }, [status.didJustFinish])
 
   // A screen unmounting mid-load must not leave a timer that fires into a dead component.
@@ -292,7 +241,7 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
     // `doNotMix` it INTERRUPTS the rider's own music, and iOS only resumes theirs once the session is
     // deactivated. Without this, previewing one stop stops their podcast permanently. `useDrive` pays
     // the same cost at the end of a drive and its comment there records why it is not optional.
-    void setIsAudioActiveAsync(false).catch(() => {})
+    releasePreviewAudioSession()
     activeSeqRef.current = null
     setActiveSeq(null)
     setUnplayableSeq(null)

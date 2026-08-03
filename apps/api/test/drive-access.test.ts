@@ -20,33 +20,17 @@
 
 import { afterEach, describe, expect, mock, test } from 'bun:test'
 import { DRIVE_CREATE_RATE } from '../src/limits'
+import { ACCOUNT, ANON, type FakeSession } from './fixtures'
 
 /* ------------------------------- the session ------------------------------ */
 
-/** Structurally what `tierOf` (../src/tiers) and drives.ts's `c.get('session')?.user.id` read. Cast
- *  once, here, rather than reproducing better-auth's full inferred Session type. */
-type FakeSession = { user: { id: string; isAnonymous: boolean; role: string | null } }
-
-/** ⚠ THE ANONYMOUS FIXTURE IS LOAD-BEARING IN TWO DIFFERENT WAYS, AND THEY ARE NOT THE SAME FIELD.
- *
- *  `isAnonymous: true` is what makes this file real TODAY: it is what `tierOf` reads, so it is what
- *  every gate and every backstop keys on. MUTATION-CHECKED 2026-08-01 — flipping it to `false` against
- *  an UNMODIFIED drives.ts turns 8 tests red. If it ever stops doing that, the session mock is not
- *  driving `tierOf` and this whole file is theatre.
- *
- *  The TRUTHY `id` is the other half, and it guards a FUTURE regression rather than a present one.
- *  After the anonymous mint (D16) an anonymous session IS a real `user` row with a real id, so an
- *  id-PRESENCE backstop (`!session?.user.id`) is `false` forever and refuses nobody — that is INV-15's
- *  whole sentence. drives.ts keys its backstops on TIER instead (E-E), which is why an empty id here
- *  does NOT currently mask a dropped gate (checked: it stays red). Keep the id truthy anyway: the day
- *  someone "simplifies" a backstop back to `!userId`, an empty-id fixture would make that revert look
- *  green. Do not zero it out to "keep the fixture minimal". */
-const ANON: FakeSession = {
-  user: { id: 'anon-00000000-0000-4000-8000-000000000000', isAnonymous: true, role: 'user' },
-}
-const ACCOUNT: FakeSession = {
-  user: { id: 'acct-00000000-0000-4000-8000-000000000000', isAnonymous: false, role: 'user' },
-}
+// `FakeSession` is structurally what `tierOf` (@skipper/shared) and drives.ts's
+// `c.get('session')?.user.id` read — declared once rather than reproducing better-auth's full
+// inferred Session type.
+//
+// ⚠ ANON/ACCOUNT are SHARED (./fixtures), and ANON is load-bearing in two different ways that are not
+// the same field — the mutation check that keeps this file honest (flip `isAnonymous` and 8 tests here
+// must go red) is written out there. Read it before editing either fixture.
 
 /** What this file wants the session resolver to answer.
  *  - a FakeSession → that session

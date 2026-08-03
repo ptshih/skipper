@@ -9,8 +9,9 @@
 // comment ("mirroring the server's tierOf") rather than a fact. That agreement is load-bearing:
 // INV-9 says a truthy session is NOT "signed in", because the Better Auth anonymous plugin mints a
 // REAL user row, so this predicate decides what every rider sees AND whether the server hands them a
-// gated route. A drift between the two sides is invisible on both. Now there is one implementation
-// and one test.
+// gated route. A drift between the two sides is invisible on both — and one had already happened:
+// the client's `isAdmin` did not exclude anonymous sessions until step 8b. Now there is one
+// implementation and one test.
 //
 // It is deliberately PURE and dependency-free — no Better Auth import, no Zod, no DB. That is what
 // lets `apps/api` use it inside a request path that must stay env-free at module load, and what keeps

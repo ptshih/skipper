@@ -87,17 +87,20 @@ export function usageUsd(model: string, usage: UsageLike): number {
   )
 }
 
-function tallyUsd(model: string, t: Tally): number {
-  const p = MODEL_PRICING[model]
-  if (!p) return 0 // unknown model: tokens are tallied, dollars honestly unpriced
-  return (
-    (t.input * p.inputPerMTok +
-      t.cacheRead * p.inputPerMTok * CACHE_READ_MULT +
-      t.cacheWrite * p.inputPerMTok * CACHE_WRITE_MULT +
-      t.output * p.outputPerMTok) /
-    1_000_000
-  )
-}
+/** A running tally priced by the SAME arithmetic as a single call.
+ *
+ *  ⚠ This was a second copy of `usageUsd`'s formula differing only in field spelling, in the module
+ *  INV-11 names as a spend guard — so a pricing change (a new cache multiplier, a rounding rule)
+ *  applied to one and not the other made the per-call `plan_spend` log and the CLI's running total
+ *  silently disagree about the same dollars. A tally IS a summed usage; the only real difference is
+ *  the names, so that is all this does. */
+const tallyUsd = (model: string, t: Tally): number =>
+  usageUsd(model, {
+    input_tokens: t.input,
+    output_tokens: t.output,
+    cache_read_input_tokens: t.cacheRead,
+    cache_creation_input_tokens: t.cacheWrite,
+  })
 
 /** Total recorded LLM spend (USD) across all models this process. */
 export function llmSpentUsd(): number {

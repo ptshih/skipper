@@ -27,7 +27,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { drivePreviewClip } from '@skipper/shared'
 import type { DriveStop } from '@skipper/engine'
-import { isAdmin } from '../src/tiers'
+import { isAdmin } from '@skipper/shared'
 
 /* ------------------------------- the presign ------------------------------ */
 

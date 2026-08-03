@@ -112,3 +112,8 @@ export function announce(opts: { tool: string; blast: Blast[]; apply: boolean })
   const mode = opts.apply ? '⚠ APPLYING (live)' : 'DRY RUN — pass --apply to execute'
   console.log(`\n[${opts.tool}] ${opts.blast.join(' + ')} — ${mode}\n`)
 }
+
+/** A date as `YYYY-MM-DD` for an operator log, or `never` when it is absent.
+ *  Both generators print freshness stamps this way; a run that formats "never" differently from its
+ *  sibling reads as two different pipelines to the operator comparing their output. */
+export const day = (d: Date | null | undefined): string => d?.toISOString().slice(0, 10) ?? 'never'

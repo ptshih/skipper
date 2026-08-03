@@ -3,8 +3,9 @@
 // Deliberately NOT a `keyboard` flag on Screen: Screen has thirteen call sites whose contract is
 // "paints `surface`, owns safe-area" (Screen.tsx:1-2), and none of them want a footer slot, a scroll
 // ref, or an auto-scroll state machine. This shell's contract is the other one — "a scroll region
-// with a pinned composer that survives the keyboard". The scroll-edge fade rule is NOT forked: the
-// overflow bookkeeping below is Screen.tsx's, copied, feeding the same standalone EdgeFade.
+// with a pinned composer that survives the keyboard". The scroll-edge fade rule is NOT forked — both
+// shells call the same `useScrollEdgeFades` and feed the same standalone EdgeFade; this one only
+// layers auto-scroll pinning on top of those events.
 //
 // It knows NOTHING about the planner — no transcript, no streaming, no network. It is handed
 // children and a footer.
@@ -21,7 +22,6 @@ import {
   ScrollView,
   StyleSheet,
   View,
-  type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
   type StyleProp,
@@ -32,6 +32,7 @@ import { useHeaderHeight } from 'expo-router/react-navigation'
 import { space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { EdgeFade } from './EdgeFade'
+import { useScrollEdgeFades } from './useScrollEdgeFades'
 
 /**
  * How close to the bottom the rider must be for a growing turn to keep scrolling itself into view.
@@ -64,15 +65,11 @@ export function ConversationScreen({
   const keyboardVisible = useKeyboardVisible()
   const scrollRef = useRef<ScrollView | null>(null)
 
-  // Overflow-aware scroll-edge fades — the rule is Screen.tsx:45-69 verbatim, including the
-  // round-to-whole-px setState guards that collapse a 60fps onScroll stream into a couple of
-  // setStates per edge crossing. A fade must only appear where content is genuinely clipped.
-  const [viewportH, setViewportH] = useState(0)
-  const [contentH, setContentH] = useState(0)
-  const [scrollY, setScrollY] = useState(0)
-  const overflows = contentH > viewportH + 1
-  const showTopFade = overflows && scrollY > 1
-  const showBottomFade = overflows && scrollY + viewportH < contentH - 1
+  // Overflow-aware scroll-edge fades — SHARED with Screen.tsx (./useScrollEdgeFades), which is where
+  // the rule and its rounding guards live. This screen only layers auto-scroll pinning on top of the
+  // same events; the fade measurements themselves are not its business.
+  const fades = useScrollEdgeFades()
+  const { showTopFade, showBottomFade } = fades
 
   // ── Auto-scroll, and how it must not fight the rider ────────────────────────────────────────
   // Seeded FALSE, which is a deliberate departure from the design's "starts `true`". At cold open
@@ -85,22 +82,17 @@ export function ConversationScreen({
 
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent
-    // Measured off THIS event, not off the rounded state above: those exist for the fades and lag
-    // by a render, and a one-frame-stale pin decision reads as a stutter mid-stream.
+    // Measured off THIS event, not off the fade hook's rounded state: that exists for the fades and
+    // lags by a render, and a one-frame-stale pin decision reads as a stutter mid-stream.
     pinnedRef.current =
       contentSize.height - layoutMeasurement.height - contentOffset.y <= CONVERSATION_STICK_PX
-    const y = Math.round(contentOffset.y)
-    setScrollY((prev) => (prev === y ? prev : y))
+    fades.onScroll(e)
   }
 
-  const onLayout = (e: LayoutChangeEvent) => {
-    const h = Math.round(e.nativeEvent.layout.height)
-    setViewportH((prev) => (prev === h ? prev : h))
-  }
+  const onLayout = fades.onLayout
 
-  const onContentSizeChange = (_w: number, h: number) => {
-    const rounded = Math.round(h)
-    setContentH((prev) => (prev === rounded ? prev : rounded))
+  const onContentSizeChange = (w: number, h: number) => {
+    fades.onContentSizeChange(w, h)
     // ⚠ NEVER re-pin here. A rider who scrolled up to re-read turn 2 while turn 9 streams must stay
     // put — that is the whole rule. This branch only ACTS on a pin that a rider action already set.
     if (!stickToBottom || !pinnedRef.current) return

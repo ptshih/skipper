@@ -67,17 +67,27 @@ export function clipStoreDir(): Directory {
   return dir
 }
 
+/* -------------------------------------------------------------------------- */
+/*  FS primitives — shared with ./offline                                       */
+/* -------------------------------------------------------------------------- */
+// ⚠ THESE FOUR LIVE HERE BECAUSE THIS MODULE IS THE LEAF: `./offline` imports this one and never the
+// reverse, so this is the only home both halves of the download store can reach. They were duplicated
+// character-for-character in both files — a path-traversal guard and a presence probe, two copies
+// each, in the pair of modules whose stated failure mode is LOSING A RIDER'S BYTES. Drift there is
+// silent and surfaces as a missing clip in a dead zone, which is the one outcome neither module is
+// allowed to have.
+
 /**
- * A filename safe to address inside the store.
+ * A relative filename safe to address inside the store or inside a drive dir.
  *
  * ⚠ A manifest read from disk is `JSON.parse`'d and shape-checked, NOT re-validated, so every name
- * that reaches a path builder here is untrusted input: a `/` or a `..` would address bytes OUTSIDE
- * the store — including a drive's `manifest.json`. This is deliberately a PATH-SAFETY guard and not a
- * full `parseStoreFileName`: a name written by a FUTURE build (a rev format this one has never seen)
- * must still resolve and play, and only the sweep — where the cost of being wrong is a deletion —
- * demands a name it can fully parse.
+ * that reaches a path builder is untrusted input: a `/` or a `..` would address bytes OUTSIDE the
+ * directory — including a drive's own `manifest.json`. This is deliberately a PATH-SAFETY guard and
+ * not a full `parseStoreFileName`: a name written by a FUTURE build (a rev format this one has never
+ * seen) must still resolve and play, and only the sweep — where the cost of being wrong is a
+ * deletion — demands a name it can fully parse.
  */
-function isSafeStoreName(name: unknown): name is string {
+export function isSafeLocalName(name: unknown): name is string {
   return (
     typeof name === 'string' &&
     name.length > 0 &&
@@ -90,8 +100,11 @@ function isSafeStoreName(name: unknown): name is string {
 }
 
 /** `exists && size > 0`, never throwing. Both properties can throw on a path torn down mid-scan (a
- *  concurrent delete), and a throw there must read as "not present", never abort the caller's pass. */
-function hasBytes(f: File): boolean {
+ *  concurrent delete), and a throw there must read as "not present", never abort the caller's pass.
+ *  ⚠ `(size ?? 0) > 0` is the ONLY correct presence probe — `file.size` returns **null**, not 0 and
+ *  not a throw, for a missing file on iOS (verified in the installed native source; the `.d.ts` claim
+ *  of "0 if the file does not exist" is wrong). See the API note in this file's header. */
+export function hasBytes(f: File): boolean {
   try {
     return f.exists && (f.size ?? 0) > 0
   } catch {
@@ -113,7 +126,7 @@ function hasBytes(f: File): boolean {
  * `hasStoredClip(name) ? storedClipUri(name) : …` can never reach `storedClipUri`'s throw.
  */
 export function hasStoredClip(name: string): boolean {
-  if (!isSafeStoreName(name)) return false
+  if (!isSafeLocalName(name)) return false
   return hasBytes(new File(clipStoreDir(), name))
 }
 
@@ -127,7 +140,7 @@ export function hasStoredClip(name: string): boolean {
  * carries no rider content (INV-13).
  */
 export function storedClipUri(name: string): string {
-  if (!isSafeStoreName(name)) {
+  if (!isSafeLocalName(name)) {
     throw new Error('offline store: refusing to address an unsafe clip name')
   }
   return new File(clipStoreDir(), name).uri
@@ -138,17 +151,23 @@ export function storedClipUri(name: string): string {
 /* -------------------------------------------------------------------------- */
 
 /**
- * A drive's own directory. Duplicated from `offline.ts` (one line) rather than imported: `offline.ts`
- * imports THIS module, so importing back would be a cycle. The shape is fixed by the layout comment
- * at the top of the file and by `listDownloadedDrives`, not by either copy.
+ * A drive's own directory.
+ *
+ * ⚠ ENCODES THE LAYOUT RULE, so it has exactly one definition: `clips/` is a SIBLING of `drives/`,
+ * never a child (see the LAYOUT block in this file's header for what a nested store would break).
+ * `listDownloadedDrives` treats every directory under `drives/` as a driveId, so this path shape and
+ * that scan have to be two readings of the same rule rather than two rules that happen to agree.
  */
-function driveDir(driveId: string): Directory {
+export function driveDir(driveId: string): Directory {
   return new Directory(Paths.document, 'drives', driveId)
 }
 
-/** Delete a file if it is there. `delete()` throws on a missing path, and every caller here is
- *  reclaiming a KNOWN-duplicate source, so a failure is never worth propagating. */
-function deleteQuietly(f: File): void {
+/** Delete a file if it is there. `delete()` throws on a missing path, and callers are always
+ *  reclaiming something they OWN (a known-duplicate source, a drive-local byte, a `.part` temp), so a
+ *  failure is never worth propagating.
+ *  ⚠ OWNERSHIP IS THE CALLER'S TO ESTABLISH — never point this at a shared store byte on behalf of one
+ *  drive; the store is reclaimed only by the sweep, which deletes nothing it cannot prove is orphaned. */
+export function deleteQuietly(f: File): void {
   try {
     if (f.exists) f.delete()
   } catch {}
@@ -233,7 +252,7 @@ export function migrateDriveV4(
   raw: Record<string, unknown>,
 ): Record<string, unknown> | null {
   const placed = new Set<string>()
-  if (isSafeStoreName(driveId)) {
+  if (isSafeLocalName(driveId)) {
     const dir = driveDir(driveId)
     for (const step of planV4Rekey(raw)) {
       // `toName: null` = the subject is not recoverable offline (a pre-step-4 fused cluster telling
@@ -241,7 +260,7 @@ export function migrateDriveV4(
       // their bytes are perfectly good audio and only the NAME is unrecoverable. Nothing to move.
       if (step.toName == null) continue
       // A source name off disk is untrusted the same way a store name is.
-      if (!isSafeStoreName(step.fromName)) continue
+      if (!isSafeLocalName(step.fromName)) continue
       try {
         if (placeOne(dir, step.fromName, step.toName)) placed.add(step.toName)
       } catch {

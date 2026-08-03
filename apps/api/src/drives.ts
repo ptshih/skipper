@@ -50,10 +50,11 @@ import {
   type DrivePreviewClip,
   type DriveProposal,
   type SignedDriveAudio,
+  isAdmin,
   varietyKey,
   type RegionAnchor,
 } from '@skipper/shared'
-import { isAdmin, requireAccount, withSession, type ApiEnv } from './entitlements'
+import { requireAccount, withSession, type ApiEnv } from './entitlements'
 import { creditSummary, driveConsumeEntry, ensureFreeGrant } from './credits'
 import { DRIVE_CREATE_RATE, MAX_DRIVE_BODY_BYTES, MAX_PLAN_ANCHORS, readBoundedText } from './limits'
 import { rateLimit } from './rate-limit'
@@ -198,6 +199,44 @@ async function hydrateAnchors(ids: string[]): Promise<ResolvedEndpoint[] | null>
     out.push(hit)
   }
   return out
+}
+
+/**
+ * Resolve a whole route's anchors — start, end, AND every via — in ONE all-or-nothing lookup.
+ *
+ * ⚠ THIS IS INV-1's ENFORCEMENT POINT, and it is a function rather than a pattern because the pattern
+ * is what broke it. `via` was once typed as free coordinates while start/end were being hardened,
+ * which satisfied "reject a non-anchor ENDPOINT" exactly while still shipping arbitrary billable
+ * midpoints — guarding both ends of a route and leaving the middle open is not a partial guarantee, it
+ * is none. Both billed callers used to spell the round trip out by hand ([start, ...via, end], then
+ * `hydrated[0]!` / `hydrated[length-1]!` / `.slice(1,-1)`), so the next billed path could copy the
+ * index arithmetic and lose the middle again. Here the guarantee is in the SIGNATURE: you cannot get a
+ * `start` out of this without every `via` having passed the same allowlist check.
+ *
+ * Returns null when ANY id is unknown or ineligible; the caller 400s with `NOT_AN_ANCHOR`.
+ */
+async function resolveRouteAnchors(
+  startId: string,
+  endId: string,
+  viaIds: string[] | undefined,
+): Promise<{
+  start: ResolvedEndpoint
+  end: ResolvedEndpoint
+  via: ResolvedEndpoint[]
+  /** Total waypoints resolved (`via.length + 2`) — what `logRouteSpend` records as `anchors`. Returned
+   *  rather than re-derived at each call site so the spend line cannot drift from what was billed. */
+  count: number
+} | null> {
+  const hydrated = await hydrateAnchors([startId, ...(viaIds ?? []), endId])
+  if (!hydrated) return null
+  // Non-null by construction: `hydrateAnchors` preserves the caller's order and length, and the input
+  // always carries at least the two endpoints.
+  return {
+    start: hydrated[0]!,
+    end: hydrated[hydrated.length - 1]!,
+    via: hydrated.slice(1, -1),
+    count: hydrated.length,
+  }
 }
 
 /** The 400 an off-list endpoint gets. ⚠ Says nothing about WHICH id failed or whether it exists —
@@ -633,11 +672,9 @@ driveRoutes.post('/propose', async (c) => {
   const { start: startId, end: endId, via: viaIds } = parsed.data
 
   // ⚠ BEFORE the Routes call — this is the billed boundary (INV-1). start, end AND every via.
-  const hydrated = await hydrateAnchors([startId, ...(viaIds ?? []), endId])
-  if (!hydrated) return c.json(NOT_AN_ANCHOR, 400)
-  const startEp = hydrated[0]!
-  const endEp = hydrated[hydrated.length - 1]!
-  const via = hydrated.slice(1, -1)
+  const anchors = await resolveRouteAnchors(startId, endId, viaIds)
+  if (!anchors) return c.json(NOT_AN_ANCHOR, 400)
+  const { start: startEp, end: endEp, via, count: anchorCount } = anchors
 
   let route
   try {
@@ -650,7 +687,7 @@ driveRoutes.post('/propose', async (c) => {
   // logRouteSpend for why this line exists and what may never ride on it.
   logRouteSpend({
     path: 'propose',
-    anchors: hydrated.length,
+    anchors: anchorCount,
     via: via.length,
     loop: sameSpot(startEp, endEp),
     meters: route.distanceMeters,
@@ -789,11 +826,9 @@ driveRoutes.post('/', requireAccount, createDriveLimiter, async (c) => {
   // HERE rather than at parse time: the idempotent-replay path above returns without routing, and it
   // is the hot path for a lost-ACK retry, so it should not pay for a lookup it does not need. A rider
   // who reached this line has already passed the credit gate, so an off-list id costs them nothing.
-  const hydrated = await hydrateAnchors([startId, ...(viaIds ?? []), endId])
-  if (!hydrated) return c.json(NOT_AN_ANCHOR, 400)
-  const start = hydrated[0]!
-  const end = hydrated[hydrated.length - 1]!
-  const via = hydrated.slice(1, -1)
+  const anchors = await resolveRouteAnchors(startId, endId, viaIds)
+  if (!anchors) return c.json(NOT_AN_ANCHOR, 400)
+  const { start, end, via, count: anchorCount } = anchors
 
   let route
   try {
@@ -808,7 +843,7 @@ driveRoutes.post('/', requireAccount, createDriveLimiter, async (c) => {
   // all end the request, and the Routes call is paid for either way.
   logRouteSpend({
     path: 'create',
-    anchors: hydrated.length,
+    anchors: anchorCount,
     via: via.length,
     loop: sameSpot(start, end),
     meters: route.distanceMeters,
@@ -861,9 +896,7 @@ driveRoutes.post('/', requireAccount, createDriveLimiter, async (c) => {
     }
   })
 
-  const startEp: ResolvedEndpoint = { name: start.name, lat: start.lat, lng: start.lng }
-  const endEp: ResolvedEndpoint = { name: end.name, lat: end.lat, lng: end.lng }
-  const routeSig = routeSigOf(startEp, endEp, route.polyline)
+  const routeSig = routeSigOf(start, end, route.polyline)
   const bbox = polylineBbox(route.polyline)
   const label = `${start.name} → ${end.name}`
   const provenance: RouteProvenance = {
@@ -955,32 +988,38 @@ driveRoutes.get('/', requireAccount, async (c) => {
   // mint an id-presence check is permanently false, and this route reaches the ledger (INV-4/INV-15).
   const userId = c.get('tier') === 'free' ? c.get('session')?.user.id : undefined
   if (!userId) return c.json({ error: 'account_required' }, 401)
-  const rows = await withRetry(
-    () =>
-      db
-        .select({
-          driveId: drives.id,
-          label: drives.label,
-          startName: drives.startName,
-          endName: drives.endName,
-          distanceMeters: drives.distanceMeters,
-          durationSeconds: drives.durationSeconds,
-          // Count clips in SQL rather than hauling the full selection jsonb back just to .length it
-          // (selection is jsonb NOT NULL, so no null-handling needed).
-          clipCount: sql<number>`jsonb_array_length(${drives.selection})`,
-          createdAt: drives.createdAt,
-        })
-        .from(drives)
-        .where(and(eq(drives.userId, userId), isNull(drives.deletedAt)))
-        .orderBy(desc(drives.createdAt)),
-    { label: 'drive.list' },
-  )
+  // ⚠ The list and the ledger read share NO data, and this route is hit on every app focus — so they
+  // go together rather than one after the other. The PAIR inside stays ordered: `ensureFreeGrant`
+  // materializes the allotment so a brand-new user reads the full balance even before their first
+  // drive, which only works if it lands before the summing read. neon-http is stateless (one HTTP
+  // round trip per statement), so what this actually saves is a whole RTT of rider-visible latency.
+  // The grant is an idempotent upsert, so it is harmless if the list half rejects first.
+  const [rows, { remaining, granted }] = await Promise.all([
+    withRetry(
+      () =>
+        db
+          .select({
+            driveId: drives.id,
+            label: drives.label,
+            startName: drives.startName,
+            endName: drives.endName,
+            distanceMeters: drives.distanceMeters,
+            durationSeconds: drives.durationSeconds,
+            // Count clips in SQL rather than hauling the full selection jsonb back just to .length it
+            // (selection is jsonb NOT NULL, so no null-handling needed).
+            clipCount: sql<number>`jsonb_array_length(${drives.selection})`,
+            createdAt: drives.createdAt,
+          })
+          .from(drives)
+          .where(and(eq(drives.userId, userId), isNull(drives.deletedAt)))
+          .orderBy(desc(drives.createdAt)),
+      { label: 'drive.list' },
+    ),
+    ensureFreeGrant(userId).then(() => creditSummary(userId)),
+  ])
   // Proactive "N drives left" hint, from the user-owned credit LEDGER (every account has a balance).
   // `remaining` is the spendable balance and `cap` the lifetime granted (for "N of M" framing).
-  // ensureFreeGrant materializes the allotment so a brand-new user reads the full balance even before
-  // their first drive. `remaining` is clamped at 0 so a future refund clawback can't surface negative.
-  await ensureFreeGrant(userId)
-  const { remaining, granted } = await creditSummary(userId)
+  // `remaining` is clamped at 0 so a future refund clawback can't surface negative.
   const credits = { remaining: Math.max(0, remaining), cap: granted }
   return c.json({
     drives: rows.map((r) => ({
@@ -1015,20 +1054,26 @@ async function loadOwnedDriveById(userId: string, id: string) {
 
 /** Read a JSON body and validate it, or hand back the 4xx the caller should return.
  *
- *  Both write routes did this by hand, which meant the "Invalid JSON body." wording lived in two
- *  places while the per-route shape message lived in each. Only the shape message actually differs,
- *  so only that is a parameter.
+ *  All three write routes did this by hand, which meant the "Invalid JSON body." wording lived in
+ *  three places while the per-route shape message lived in each. Only the rider-facing strings
+ *  actually differ, so only those are parameters.
  *
  *  ⚠ `maxBytes` is REQUIRED and undefaulted on purpose — a new caller has to state what it is willing
  *  to carry. This function's first act used to be `await c.req.json()`, which buffers an unbounded body
  *  into memory before anything can object: one unauthenticated request could carry a megabyte into the
  *  paid paths (INV-3). The bound is measured on the real stream and Content-Length is never consulted;
- *  see ./limits for why that distinction is the whole guarantee. */
-async function readJsonBody<T>(
+ *  see ./limits for why that distinction is the whole guarantee.
+ *
+ *  ⚠ EXPORTED because the planner route is the third caller and the most expensive one to get wrong —
+ *  it is the anonymous model path. A copy of this ladder is a copy of an INV-3 spend guard, and the
+ *  one that gets missed by the next hardening is whichever one lives furthest from this comment. */
+export async function readJsonBody<T>(
   c: Context,
   schema: { safeParse: (v: unknown) => { success: true; data: T } | { success: false } },
   shapeMessage: string,
   maxBytes: number,
+  /** Rider-facing 413 copy. Defaulted because only the planner speaks in persona here. */
+  tooLargeMessage = 'That request is too large. Try trimming it down.',
 ): Promise<{ ok: true; data: T } | { ok: false; res: Response }> {
   const read = await readBoundedText(c.req.raw, maxBytes)
   // 413 — "Content Too Large" (RFC 9110 §15.5.14; "Payload Too Large" is the retired RFC 7231 name).
@@ -1037,7 +1082,7 @@ async function readJsonBody<T>(
   if (!read.ok) {
     return {
       ok: false,
-      res: c.json({ error: 'payload_too_large', message: 'That request is too large. Try trimming it down.' }, 413),
+      res: c.json({ error: 'payload_too_large', message: tooLargeMessage }, 413),
     }
   }
   let body: unknown
@@ -1113,22 +1158,37 @@ async function manifestForStoredDrive(drive: NonNullable<Awaited<ReturnType<type
 const ownerId = (c: Context<ApiEnv>): string | undefined =>
   c.get('tier') === 'free' ? c.get('session')?.user.id : undefined
 
-/** Load a LIVE drive the caller OWNS (404 on miss-or-not-yours-or-deleted — never reveal another
- *  user's drive, and a soft-deleted drive reads as gone). */
-async function loadOwnedDrive(c: Context<ApiEnv>) {
+/** The `(driveId, userId)` pair every owner-scoped query is keyed on, or null when either half is
+ *  missing/malformed.
+ *
+ *  ⚠ ONE PLACE, because all three owner routes must agree and the failure of disagreeing is silent.
+ *  The UUID guard is not cosmetic: without it a `:id` like `not-a-uuid` reaches Postgres as a uuid
+ *  comparison and comes back a DRIVER ERROR (500), not the 404 an unowned id is supposed to read as —
+ *  so a fourth owner route added without it regresses 404→500 and leaks that the id was malformed
+ *  rather than simply not the caller's. Callers keep their own miss handling (a loader returns null, a
+ *  route 404s) because that part legitimately differs. */
+function ownedRef(c: Context<ApiEnv>): { id: string; userId: string } | null {
   const id = c.req.param('id')
   const userId = ownerId(c)
   if (!id || !UUID_RE.test(id) || !userId) return null
-  return loadOwnedDriveById(userId, id)
+  return { id, userId }
+}
+
+/** Load a LIVE drive the caller OWNS (404 on miss-or-not-yours-or-deleted — never reveal another
+ *  user's drive, and a soft-deleted drive reads as gone). */
+async function loadOwnedDrive(c: Context<ApiEnv>) {
+  const ref = ownedRef(c)
+  if (!ref) return null
+  return loadOwnedDriveById(ref.userId, ref.id)
 }
 
 /** Lean owner-scoped loader — only { id, selection }, for paths that re-presign but need no geometry
  *  (POST /:id/assets/sign). Same ownership scoping as loadOwnedDrive (id + userId + not-deleted +
  *  UUID guard); 404 on any miss. */
 async function loadOwnedSelection(c: Context<ApiEnv>) {
-  const id = c.req.param('id')
-  const userId = ownerId(c)
-  if (!id || !UUID_RE.test(id) || !userId) return null
+  const ref = ownedRef(c)
+  if (!ref) return null
+  const { id, userId } = ref
   const rows = await withRetry(
     () =>
       db
@@ -1185,11 +1245,11 @@ driveRoutes.post('/:id/assets/sign', requireAccount, async (c) => {
  * Owner route: `requireAccount` first on its own chain (D15/INV-15).
  */
 driveRoutes.delete('/:id', requireAccount, async (c) => {
-  const id = c.req.param('id')
   // 404, not 401 — deliberate here (see loadOwnedDrive): an unowned id must read as gone. Tier-keyed
   // like the other owner loaders so no query is ever scoped by an anonymous id (INV-4/INV-15).
-  const userId = ownerId(c)
-  if (!id || !UUID_RE.test(id) || !userId) return c.json({ error: 'not_found' }, 404)
+  const ref = ownedRef(c)
+  if (!ref) return c.json({ error: 'not_found' }, 404)
+  const { id, userId } = ref
   const deleted = await withRetry(
     () =>
       db

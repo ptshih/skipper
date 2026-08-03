@@ -22,9 +22,10 @@
 //
 // ⚠ INV-13: nothing here logs a url, a vendor error string, or anything else.
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { PRE_START_STALL_MS } from '@skipper/engine'
 import { track } from './analytics'
+import { applyPreviewAudioMode, releasePreviewAudioSession, useStartWatchdog } from './preview-audio'
 import { decideFail, decideToggle, PREVIEW_END_EPS_SEC, sawFreshAudio } from './preview-util'
 
 export interface RoutePreview {
@@ -78,20 +79,10 @@ export function useRoutePreview(): RoutePreview {
   // paired event exists to produce.
   const completedCardRef = useRef<string | null>(null)
 
-  // ⚠ THE PRE-START WATCHDOG — the reason this surface does not depend on `status.error` firing.
-  // The header's DEVICE-UNVERIFIED note below is the whole problem: if expo-audio does NOT populate
-  // `status.error` for an HTTP 403 on a remote source, the error effect never runs and the rider taps
-  // a disc that does nothing, forever, with no hint and no way to know the taste is simply gone. A
-  // timer needs no such cooperation. `useDrive` has always had one (it is the same clip over the same
-  // kind of presigned url); this surface shipped without it, so the honest terminal state the header
-  // promises was only reachable when the vendor happened to report the failure.
-  const startWatchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const clearStartWatchdog = useCallback(() => {
-    if (startWatchdog.current) {
-      clearTimeout(startWatchdog.current)
-      startWatchdog.current = null
-    }
-  }, [])
+  // ⚠ THE PRE-START WATCHDOG — the reason this surface does not depend on `status.error` firing. It
+  // and the exclusive-focus flip are SHARED with useStopPreview (./preview-audio); read that module
+  // before changing either, and change it there rather than here.
+  const { arm: armStartWatchdog, clear: clearStartWatchdog } = useStartWatchdog()
 
   // The ONE terminal state, shared by all three ways a clip can fail to play: a synchronous throw out
   // of replace(), an asynchronous `status.error`, and the watchdog above. They were three near-copies
@@ -109,30 +100,13 @@ export function useRoutePreview(): RoutePreview {
         setActiveCardId((c) => (c === cardId ? null : c))
         activeCardIdRef.current = null
       }
-      if (act.releaseSession) void setIsAudioActiveAsync(false).catch(() => {})
+      if (act.releaseSession) releasePreviewAudioSession()
       setFailedCardId(cardId)
     },
     [clearStartWatchdog],
   )
 
   const durSec = status.duration && status.duration > 0 ? status.duration : 0
-
-  // ⚠ D35 (1.1): pre-drive skipper audio takes EXCLUSIVE focus, exactly like a drive — the skipper
-  // never talks over the rider's music, on any surface. This mirrors the same flip in
-  // useStopPreview.ts and app/sample.tsx; docs/decisions/drive-audio-exclusive-focus.md carries the
-  // broadened scope. Do not soften it back to mixWithOthers.
-  //
-  // ⚠ RE-ASSERTED ON EVERY play(), NOT ONCE ON MOUNT. setAudioModeAsync is PROCESS-WIDE and
-  // last-writer-wins, and a live drive sets `shouldPlayInBackground: true` from a screen that PUSHES
-  // over this still-mounted conversation. Without the re-assert, a rider who opens a drive and comes
-  // back gets a preview clip that keeps talking after they leave the app.
-  const applyPreviewAudioMode = useCallback(() => {
-    setAudioModeAsync({
-      playsInSilentMode: true,
-      shouldPlayInBackground: false,
-      interruptionMode: 'doNotMix',
-    }).catch(() => {})
-  }, [])
 
   // Toggle/replay the loaded clip. Shared by the in-card disc (via play() on the active card) and the
   // pinned ClipBar. The `atEnd` check is why this is not a bare `playing ? pause : play`: expo-audio
@@ -194,19 +168,17 @@ export function useRoutePreview(): RoutePreview {
         // Arm the pre-start watchdog LAST, so it covers only a clip that was actually handed to the
         // player. A later tap re-enters play() and re-arms it; the guard inside is what makes the
         // superseded timer harmless if it fires first.
-        clearStartWatchdog()
-        startWatchdog.current = setTimeout(() => {
-          startWatchdog.current = null
+        armStartWatchdog(PRE_START_STALL_MS, () => {
           if (activeCardIdRef.current !== cardId) return // superseded by a later tap — not this card's verdict
           failCard(cardId)
-        }, PRE_START_STALL_MS)
+        })
       } catch {
         // A synchronous throw is a malformed source, not a network failure — the presign 403 arrives
         // asynchronously via status.error. Both land on the same rider-facing hint.
         failCard(cardId)
       }
     },
-    [activeCardId, applyPreviewAudioMode, clearStartWatchdog, failCard, player, status.error, toggle],
+    [activeCardId, armStartWatchdog, failCard, player, status.error, toggle],
   )
 
   // Real audio arrived ⇒ disarm. Mirrors useDrive's `sawFresh` exactly (playing AND past the first
@@ -247,7 +219,7 @@ export function useRoutePreview(): RoutePreview {
     // nothing was ever interrupted, so nothing needed handing back. `useDrive` already paid to learn
     // this at the end of a drive; the same rule applies to every surface that takes exclusive focus.
     // Fire-and-forget — a failure here must never block stopping the clip.
-    void setIsAudioActiveAsync(false).catch(() => {})
+    releasePreviewAudioSession()
     activeCardIdRef.current = null
     setActiveCardId(null)
     setFailedCardId(null)
@@ -258,7 +230,7 @@ export function useRoutePreview(): RoutePreview {
   // the one that strands their music.
   useEffect(() => {
     if (!status.didJustFinish) return
-    void setIsAudioActiveAsync(false).catch(() => {})
+    releasePreviewAudioSession()
   }, [status.didJustFinish])
 
   // ── preview_clip_played: COMPLETION — the other half of the pair emitted in play().
