@@ -5,8 +5,11 @@
 > (iPhone 17 Pro Max, dusk) at `5148063`. ⚠ **A second agent was mid-edit in
 > `ExampleAsks.tsx`/`FilterChip.tsx`/`index.tsx` while this was written**, working note 2 by a
 > different route (chip kept, `label` → `body` + `wrap`) — so read this as the COMPOSITION argument
-> the element-level fix does not reach, and reconcile before either lands. Visual before/after mock:
-> the published artifact (Trailhead 89 palette, real strings). Line numbers drift; the code wins.
+> the element-level fix does not reach, and reconcile before either lands. **The founder called the
+> first pass "directionally better" and asked for outside research; §5–§6 are that second pass** — and
+> the research produced one finding that argues AGAINST the first proposal, recorded as such rather
+> than dropped. Visual mock of all three options: the published artifact (Trailhead 89 palette, real
+> strings). Line numbers drift; the code wins.
 
 ## The three notes
 
@@ -88,18 +91,86 @@ permission-free tap, and `index.tsx` already comments that the conversation made
 load-bearing, not less (the curated endpoints are Tahoe-only and there is an account at the end).
 Moving it below MY DRIVES trades a review risk for a layout win. Quieter, same place.
 
-## The bigger move, listed separately because it is behaviour
+## 5. What the outside research says
 
-The screen **already has a compact mode**: `collapsed` drops the headline, the trail and the
-tagline — the hero comment claims ≈180pt — but it is keyed to `riderTurnCount > 0`. So the layout is
-at its loudest during the one moment the rider has the least to look at, and tidies itself only
-*after* they have acted. Collapsing on first scroll instead would reclaim that space when it counts.
+Two categories solve this exact problem — a blank input a user must fill — and they solve it
+*differently*. Skipper currently sits between them. Sources at the foot of this doc.
 
-⚠ **`collapsed` is load-bearing beyond spacing** and must not be re-keyed casually: its comment
-records that `RouteTrack glow` is the screen's ONE amber (DESIGN §8) and has to be gone before a
-route card's amber MIN badge or the TypingDots appear. Any new trigger has to preserve that
-ordering — collapsing on scroll does not obviously guarantee it, since a rider can send a turn
-without scrolling. Unresolved here on purpose.
+- **Airbnb: the input IS the hero.** Their homepage `h1` is **28px/700 and sits BENEATH the search
+  bar**, letting photography carry hierarchy; the search pill is **64px**, the largest element on the
+  page. ⚠ **This is the exact inverse of Skipper today** — our display headline is 30pt Zilla Slab at
+  the top and the input is 45pt at the bottom.
+- **Airbnb: one hot colour, spent on the ACTION.** Rausch `#ff385c` is used scarcely (pages are "90%
+  white + ink with one or two Rausch moments"); the 48×48 search orb is "the hottest single colour
+  moment on the homepage". ⚠ Trailhead 89 has the identical rule (§8, one amber) — **but we spend
+  ours on an ornament** (the parked rig's glow) and render the primary action in amber at 0.45
+  opacity.
+- **Airbnb: three tiers.** primary = filled · secondary = outlined · tertiary = plain text; their
+  category chips are 14px/500, sentence case. **Our asks are drawn at SECONDARY tier when they are
+  tertiary content** — that mis-tiering is note 2 in one sentence.
+- **Chip guidance is explicit that a sentence is not a chip:** labels should be concise, and long
+  labels "force the text to wrap". Two of our three asks wrap — the documented symptom.
+  `FilterChip`'s own header already says it is built for "the short noun".
+- **The AI-assistant convention we HALF-adopted.** Every major assistant ships an empty state of *a
+  centred text field, a placeholder, and 4–6 suggested prompts* (ChatGPT, Claude, Gemini, Copilot,
+  Cursor, Perplexity, Grok, Le Chat). **Skipper took the chips and left the centred field**, pinning
+  the input to the bottom under a travel poster — so it carries the convention's clutter cost without
+  its clarity benefit. ⚠ The same source calls that convention one that "solidified in 2023 without a
+  real design phase" — a reason to adapt it, not to copy it onto a product whose doctrine is charm
+  over scale.
+
+### ⚠ The counter-finding — it argues against §"Proposed changes" above
+
+2026 design literature **favours chips/buttons over plain text lists** for suggested prompts,
+because chips carry better affordance signalling; and the empty state should offer **3–5 specific,
+realistic prompts that demonstrate the RANGE** of the feature. Our three already do exactly that
+(A→B · loop · open-ended). **So the first proposal's "dissolve the pills into text links" overshoots**
+— keep three, keep them obviously tappable, demote the TIER and the type, not the affordance.
+Recorded because it corrects this doc's own earlier recommendation.
+
+## 6. Three options
+
+| Option | What moves | Answers | Cost / risk |
+| --- | --- | --- | --- |
+| **A · Re-tier** | Nothing structural — type scale, colour, one fill | Notes 2 and 3 fully; note 1 only partly (block count unchanged) | Lowest; mostly a `variant` swap + the tagline edit. Collides with the in-flight agent's narrower version. |
+| **B · Input as hero** *(recommended)* | Composer rises above the fold and grows; headline shrinks; the one amber moves to the send disc; tagline drops below MY DRIVES | All three, structurally — there is exactly one thing to do and it is the biggest element | Medium. Cold open and conversation become two layouts (the composer must fall back to a pinned footer once a transcript exists). ⚠ Moving the amber needs a founder call. |
+| **C · Poster restored** | The conversation leaves home for a pushed full-screen surface; asks live inside it | Note 1 most decisively — home drops to five blocks | Highest, and adds a navigation hop before the rider's first word, which fights 1.1's thesis that *prepare is a conversation*. Kills the keyboard-covers-the-hero problem `Composer.tsx` already comments on. |
+
+### ⚠ Option B moves the one amber, and that is an invariant, not a style
+
+`index.tsx`'s hero comment records that `RouteTrack glow` is the screen's ONE amber (DESIGN §8) and
+**must be gone before** a route card's amber MIN badge or the TypingDots appear — which is precisely
+why `collapsed` is keyed to the first rider turn. If the glow moves to the send disc that ordering
+argument has to be re-derived, because **the send disc does not disappear on the first turn**. Worth
+doing; not worth doing quietly.
+
+### The compact mode that already exists
+
+`collapsed` drops the headline, the trail and the tagline (the hero comment claims ≈180pt) but is
+keyed to `riderTurnCount > 0` — so the layout is loudest during the one moment the rider has least to
+look at, and tidies itself only *after* they act. Option B effectively makes the cold open look like
+the collapsed state from the start. ⚠ Re-keying it to first SCROLL instead does **not** obviously
+preserve the amber ordering above, since a rider can send a turn without scrolling.
+
+## Sources
+
+- [Airbnb design-system breakdown](https://github.com/VoltAgent/awesome-design-md/blob/main/design-md/airbnb/DESIGN.md)
+  — Rausch allocation, the 64px search pill + 48×48 orb, the three button tiers.
+- [How Airbnb Designs Their UI (2026)](https://superdesign.dev/blog/airbnb-design-system) — the
+  mobile collapse-to-overlay pattern, 48px minimum targets.
+- [The death of the empty state in AI products](https://uxdesign.cc/the-death-of-the-empty-state-in-ai-products-2026-e11439fbb688)
+  — the centred-field + 4–6 chips convention, and that it solidified without a design phase.
+- [Designing AI chat interfaces](https://www.setproduct.com/blog/ai-chat-interface-ui-design) ·
+  [Conversational UI patterns 2026](https://www.aiuxdesign.guide/patterns/conversational-ui) ·
+  [Chatbot UX design](https://www.parallelhq.com/blog/chatbot-ux-design) — starter-prompt
+  discoverability, the 3–5 range rule, the chips-beat-text affordance finding.
+- [Chip UI design — Mobbin](https://mobbin.com/glossary/chip) ·
+  [Chips — Material Design 3](https://m3.material.io/components/chips/guidelines) — concise labels;
+  long labels force wrapping.
+
+⚠ Airbnb's internals here come from a published third-party breakdown, not first-party docs. The
+M3 chips page is JS-rendered and did not fetch; its guidance is quoted via the Mobbin summary and
+search results, so re-check it before treating the wording as authoritative.
 
 ## Not done, and why
 
