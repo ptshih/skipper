@@ -788,25 +788,31 @@ schema-introspected and mutation-checked.
       looking like a read) and the ordering rule. Mutation-checked.
       A reaper for orphaned ledger rows was considered and rejected — new machinery for a bounded
       race, and CLAUDE.md's wariness about reapers touching rider identity applies.
-- [ ] **PLAN: cookie growth is now a per-request cost — write the rule down.** No action needed today:
-      `auth.ts` configures **no user `additionalFields`**, and the cached payload is nine small fields
-      (`id, email, name, emailVerified, createdAt, updatedAt, role, isAnonymous, banned` — verified by
-      probing `parseUserOutput` against this build). Nowhere near the ~4 KB cookie limit.
-      ⚠ What changed is the RULE, not the state: since `7bd7614`, adding a field to `user` puts it in
-      the cookie on **every request**, and plugin fields ride automatically (that is what makes `role`
-      and `isAnonymous` work). Oversized cookies fail in ugly, hard-to-attribute ways. Cheapest guard
-      is one line in `auth.ts`'s cookie-cache note plus, if it ever grows, an assertion on the field
-      count in `test/auth-cookie-cache.test.ts`. Do it when a field is actually proposed.
-- [ ] **PLAN: trace whether the mobile client's session view can now lag the server's.** Unproven
-      either way — flagged for honesty, not because a bug is known. The client keeps its own session in
-      secure-store via `@better-auth/expo` and refetches off a `$sessionSignal` atom
-      (`apps/mobile/src/lib/auth.ts`), and `useSession` has six consumers including `_layout`,
-      `index`, `settings` and the drive player. With the server now answering `get-session` from a
-      cookie for up to `REGIONS`-independent 60s, a client refetch can observe a stale server answer.
-      ⚠ Most paths look benign by construction: sign-out clears both cookies on that device (verified),
-      and deletion happens on-device. The case worth actually tracing is INV-9 — whether `isSignedIn`
-      can read TRUE for up to 60s after the account is gone, and if so whether any screen writes
-      during that window. ~30 minutes of reading, no change expected.
+- [x] ~~Cookie growth is a per-request cost~~ — **MEASURED 2026-08-02, no action.** The payload is
+      fully accounted for: three plugins (`expo` adds no user fields, `anonymous` adds `isAnonymous`,
+      `admin` adds `role` + `banned`) and no `additionalFields`, which is exactly the nine fields
+      probed out of `parseUserOutput`. A realistic signed payload — real UUIDs, a full iOS user-agent —
+      measures **~988 bytes, ~76% headroom** under the 4096-byte per-cookie limit.
+      ⚠ And the limit is not a cliff: better-auth CHUNKS the cookie (`getChunkedCookie`), so exceeding
+      4 KB degrades into multiple cookies rather than breaking. So the rule stands — a new `user` field
+      now costs bytes on EVERY request — but the margin is large and the failure is gradual. Not worth
+      a test today; revisit only if someone proposes a field that carries free text.
+- [x] ~~Trace whether the mobile client's session view can lag the server's~~ — **TRACED 2026-08-02.
+      Benign, and narrower than feared.**
+      **On the deleting device there is no window at all.** `app/settings.tsx` already does the right
+      thing after `deleteUser`: it wipes local downloads and then `await signOut()`, which runs
+      better-auth's `deleteSessionCookie` — and that expires the CACHED cookie as well as the session
+      token (verified in the installed source). The comment there already says why: "the token still
+      sits in this device's SecureStore — clear it, or the app keeps believing it's signed in".
+      **On a SECOND device the window is real but harmless.** Its cached cookie stays valid up to
+      `maxAge`, so `useSession` reports signed-in — but every owner route now runs `withFreshSession`
+      (`5b2286d`), resolves null, and the handler's tier backstop 401s. `api.ts`'s `ApiError.needsAccount`
+      maps 401 → the AccountGate, so the rider sees "create a free account", not an error. No data loss,
+      no orphan, and it self-corrects when the cache expires.
+      ⚠ Recorded honestly: the cache DID widen this from immediate to ≤60s. Without it, the next request
+      would resolve from the DB and find the session cascade-deleted. What that buys is a ≤60s
+      cosmetically-stale signed-in state on a second device — which is the cost we accepted, now
+      confirmed to be the whole of it rather than the visible part of something larger.
 - [ ] **Optional follow-up: a rate limit on `/regions` as defence-in-depth.** Much less urgent now —
       the memo absorbs a burst, so an attacker gets cached bytes rather than DB load — but it is still
       the only anonymous route with no cap, and a cold instance serves the first request for real.
