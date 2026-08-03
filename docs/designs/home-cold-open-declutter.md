@@ -1,7 +1,10 @@
 # The home cold open — four CTAs and no primary
 
-> **Status:** ✅ **GREENLIT 2026-08-03 — BUILD IN PROGRESS.** The build plan is §15 and the
-> enforcement plan for its hazards is §16; read both before touching `apps/mobile`. Captured
+> **Status:** ✅ **BUILT 2026-08-03.** The cold open ships as described here EXCEPT for six decisions
+> that changed during the build — **§17 is the list, and it wins over the rest of this document.**
+> Read §17 first: four of the six reverse instructions §10/§13/§15/§16 give, and each was reversed for
+> a reason found by building or by looking at the screen, not by preference. The build plan is §15 and
+> the hazard-enforcement plan is §16. Captured
 > from three founder notes taken live against the shipped 1.1 home screen, measured on device
 > (iPhone 17 Pro Max, dusk) at `5148063`. ⚠ **A second agent was mid-edit in
 > `ExampleAsks.tsx`/`FilterChip.tsx`/`index.tsx` while this was written**, working note 2 by a
@@ -1009,6 +1012,61 @@ when the defect cannot be seen at runtime yet** — the repo already has one suc
 (the hooks import `expo-audio`, which is why ESLint exists here at all), so the device pass is not a
 formality — it is the only instrument for three of this design's decisions. Put them on the checklist
 explicitly rather than trusting a general "looks fine".
+
+## 17. What shipped, and the six places it diverged from this document
+
+⚠ **This section wins over the rest of the doc.** Each entry reverses an instruction above; each was
+reversed by building it or by looking at the screen, never by preference. Kept so nobody "restores"
+one of them from the earlier sections without the reason.
+
+1. **RegionChip is a NEW component, not a `FilterChip` variant** (reverses §10 R3, §15 step 1). §10
+   argued the system had been waiting for this variant because `Icon.tsx`'s `expand` glyph is
+   commented *"a filter chip that opens a picker"*. One sentence further, `FilterChip` says it carries
+   no caret **because** "a tap SELECTS directly (no picker opens)" and defers picker-opening to the
+   START/END `PickerField`s — **which 1.1 deleted**, so the slot is a vacancy, not a filled one.
+   Hosting it there would have required keeping `wrap` (i.e. `numberOfLines`), the exact footgun §16.6
+   wants structurally absent.
+2. **The dashed atlas rule is gone entirely** (reverses §13 S1, founder-approved). ⚠ The cause is
+   worth more than the removal: **`Divider dashed` paints via `borderTopWidth`, and a border-only View
+   in a ROW renders NOTHING.** I misread it twice as a layout collapse and once as a daylight contrast
+   problem before proving it with a temporary coloured box. The trap is live for anyone else — do not
+   put `Divider dashed` in a row.
+3. **The Sunburst is replaced by a `Ridgeline`** (reverses §13 S1's "raise the opacity"). ⚠ **The
+   opacity was never the problem** — `styles.hero` carried `overflow: 'hidden'`, so the burst was
+   CLIPPED, and re-anchoring it made 0.09 read clearly. It was still wrong: a burst is a RADIAL object
+   with a centre, so it reads as a decal wherever it sits and its rays get cropped by the edges. A
+   ridge is an EDGE and runs off both sides. It is also a STROKE, not a filled silhouette — a fill
+   gives it a hard baseline, and there is no gradient dependency to fade one.
+4. **The offline component split was NOT done** (reverses §8, §15 step 5) — see §8's own ✅ note. The
+   unmount hazard it guards against **only exists if the two experiences are separate components**;
+   as one JSX branch, planner state is inherently preserved. Splitting would have added the risk.
+5. **The region chip is tappable at ONE region** (reverses §10's "not pressable at N=1"). The sheet
+   answers *"where can I actually go?"*, and the list of roads the skipper knows IS the limit —
+   expressed as content rather than the disclaimer §14 cut. One region is a short answer, not the
+   absence of one.
+6. **The limit line stayed cut** (§14 already records this, listed here for completeness).
+
+### Also true, and not in the plan
+
+- ✅ `markSamplePlayed()` was specified in §14/§16 and **shipped as dead code** in the first pass —
+  home marked the row SEEN but nothing marked it PLAYED, so half the founder's rule never fired. Wired
+  to `sample.tsx`'s existing playback-began latch.
+- ⚠ §16's source assertions are built, and **the first version of the chip-row one was a fake** that
+  only a mutation check exposed: it pinned the literal `regions.length > 1`, and a re-introduction
+  spelled `regions?.length` sailed through. Both now assert structure and both are mutation-verified.
+  The file also strips comments before asserting — the first run matched the comment explaining the
+  deletion.
+- The stale App-Review claim §9 flagged **removed itself**: it lived on the ghost sample button this
+  redesign deleted.
+
+### Verified
+
+Root `bun run check` EXIT 0 and `apps/mobile` `bun run check` EXIT 0 (386 tests; warnings 4, one BELOW
+the pre-existing baseline). Exercised on the simulator in **both themes**: the region sheet, the
+`/drives` deep link and its signed-out state, the rotating placeholder cycling region-composed
+examples, and a suggestion row seeding both halves of its authored exchange with no model call. The
+listen-row flag was confirmed end-to-end — shown, marked, and absent on the next launch until the flag
+file was cleared.
 
 ## Sources
 
