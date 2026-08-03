@@ -722,24 +722,32 @@ schema-introspected and mutation-checked.
       memo and never fills it — pinned in `test/regions-cache.test.ts` and mutation-checked on both
       gates. Do not add `Cache-Control` here: a shared cache serving the staged variant is the exact
       failure that test exists to prevent.
-- [ ] **The session read on every `withSession` route — fix it at the auth layer, not per-route.**
-      `withSession` calls `auth.api.getSession()`, an auth-DB round-trip on the separate
-      neon-serverless Pool, and post-D16 it NEVER short-circuits: the anonymous mint means every rider
-      carries a cookie, so there is always a token to look up. It is paid on `/regions` and on every
-      `/drives*` request.
-      The mechanism is better-auth's **`session.cookieCache`** — a signed copy of the session in the
-      cookie, so `getSession` validates without a query. Disabled by default; not configured here.
-      Config shape (from the current docs): `session: { cookieCache: { enabled: true, maxAge: 60 } }`.
-      ⚠ **NOT a drop-in, which is why this is a founder call.** Cookie caching delays REVOCATION by
-      `maxAge` — better-auth's own words: "revoked sessions may remain active on other devices until
-      the cookie cache expires". The sharp edge for us is not sign-out, it is **account deletion**: a
-      cached cookie validating against a user `purgeUserData` has already erased would write a drive
-      or a ledger row against a vanished user id — precisely the orphan INV-4 and 5.1.1(v) exist to
-      prevent. Mitigation exists (`disableCookieCache: true` per-request on the sensitive paths, which
-      already sit behind `sensitiveSessionMiddleware`), but it must be deliberate.
-      ⚠ Do NOT solve this per-route. `928cb1a` tried, via a `?includeStaged=1` opt-in on `/regions`,
-      and it both left every other route paying the read AND broke in-app staged preview because the
-      client never sent the param — reverted in `ecc30f7`.
+- [x] ~~The session read on every `withSession` route~~ — **DONE 2026-08-02 (`7bd7614`), founder call.**
+      `session.cookieCache` is ON at **`maxAge: 60`**, so `getSession()` validates a signed copy from
+      the cookie instead of a round-trip to the separate neon-serverless Pool, on `/regions` and every
+      `/drives*` request. Grounded in the INSTALLED better-auth 1.6.23 source, not the docs alone.
+      ⚠ **60, not the library's 300 default, and the number is the whole decision.** Cookie caching
+      delays REVOCATION by `maxAge` — the server cannot delete a cookie on a device it is not talking
+      to. The sharp edge is ACCOUNT DELETION: a second device holding a cached cookie can still
+      authenticate for the window, and a WRITE there inserts a row against a user id `purgeUserData`
+      already erased — the orphan INV-4 and 5.1.1(v) exist to prevent, with no FK to catch it. 60s is
+      a deliberate 5× reduction of that window. `test/auth-cookie-cache.test.ts` fails if either
+      `enabled` or `maxAge` drifts, because both are silent when they do.
+      ⚠ The anonymous→account link does NOT open a matching hole despite also hard-deleting a user
+      row: a stale cached ANONYMOUS session still resolves to `tier: 'anonymous'`, so `requireAccount`
+      401s it before any write.
+- [ ] **Close the deletion window properly: `disableCookieCache` on the WRITE paths.** The residual
+      risk above is entirely about writes — a READ against a deleted user returns nothing and orphans
+      nothing. So the fix is narrow: have the owner WRITE routes (`POST /drives` above all) resolve a
+      FRESH session while reads keep the cache. Mechanism is per-request:
+      `auth.api.getSession({ headers, query: { disableCookieCache: true } })` — the installed session
+      route reads `ctx.query.disableCookieCache`, and `test/auth-cookie-cache.test.ts` pins that it
+      still exists so this plan does not rot silently.
+      ⚠ Shape it as a SECOND middleware (`withFreshSession`) rather than a flag on `withSession` —
+      the route table in `drives.ts` is what `test/drive-access.test.ts` reads to enforce INV-15, and
+      a per-route middleware is visible there in a way a boolean argument is not.
+      ⚠ Deferred only because `apps/api/src/drives.ts` was mid-edit by another agent at the time.
+      Cost is ~one extra session read per created drive, which is already rate-limited and rare.
 - [ ] **Optional follow-up: a rate limit on `/regions` as defence-in-depth.** Much less urgent now —
       the memo absorbs a burst, so an attacker gets cached bytes rather than DB load — but it is still
       the only anonymous route with no cap, and a cold instance serves the first request for real.
