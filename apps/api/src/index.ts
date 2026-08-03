@@ -218,12 +218,43 @@ app.use(
 // Better Auth owns everything under /api/auth/* (its own handler).
 app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 
+/* -------------------------------------------------------------------------- */
+/* The rider-facing rate limiters, as NAMED middlewares.                        */
+/*                                                                              */
+/* ⚠ NAMED SO THEY CAN BE PINNED, which is the only guard available to them.    */
+/* ./rate-limit returns next() unconditionally under NODE_ENV=test, so no       */
+/* behavioural test can prove a bucket COUNTS — test/limits.test.ts says so     */
+/* outright and pins the numbers and labels instead. But "does it count" and    */
+/* "is it mounted at all" are DIFFERENT properties, and the second one IS       */
+/* assertable: Hono records a handler per registered middleware, so identity    */
+/* against a named const proves the mount — exactly how test/drive-access       */
+/* pins `requireAccount` and `createDriveLimiter`.                              */
+/*                                                                              */
+/* ⚠ These were inline `rateLimit(...)` calls until 2026-08-03, and each call   */
+/* returns a FRESH closure, so nothing could compare them and nothing pinned    */
+/* them. That left the three paths that bill an external vendor — Routes on     */
+/* /drives/propose, a frontier model TWICE on /drives/plan — able to lose their */
+/* cap to a refactor with no test failing, no type error and no runtime signal. */
+/* The only tell would have been the invoice. `createDriveLimiter` was already  */
+/* a named const in ./drives and was already pinned; this just applies the same */
+/* pattern to the ones that actually spend. See test/limiter-mounts.test.ts.    */
+/* -------------------------------------------------------------------------- */
+/* ⚠ EXPORTED FOR THE MOUNT TEST ONLY — nothing in the app imports these; the mounts below are the
+ * only consumers. Identity is the whole point: a test can only prove `/drives/propose` still carries
+ * its cap by comparing the registered handler to THIS reference. (Same "exported for tests" shape as
+ * `decodePolyline` in @skipper/routing, for the same reason: the thing worth testing is not reachable
+ * any other way.) */
+export const proposeLimiter = rateLimit(PROPOSE_RATE)
+export const planMinuteLimiter = rateLimit(PLAN_RATE_MINUTE)
+export const planHourLimiter = rateLimit(PLAN_RATE_HOUR)
+export const sampleLimiter = rateLimit(SAMPLE_RATE)
+
 // Rate-limit the propose path BEFORE mounting the sub-app: POST /drives/propose fires ONE Google
 // Routes call (+ a corpus read) per request and otherwise has no cap, so this is the spend/DB-load
 // guard (per-instance in-memory first cut — see ./rate-limit). The heavier CREATE path (POST /drives:
 // Routes + a credit consume + a write) is capped too, via route-level middleware in ./drives
 // (createDriveLimiter) — kept there so it scopes to exactly POST / and not the cheap reads under /drives.
-app.use('/drives/propose', rateLimit(PROPOSE_RATE))
+app.use('/drives/propose', proposeLimiter)
 
 // ⚠ REGISTERED ABOVE THE /drives MOUNT, AND THAT IS THE WHOLE POINT. Hono matches in REGISTRATION
 // ORDER, so below `app.route('/drives', driveRoutes)` this path would be swallowed by that sub-app's
@@ -236,7 +267,7 @@ app.use('/drives/propose', rateLimit(PROPOSE_RATE))
 // IP per instance on a path that bills a frontier model every time; the hourly window is what makes
 // that a bounded number. No session middleware: the planner has NO corpus access at all (D9), so
 // there is nothing an admin could be shown that a stranger could not.
-app.use('/drives/plan', rateLimit(PLAN_RATE_MINUTE), rateLimit(PLAN_RATE_HOUR))
+app.use('/drives/plan', planMinuteLimiter, planHourLimiter)
 app.route('/drives/plan', planRoutes)
 
 // Create-a-Drive: user-owned, on-demand A→B drives over the shared narration corpus. ⚠ The sub-app
@@ -258,7 +289,7 @@ app.route('/drives', driveRoutes)
 // the subpath; keep it now for the plainer reason that every anonymous, uncapped DB-touching route is
 // a standing invitation. The NUMBER lives in ./limits with every other rider-facing cap (INV-12) —
 // this mount was the last one still spelling its cap as an inline literal, the shape that drifts.
-app.use('/sample', rateLimit(SAMPLE_RATE))
+app.use('/sample', sampleLimiter)
 app.get('/sample', async (c) => {
   const qid = process.env.SAMPLE_NARRATION_QID
   // Unset config is an OPERATOR miss, not a rider error — but the rider still gets a clean, retryable
@@ -318,6 +349,14 @@ const port = Number(process.env.PORT ?? 8787)
 // returns 200 at 25s. Nothing in the test suite can catch a regression here (an in-process
 // `app.fetch` never touches a socket), which is why ./limits pins the RELATIONSHIP to
 // PLANNER_TIMEOUT_MS instead.
+/** ⚠ EXPORTED FOR THE MOUNT TEST ONLY — the DEFAULT export below is Bun's serve config
+ *  (`{ port, fetch, … }`), so it carries no `.routes` and the middleware chain is invisible through it.
+ *  Structural assertions need the Hono instance itself: that a rider-facing rate limiter is mounted at
+ *  all is only provable by comparing registered handler identity, and that is the ONLY guard those
+ *  limiters can have (./rate-limit no-ops under NODE_ENV=test, so no request can prove one counts).
+ *  Nothing in the app imports this. See test/limiter-mounts.test.ts. */
+export { app }
+
 export default {
   port,
   idleTimeout: SERVER_IDLE_TIMEOUT_SEC,
