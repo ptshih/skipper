@@ -749,12 +749,16 @@ schema-introspected and mutation-checked.
       owner routes — `GET /drives/:id`, `POST /:id/assets/sign`, `DELETE /:id` — only ever touch rows
       that `purgeUserData` has already removed, so they 404 and orphan nothing. They can stay cached.
       **Three ways to close it, cheapest first:**
-      1. **Drop the lazy grant from the READ path.** `auth.ts:364` already grants at signup via a
-         database hook, so `ensureFreeGrant` on `GET /drives` is a BACKSTOP for accounts created
-         before that hook existed. If that backstop has outlived its purpose, deleting it removes the
-         orphan vector *and* leaves the hottest owner route fully cached. ⚠ Founder call — `auth.ts`
-         explicitly calls the signup grant "ADDITIVE, not a replacement", so this reverses a stated
-         decision and needs the question asked, not assumed.
+      1. ~~Drop the lazy grant from the READ path.~~ **RULED OUT 2026-08-02 — do not re-propose.** I
+         had this as the elegant option on the theory that `auth.ts:364`'s signup hook made the lazy
+         call legacy scaffolding. `7069b86` says otherwise, explicitly: "ADDITIVE, not a swap.
+         `ensureFreeGrant` stays on the read/spend paths in ./drives as the backstop: **the signup
+         hook swallows its own errors** (a ledger write must NEVER fail account creation — the account
+         is already committed by then), and any future user-creation path that bypasses the hook still
+         can't produce a credit-less account." So it is a LIVE safety net, not scaffolding: if a
+         signup grant write fails, the hook continues silently and the lazy path is the only thing
+         that ever recovers that rider's credits. Removing it strands them at 0 forever, to close a
+         60-second race. Wrong trade.
       2. **`withFreshSession` on the two exposed routes.** Mechanism verified in the installed
          better-auth: `auth.api.getSession({ headers, query: { disableCookieCache: true } })` — the
          session route reads `ctx.query.disableCookieCache` and merges it with a `config` argument,
@@ -767,7 +771,11 @@ schema-introspected and mutation-checked.
       3. **Accept it, explicitly.** The window is 60s and needs a two-device delete race. The residual
          artifact is a single grant row with no drives attached. Cheapest, but it leaves personal data
          surviving a deletion request, which is the thing 5.1.1(v) is actually about.
-      **Recommended: 1 if the founder retires the backstop, else 2 on `POST /drives` + `GET /drives`.**
+      **DECIDED: option 2** (founder: "go with your rec", 2026-08-02) — `withFreshSession` on
+      `POST /drives` + `GET /drives`, now that option 1 is ruled out on evidence rather than left as
+      an open question. ⚠ **NOT YET IMPLEMENTED: both files it needs were mid-edit by another agent**
+      (`drives.ts` ~172 lines in flight, `entitlements.ts` being re-pointed at `@skipper/shared`).
+      Pick it up when they are free; nothing about the decision is open.
       A reaper for orphaned ledger rows was considered and rejected — it is new machinery for a
       bounded race, and CLAUDE.md's existing wariness about reapers touching rider identity applies.
       **Test plan:** extend `test/drive-access.test.ts` (it already enumerates the route table for
