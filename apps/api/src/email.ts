@@ -85,9 +85,9 @@ export async function sendPasswordResetEmail(to: string, url: string): Promise<v
       url,
       '',
       'The link works once and expires in an hour.',
-      "If this wasn't you, ignore this email — nothing changes until the link is used.",
+      "If this wasn't you, ignore this email. Nothing changes until the link is used.",
       '',
-      '— The Skipper',
+      'The Skipper',
     ].join('\n'),
   })
 }

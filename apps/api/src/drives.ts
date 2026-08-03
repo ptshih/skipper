@@ -244,7 +244,7 @@ async function resolveRouteAnchors(
  *  job (an in-persona "don't know that one"), never a geocode. */
 const NOT_AN_ANCHOR = {
   error: 'unknown_anchor',
-  message: "I don't know one of those spots — pick one from the list and I'll plot it.",
+  message: "I don't know one of those spots. Pick one from the list and I'll plot it.",
 } as const
 
 /** Build the ordered Routes waypoints for a drive: [start, ...via, end]. A LOOP is end===start with a
@@ -820,7 +820,7 @@ driveRoutes.post('/', requireAccount, createDriveLimiter, withFreshSession, asyn
     return c.json(
       {
         error: 'drive_limit_reached',
-        message: `That's all ${granted} of your free drives — you've been busy. Email ${SUPPORT_EMAIL} and we'll top you up, free.`,
+        message: `That's all ${granted} of your free drives, and you've been busy. Email ${SUPPORT_EMAIL} and we'll top you up, free.`,
         cap: granted,
         supportEmail: SUPPORT_EMAIL,
       },

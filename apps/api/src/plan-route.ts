@@ -205,7 +205,7 @@ planRoutes.post('/', async (c) => {
   // 400 — a rider who has been chatting with a character should not suddenly meet a validator.
   const capFailure = checkTranscript(read.data.turns)
   if (capFailure) {
-    return c.json({ say: "We have been at this a while — let's start fresh and I'll get you rolling.", done: true }, 200)
+    return c.json({ say: "We have been at this a while. Let's start fresh and I'll get you rolling.", done: true }, 200)
   }
 
   const [region] = await withRetry(

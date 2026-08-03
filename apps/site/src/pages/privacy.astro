@@ -46,14 +46,14 @@ import Legal from '../layouts/Legal.astro'
   <div class="legal-summary framed">
     <h2>The short version</h2>
     <ul>
-      <li>No ads, and we never sell your data. We do use privacy-friendly analytics (PostHog) to see what's working and catch crashes — anonymous, and not tied to your account.</li>
+      <li>No ads, and we never sell your data. We do use privacy-friendly analytics (PostHog) to see what's working and catch crashes: anonymous, and not tied to your account.</li>
       <li>Skipper uses your location only while the app is open, to play each story at the right moment.</li>
-      <li>Your location <strong>never leaves your phone</strong> — not precisely, not blurred, not at all.
+      <li>Your location <strong>never leaves your phone</strong>: not precisely, not blurred, not at all.
         Your phone does the triggering itself.</li>
       <li>You plan a drive by <strong>talking to the Skipper</strong>, and that part is an AI. What you type
-        is sent to Anthropic to write his reply. Your location isn't, ever — and we don't keep the
+        is sent to Anthropic to write his reply. Your location isn’t, ever, and we don’t keep the
         conversation.</li>
-      <li>Deleting your account deletes your data immediately — drives, credits, the lot.</li>
+      <li>Deleting your account deletes your data immediately: drives, credits, the lot.</li>
     </ul>
   </div>
 
@@ -73,7 +73,7 @@ import Legal from '../layouts/Legal.astro'
   <h3>While you're using the app, and not otherwise</h3>
   <p>
     Skipper asks for location access <strong>only while the app is in use</strong> ("When In Use").
-    It does not ask for — and is not built to receive — background location. Background location is
+    It does not ask for, and is not built to receive, background location. Background location is
     switched off in the app's build configuration, so the app cannot track you when it isn't open. If
     you leave Skipper running on a mount for the drive, that's the app being used; close it and the
     location stops.
@@ -90,18 +90,18 @@ import Legal from '../layouts/Legal.astro'
     <li>
       <strong>Planning a drive.</strong> You tell the Skipper where you'd like to go, in words. He can only
       offer places from a list we curated in advance, and what travels to our server is the
-      <strong>identifier of a place you picked</strong> — not a reading from your GPS. We send those
+      <strong>identifier of a place you picked</strong>, not a reading from your GPS. We send those
       endpoints to Google's Routes API to compute the road route, and we store them with your drive so you
       can replay it.
     </li>
     <li>
       <strong>Driving it.</strong> Nothing. The drive plays entirely on your phone against the route it
-      already holds — that's also why it works with no signal.
+      already holds, which is also why it works with no signal.
     </li>
     <li>
       <strong>The map.</strong> Your position is drawn on the map on your device. The map itself is
       rendered by the <strong>Google Maps SDK</strong> built into the app. Google receives what it needs
-      to draw a map — device and app diagnostics, a device identifier, and usage data — and, because the
+      to draw a map (device and app diagnostics, a device identifier, and usage data), and because the
       map follows along while you drive, the area it draws is necessarily the area you're in. We don't
       hand Google your account or a separate feed of your position.
     </li>
@@ -109,44 +109,44 @@ import Legal from '../layouts/Legal.astro'
   <p>
     Being straight with you: our server still sees your <strong>IP address</strong> on any request your
     phone makes, the way every server does, and PostHog turns an IP into a city-level guess (below).
-    That's a coarse, ordinary thing — but it isn't nothing, and we'd rather say so than let you find out.
+    That's a coarse, ordinary thing, but it isn’t nothing, and we’d rather say so than let you find out.
   </p>
 
   <h3>Motion</h3>
   <p>
     Your speed and heading come from the same location updates described above, and iOS draws on the
-    device's motion sensor to produce them — which is why the app asks for motion access. It's used on
+    device's motion sensor to produce them, which is why the app asks for motion access. It's used on
     your phone, in the moment, so a story starts at the right time at 55 mph instead of after you've
     gone past. We don't collect it and it isn't sent anywhere.
   </p>
 
-  <h2>Planning a drive is a conversation — and that part is an AI</h2>
+  <h2>Planning a drive is a conversation, and that part is an AI</h2>
   <p>
     You plan a drive by talking to the Skipper in the app. He's a real AI model, and we'd rather name it
-    than let "powered by AI" do the work: each time you send a message, what you have typed — and what he
-    said back earlier in that conversation — goes to <strong>Anthropic</strong>, who run the model that
+    than let "powered by AI" do the work: each time you send a message, what you have typed, and what he
+    said back earlier in that conversation, goes to <strong>Anthropic</strong>, who run the model that
     writes his reply. He is also handed the list of curated places he's allowed to offer you.
   </p>
   <p>What does <em>not</em> go with it is the interesting part:</p>
   <ul>
     <li><strong>Not your location.</strong> The model is never given your position, and it is not given
-      coordinates for any place either — only names and identifiers. It cannot react to where you are,
+      coordinates for any place either: only names and identifiers. It cannot react to where you are,
       because it is never told.</li>
     <li><strong>Not your account.</strong> The planning request is sent without your credentials, on
       purpose, so a conversation is never linked to a signed-in identity. You don't need an account to
       have it.</li>
     <li><strong>Not your IP address.</strong> Our server calls Anthropic, not your phone, so what Anthropic
-      sees is our server — not you.</li>
+      sees is our server, not you.</li>
   </ul>
   <p>
-    <strong>Nobody keeps the conversation — including your phone.</strong> There is no transcript table in
+    <strong>Nobody keeps the conversation, including your phone.</strong> There is no transcript table in
     our database and we don't log what you write. On your phone it is held in the app's memory while the
     screen is open, and re-sent each turn so the Skipper remembers what you just said; it is never written
     to storage. Close the app and it is gone, from both ends. What survives is the drive you decided to make.
   </p>
   <p>
     Anthropic handles that text under their own terms as our processor. Being straight with you: once text
-    leaves for a third party, our promise about it is a promise about <em>us</em> — so the honest advice is
+    leaves for a third party, our promise about it is a promise about <em>us</em>, so the honest advice is
     the same as for any chat box. Tell him where you'd like to drive; don't tell him your secrets.
   </p>
 
@@ -157,21 +157,21 @@ import Legal from '../layouts/Legal.astro'
   </p>
   <ul>
     <li>Your <strong>email address</strong> and a <strong>display name</strong>.</li>
-    <li>Your <strong>password, stored as a hash</strong> — never as plain text, and not readable by us.</li>
+    <li>Your <strong>password, stored as a hash</strong>, never as plain text, and not readable by us.</li>
     <li>Session records, which include your <strong>IP address</strong> and your device's browser/app
       identification string. This is how you stay signed in and how we can tell a session apart from an
       attacker's.</li>
   </ul>
   <p>
     There is no sign-in with Google or Apple: those aren't configured, so email and password is the only
-    way in. We send exactly <strong>one</strong> kind of email — a password reset, when you ask for one.
+    way in. We send exactly <strong>one</strong> kind of email: a password reset, when you ask for one.
     There is no marketing email, because there is no marketing list.
   </p>
 
   <h2>Drives and credits</h2>
   <p>
     A drive you create belongs to you. We store its label, its start and end points and their names, the
-    route geometry, how long and far it is, and which stories were selected to ride along it — enough to
+    route geometry, how long and far it is, and which stories were selected to ride along it, enough to
     show it to you again later.
   </p>
   <p>
@@ -195,11 +195,11 @@ import Legal from '../layouts/Legal.astro'
   <p>
     We use <strong>PostHog</strong>, a third-party product-analytics and crash-reporting service, to see
     which parts of the app people actually use and to catch crashes so we can fix them. This is
-    first-party product analytics — not advertising, and not a data broker. Through PostHog we collect:
+    first-party product analytics, not advertising, and not a data broker. Through PostHog we collect:
   </p>
   <ul>
     <li>which screens you open, and a small number of anonymous usage events;</li>
-    <li>crash and error reports — what failed and where — along with basic device and app-version
+    <li>crash and error reports (what failed and where) along with basic device and app-version
       information;</li>
     <li>an approximate, city-level location that PostHog derives from your internet (IP) address.</li>
   </ul>
@@ -221,16 +221,16 @@ import Legal from '../layouts/Legal.astro'
   <p>These are the services that run Skipper. They handle data on our behalf, to do their job:</p>
   <dl>
     <dt>Neon</dt>
-    <dd>Hosts our database — your account, drives, and credit ledger live here.</dd>
+    <dd>Hosts our database: your account, drives, and credit ledger live here.</dd>
     <dt>Google</dt>
     <dd>
       Google Cloud runs our server. Google's Routes API computes the road route between the two
-      endpoints you pick for a drive. And the Google Maps SDK inside the app draws the map — see
+      endpoints you pick for a drive. And the Google Maps SDK inside the app draws the map; see
       <em>The map</em> above for what that involves.
     </dd>
     <dt>Anthropic</dt>
     <dd>Runs the AI model the Skipper talks with while you plan a drive. Receives what you type in that
-      conversation and nothing else — no location, no account, not your IP. See <em>Planning a drive</em>
+      conversation and nothing else: no location, no account, not your IP. See <em>Planning a drive</em>
       above.</dd>
     <dt>Cloudflare R2</dt>
     <dd>Stores the narration audio files. Audio is private and served through short-lived signed links.</dd>
@@ -238,14 +238,14 @@ import Legal from '../layouts/Legal.astro'
     <dd>Sends the password-reset email. Your address is passed to them only for that message.</dd>
     <dt>PostHog</dt>
     <dd>Product analytics and crash reporting (US region). Receives the anonymous usage events, screen
-      views, crash reports, device information, and IP-derived approximate location described above —
+      views, crash reports, device information, and IP-derived approximate location described above,
       never linked to your account.</dd>
     <dt>Apple</dt>
     <dd>Distributes the app through the App Store.</dd>
   </dl>
   <p>
     Worth separating the two AIs, because they work very differently. The Skipper's <strong>narration</strong>
-    — every story you hear on the road — is written and voiced <strong>before you ever press play</strong>,
+    (every story you hear on the road) is written and voiced <strong>before you ever press play</strong>,
     in our studio, in advance, and stored as an audio file. Nothing about you or your drive is sent to the
     AI services that write and voice it. On the drive itself there is no AI listening to you or reacting to
     where you are; there's a recording, and your phone decides when to play it. The <strong>planning
@@ -261,16 +261,16 @@ import Legal from '../layouts/Legal.astro'
 
   <h2>Deleting your account</h2>
   <p>
-    You can delete your account from the app, in Settings. It is <strong>immediate and total</strong> —
+    You can delete your account from the app, in Settings. It is <strong>immediate and total</strong>:
     no grace period, no thirty-day tombstone, no "we'll keep it in case you come back". Deleting removes:
   </p>
   <ul>
     <li>your user record, your sessions, and your sign-in credentials;</li>
-    <li>every drive you've made — the actual rows, not a flag that hides them;</li>
+    <li>every drive you've made: the actual rows, not a flag that hides them;</li>
     <li>your entire credit ledger.</li>
   </ul>
   <p>
-    <strong>Any credits you have left are forfeited.</strong> Credits are never refunded — not on
+    <strong>Any credits you have left are forfeited.</strong> Credits are never refunded, not on
     deletion, and not when you delete a single drive. If you have credits you care about, spend them
     first.
   </p>
@@ -286,8 +286,8 @@ import Legal from '../layouts/Legal.astro'
   <h2>Nevada residents</h2>
   <p>
     We're a Nevada company, and Nevada law (NRS 603A) gives Nevada residents the right to tell an online
-    service not to sell their covered information. <strong>We don't sell your information — not to
-    anyone, not for anything</strong> — so there's nothing here for us to stop doing. If you'd like that
+    service not to sell their covered information. <strong>We don't sell your information, not to
+    anyone, not for anything</strong>, so there's nothing here for us to stop doing. If you'd like that
     answered in writing anyway, that's a fair thing to ask: email
     <a href="mailto:hello@skipper.fm">hello@skipper.fm</a>, our designated request address, and we'll
     confirm within the 60 days the law allows.
@@ -296,7 +296,7 @@ import Legal from '../layouts/Legal.astro'
   <h2>How long we keep things</h2>
   <p>
     Your account and drives are kept until you delete them or ask us to. Sessions expire on their own.
-    Planning conversations aren't kept at all — there's nothing to expire. Server request logs are kept for
+    Planning conversations aren't kept at all; there's nothing to expire. Server request logs are kept for
     a limited period by our hosting provider for operating and debugging the service; they record that a
     request happened, not what you typed. The anonymous analytics and crash data held by PostHog is
     retained per our PostHog project's settings.

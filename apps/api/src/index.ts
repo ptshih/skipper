@@ -318,7 +318,7 @@ app.get('/sample', async (c) => {
   // Unset config is an OPERATOR miss, not a rider error — but the rider still gets a clean, retryable
   // surface rather than a 500. Setting the QID is an explicit go-live gate (see the submission guide).
   if (!qid) {
-    return c.json({ error: 'no_sample', message: 'No sample is cued up just yet — check back soon.' }, 404)
+    return c.json({ error: 'no_sample', message: 'No sample is cued up just yet. Check back soon.' }, 404)
   }
   const rows = await withRetry(
     () =>
@@ -339,7 +339,7 @@ app.get('/sample', async (c) => {
   )
   const row = rows[0]
   if (!row) {
-    return c.json({ error: 'no_sample', message: 'No sample is cued up just yet — check back soon.' }, 404)
+    return c.json({ error: 'no_sample', message: 'No sample is cued up just yet. Check back soon.' }, 404)
   }
   try {
     return c.json({

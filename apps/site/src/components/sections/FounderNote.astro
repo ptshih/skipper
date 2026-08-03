@@ -34,7 +34,7 @@ const quotes: { stars: number; quote: string; who: string }[] = [
           </>
         ) : (
           <>
-            <span class="kicker">No reviews yet — here’s the truth instead</span>
+            <span class="kicker">No reviews yet. Here’s the truth instead</span>
             <h2 class="title">Nobody’s rated this yet. It’s not in the store yet.</h2>
           </>
         )
@@ -42,21 +42,21 @@ const quotes: { stars: number; quote: string; who: string }[] = [
       {
         quotes.length ? (
           <p class="founder__body">
-            Full disclosure: nobody’s actually reviewed Skipper yet — it isn’t even in the store. So
+            Full disclosure: nobody’s actually reviewed Skipper yet. It isn’t even in the store. So
             the Skipper rounded up a few “riders” of, ah, questionable independence. The real ones
             land right here the day they exist. Until then, the only review that counts is your own
             ears, a few scrolls up.
           </p>
         ) : (
           <p class="founder__body">
-            So here’s the honest version: Skipper is a small, stubborn labor of love — one drive, one
+            So here’s the honest version: Skipper is a small, stubborn labor of love. One drive, one
             voice, built by someone who got tired of audio tours that read facts at you like a museum
             placard. When real riders have opinions, their words go here. Until then, the only review
             that counts is your own ears, a few scrolls up.
           </p>
         )
       }
-      <p class="founder__signoff">— see you at the trailhead. Bring snacks.</p>
+      <p class="founder__signoff">See you at the trailhead. Bring snacks.</p>
       <a class="btn btn--secondary founder__cta" href="#top">
         <Icon name="play" size={18} /> Go back and hear him
       </a>
@@ -70,7 +70,7 @@ const quotes: { stars: number; quote: string; who: string }[] = [
                   {'★'.repeat(Math.max(0, Math.min(5, q.stars)))}
                 </span>
                 <blockquote class="founder__quotetext">{q.quote}</blockquote>
-                <figcaption class="founder__who">— {q.who}</figcaption>
+                <figcaption class="founder__who">{q.who}</figcaption>
               </figure>
             ))}
           </div>

@@ -191,7 +191,7 @@ export const DRIVE_CREATE_RATE = {
   limit: 15,
   windowSec: 60,
   label: 'drives-create',
-  message: "One at a time, friend — I'm still hitching up the last one.",
+  message: "One at a time, friend. I'm still hitching up the last one.",
 } as const
 
 /** POST /drives/plan, per minute — LOOSER than propose on purpose: the INTENT COUNT differs, not the
@@ -276,7 +276,7 @@ export const REGIONS_RATE = {
   limit: 120,
   windowSec: 60,
   label: 'regions',
-  message: "Easy there — I'm still unrolling the map. Try me again in a moment.",
+  message: "Easy there. I'm still unrolling the map, so try me again in a moment.",
 } as const
 
 /** How long `GET /regions` may serve its memoized ANONYMOUS payload before re-reading.
