@@ -330,10 +330,13 @@ export default function DriveScreen() {
       glow: false,
     }
   } else if (d.activeSeq != null) {
-    // A loaded clip. A held clip dims the halo and stops claiming "NOW PLAYING".
+    // A loaded clip. A held clip dims the halo, stops claiming "NOW PLAYING", and gains ONE line of him
+    // waiting with you — the card's body slot is otherwise unused in this state, so the line costs a
+    // row of height only while held and none while playing.
     card = {
       kicker: d.nowPlaying ? voice.player.nowPlaying : voice.player.paused,
       title: nowTitle,
+      body: d.nowPlaying ? undefined : voice.player.pausedBody,
       glow: d.nowPlaying,
       badge: activeStop
         ? { tone: stopTone(activeStop.stopType), label: stopLabel(activeStop.stopType) }

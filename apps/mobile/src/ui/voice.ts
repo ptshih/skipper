@@ -283,6 +283,12 @@ export const voice = {
     stall: 'Couldn’t load that stop. Skipping ahead.',
     nowPlaying: 'NOW PLAYING', // emoji kept OUT of label strings (custom font = tofu)
     paused: 'PAUSED', // a held clip — the NOW card must not keep saying "NOW PLAYING"
+    // The one beat the pause control was missing: he's still in the car while you're stopped. Pairs with
+    // the CTAs, which already speak as him ('Hold here' / 'Roll on again'). Deliberately says NOTHING
+    // about where you stopped or why — he has no eyes and no live data, and a concierge who names places
+    // was cut on purpose (docs/decisions/cut-mid-drive-concierge.md). Landscape permanence is the joke;
+    // it's the one observation he can always make without perceiving anything.
+    pausedBody: 'Take your time. Nothing out here is going anywhere.',
     rolling: 'ROLLING', // between stops — road-trip, not the flat "DRIVING"
     rollingOpen: 'On the open road', // rolling-card title when there's no next stop queued yet
     replay: 'Replay that', // re-hear the stop that just ended — plain chrome, NOT the skipper's voice (replay-last-stop)
