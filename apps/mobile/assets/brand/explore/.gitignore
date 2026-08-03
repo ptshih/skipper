@@ -1,0 +1,9 @@
+# Everything here regenerates from gen*.py — only the generators and the README
+# are worth history. `out/` also caches third-party App Store artwork for the
+# home-screen mock, which must never be committed.
+out/
+final/
+__pycache__/
+*.pyc
+sheet-*.png
+*.html

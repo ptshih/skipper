@@ -377,11 +377,22 @@ The system reads as Trailhead 89 today on the **vector Ionicon** set (`stops.ts`
   per-stop ink is the remaining piece.
 - **Amber sunburst + postmark watermarks** behind hero headers / empty states
   (`expo-linear-gradient` or a static SVG — never animate color stops on Android).
-- **Splash/app icon.** ✅ Shipped: the locked **M1 "compass porthole"** — a play triangle
-  that's a window onto the park (sun, ridgeline, snow-cap), framed by a compass dial with an
-  amber north; text-free, day & dusk (`icon-dark.png`). SVG sources + `build.sh` in
-  `assets/brand/`, wired in `app.json`. (The enamel travel badge is now reserved as the
-  separate in-app home-hero mark, not the launcher.)
+- **Splash/app icon.** ✅ Shipped: the **switchback S** — a drawn S whose dashed centre line
+  makes it a road, pine on paper by day and parchment on night at dusk, with a decorative amber
+  dot at the head. Text-free. It replaced the "M1 compass porthole" (a play triangle over a
+  compass dial), which stacked four ideas and whose ring went sub-pixel below ~120pt. Two
+  choices here are load-bearing and were measured, not eyeballed:
+  - **Paper is the ground on purpose.** The outdoors/travel category is uniformly a saturated
+    field with a mountain on it; paper is what makes the icon findable in that grid.
+  - **Amber is decorative and must stay that way.** iOS derives the tinted/clear appearances by
+    LUMINANCE, so amber (2.63:1 on pine, 2.47:1 on paper — both under the 3:1 non-text bar)
+    collapses there. The mark reads without it.
+
+  Six assets, SVG sources + `build.sh` in `assets/brand/`, wired in `app.json`. ⚠ The splash
+  needs **two** assets: one image renders over paper in light and night in dark, and a bare
+  letterform can't serve both (pine on night is 2.10:1), so splash `dark.image` points at
+  `splash-icon-dark.png` — don't collapse them back to one file. (The enamel travel badge stays
+  the separate in-app home-hero mark, not the launcher.)
 
 ## 10. How to extend
 

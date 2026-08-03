@@ -130,18 +130,23 @@ verified — they share the build, so do them together.
 ## §1 — Splash & app icon (native; visible only after a fresh build, never on hot-reload)
 
 - [ ] **App icon on the home screen.** Do: after a fresh install, find the Skipper icon (home screen,
-  app switcher, Settings list); also toggle Dark Mode to check the dusk variant. Expect: the M1
-  "compass porthole" — a play triangle that's a window onto the park (sun, ridgeline, snow-cap),
-  framed by a compass dial with an amber north, on a full-bleed pine (`#1E5B40`) field (opaque, no
-  alpha); in dark mode the dusk variant (`icon-dark.png`). Watch-for: the stock black Expo void
-  (build didn't pick up the icon, or you're on an old install — re-run `prebuild:ios`); a
-  transparent/black corner; clipping under the rounded-rect mask. (`app.json` `ios.icon` +
-  `android.adaptiveIcon`, `apps/mobile/assets/brand/icon.svg`)
+  app switcher, Settings list); also toggle Dark Mode to check the dusk variant. Expect: the
+  **switchback S** — a drawn S with a dashed centre line running through it and a small amber dot
+  at its head — in pine on a full-bleed paper (`#F2E7CC`) field (opaque, no alpha); in dark mode
+  the dusk variant, parchment on night (`icon-dark.png`). Also check the **tinted** appearance
+  (long-press home screen → Edit → Customize → Tinted): it should use our grayscale asset, not a
+  tinted version of the paper artwork. Watch-for: the stock black Expo void (build didn't pick up
+  the icon, or you're on an old install — re-run `prebuild:ios`); a transparent/black corner;
+  clipping under the rounded-rect mask. (`app.json` `ios.icon` + `android.adaptiveIcon`,
+  `apps/mobile/assets/brand/icon.svg`)
 - [ ] **Splash on cold launch, light *and* dark.** Do: fully quit, cold-launch; then switch the
-  device to Dark Mode and cold-launch again. Expect: the centred M1 pine-disc mark (contain, ~240pt)
-  on a solid field — cream `#F2E7CC` in light, deep pine `#14201B` in dark (the dark override).
-  Watch-for: white/black default splash (asset not bundled / stale build); cream instead of pine in
-  dark (dark override not applied); stretched or off-centre mark. (`app.json` `expo-splash-screen`)
+  device to Dark Mode and cold-launch again. Expect: the centred switchback S (contain, ~240pt) on
+  a solid field — pine mark on cream `#F2E7CC` in light, parchment mark on deep pine `#14201B` in
+  dark (the dark override). ⚠ These are **two different assets** now, not one recoloured by the
+  system: a pine mark left on the night field measures 2.10:1 and reads as a murky smudge, which is
+  exactly the symptom if `dark.image` gets collapsed back to `splash-icon.png`. Watch-for:
+  white/black default splash (asset not bundled / stale build); cream instead of pine in dark (dark
+  override not applied); stretched or off-centre mark. (`app.json` `expo-splash-screen`)
 
 ## §2 — Drive detail: trailhead placard, summary, place names, offline chip
 
