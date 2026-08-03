@@ -1,6 +1,13 @@
 # Fused cluster generation — phase 4 of the legibility layer
 
 > **Status:** ✅ **BUILT, GENERATED AND RELEASED for Tahoe/Reno — 2026-07-30, re-counted 2026-08-02.**
+> ⚠ **One detail superseded 2026-08-03:** each member now contributes its **grounding** hash
+> (`coalesce(sheet_hash, facts_hash)`) to the fused fingerprint, not `pois.facts_hash`. The single
+> polymorphic column was split in migration `0043`, so §6's "raw-article churn that storyFactsHash's
+> enriched/un-enriched switch exists to prevent" is now prevented by WHICH COLUMN the sweep writes
+> rather than by a switch. Feeding raw-facts digests here after the split would have staled all 37
+> fused clips on every free sweep AND left them reading fresh across a re-enrich — wrong in both
+> directions; `clusterGroundingHash` was corrected in the same commit. The member-set rule is unchanged.
 > Steps 1–3 (staleness hash + member-set resolver, trigger position, read paths) spend nothing and are
 > green; **step 4 — the step that SPENDS — has already spent**; step 5's founder listen passed ("clips
 > sound fine"); step 6's member retirement is built. Counted read-only against the live DB 2026-08-02:

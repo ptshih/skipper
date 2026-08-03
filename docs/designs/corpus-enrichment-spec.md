@@ -1,6 +1,16 @@
 # Corpus enrichment — Build Spec
 
-> **Status:** ✅ **BUILT 2026-06-15, RUN 2026-06-16** — the code shipped on a "skip the ear-test, build
+> **Status:** ✅ **BUILT 2026-06-15, RUN 2026-06-16.** ⚠ **SUPERSEDED IN ONE DETAIL (2026-08-03): the
+> grounding fingerprint is TWO columns now.** Everywhere below that says `facts_hash` "keys on the fact
+> sheet / the well", read **`pois.sheet_hash`**. The single polymorphic column (sheet digest when
+> enriched, facts digest otherwise) was split because the branch lived on the WRITE side across four
+> writers and getting it wrong was invisible — a dropped argument passed typecheck and all 434 studio
+> tests while staling every enriched clip. `facts_hash` is now ALWAYS the raw facts digest,
+> `sheet_hash` is the sheet digest or NULL, and what a narration is compared against is
+> `coalesce(sheet_hash, facts_hash)` (`groundingHash`, `@skipper/db/hash`), evaluated once on READ.
+> Migration `0043`, applied. The enrichment BEHAVIOUR below is unchanged.
+>
+> The code shipped on a "skip the ear-test, build
 > now" founder call; a paid `enrich --apply` has since been RUN across all story-eligible POIs (315
 > welled), so the ear-test (§11) is now the remaining acceptance gate. What shipped, the resolved §9 calls, and the deviations are
 > recorded in [`docs/decisions/corpus-enrichment.md`](../decisions/corpus-enrichment.md) (read that for
