@@ -860,9 +860,14 @@ export default function HomeScreen() {
   // out mid-glance. Evaluated once here, it is true by construction rather than by care.
   const [showListenRow] = useState(shouldShowListenRow)
 
-  // Only worth a sheet when there is more than one answer. Single-sourced so the chip's affordance and
-  // the sheet's existence can never disagree — a caret with no sheet behind it is the failure mode.
-  const multiRegion = (regions?.length ?? 0) > 1
+  // ⚠ ANY region at all, not "more than one" — and the change of heart is the point. Gating this on
+  // a second region made the chip a dead label for the only configuration that ships, and the reason
+  // I gave (a picker onto a list of one does nothing) was wrong about what the sheet is FOR: it
+  // answers "where can I actually go?", and the list of roads the skipper knows IS the limit —
+  // expressed as content rather than as the disclaimer §14 deliberately cut from the hint line.
+  // One region is a short answer to that question, not the absence of one.
+  // Single-sourced so the chip's affordance and the sheet's existence can never disagree.
+  const hasRegions = (regions?.length ?? 0) > 0
   const [regionPickerOpen, setRegionPickerOpen] = useState(false)
 
   // ── The rotating placeholder ────────────────────────────────────────────────────────────────
@@ -961,7 +966,7 @@ export default function HomeScreen() {
       // a plain label — RegionChip renders that state itself — because a caret onto a list of one is
       // a control that does nothing. The sheet is built and wired; it simply has no work to do until
       // region 2 ships, at which point this turns on with no further change.
-      onPress={multiRegion ? () => setRegionPickerOpen(true) : undefined}
+      onPress={hasRegions ? () => setRegionPickerOpen(true) : undefined}
     />
   )
 
@@ -1375,9 +1380,9 @@ export default function HomeScreen() {
 
       {masthead}
 
-      {/* Mounted only when it can do something — `visible` alone would keep a Modal in the tree on
-          every single-region launch, which is the overwhelmingly common case today. */}
-      {multiRegion ? (
+      {/* Mounted only once regions exist — `visible` alone would keep a Modal in the tree through
+          every cold start before /regions lands. */}
+      {hasRegions ? (
         <RegionPicker
           visible={regionPickerOpen}
           regions={regions ?? []}
