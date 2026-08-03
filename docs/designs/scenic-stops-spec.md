@@ -453,7 +453,49 @@ name-only wave lands short and evaluatePacing never flags short"). Do not tune i
 
 **Total smoke: 22 clips, $0.25, nothing persisted.** The content question is closed.
 
-### 11.10 ⛔ BLOCKER — a scenic clip is NEVER SELECTED. Do not generate this tier yet.
+### 11.10 ✅ RESOLVED — the blocker below is FIXED; the drive now plays the tier
+
+**Built 2026-08-03, $0.** `DriveCandidate.glance` + a fill pass in `buildDrive` (step 4b), run AFTER
+the stop selection is final. Re-measured on the same drive:
+
+| | stops | scenic | coverage | quiet | **longest gap** |
+| --- | --- | --- | --- | --- | --- |
+| today | 8 | 0 | 23% | 80% | 6:12 |
+| **with the glance fill** | **13** | **5** | 27% | 75% | **3:40** |
+
+**The worst silence nearly halves.** Coverage moves only 4 points — which is the point: a glance
+PUNCTUATES the quiet rather than filling it, exactly as §11.5 said it would. The five it picked are
+Kasian Recreation Area, Kailua Park, Lonely Gulch, Eagle Point and Baldwin Beach — real named
+features spread along the route.
+
+⚠ **The eight stories are bit-identical** (audio 9:03 → 10:43, i.e. +1:40 = exactly 5 × 20 s). That
+is the design constraint, not a happy result: a glance must never displace a telling, so the fill runs
+after selection and cannot perturb it. Pinned by a test asserting the non-glance stops come back
+unchanged.
+
+Rules, each with a reason:
+- **ONE glance per quiet window**, and it must clear `GLANCE_EDGE_SEC` (45 s) on BOTH sides — of the
+  clip that just finished PLAYING (not merely of its trigger: the FIFO means a stop's audio outlives
+  its trigger by its whole duration) and of the next stop's trigger.
+- **Glances ignore `driveMaxStops`.** That cap keeps a drive from becoming a lecture at ~1 stop / 4
+  min; a 20-second call-out inside a 6-minute silence is not what it protects against, and counting
+  them would make the cap starve the very gaps this fills.
+- **Earliest eligible wins**, because a glance's `alongSec` is where the place physically IS — you
+  call a thing out as you pass it, and the runner-up is simply further down the road.
+- **Never within `DRIVE_MIN_SEPARATION_M` of a selected stop** — the co-located rule the stop pass
+  applies to itself, applied across the two passes.
+
+**MUTATION-CHECKED:** setting `GLANCE_EDGE_SEC` to 0 fails 1 test; letting glances compete in the main
+pass instead of filling fails 3. Engine 130 → 135 tests.
+
+⚠ Still true, and the reason this is not "done": the fill proves a scenic clip WOULD be selected. It
+does not generate one. The machinery in §11.9's closing paragraph (TTS, loudnorm, R2, the eval gate
+against an empty fact well, the never-used write path) is unchanged and still ahead of the ~$29–31 run.
+
+<details>
+<summary>The original blocker, kept as the record of what was wrong</summary>
+
+### ⛔ BLOCKER (2026-08-03, now fixed) — a scenic clip is NEVER SELECTED
 
 Measured free, 2026-08-03, **before** any generation spend — and it would have been a ~$30 mistake.
 Simulated the real Tahoe drive with the scenic tier added as candidates (20 s each, the band the smoke
@@ -491,6 +533,8 @@ already the tool for both.
 actually selected → THEN the machinery no smoke has touched (TTS, loudnorm, R2, the fail-closed eval
 gate against an empty fact well, and the `narrations` write path for a form that has never had a row)
 → THEN the ~$29–31 generation run. **The content is ready; the drive cannot play it yet.**
+
+</details>
 
 **Cost discipline, for the next run's estimate:** 16 script-only clips cost **$0.19** total ($0.06 +
 $0.05 + $0.08), heavily prompt-cached. That is scripts only — TTS, loudnorm, R2 and the eval gate are

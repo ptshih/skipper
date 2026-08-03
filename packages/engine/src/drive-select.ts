@@ -65,6 +65,17 @@ export interface DriveCandidate {
    *  (fail-closed: the alternative is silently falling back to the off-road centre, which is the exact
    *  mis-placement the flag exists to prevent). Undefined for a poi, which has no members. */
   memberPoints?: LngLat[]
+  /** This telling is a GLANCE — a short call-out (a named scenic feature you are passing) rather than
+   *  a stop. Glances are selected in a SEPARATE pass that fills the quiet BETWEEN stops; they never
+   *  compete for a stop slot and never count against `maxStops`.
+   *
+   *  ⚠ THE FLAG EXISTS BECAUSE COMPETING IS EXACTLY WHAT BREAKS THEM. Measured 2026-08-03 on the live
+   *  corpus: adding 30 eligible 20-second scenic candidates to a real drive selected **zero** of them
+   *  and changed the drive by nothing, while the same 30 run WITHOUT stories selected 7. They are
+   *  reachable, they survive the co-located dedupe, they clear the pacing floor — they simply lose
+   *  `better()`, which ranks on `audioDurationMs`, so a 60-90 s telling beats a 20 s glance in every
+   *  window. A tier generated without this flag would be invisible in the only mode that exists. */
+  glance?: boolean
 }
 
 /** The trigger floor for a candidate: an explicit override when one is supplied (a cluster), else the
@@ -109,6 +120,17 @@ export const DRIVE_MIN_SEPARATION_M = 1_000
 /** A clip that would start more than this many seconds after its trigger (FIFO queue lag) is
  *  DROPPED — silence beats a clip playing far behind the car. */
 export const DRIVE_MAX_LAG_SEC = 45
+
+/**
+ * How much silence a GLANCE must leave on EACH side of itself: clear of the clip that just ended, and
+ * clear of the next stop's trigger.
+ *
+ * ⚠ Deliberately the same number as `DRIVE_MAX_LAG_SEC`, and for the same reason rather than by
+ * coincidence: that constant is the project's existing answer to "how far behind the car may audio
+ * fall before silence is better", so it is the natural unit for "how much room a clip needs in order
+ * not to tread on its neighbours". A glance that crowds the telling before it is worse than no glance.
+ */
+export const GLANCE_EDGE_SEC = 45
 
 interface Snapped {
   cand: DriveCandidate
@@ -186,6 +208,9 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
   //    correction, not a regression: the stops it removes were never going to play, and a shorter
   //    honest drive beats a longer one with silent gaps in it.
   const placed: Snapped[] = []
+  // Glances are admitted on the SAME geometry as stops (they are real places on the route) but are
+  // held out of the pacing pass entirely — see the glance fill after step 4.
+  const glancesPlaced: Snapped[] = []
   for (const cand of candidates) {
     const reachM = Math.min(
       OFF_ROUTE_MAX_M,
@@ -221,7 +246,7 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
     const anchor: LngLat = placement ? placement.anchor : [cand.lng, cand.lat]
     const s = placement ? placement.s : snap(anchor)
     if (s.offRouteM <= reachM) {
-      placed.push({
+      ;(cand.glance === true ? glancesPlaced : placed).push({
         cand,
         anchor,
         alongSec: s.alongSec,
@@ -303,7 +328,49 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
     survivors.push(s)
   }
 
+  // 4b. THE GLANCE FILL — short call-outs dropped into the quiet BETWEEN stops.
+  //
+  // ⚠ This runs AFTER the stop selection is final, and that ordering is the whole design. A glance
+  // must never displace a telling: measured 2026-08-03, letting 20-second scenic candidates compete in
+  // step 3 selected ZERO of them (better() ranks on clip length, so a 90-second story wins every
+  // window), and the naive fix — making the comparator form-aware — would have let a glance beat a
+  // telling instead, which is worse. Selecting stops first and filling the leftovers costs the stop
+  // pass nothing and cannot change it.
+  //
+  // ⚠ Glances do NOT count against `maxStops`. That cap exists to keep a drive from becoming a lecture
+  // (~1 stop / 4 min); a 20-second glance in a 6-minute silence is not what it was protecting against,
+  // and counting them would have the cap starve exactly the gaps this fills.
+  //
+  // ONE per window, and it must clear `GLANCE_EDGE_SEC` on BOTH sides — of the clip that just finished
+  // playing (not merely of the previous trigger: the FIFO means a stop's audio outlives its trigger by
+  // its whole duration) and of the next stop's trigger. Among the eligible, the EARLIEST wins, because
+  // a glance's alongSec is where the place physically is — you call a thing out as you pass it, and
+  // the second-best candidate in a window is simply further down the road.
+  if (glancesPlaced.length > 0) {
+    const bySeq = [...survivors].sort((a, b) => a.alongSec - b.alongSec)
+    const taken: Snapped[] = []
+    let playEndCursor = 0
+    for (let w = 0; w <= bySeq.length; w++) {
+      const prev = w > 0 ? bySeq[w - 1] : undefined
+      const next = bySeq[w]
+      // The quiet runs from when the previous clip stops PLAYING to when the next one triggers.
+      if (prev) playEndCursor = Math.max(playEndCursor, prev.alongSec) + prev.cand.audioDurationMs / 1000
+      const from = (prev ? playEndCursor : 0) + GLANCE_EDGE_SEC
+      const until = (next ? next.alongSec : totalSec) - GLANCE_EDGE_SEC
+      const pick = glancesPlaced
+        .filter((g) => !taken.includes(g))
+        .filter((g) => g.alongSec >= from && g.alongSec + g.cand.audioDurationMs / 1000 <= until)
+        // Never call out a place the drive already stops at — the co-located rule the stop pass
+        // applies to itself, applied across the two passes.
+        .filter((g) => !bySeq.some((s) => haversineMeters(s.anchor, g.anchor) < DRIVE_MIN_SEPARATION_M))
+        .sort((a, b) => a.alongSec - b.alongSec)[0]
+      if (pick) taken.push(pick)
+    }
+    survivors.push(...taken)
+  }
+
   // 5. Order + number.
+  survivors.sort((a, b) => a.alongSec - b.alongSec)
   return survivors.map((s, seq) => ({
     seq,
     poiId: s.cand.poiId,

@@ -149,6 +149,101 @@ describe('buildDrive', () => {
     expect(stops.some((s) => s.poiId === 'district')).toBe(true)
   })
 
+  // THE GLANCE FILL. A 20 s scenic call-out cannot compete with a 90 s telling — measured on the live
+  // corpus, 30 eligible glance candidates added to a real drive selected ZERO, because `better()` ranks
+  // on clip length. So glances are selected in a SEPARATE pass over the quiet BETWEEN stops.
+  //
+  // Route note: 0.001 deg lat ≈ 111 m and the drive runs ≈ 16.85 m/s, so GLANCE_EDGE_SEC (45 s) is
+  // ≈ 758 m of road — usefully TIGHTER than DRIVE_MIN_SEPARATION_M (1 km), which is what leaves a band
+  // where the window admits a glance and the co-location rule still refuses it (tested below).
+  const stopAt = (lat: number, ms: number) => cand({ poiId: `stop@${lat}`, lat, audioDurationMs: ms })
+  const glanceAt = (lat: number) =>
+    cand({ poiId: `glance@${lat}`, lat, audioDurationMs: 20_000, glance: true })
+
+  test('a glance fills the quiet BETWEEN stops and never displaces one', () => {
+    const stops = [stopAt(38.01, 20_000), stopAt(38.09, 20_000)]
+    const without = buildDrive({ polyline, totalSec: TOTAL_SEC, minGapSec: 180, maxStops: 10, candidates: stops })
+    const with_ = buildDrive({
+      polyline,
+      totalSec: TOTAL_SEC,
+      minGapSec: 180,
+      maxStops: 10,
+      candidates: [...stops, glanceAt(38.05)],
+    })
+    expect(without).toHaveLength(2)
+    expect(with_).toHaveLength(3)
+    // ⚠ THE LOAD-BEARING HALF: the two real stops are untouched — same subjects, same placement. A
+    // glance that shifted a telling would be worse than a glance that never fired.
+    expect(with_.filter((s) => !s.poiId.startsWith('glance')).map((s) => s.poiId)).toEqual(
+      without.map((s) => s.poiId),
+    )
+    // ...and it lands between them, in route order.
+    expect(with_[1]!.poiId).toBe('glance@38.05')
+  })
+
+  test('a glance does NOT count against maxStops', () => {
+    // maxStops 1 admits exactly one STOP; the glance rides anyway.
+    const stops = buildDrive({
+      polyline,
+      totalSec: TOTAL_SEC,
+      minGapSec: 180,
+      maxStops: 1,
+      candidates: [stopAt(38.01, 20_000), stopAt(38.09, 20_000), glanceAt(38.05)],
+    })
+    expect(stops.filter((s) => !s.poiId.startsWith('glance'))).toHaveLength(1)
+    expect(stops.filter((s) => s.poiId.startsWith('glance'))).toHaveLength(1)
+  })
+
+  test('a glance too close to a stop is refused — and the same glance further along is taken', () => {
+    // A 1 s clip opens the window early (ends ≈ 67 s, so the window starts ≈ 112 s), which admits BOTH
+    // candidates on TIME. Only the ground distance separates them: 38.018 is ≈ 890 m from the stop
+    // (inside DRIVE_MIN_SEPARATION_M) and 38.03 is ≈ 2.2 km (outside).
+    const near = buildDrive({
+      polyline,
+      totalSec: TOTAL_SEC,
+      minGapSec: 180,
+      maxStops: 10,
+      candidates: [stopAt(38.01, 1_000), stopAt(38.09, 20_000), glanceAt(38.018)],
+    })
+    const far = buildDrive({
+      polyline,
+      totalSec: TOTAL_SEC,
+      minGapSec: 180,
+      maxStops: 10,
+      candidates: [stopAt(38.01, 1_000), stopAt(38.09, 20_000), glanceAt(38.03)],
+    })
+    expect(near.some((s) => s.poiId.startsWith('glance'))).toBe(false)
+    expect(far.some((s) => s.poiId.startsWith('glance'))).toBe(true)
+  })
+
+  // ⚠ The quiet is measured from when the previous clip stops PLAYING, not from its trigger — the FIFO
+  // means a stop's audio outlives its trigger by its whole duration. So a LONGER first clip eats the
+  // window a glance needed. The pair below changes ONLY that duration (the stops, the glance and the
+  // spacing are identical), which is what makes it a test of the window arithmetic rather than of
+  // distance or pacing.
+  const roomTest = (firstClipMs: number) =>
+    buildDrive({
+      polyline,
+      totalSec: TOTAL_SEC,
+      minGapSec: 1,
+      maxStops: 10,
+      candidates: [stopAt(38.0, firstClipMs), stopAt(38.02, 20_000), glanceAt(38.01)],
+    })
+
+  test('a glance fits when the preceding clip leaves room', () => {
+    // stop@38.0 plays 0-20 s → window opens at 65 s; stop@38.02 triggers at ≈132 s → window shuts at
+    // 87 s. The glance sits at ≈66 s and runs 20 s, so it just fits.
+    expect(roomTest(20_000).some((s) => s.poiId.startsWith('glance'))).toBe(true)
+  })
+
+  test('...and is refused when the preceding clip eats it — same everything else', () => {
+    // Only change: the first clip now runs 60 s, so the window opens at 105 s and shut at 87 s. There
+    // is no room, and silence is the correct answer.
+    const stops = roomTest(60_000)
+    expect(stops.filter((s) => !s.poiId.startsWith('glance'))).toHaveLength(2)
+    expect(stops.some((s) => s.poiId.startsWith('glance'))).toBe(false)
+  })
+
   // The 250-700 m band: a candidate the old flat off-route ceiling admitted but the TRIGGER could
   // never reach, so it consumed a pacing slot and played nothing. Measured on the real Tahoe drives at
   // 3 of 18 selected stops before the fix. ~11.1 km over 660 s = ~17 m/s, so speed x 12 s lead ~ 202 m
