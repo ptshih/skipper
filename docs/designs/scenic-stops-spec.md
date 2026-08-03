@@ -453,6 +453,44 @@ name-only wave lands short and evaluatePacing never flags short"). Do not tune i
 
 **Total smoke: 22 clips, $0.25, nothing persisted.** The content question is closed.
 
+### 11.12 ✅ BUILT — the whole tier, 2026-08-03. 309 clips, 114 min, ~$44, ALL STAGED.
+
+Founder go for the full build. Run in waves, and the staging paid for itself twice over.
+
+| | |
+| --- | --- |
+| **scenic narrations** | **309** (0 released) |
+| **audio** | **114 min** — the corpus is now 458 story / 309 scenic, 767 total |
+| spend | ~$44 all in (the 276-clip final wave was $38.72) |
+| withheld by the gate | 2 · one synthesis failure (273/274) |
+| **excisions** | **59** — the scenic rules trimmed ungrounded claims in 59 clips |
+| shape-contract violations | **0** (checked: no attribution, no facts_hash, poi subject, audio present) |
+
+**⚠ WAVE 1 (30 clips) WITHHELD FIFTEEN — 50%.** Every one the primitive-`claims` throw. Running all
+276 blind would have billed narration + judging on every clip and shipped half; the probe cost $2.44
+to learn it. The diagnosis and the two-step fix are in `df54f35`: a blind re-ask took it to 20% and
+the residue was DETERMINISTIC (the same places failing every attempt), because a clip asserting zero
+place-claims leaves the judge nothing to decompose and it answers in prose. A CORRECTIVE re-ask —
+naming the wrong shape — took it to 0%. Over the final wave the correction fired **376 times across
+276 clips** (~1.4 each) and only 2 clips ended up withheld.
+
+⚠ **The estimator under-predicts this path ~2.3×** — it quoted $16.65 for the wave that cost $38.72,
+because retakes, excisions and shape re-asks are all billed and none are in the estimate. Use the
+measured **~$0.14/clip** for the next region, not the printed quote.
+
+**✅ END-TO-END VERIFIED with the real clips**, not a simulation of them: 30 scenic clips are reachable
+on the flagship drive, **5 are selected as glances**, the 8 stories come back untouched, and the worst
+silence goes **6:12 → 3:40**.
+
+⚠ **The last-mile wiring was missing and nearly shipped that way** — nothing set `glance: true`, so
+309 clips and 114 minutes were unreachable exactly as §4.3's 8m13s had been. `candidateOf` now derives
+it from the narration FORM (not a second field, so a glance cannot disagree with what `toClipForm`
+tells the rider it is). **This is the third time in one day that content existed with no selection
+rule to serve it** — treat "who selects this?" as a required question for any new content kind.
+
+**What remains is not engineering.** Every clip is STAGED, so no rider hears one. The next steps are a
+LISTEN and then a region release, both founder calls.
+
 ### 11.11 ✅ THE TIER EXISTS — first scenic audio in the corpus, 2026-08-03 ($0.34)
 
 `generate-scenic-narrations.ts --apply --limit 3 --spread --max-cost 1.00`. **3/3 synthesized, 0

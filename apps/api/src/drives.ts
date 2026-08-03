@@ -555,6 +555,13 @@ const candidateOf = (r: NarrationRow): DriveCandidate => ({
   varietyKey: r.varietyKey,
   // Only a cluster sets this; a poi leaves it undefined and keeps deriving from kind/anchored.
   ...(r.triggerRadiusM != null ? { triggerRadiusM: r.triggerRadiusM } : {}),
+  // A SCENIC telling is a GLANCE — a ~20 s call-out naming a place you are passing, not a stop. It is
+  // selected in buildDrive's separate fill pass over the quiet BETWEEN stops, because it cannot win a
+  // pacing window against a telling: `better()` ranks on clip length, and measured on the live corpus,
+  // 30 eligible scenic candidates added to a real drive selected ZERO of them.
+  // ⚠ Derived from the FORM rather than carried as a second field — the form is what the generator
+  // wrote and what `toClipForm` serves, so a glance cannot disagree with what the rider is told it is.
+  ...(r.form === 'scenic' ? { glance: true } : {}),
   // Set only for a group too wide for a point. buildDrive places these on the earliest MEMBER the
   // route reaches rather than snapping the enclosing-circle centre — see the second admission rule.
   // ⚠ The two travel TOGETHER: the flag without the points is a refusal (fail-closed), so a mapper
