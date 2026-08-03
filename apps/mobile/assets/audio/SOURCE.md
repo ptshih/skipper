@@ -1,4 +1,4 @@
-# Tour audio assets
+# Drive audio assets
 
 The drive soundtrack is a **shuffled rotation** (`src/lib/driveMusic.ts`): a fresh track
 fades in for each leg between stops, ducking out under narration. All tracks below are
@@ -30,7 +30,7 @@ covered the rotation, so there's no longer any license ambiguity in the bundle.
 | `redwood_trail.mp3` | *Redwood Trail* — Jason Shaw (Audionautix) | CC BY 4.0 | ✅ |
 | `paper_wings.mp3` | *Paper Wings* — Jason Shaw (Audionautix) | CC BY 4.0 | ✅ |
 | `landras_dream.mp3` | *Landra's Dream* — Jason Shaw (Audionautix) | CC BY 4.0 | ✅ |
-| `intro.mp3` / `outro.mp3` | tour-start / tour-end sting (Pixabay) | Pixabay Content License | Staged, not wired |
+| `intro.mp3` / `outro.mp3` | drive-start / drive-end sting (Pixabay) | Pixabay Content License | Staged, not wired |
 
 > **Loudness:** the whole rotation (all 17, incl. `drive_loop.mp3`) was re-mastered 2026-06-19 to the
 > master spec with a two-pass `ffmpeg -af loudnorm=I=-14:TP=-1.0:LRA=11` (measure → linear gain),
@@ -108,6 +108,6 @@ now carries no license ambiguity. (Recorded here so the next agent doesn't resur
 
 The player (`src/lib/driveMusic.ts`) shuffles the rotation, plays a fresh track per leg
 between stops, fades each out under a stop's narration, advances gaplessly when a track
-ends mid-leg (playlist `loop: 'all'`), and fades out when the tour ends. The full songs
+ends mid-leg (playlist `loop: 'all'`), and fades out when the drive ends. The full songs
 are not seamless loops; the rotation advances between them rather than looping any single
 one.

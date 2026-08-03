@@ -65,8 +65,8 @@ const SOURCE_LABELS: Record<string, string> = {
  *  the credit if a new source ships before this map learns it. */
 export const attributionSourceLabel = (source: string): string => SOURCE_LABELS[source] ?? source
 
-/** Offline fallback for the credits screen. Source of truth is GET /sources — keep this in
- *  rough sync, but it is non-authoritative (the live list overrides it whenever online). */
+/** THE catalog for the credits screen — authoritative, and the only copy. Nothing overrides it at
+ *  runtime; there is no server list to drift against (see the header). Edit here, ship a release. */
 export const DATA_SOURCES: DataSource[] = [
   {
     name: 'Wikipedia',
@@ -102,10 +102,10 @@ export const DATA_SOURCES: DataSource[] = [
 ]
 
 // The drive soundtrack — a shuffled rotation of royalty-free instrumentals (the audio
-// files + their full source list live in assets/audio/SOURCE.md). Unlike the fact
-// sources above, the music is BUNDLED in the app binary, so its credits version WITH the
-// app and live here (client-side) rather than on GET /sources — and so they stay visible
-// offline. Most tracks are under the Pixabay Content License (no attribution required);
+// files + their full source list live in assets/audio/SOURCE.md). The tracks ship IN the
+// app binary, so their credits version with the app for a second reason on top of the one
+// above: a track can't be added without a release either, so the two can never disagree.
+// Most tracks are under the Pixabay Content License (no attribution required);
 // the ones below are CC BY 4.0, which REQUIRES visible credit. Keep in lockstep with the
 // CC-BY entries in assets/audio/SOURCE.md.
 

@@ -1,4 +1,4 @@
-// The freemium wall, shared by every gated screen (tour + preview). A "smart"
+// The freemium wall, shared by every gated screen (drive detail + player). A "smart"
 // composite — unlike the pure primitives, it knows the sign-in route + the skipper
 // gate copy. `note` prefixes a context line (e.g. the preview's "sample only").
 import { Stack, useRouter } from 'expo-router'

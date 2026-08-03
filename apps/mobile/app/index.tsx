@@ -139,8 +139,10 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null)
   // True when the /drives fetch failed but saved downloads carried us (dead-zone fallback).
   const [offline, setOffline] = useState(false)
-  // Free-tier credit balance for the gentle "N free drives left" hint. Null = hidden: anonymous, paid
-  // (server sends credits:null for uncapped), or an older server without the field.
+  // Free credit balance for the gentle "N free drives left" hint. Null = hidden, and there are only
+  // two ways to get there: an anonymous rider (no gated call is made at all) or a server old enough
+  // to predate the field (it is nullish on the wire). There is NO uncapped/paid case to hide for —
+  // premium is credits, not a plan, so every account has a balance (docs/decisions/cut-tiers.md).
   const [credits, setCredits] = useState<{ remaining: number; cap: number } | null>(null)
 
   // ── The conversation ────────────────────────────────────────────────────────────────────────
@@ -237,7 +239,7 @@ export default function HomeScreen() {
       const r = await listDrives()
       if (!isCurrent()) return
       setDrives(r.drives)
-      setCredits(r.credits ?? null) // null for paid/uncapped (or an older server) → hint hidden
+      setCredits(r.credits ?? null) // null only against a server predating the field → hint hidden
       setOffline(false)
     } catch (e) {
       if (!isCurrent()) return

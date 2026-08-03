@@ -1,9 +1,9 @@
 // Sources & Licenses — the public attribution surface, reached from Settings → Sources.
 // CC BY-SA / CC BY oblige us to credit our sources and link the license; this is where
 // that credit lives app-wide (per-clip credit is frozen on narrations.attribution).
-// The catalog is served by GET /sources (authoritative) so a new fact source credits
-// without an App Store release; we seed from the bundled FALLBACK so the page never
-// dead-ends offline, then upgrade to the live list. Theme roles only (no raw hex/font).
+// The catalog is BUNDLED (`src/lib/licenses.ts` — its one home), never fetched: a legal page
+// has to render in a dead zone, so crediting a new source costs an app release. That is the
+// deliberate trade, not an oversight. Theme roles only (no raw hex/font).
 import { Pressable, StyleSheet, View } from 'react-native'
 import * as Linking from 'expo-linking'
 import { Stack } from 'expo-router'

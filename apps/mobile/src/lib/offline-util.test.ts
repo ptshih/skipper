@@ -140,7 +140,7 @@ describe('urlMapFromDriveManifest', () => {
       clips: [
         driveClip(0, 'story', 'https://r2/c0'),
         driveClip(1, 'scenic', 'https://r2/c1'),
-        driveClip(2, 'wave', 'https://r2/c2'),
+        driveClip(2, 'scenic', 'https://r2/c2'),
       ],
     })
     expect(m.get(0)).toBe('https://r2/c0')
@@ -153,7 +153,7 @@ describe('urlMapFromDriveManifest', () => {
       clips: [
         driveClip(0, 'story', 'https://r2/c0'),
         driveClip(1, 'break', null), // a silent rest beat — no audio
-        driveClip(2, 'wave', 'https://r2/c2'),
+        driveClip(2, 'scenic', 'https://r2/c2'),
       ],
     })
     expect(m.get(0)).toBe('https://r2/c0')

@@ -155,7 +155,7 @@ All token-driven and theme-aware. Compose these; don't restyle from scratch.
   build has no color-emoji fallback, so emoji render as tofu (`?`).
 - **`Card`** — the ranger placard. Plain by default (glanceable); `framed` adds the
   carved double-keyline + corner screw-dots — **non-driving surfaces only**.
-- **`Badge`** — enamel pill for stop types, lengths, the joke meter. `tone`
+- **`Badge`** — enamel pill for stop types and lengths. `tone`
   (`pine·amber·teal·rust·neutral`) maps to a contrast-safe text color; `filled` for
   a solid disc.
 - **`Divider`** — hairline or `dashed` (the atlas-trail rule).
@@ -179,7 +179,7 @@ All token-driven and theme-aware. Compose these; don't restyle from scratch.
 - **`ThemeModePicker`** — Auto / Day / Dusk segmented control (lives on Settings).
 - **`StateView`** — the shared loading / error / empty centered state (`loading`,
   `tone`, `action`, `title`). Kills the repeated `<Screen center>…` boilerplate.
-- **`AccountGate`** — the shared freemium wall (tour + preview). A "smart" composite:
+- **`AccountGate`** — the shared freemium wall (drive detail + player). A "smart" composite:
   unlike the pure primitives it knows the sign-in route + gate copy.
 
 ## 7. Voice in the UI (`src/ui/voice.ts`)
@@ -208,7 +208,7 @@ live in `voice.ts`. (Mirrors the studio pipeline's "persona lives in DELIVERY" r
   night-driving distraction.
 - **Dynamic Type is intentional, not accidental** (`IN_CAR_MAX_FONT_SCALE` in
   `tokens.ts`). SCROLLABLE / non-driving surfaces (Settings, Sign-in, the corridor +
-  tour lists, Legal) stay **uncapped** — full iOS Dynamic Type incl. the accessibility
+  drive lists, Legal) stay **uncapped** — full iOS Dynamic Type incl. the accessibility
   (AX) sizes, so all real content honors WCAG 1.4.4. Only the few **glance-critical
   in-car player surfaces** — the flanked transport labels, the mono timers, the NOW-card
   title — cap growth (at ~1.35×, iOS's largest _standard_ size) so a label can't blow out

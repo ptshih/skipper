@@ -70,11 +70,11 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   auto: 'contrast-outline', // half-lit disc = "follow the phone" (system appearance)
   settings: 'settings-outline',
   expand: 'chevron-down', // a filter chip that opens a picker
-  downloaded: 'cloud-done-outline', // a tour that's saved to disk + plays with no signal
+  downloaded: 'cloud-done-outline', // a drive that's saved to disk + plays with no signal
   // Still in the cloud = will STREAM. The counterpart to `downloaded`, and deliberately a plain cloud
   // (not `cloud-offline`, which reads as "you are offline" rather than "this isn't on your phone").
   notDownloaded: 'cloud-outline',
-  update: 'cloud-download-outline', // a saved tour whose clips were re-cut server-side — pull again
+  update: 'cloud-download-outline', // a saved drive whose clips were re-cut server-side — pull again
   more: 'ellipsis-horizontal', // header overflow menu (secondary/utility actions)
   music: 'musical-notes-outline', // the rider's own audio (PAUSED while the skipper talks, then handed back — not ducking)
   patter: 'chatbubble-ellipses-outline', // the skipper talking

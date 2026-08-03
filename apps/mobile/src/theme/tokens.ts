@@ -138,7 +138,7 @@ export const hit = {
 
 // ── Dynamic Type policy ──────────────────────────────────────────────────────
 // Deliberate, NOT accidental: SCROLLABLE / non-driving surfaces (settings, sign-in,
-// the corridor + tour lists, legal) stay UNCAPPED so they honor the full iOS Dynamic
+// the corridor + drive lists, legal) stay UNCAPPED so they honor the full iOS Dynamic
 // Type range incl. the accessibility (AX) sizes — WCAG 1.4.4 for all real content.
 // The few GLANCE-CRITICAL in-car player surfaces — the flanked transport labels, the
 // mono timers, the NOW-card title — cap growth here so a label can't blow out the

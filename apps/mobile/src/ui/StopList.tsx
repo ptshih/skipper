@@ -1,11 +1,11 @@
 // The route itinerary — ONE raised card of StopRows separated by hairline rules (the carved
-// "route panel"). Shared by the tour-detail screen AND the in-drive player so the stop UX is
+// "route panel"). Shared by the drive-detail screen AND the in-drive player so the stop UX is
 // identical on both. Rows carry per-stop state on the player (active / passed); the detail
 // passes none (all upcoming). The active row reads as a SUNKEN well inside this raised card
 // (see StopRow), so the single-card treatment works in every context.
 //
 // Two layouts:
-//   • default — the card sizes to its rows (the host screen scrolls). Tour detail.
+//   • default — the card sizes to its rows (the host screen scrolls). Drive detail.
 //   • scroll  — the card is a FIXED shell (the caller gives it flex:1); only the rows scroll,
 //               inside it, clipped to the rounded corners. The in-drive player, so all four
 //               corners stay put while the itinerary scrolls.

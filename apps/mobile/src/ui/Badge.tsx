@@ -1,4 +1,4 @@
-// Enamel travel badge — a small pill for stop types, tour length, the joke meter.
+// Enamel travel badge — a small pill for stop types and drive length.
 // Outlined by default; `filled` for a solid enamel disc. Tone maps to a
 // contrast-safe text color (note: amber text uses the burnt/lantern accent, never
 // the bright fill amber, so it survives on paper).

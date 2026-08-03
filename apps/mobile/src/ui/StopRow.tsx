@@ -58,7 +58,7 @@ function StopRowBase({
   return (
     <Pressable
       onPress={onPress}
-      // Derive interactivity from the handler: a read-only row (live/sim drive, tour detail)
+      // Derive interactivity from the handler: a read-only row (live/sim drive, drive detail)
       // announces as plain 'text', not a tappable 'button' that does nothing, and skips the
       // press tracking + pressed dimming. Only the preview (onPress set) reads as a button.
       disabled={!onPress}

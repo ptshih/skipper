@@ -4,7 +4,7 @@
 // road-trip tracks (assets/audio/*.mp3 — see assets/audio/SOURCE.md) plays between
 // stops and fades OUT when a stop's narration plays, then a FRESH track fades back
 // IN when the next driving leg begins — so each narrated leg gets a different song.
-// It also fades out when the tour ends. The playlist loops ('all'), so a track that
+// It also fades out when the drive ends. The playlist loops ('all'), so a track that
 // ends mid-leg advances gaplessly (expo-audio's playlist engine) and the rotation
 // never runs dry.
 //
@@ -57,7 +57,7 @@ const TRACKS = [
 const FULL = 0.95 // music is foreground between stops (not under voice) → near full
 const TICK_MS = 100 // volume-ramp tick; 100ms (12 steps over a 1.2s fade) halves native bridge writes vs 50 (audit #594)
 const FADE_MS = 1200 // duck/unduck at a stop boundary
-const FADE_END_MS = 600 // fade out a touch faster when the tour ends
+const FADE_END_MS = 600 // fade out a touch faster when the drive ends
 
 // Fisher–Yates: a fresh shuffle of the track order for this hook instance.
 function shuffled<T>(input: readonly T[]): T[] {

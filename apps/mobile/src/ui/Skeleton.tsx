@@ -1,5 +1,5 @@
 // Loading placeholders — the "content shape is arriving" cue that replaces a bare spinner
-// on a blank screen (the home drive list, the tour placard). A `Skeleton` is one inert
+// on a blank screen (the home drive list, the drive placard). A `Skeleton` is one inert
 // `surfaceSunken` block (the same inset-well tone an empty field wears); a `SkeletonGroup`
 // wraps a silhouette of them and breathes the WHOLE thing as ONE element — a single shared
 // opacity pulse, so the screen never shows "a field of" animating blocks (DESIGN §8: at most

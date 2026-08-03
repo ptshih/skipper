@@ -200,8 +200,10 @@ export const getSample = async (): Promise<Sample> =>
   parseDto(sample, await fetchJson('/sample', undefined, { anonymous: true }))
 
 /* -------------------------------------------------------------------------- */
-/*  Create-a-Drive — user-owned on-demand A→B drives. Account-gated today, so     */
-/*  every call sends the session cookie. ⚠ 1.1 opens plan/propose to anonymous.   */
+/*  Create-a-Drive — user-owned on-demand A→B drives. ⚠ NOT uniformly gated any   */
+/*  more: 1.1 opened plan + propose to anonymous, and the wall is POST /drives    */
+/*  ALONE. On the server that is `requireAccount` per-ROUTE, never on the /drives  */
+/*  mount — so do not "simplify" this file back to one blanket account rule.      */
 /* -------------------------------------------------------------------------- */
 
 /** The pickable regions for the Create-a-Drive region selector (anonymous; just id/slug/name). */
@@ -216,7 +218,8 @@ export const listRegions = async (): Promise<Region[]> =>
 // offline card) ride on `region.exampleAnchors` — names, no ids, no coordinates.
 
 /** Phase 1: preview the route for a rider-picked START→END. Cheap, persists nothing, costs no credit
- *  — the confirm-before-spend interstitial. 401 ⇒ needs an account. */
+ *  — the confirm-before-spend interstitial, and ANONYMOUS: it is half the open front door (with
+ *  `planTurn`), so it does NOT 401 and no caller should branch as though it might. */
 export const proposeDrive = async (req: DriveProposeRequest): Promise<DriveProposal> =>
   parseDto(
     driveProposal,
