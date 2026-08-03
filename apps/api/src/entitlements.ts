@@ -53,9 +53,16 @@ export const withSession: MiddlewareHandler<ApiEnv> = async (c, next) => {
  *
  *  ⚠ AND IT GOES LAST IN THE CHAIN, AFTER `requireAccount` (and after `createDriveLimiter` on POST) —
  *  NOT first. Leading with it would be simpler to reason about, and wrong: `requireAccount` is a pure
- *  in-memory check placed first precisely so an anonymous flood costs nothing, and an auth-DB read
- *  ahead of it hands that flood a query per request. Running last means only a caller who already
- *  cleared the cheap gate pays for freshness.
+ *  in-memory check placed first precisely so an anonymous flood costs LITTLE, and an auth-DB read
+ *  ahead of it hands that flood a GUARANTEED query per request. Running last means only a caller who
+ *  already cleared the cheap gate pays for freshness.
+ *  ⚠ "little", not "nothing", and the difference is a recorded gap rather than a quibble: the blanket
+ *  `driveRoutes.use('*', withSession)` still runs ahead of `requireAccount` — it has to, since
+ *  `requireAccount` READS the session it sets — and while that resolve is usually answered from the
+ *  cookie cache, a caller who sends a minted anonymous token WITHOUT `sessionData` forces it to the
+ *  auth DB every time. None of the owner routes carry a rate limit, so that path is uncapped. See the
+ *  `/drives` owner-routes item in TODO.md (2026-08-03 guard-ordering audit); capping it is a founder
+ *  call, and this ordering is still the right one either way.
  *  ⚠ WHICH MAKES THE HANDLERS' TIER-KEYED BACKSTOPS LOAD-BEARING IN A NEW WAY. A deleted account still
  *  passes `requireAccount`, because that decided on the cached session — what rejects it is
  *  `c.get('tier') === 'free' ? … : undefined` inside the handler, reading the session THIS middleware
