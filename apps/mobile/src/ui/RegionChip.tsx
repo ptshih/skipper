@@ -19,44 +19,54 @@
 // hairline, ink label, accent caret, NOT the pine outline); that weight is reproduced below
 // verbatim. Only the host file differs.
 //
-// ⚠ At 1.1 Tahoe is the only region, so the PRESSABLE skin below never renders until region 2 —
-// what ships is glyph + name + rule. Judge the pill on a seeded second region, not on launch.
+// ⚠ "THE PRESSABLE SKIN NEVER RENDERS UNTIL REGION 2" IS WHAT THIS COMMENT USED TO SAY, AND IT WAS
+// WRONG THE DAY IT WAS WRITTEN — it cost a real breakage (founder, 2026-08-03). `GET /regions` serves
+// STAGED regions to an admin (`canPreview`, apps/api/src/index.ts), so with a second region merely
+// SEEDED the signed-in founder gets a list of two, home's `rs.length === 1` auto-select declines to
+// fire, and nothing is selected. The screen that produced was not "a chip without a caret" — it was no
+// chip at all, no example asks, and a permanently disabled composer (`sending={sending || !regionId}`),
+// with no way back. Hence the UNSELECTED state below: a null name is only silent when there is also no
+// picker to open. Judge this on a seeded second region — which, if one is seeded, is what you have.
 import { Pressable, StyleSheet, View } from 'react-native'
 import { radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Icon } from './Icon'
 import { Text } from './Text'
+import { voice } from './voice'
 
 export interface RegionChipProps {
-  /** Display name of the CURRENT region, or null when none is loaded (`regionsFailed`, or a cold
-   *  first launch whose `/regions` call failed). Nullable is the §16.8 guard: the type forces every
+  /** Display name of the CURRENT region, or null when there is none — which covers TWO unlike reads,
+   *  and conflating them is what broke this once: nothing LOADED (`regionsFailed`, or a cold first
+   *  launch whose `/regions` never landed), versus a list that loaded fine and nothing is PICKED yet
+   *  (more than one region came back, so home's auto-select declined). `onPress` is what tells them
+   *  apart here — see the branch order below. Nullable is the §16.8 guard: the type forces every
    *  caller through the degraded path, so a half-interpolated "Region: undefined" cannot exist.
    *  ⚠ A NAME, not the `Region` DTO — two region shapes reach home (`Region` from `@skipper/shared`
    *  and `CachedRegion` from `src/lib/region-cache.ts`) and a `src/ui` primitive has no business
    *  knowing either wire type. The screen interpolates; this renders. */
   regionName: string | null
   /** Omit when there is only ONE region: the chip renders as a plain, non-pressable label — no
-   *  fill, no border, no caret. A dead dropdown at launch is worse than no affordance (§10). */
+   *  caret. A dead dropdown at launch is worse than no affordance (§10).
+   *  ⚠ PASS IT WHENEVER A LIST EXISTS, including before anything is picked — with a null name this is
+   *  the ONLY control that can reach the sheet, and without it the screen has no region, no example
+   *  asks and a disabled composer. Gate it on "are there regions", never on "is one selected". */
   onPress?: () => void
 }
 
 export function RegionChip({ regionName, onPress }: RegionChipProps) {
   const { colors } = useTheme()
-  // Nothing true to say, so say nothing — and the dashed rule goes with it in the SAME return. The
-  // rule is meaningless without a marker to leave from, and owning both here means the degraded
-  // state is one branch instead of a condition the screen has to keep in sync with this one.
-  // ⚠ Screen-side counterpart: whatever anchors the Sunburst behind this row must not collapse to
-  // zero height when this renders nothing.
-  if (regionName === null) return null
 
-  // Names the field, not just the value — VoiceOver reading a bare "Lake Tahoe" in the middle of a
-  // conversation screen says nothing about what it is. Same string the dormant chip row used, so
-  // the announcement does not change when that row is deleted.
-  const a11yLabel = `Region: ${regionName}`
-
-  return (
-    <View style={styles.row}>
-      {onPress ? (
+  // ⚠ THE PRESSABLE BRANCH IS TESTED FIRST, AND ON `onPress` RATHER THAN ON THE NAME, because a
+  // pickable chip with nothing picked yet is a REAL state — the one the old `regionName === null`
+  // early return swallowed (see the header). Having a picker is what makes an unnamed chip worth
+  // drawing: the caret still promises a sheet, and the sheet still has a list behind it.
+  if (onPress) {
+    // Names the field, not just the value — VoiceOver reading a bare "Lake Tahoe" in the middle of a
+    // conversation screen says nothing about what it is. Unselected, the prompt already reads as an
+    // instruction, so prefixing it would announce "Region: Pick a region".
+    const a11yLabel = regionName === null ? voice.region.unset : `Region: ${regionName}`
+    return (
+      <View style={styles.row}>
         <Pressable
           onPress={onPress}
           // The `label` line box plus `space.sm` of vertical padding lands in the low 30s — under
@@ -67,7 +77,11 @@ export function RegionChip({ regionName, onPress }: RegionChipProps) {
           hitSlop={12}
           accessibilityRole="button"
           accessibilityLabel={a11yLabel}
-          accessibilityHint="Choose a different region"
+          // "a different" would be a lie with nothing selected, and this is the one state where the
+          // hint is doing real work rather than restating the label.
+          accessibilityHint={
+            regionName === null ? 'Opens the list of regions' : 'Choose a different region'
+          }
           // ⚠ No `accessibilityState`. A picker TRIGGER has neither `selected` (nothing here is one
           // of a set) nor `expanded` (the sheet is a separate surface, not this element's subtree).
           style={({ pressed }) => [
@@ -77,31 +91,42 @@ export function RegionChip({ regionName, onPress }: RegionChipProps) {
             pressed && styles.pressed,
           ]}
         >
-          <RegionMark regionName={regionName} />
+          <RegionMark regionName={regionName ?? voice.region.unset} />
           {/* The chip spends its one pine here rather than on the glyph: the caret IS the
               affordance, and §14 flagged the screen's total pine load (listen keyline, three row
               badges, the send disc) as the thing the quiet chip exists to keep in budget. */}
           <Icon name="expand" size={14} color="accent" />
         </Pressable>
-      ) : (
-        // ⚠ THE PILL SKIN IS WORN IN BOTH STATES — only the CARET and the press behaviour are
-        // conditional. The approved design shows a quiet pill, and rendering bare text at one region
-        // made the screen look unlike it for the only configuration that ships today. What must not
-        // appear without a picker behind it is the CARET, which is the thing that promises one.
-        // `accessible` groups glyph and name so the field name is read once; no role, because a label
-        // that does nothing must not announce itself as a button.
-        <View
-          style={[
-            styles.mark,
-            styles.pill,
-            { backgroundColor: colors.surfaceRaised, borderColor: colors.rule },
-          ]}
-          accessible
-          accessibilityLabel={a11yLabel}
-        >
-          <RegionMark regionName={regionName} />
-        </View>
-      )}
+      </View>
+    )
+  }
+
+  // No name AND no picker: nothing true to say and nothing to do about it, so say nothing. This is
+  // the genuine degraded read — `regionsFailed`, or a cold first launch whose `/regions` never
+  // landed — where a pill would be an empty promise.
+  // ⚠ Screen-side counterpart: whatever anchors the Ridgeline behind this row must not collapse to
+  // zero height when this renders nothing.
+  if (regionName === null) return null
+
+  // ⚠ THE PILL SKIN IS WORN IN BOTH STATES — only the CARET and the press behaviour are
+  // conditional. The approved design shows a quiet pill, and rendering bare text at one region
+  // made the screen look unlike it for the only configuration that ships today. What must not
+  // appear without a picker behind it is the CARET, which is the thing that promises one.
+  // `accessible` groups glyph and name so the field name is read once; no role, because a label
+  // that does nothing must not announce itself as a button.
+  return (
+    <View style={styles.row}>
+      <View
+        style={[
+          styles.mark,
+          styles.pill,
+          { backgroundColor: colors.surfaceRaised, borderColor: colors.rule },
+        ]}
+        accessible
+        accessibilityLabel={`Region: ${regionName}`}
+      >
+        <RegionMark regionName={regionName} />
+      </View>
     </View>
   )
 }

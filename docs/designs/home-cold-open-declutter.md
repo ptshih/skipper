@@ -14,6 +14,53 @@
 > the research produced one finding that argues AGAINST the first proposal, recorded as such rather
 > than dropped. Visual mock of all three options: the published artifact (Trailhead 89 palette, real
 > strings). Line numbers drift; the code wins.
+>
+> ⚠ **CORRECTION 2026-08-03 — this document's region-affordance plan shipped a latent kill switch, and
+> §18 supersedes every part of it.** Wherever the text below says the chip is a plain non-pressable
+> label until "region 2 ships", or that `RegionChip` renders NOTHING when no region is selected, it is
+> **wrong and must not be re-implemented.** Those two rules combined with home's pre-existing
+> "auto-select only when the list has exactly one region" to make an unrecoverable dead screen. Read
+> **§18 before touching the chip, the picker or `loadRegions`.**
+
+## §18 · The region affordance was a kill switch on shipped builds (2026-08-03)
+
+Found by the founder signing in on the simulator: no region chip, one generic suggestion instead of
+three, and a composer that could not be typed into. Not a rendering bug — the screen had **no region
+selected**, and every symptom follows from that.
+
+**Why a second region appeared at all.** `GET /regions` serves STAGED regions to an admin
+(`canPreview`, `apps/api/src/index.ts`), so a merely *seeded* `Yosemite-national-park` put the
+signed-in founder into the multi-region path. Anonymous riders still got exactly one, which is why it
+reproduced only when signed in and why `curl` looked healthy.
+
+**Why that killed the screen.** `loadRegions` auto-selected only at `rs.length === 1`. With two
+regions nothing was selected, and then: no `regionId` → no region → `RegionChip` returned `null` (no
+chip) → no `exampleAnchors` → the example asks collapsed to the one region-less shape → and
+`sending={sending || !regionId}` disabled the composer. The one control that could have fixed it —
+the picker — was reachable only *through* the chip that had rendered nothing.
+
+**Why it mattered far beyond an admin's simulator.** Regions are SERVER data; releasing one is a
+`released_at` flip, deliberately **not** an App Store submission (founder requirement, restated
+2026-08-03). Under the old rule, the day a second region was released **every already-installed app
+would have hit this**, with no build in riders' hands able to recover. The admin staged-preview path
+surfaced it months early, by luck.
+
+**The fix, in three parts:**
+
+1. **Always land on something.** `pickRegionId` (`src/lib/region-select.ts`, unit-tested and
+   mutation-checked) replaces the length-1 rule: the rider's cached region if it is *still on offer*,
+   else the first the server listed, else null only for a genuinely empty list. Picking imperfectly is
+   one tap from correct; picking nothing is not recoverable at all. The membership re-check is
+   load-bearing — pinning `regionId` to a region absent from the list reproduces the dead state.
+2. **The chip must survive having no name.** `RegionChip` renders its unselected, tappable state
+   (`voice.region.unset`) whenever a picker exists, and stays silent only when there is *also* nothing
+   to pick. Gate `onPress` on **"are there regions"**, never on "is one selected" — the latter is the
+   deadlock.
+3. **Persist the choice.** The picker writes `region-cache.json` on select, or `pickRegionId` drags
+   the rider back to the first region on every cold start.
+
+⚠ Part 1 is what makes server-side region releases safe. Parts 2 and 3 are the safety net and the
+manners; **1 is the one that must not be undone.**
 
 ## The three notes
 

@@ -336,6 +336,13 @@ export const voice = {
     // the answer is a list of places, and the list says it.
     heading: 'Roads I know',
     close: 'Done',
+    // The CHIP's label when no region is selected yet. Plain, not in-persona, and deliberately so:
+    // unlike the sheet heading above, this one is the only thing standing between the rider and a
+    // dead composer, so it has to read as an instruction rather than as flavour.
+    // ⚠ Reachable whenever `/regions` returns more than one, which is NOT the hypothetical future it
+    // sounds like — an ADMIN is served staged regions too (apps/api GET /regions, `canPreview`), so
+    // this ships the moment a second region is seeded, released or not.
+    unset: 'Pick a region',
   },
   greeting: 'Hop in. I’ll do the talking.',
   // The cold-open descriptor: a newcomer should know WHAT this is before any audio

@@ -61,6 +61,7 @@ import {
   type Turn,
 } from '@/lib/planner-transcript'
 import { readCachedRegion, writeCachedRegion } from '@/lib/region-cache'
+import { pickRegionId } from '@/lib/region-select'
 import { emptySayBuffer, pushDelta, settle, tickHold, type SayBuffer } from '@/lib/say-buffer'
 import { useRoutePreview } from '@/lib/useRoutePreview'
 import { uuidV4 } from '@/lib/uuid'
@@ -312,22 +313,29 @@ export default function HomeScreen() {
   // requires a regionId, so a failed load means there is nothing to talk to — hence the outage card
   // and no composer rather than a field that 400s on send.
   //
-  // D-J / 1.1: SINGLE-REGION. Auto-select at length 1 (the Tahoe-launch case); a chip row appears
-  // above the hero only if a second region ever ships. The planner is given no cross-region
-  // vocabulary, so the rider must be talking to exactly one skipper.
+  // The planner is given no cross-region vocabulary, so the rider is always talking to exactly ONE
+  // skipper — which is why a region is selected here rather than left for the rider to choose.
+  // ⚠ ALWAYS SELECT SOMETHING when the list is non-empty (`pickRegionId`, src/lib/region-select.ts).
+  // The old rule auto-selected only at length 1, and that was a kill switch on shipped builds: regions
+  // are server data, so releasing a second one would have left every installed app with nothing
+  // selected — no chip, no example asks, a composer disabled by `sending || !regionId` — and no build
+  // in riders' hands able to recover. That file's header has the full account; the rule is tested
+  // there because this hook is not reachable by `bun test`.
   const loadRegions = useCallback(async () => {
     setRegionsFailed(false)
     try {
       const rs = await listRegions()
       setRegions(rs)
-      const only = rs.length === 1 ? rs[0] : null
-      if (only) {
-        setRegionId(only.id)
+      // Read fresh rather than closing over the mount-time `cachedRegion` memo, so a region the rider
+      // picked THIS session is still honoured by a later reload.
+      const picked = rs.find((r) => r.id === pickRegionId(rs, readCachedRegion()?.regionId))
+      if (picked) {
+        setRegionId(picked.id)
         // Names only, for the degraded cards. See region-cache.ts's header for what this may hold.
         writeCachedRegion({
-          regionId: only.id,
-          displayName: only.displayName,
-          exampleAnchors: only.exampleAnchors,
+          regionId: picked.id,
+          displayName: picked.displayName,
+          exampleAnchors: picked.exampleAnchors,
         })
       }
     } catch {
@@ -953,19 +961,21 @@ export default function HomeScreen() {
     </View>
   )
 
-  // The region this conversation is pinned to, and the dashed atlas rule running off it to the right
-  // edge. The rule lives INSIDE RegionChip: it starts at the chip and is meaningless without one, so
-  // keeping them together makes the no-region case a single early return instead of two conditions
-  // that must agree.
+  // The region this conversation is pinned to.
   const masthead = (
     <RegionChip
-      // The cached name covers the offline and outage reads; null only when no /regions call has ever
-      // succeeded on this device, which RegionChip renders as nothing rather than an empty pill (§12).
+      // The cached name covers the offline and outage reads. Null means either no /regions call has
+      // ever succeeded here, or one did and returned SEVERAL — `loadRegions` auto-selects at length 1
+      // only, so a longer list leaves nothing pinned until the rider picks.
       regionName={regionLabel}
-      // ⚠ Pressable ONLY when there is genuinely something to pick. With one released region this is
-      // a plain label — RegionChip renders that state itself — because a caret onto a list of one is
-      // a control that does nothing. The sheet is built and wired; it simply has no work to do until
-      // region 2 ships, at which point this turns on with no further change.
+      // ⚠ GATED ON "ARE THERE REGIONS", NEVER ON "IS ONE SELECTED", and the difference is the whole
+      // repair (founder, 2026-08-03). `hasRegions` is true the moment a list lands, so the unpicked
+      // case gets the caret and can reach the sheet. Gating on `region`/`regionLabel` instead would
+      // recreate the deadlock exactly: no selection → no chip → no way to select → composer disabled
+      // by `sending={sending || !regionId}`, forever.
+      // ⚠ And this is NOT the hypothetical "until region 2 ships" it was written as: an admin is
+      // served STAGED regions (apps/api GET /regions, `canPreview`), so a merely SEEDED second region
+      // puts the signed-in founder straight into the multi-region path on the live app.
       onPress={hasRegions ? () => setRegionPickerOpen(true) : undefined}
     />
   )
@@ -1400,6 +1410,17 @@ export default function HomeScreen() {
             // set. Wiping the conversation would punish a rider for answering "which country" after
             // they had already started describing a drive.
             setRegionId(id)
+            // Persist the choice, or `pickRegionId` drags them back to the first region on the next
+            // cold start — the cache is the ONLY record that this rider prefers a different one.
+            // Same payload the load writes, so the offline card names the region they actually chose.
+            const chosen = regions?.find((r) => r.id === id)
+            if (chosen) {
+              writeCachedRegion({
+                regionId: chosen.id,
+                displayName: chosen.displayName,
+                exampleAnchors: chosen.exampleAnchors,
+              })
+            }
             setRegionPickerOpen(false)
           }}
           onClose={() => setRegionPickerOpen(false)}
