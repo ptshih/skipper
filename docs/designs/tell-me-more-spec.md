@@ -11,6 +11,18 @@
 > content risk is retired; what remains is `narrations_poi_uq` (§3), the half-the-corpus button
 > question (§8.0), and one prompt tweak (§8.0.1).
 >
+> **⚠ MEASURED 2026-08-03 — a b-side is NOT a gap-filler, and nobody should promote it to one.** A
+> separate pass asked whether b-sides could fill a drive's dead air (79% of a real drive). They
+> cannot: on `Tahoe City → South Lake Tahoe` only **1 of 8** stops carries usable leftover material
+> (Vikingsholm 861c; the rest 0–314c), so b-sides would add ~90 s to a 39-minute drive — coverage
+> 23% → 26%. **This does not weaken the feature**, it confirms its own framing: corpus-wide the
+> median live story leaves **446 chars** unspoken and **54% clear 400c**, which is §8.0's "half the
+> corpus" estimate landing almost exactly. It is a PULL rung you tap, as specced — not a push.
+> ⚠ Also tested and FALSE: the theory that selection starves it because `buildDrive`'s `better()`
+> prefers the longest clip. Longer clips carry MORE leftover, not less (313c → 516c → 1133c by length
+> band) — clip length tracks how much material a place HAS, not how much got spent. Numbers:
+> [scenic-filler-and-the-empty-stretch §5c](../decisions/scenic-filler-and-the-empty-stretch.md).
+
 > **⚠ §8's build order was deliberately INVERTED (founder, 2026-08-03) — read §8.0 before following it.**
 > `narrateDeeperCut` (`pipeline/narrate.ts`) + `generate-bside-narrations.ts` exist and can print a
 > b-side script for any live story stop. No schema change, no TTS, no DTO, no player, and **no

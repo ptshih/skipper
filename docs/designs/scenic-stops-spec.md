@@ -4,6 +4,13 @@
 (re-anchored 2026-06-19). The CONCEPT survives the V1→V2 pivot, but its implementation plan was
 written against storage that no longer exists; read the V2 banner below before building.
 
+> ✅ **SCOPED 2026-08-03 — read §11 first.** The demand is now measured (every one of the 458 live
+> narrations is a `story`; the scenic tier has NEVER been generated, while a real drive runs 79%
+> silent), the population is counted (925 fact-less POIs, **312** with both a kind and a road-snapped
+> anchor — the honest first run), and most of the build is **recoverable** from the cut WAVE form
+> (`fd2df45` + `81f6ca5`), whose two traps already have fixes. ⚠ It punctuates the silence, it does
+> not fill it. 💸 Any real test spends.
+>
 > ⚠ **Its core mechanism was BUILT AND REJECTED — read
 > [scenic-filler-and-the-empty-stretch](../decisions/scenic-filler-and-the-empty-stretch.md) FIRST**
 > (added 2026-08-03). `SCENIC_ANCHORS` — the factless curated-overlook table this spec proposes at
@@ -272,7 +279,92 @@ rails (don't let "curated WHERE" leak into curated WHAT — the words stay gener
 a trigger point + non-null `audio_url` (the readiness boundary); a SHARED scenic telling stays
 direction-neutral (§4); keep the geology + Wikidata enrichment channels working unchanged.
 
+## 11. SCOPE (2026-08-03) — the demand is measured, and most of the build is recoverable
+
+Added after a measurement pass that started somewhere else entirely (how to fill the silence between
+far-apart POIs) and landed here. **Read §1–§10 as the 2026-06-08 design; read this as the current
+state of the world.**
+
+### 11.1 The demand, measured
+
+⚠ **Every narration in the live corpus is a `story` — 458 of 458. The scenic tier has never been
+generated once.** Meanwhile a real drive is **79% silence** with gaps of 3:33–6:15, and neither more
+stops nor b-side leftovers can close it — both tested and both negative. Full numbers:
+[scenic-filler-and-the-empty-stretch §5](../decisions/scenic-filler-and-the-empty-stretch.md).
+
+### 11.2 The population, counted
+
+Un-narrated, un-excluded, un-clustered POIs with **no facts at all** — the places that are silent
+today precisely because a story needs a sheet:
+
+| set | count |
+| --- | --- |
+| total | **925** |
+| ...with a `kind` (the require-a-kind gate; 9 were dropped for a null kind at wave cut-time) | 880 |
+| ...with a road-snapped `speakable` anchor | 318 |
+| ...**both — the safest subset to run first** | **312** |
+
+Top kinds: mountain 214, lake 168, valley 88, park 88, meadow 70, spring 47, hill 46, ridge 40.
+On the flagship drive specifically, **19** sit reachable along the route (Eagle Rock, Emerald Point,
+Inspiration Point, Rubicon Bay, Baldwin Beach, Lester Beach, Calawee Cove Beach, McKinney Bay…).
+
+⚠ Most are NATURAL features, so most carry the fat kind-aware trigger floor (1500 m for a peak,
+1200 m for a lake or valley) and only 318 of 925 are road-snapped. Anchoring is the difference
+between a call-out that lands where you can see the thing and one that fires a kilometre early.
+
+### 11.3 ⚠ This was BUILT and CUT — do not spec it from scratch
+
+The **WAVE form** (`cut-wave-form.md`) was exactly this: a ~15 s call-out naming a place and its
+kind, built for the 932 bare `source='wikidata'` Tahoe pins. Built 2026-07-24 (`fd2df45`, `81f6ca5`),
+smoke-tested twice, **cut 2026-07-26** before the v2 release with zero rows ever written. The build
+is **recoverable in full from those two commits**, and the pre-run scope at cut time was **378
+eligible clips, ~$29–31, ≈95 minutes**.
+
+⚠ **`narrate.ts` already supports scenic and is NOT part of what was cut** — `stopType === 'scenic'`
+branches are live, including the anti-invention guard: *"FACT SHEET: (none — no real facts available.
+Treat this as a scenic moment; do not invent a story.)"* What is missing is the GENERATOR path:
+`generate-narrations.ts` skips any poi without a fact sheet, and its comment says so, pointing at the
+wave cut.
+
+⚠⚠ **Reviving it for DRIVES is a NEW decision, not a restore.** Wave was built for ROAM, and
+`loadCorpusForRoute` carried an explicit `ne(narrations.form, 'wave')` exclusion — drives deliberately
+filtered it out. Roam is gone; the exclusion went with the backout. Whoever revives this must decide
+the drive question on its own merits rather than inheriting a roam-era answer.
+
+### 11.4 The two traps, and their fixes (both already written)
+
+From `cut-wave-form.md` §"Two traps" — the real yield of that build, and **properties of any form
+whose sheet is a name + a kind**, so they apply here in full:
+
+1. **Monotony is STRUCTURAL, not a weak prompt.** With two input fields the model converges hard —
+   measured, 2 of the first 3 smoke clips were the same sentence template. ✅ Fix in `81f6ca5`:
+   **assign the opening shape round-robin by queue index**, never a rolling recent-openers buffer (a
+   buffer leaves the first `NARRATION_CONCURRENCY` clips generating against empty history and
+   colliding). Verified at the time on 6 pins of the same kind → 6 distinct openers.
+2. **The grounding gate CANNOT catch a claim derived from the place's NAME.** "Cathedral Peak" with a
+   null kind produced "there's a peak out there" — a kind the card never gave; the gate passes it
+   because the claim traces to the name, and the name is legitimately on the grounding well. ✅ Fix:
+   **require the sayable fields up front** (the require-a-kind filter) rather than trusting the gate.
+   ⚠ This is why the 312 "kind AND anchored" subset is the honest first run, not the 925.
+
+### 11.5 ⚠ What a scenic run does NOT do
+
+**It punctuates the silence; it does not fill it.** A 15–20 s call-out inside a 6-minute gap leaves
+~5:45 still quiet. Nothing short fills a six-minute gap and nothing long can be written for a place
+with no facts, so the [scenic-filler](../decisions/scenic-filler-and-the-empty-stretch.md) decision
+survives. The question this tier actually answers is narrower and worth stating plainly: **is naming
+the thing you are looking at worth 15 seconds?** That is an ear question, and it is the one the
+smallest run should be sized to answer.
+
+### 11.6 💸 Spend gate — and note the trap
+
+Any real test **SPENDS**: `--scripts-only` narrates and prints (`apply: apply || scriptsOnly`), so
+only the no-flag dry run is free. An **operator paid run needs an explicit founder "go" per run** and
+is never inferred from a design pass. Precedent worth copying: the two wave smoke runs cost **$0.66
+total at 3 and 6 clips, and each found a real defect** — a small paid smoke before any full run is
+the established, cheap move here.
+
 ---
 
 *Source: 9-agent design workflow + two adversarial lenses (charm/pacing vs engineering/grounding),
-2026-06-08; V2 re-anchor 2026-06-19. Memory: `scenic-stops-plan.md`.*
+2026-06-08; V2 re-anchor 2026-06-19; §11 scope 2026-08-03. Memory: `scenic-stops-plan.md`.*

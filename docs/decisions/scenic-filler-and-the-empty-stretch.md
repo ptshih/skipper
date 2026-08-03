@@ -91,7 +91,63 @@ is $0.
 question this entry exists to answer — *what goes in the void* — is still answered "nothing", by the
 June decision, until the §3 shape is funded.
 
-## 5. Related
+## 5. MEASURED 2026-08-03 — four numbers that settle §1 empirically
+
+The June call was made on instinct. It is now measured, and it holds. All four are $0, read-only,
+re-runnable from `packages/studio/.scratch` (gitignored) and `packages/sim --gaps`.
+
+**(a) How much silence is there?** On `Tahoe City → South Lake Tahoe` at 45 mph: **79% quiet**, gaps
+of 3:33–6:15, five of eight windows wide enough for a beat. Corpus-wide the Skipper speaks for
+**21–28% of a drive**. ⚠ This OVERTURNED `downtime-callouts-spec.md`'s Finding 1, which had claimed
+the planned-gap path barely exists.
+
+**(b) Can existing stops fill it? NO — and the cap is not the reason.** Swept `DRIVE_MIN_GAP_SEC` ×
+`driveMaxStops` over the real corpus:
+
+| minGap | maxStops | stops | coverage | quiet | longest gap |
+| --- | --- | --- | --- | --- | --- |
+| 180 | 10 | 8 | 23% | 80% | 6:12 ← today |
+| 180 | **24** | **8** | 23% | 80% | 6:12 |
+| 120 | 10 | 10 | 27% | 76% | 6:12 |
+| 90 | 14 | 12 | 31% | 71% | 4:13 |
+
+⚠ **Raising the stop cap changes NOTHING** — the 3-minute floor and the 1 km co-located dedupe bind
+first. And loosening the floor all the way to 90 s still leaves the drive **71% quiet**. The reason is
+geometry: candidates are spatially BUNCHED (Sunnyside twice inside a minute; Sugar Pine Point Light
+and its park two seconds apart), so a looser floor just takes a second item from a cluster already
+represented, while the genuinely long stretches stay empty. **"Real stops can't fill an empty
+stretch" is now a measurement, not a hunch.**
+
+**(c) Can LEFTOVER material fill it (the b-side)? NO.** Corpus-wide the median live story telling
+leaves **446 chars** of unspoken sheet material and 54% clear 400c — so
+[tell-me-more-spec](../designs/tell-me-more-spec.md) is sound as a feature, and its own "half the
+corpus" estimate is right. But on the flagship drive only **1 of 8** stops has any (Vikingsholm,
+861c; the rest 0–314c). B-sides would add ~90 s to a 39-minute drive: 23% → 26%. ⚠ A hypothesis that
+selection *starves* the b-side (because `better()` prefers the longest clip) was tested and is
+**FALSE** — longer clips carry MORE leftover, not less (313c → 516c → 1133c by clip length band).
+Clip length tracks how much material a place HAS, not how much got spent.
+
+**(d) What is actually out there? 19 real places, and they have no facts.** Un-narrated POIs
+reachable from that route: **19, all with zero facts** — Eagle Rock, Emerald Point, Inspiration
+Point, Rubicon Bay, Baldwin Beach, Lester Beach, Calawee Cove Beach, McKinney Bay, Lonely Gulch,
+Quail Lake. Corpus-wide that population is **925** (880 with a `kind`, 318 road-snapped, **312 with
+both**). They are beaches, points, bays and peaks — the things a driver is LOOKING AT during the
+silence.
+
+### What that adds up to
+
+⚠ **Every narration in the live corpus is a `story` — 458 of 458.** The scenic tier has never been
+generated, not once. The gap is not a content-selection problem and not a leftover problem; it is a
+whole TIER of the corpus that was designed, partly built, and never run. Scope + the recoverable
+build are in [scenic-stops-spec](../designs/scenic-stops-spec.md) §11.
+
+⚠ **But note what this does NOT claim.** A wave/scenic call-out is ~15–20 s. Dropped into a 6-minute
+gap it *punctuates* the silence; it does not fill it. Nothing short fills a six-minute gap, and
+nothing long can be written for a place with no facts. So §1's decision survives in its strongest
+form: **the empty stretch stays mostly empty, by arithmetic** — the open question is only whether
+naming what you are passing is worth 15 seconds.
+
+## 6. Related
 
 - [scenic-stops-spec.md](../designs/scenic-stops-spec.md) — ⚠ still proposes `SCENIC_ANCHORS`, the
   mechanism §1 rejected. Read this entry first.

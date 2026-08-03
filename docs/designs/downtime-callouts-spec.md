@@ -194,6 +194,19 @@ The measurement vindicates the founder. What the numbers cannot say is whether a
 gap is *welcome* — that is still an ear question, and §0.2's music-steps-back design is still
 unheard.
 
+⚠ **FOLLOW-ON, same day — the founder answered §0.6's open ear question with comp evidence, and it
+moved the feature.** "Dead air" is the category's #1 reviewed complaint **4-for-4**
+(`research/competitor-ux-studies.md`), and Shaka's exact wording is that it *"could've been filled
+with **stories**"* — i.e. riders asked for CONTENT, not mood. Founder call: the gap wants material.
+⚠ **That cuts against this spec's v1, which is persona-only and factless BY DESIGN** (§0's "persona-only
+is the whole safety story"). Three candidate fillers were then measured and two were eliminated —
+more stops can't (pacing is not the binding constraint) and b-side leftovers can't (1 of 8 on the
+flagship drive). What survived is the never-generated SCENIC tier:
+[scenic-stops-spec §11](scenic-stops-spec.md). This spec is not cancelled by that — a persona beat
+and a scenic call-out answer different halves of the same silence — but **do not build the factless
+pool as the dead-air answer without re-reading
+[scenic-filler-and-the-empty-stretch §5](../decisions/scenic-filler-and-the-empty-stretch.md) first.**
+
 ⚠ **Validity guard, deliberately built in:** `--gaps` REFUSES to gate when any selection item was
 skipped. The simulator cannot place a CLUSTER subject, and a skipped clip merges its neighbours'
 windows into one longer one — biasing the report toward "yes, build callouts". All three drives are
