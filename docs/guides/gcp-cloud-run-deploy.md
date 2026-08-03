@@ -236,7 +236,7 @@ coming. After 1.1 it is also the only control anywhere that bounds **aggregate**
 ```sh
 gcloud services enable billingbudgets.googleapis.com          # was not enabled at all
 gcloud billing budgets create --billing-account=019BCA-9D6FC9-B3E1DC \
-  --display-name="Skipper — monthly spend tripwire" --budget-amount=100USD \
+  --display-name="Skipper — monthly spend tripwire" --budget-amount=1000USD \
   --filter-projects=projects/lithe-window-491818-k8 \
   --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 --threshold-rule=percent=1.0 \
   --threshold-rule=percent=1.0,basis=forecasted-spend \
@@ -250,8 +250,11 @@ gcloud billing budgets create --billing-account=019BCA-9D6FC9-B3E1DC \
   month rather than confirming one after the fact.
 - ✅ **Its delivery does not depend on the unproven `hello@skipper.fm` inbox.** It notifies that
   channel *and*, since `disableDefaultIamRecipients` is false, every billing-account admin.
-- **$100 was chosen, not measured** — recorded per-operation costs run $0.04–$10, so it sits far above
-  steady state and well below a runaway. Re-price when real traffic exists (`budgets update`).
+- **The amount is chosen, not measured** — recorded per-operation costs run $0.04–$10. Created at $100
+  and raised to **$1,000** (founder, 2026-08-03). ⚠ The first threshold therefore lands at **$500**,
+  far above any plausible normal month: this is a **catastrophic-runaway tripwire, not an early
+  warning**, and a slow leak burning $50/mo forever would never trip it. Deliberate trade for silence;
+  re-price with `budgets update` if that stops being the right one.
 - ⚠ There is a SECOND, CLOSED billing account on this login (`0190CB-DE5D23-69436F`). The budget is on
   the open one that the project actually bills to; check `gcloud billing projects describe` before
   assuming which is which.

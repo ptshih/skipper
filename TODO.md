@@ -894,7 +894,8 @@ None of this is a build; all of it is config. The premise changed on 2026-07-28:
       root cause of the only real outage this project has had, and after 1.1 step 8 this is the ONLY
       control anywhere that bounds AGGREGATE spend (every cap in `limits.ts` keys on client IP, so each
       bounds one caller and none bounds the total — [rider-spend-exposure.md](docs/research/rider-spend-exposure.md)).
-      `Skipper — monthly spend tripwire`, **$100/mo**, scoped to this project, on billing account
+      `Skipper — monthly spend tripwire`, **$1,000/mo** (founder, 2026-08-03 — raised from the $100 it
+      was created at), scoped to this project, on billing account
       `019BCA-9D6FC9-B3E1DC`. Thresholds **50 / 90 / 100 % actual + 100 % FORECASTED** — the forecast
       rule is the one that matters, because it fires partway through a runaway month instead of after it.
       ⚠ **A BUDGET IS AN ALERT, NOT A CAP. It does not stop a single request or a single dollar.** GCP
@@ -902,8 +903,11 @@ None of this is a build; all of it is config. The premise changed on 2026-07-28:
       and `max_tokens`. Do not let this entry read as "spend is now handled".
       ✅ Its delivery does NOT depend on the unproven `hello@skipper.fm` inbox: it notifies that channel
       AND, because `disableDefaultIamRecipients` is false, every billing-account admin by default.
-      **$100 was chosen, not measured** — recorded costs in `docs/` run $0.04–$10 per operation, so it
-      sits far above steady state and well under a runaway. Re-price it when real traffic exists:
+      **The number is CHOSEN, not measured** — recorded costs in `docs/` run $0.04–$10 per operation.
+      ⚠ At $1,000 the first alert lands at **$500**, which is orders of magnitude above any plausible
+      normal month, so read this as a **catastrophic-runaway tripwire, not an early warning**: a
+      leak burning $50/mo forever would never fire it. That is a deliberate trade for silence.
+      Re-price with:
       `gcloud billing budgets update b0c32259-f947-4a8a-a612-53f1ee8c4897 --billing-account=019BCA-9D6FC9-B3E1DC --budget-amount=<n>USD`
 - [x] ~~**Set `--max-instances` on the API deploy**~~ — **DONE 2026-08-03** (`cloudbuild.yaml:73`,
       `--max-instances=3`, plus the service-level `maxScale: 3` applied out of band). RISK-4's
