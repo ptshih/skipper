@@ -1498,20 +1498,37 @@ norms rule out autonomous editing, so an agent reads the `not_filed` rows (each 
 correction + an authoritative `source_url`) and drafts the talk-page post / edit; a human reviews
 and files it, then sets `upstream_status` → `filed` (+ `upstream_url`).
 
-Three ACTIVE fact_edits are draftable (all `upstream_status = not_filed`):
-- **Lennart Palme** — Vikingsholm's architect (Emerald Bay State Park, wikipedia `1985884`); the
-  article says "Leonard." Source: vikingsholm.com + Wikipedia's own Vikingsholm article.
-- **Pope Estate builder/decade** (wikipedia `39007559`) — the article credits Lloyd Tevis / 1880s;
-  correct is George Tallant (Crocker Bank) 1894, with the Tevis family buying it in 1899. Source:
-  taylortallac.org history.
-- **Chambers Lodge 1863** (wikipedia `32308786`) — the article says "first established in 1854";
-  John McKinney established Hunter's Retreat at the site in 1863. Source: donsnotes.com + others.
+- [x] **The three drafts are WRITTEN — `docs/guides/upstream-wikipedia-corrections.md` (2026-08-03).**
+      All three errors were re-verified as still LIVE first (each row's `find` string still present in
+      the article's current extract), so none of this is stale. Filing is the human's half.
+      ⚠ **Three things the re-verification changed, and they are why the drafts are not equally
+      filable** — the row summaries here were taken on trust and two of them do not survive contact:
+      - **Emerald Bay / Palme is now the EASY one, on evidence nobody had noticed.** The sentence's own
+        cited footnote (an archived vikingsholm.org page) already reads "her nephew by marriage,
+        Lennart Palme, a Swedish architect" — so the article contradicts its own source and needs no
+        new one. ⚠ But the row's stated reason is WRONG: Wikipedia's Vikingsholm article names **no
+        architect at all** (0 occurrences of "Palme", checked 2026-08-03), so do not argue from it —
+        fix the row's `reason` in the admin console. ⚠ And `vikingsholm.com`, the row's `source_url`,
+        did not respond at all on 2026-08-03 (two clients) — do not cite a dead link.
+      - **Pope Estate is wrong in TWO places, not one.** The infobox also carries
+        `built = {{Start date|1884}}`, which the override cannot reach (it is a find→replace on the
+        fetched EXTRACT, and the infobox is not in it). An upstream fix must cover both or the article
+        contradicts itself. taylortallac.org verified live and says exactly what the row claims.
+        ⚠ Expect the 1884 to trace to the NRHP nomination (`refnum 87000495`) — pull it before posting.
+      - **Chambers Lodge is the weak one and is drafted as a QUESTION, not a correction.** The 1854
+        claim is CITED (a 1968 newspaper item), and our source is `donsnotes.com` — a personal notes
+        site, not a Wikipedia RS. It will not displace a newspaper citation on its own. The row also
+        names Rubicon Trail Foundation / tahoecountry.com / L.W. Currey; **none was re-verified**, and
+        finding one that qualifies as an RS is the real prerequisite. ⚠ Our LOCAL override stays
+        correct either way — we are grounding a narration, not writing an encyclopedia.
 
 NOT this list: the Tahoe Keys row is RETIRED (`active = false`, 2026-06-10) — Wikipedia already
 removed the dated construction sentence, so there's nothing left to file.
 
-- [ ] Draft a per-row talk-page correction (claim → correction → authoritative source, in
-      Wikipedia's neutral register) for the 3 active rows; surface for human review + filing.
+- [ ] **Human: review + file the three drafts**, then set each row's `upstream_status` → `filed`
+      (+ `upstream_url`) in the admin console. ⚠ Filing does NOT retire the local override — the fix
+      has to land upstream AND propagate through a re-fetch; the pipeline's unmatched-`find` warning is
+      the signal to retire, and `active = false` is how (never a delete).
 
 Refs: `docs/decisions/fact-overrides-and-veracity.md` ("Contribute back" + the discipline line),
 the `poi_overrides` table rows (reasons + source_urls; curated via the admin console),
