@@ -190,6 +190,43 @@ function createAuth() {
     // rejects the reset request outright with INVALID_REDIRECT_URL. This is an open-redirect guard, so
     // it stays an exact-origin allowlist — never a wildcard.
     trustedOrigins: [`${MOBILE_SCHEME}://`, SITE_ORIGIN],
+    // ⚠ SESSION COOKIE CACHE — a signed copy of the session rides in the cookie, so `getSession()`
+    // validates WITHOUT an auth-DB round-trip. Founder call 2026-08-02.
+    //
+    // WHY IT IS WORTH A TRADE AT ALL: `withSession` resolves the session on every request that uses
+    // it — `/regions` and all of `/drives*` — and that read goes through the SEPARATE
+    // neon-serverless Pool (auth needs interactive transactions; the rest of the app is neon-http).
+    // Post-D16 it never short-circuits either: the anonymous mint means every rider carries a cookie,
+    // so there is always a token to look up. This removes that read from the common path.
+    //
+    // ⚠ WHAT IT COSTS, STATED PLAINLY: REVOCATION IS DELAYED BY `maxAge`. Better Auth's own docs —
+    // "revoked sessions may remain active on other devices until the cookie cache expires" — because
+    // the server cannot reach out and delete a cookie on a device it is not talking to. Signing out
+    // clears the cookie on THAT device immediately; another device keeps a usable cached session for
+    // up to the window.
+    //
+    // ⚠ THE SHARP EDGE HERE IS NOT SIGN-OUT, IT IS ACCOUNT DELETION. `purgeUserData` erases a rider's
+    // drives + ledger and the user row goes with it — but a second device holding a cached cookie can
+    // still authenticate for up to `maxAge`, and a WRITE in that window (POST /drives) would insert a
+    // row against a user id that no longer exists: exactly the orphan INV-4 and App Store 5.1.1(v)
+    // exist to prevent, with no FK to catch it. That is why this is 60s and not the library's 300s
+    // default — it is a deliberate 5× reduction of that window, not a tuning number. It requires a
+    // rider signed in on two devices who deletes on one while creating a drive on the other, inside a
+    // minute; accepted knowingly at that size. See TODO for the follow-up that closes it properly
+    // (`disableCookieCache` on the WRITE paths, which reads cannot orphan anything through).
+    //
+    // ⚠ The anonymous→account link does NOT open a matching hole, and the reason is worth knowing:
+    // that path also hard-deletes a user row (INV-4), but a stale cached ANONYMOUS session still
+    // resolves to `tier: 'anonymous'`, so `requireAccount` 401s it before any write. The tier check,
+    // not the freshness of the read, is what protects that one.
+    //
+    // ⚠ Do NOT raise `maxAge` without re-reading the paragraph above; test/auth-cookie-cache.test.ts
+    // fails if it moves. Grounded in the INSTALLED better-auth 1.6.23 source
+    // (`dist/api/routes/session.mjs` reads `session.cookieCache.enabled` + `maxAge`, defaulting the
+    // cookie to 300s in `dist/cookies/index.mjs`), not just the docs.
+    session: {
+      cookieCache: { enabled: true, maxAge: 60 },
+    },
     // Brute-force guard on the auth endpoints. Better Auth's built-in limiter is enabled by DEFAULT
     // ONLY in production; making it explicit (`enabled: true`) turns it on in dev too, so the same
     // ceiling holds everywhere. Default in-memory "memory" storage — per-instance, same first-cut
