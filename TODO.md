@@ -227,8 +227,26 @@ deleted when done and those outlive it.
 - [ ] **13 clips remain flagged** at median 5.6 dB (max 9.3, vs the fused disaster's 14.4). Cheapest
       next move is another `resynth` round on just those (~$0.50); a few are genuinely structural and
       want an ear, not another re-roll.
-- [ ] **Standing regression test for any persona-prompt change**: same places, tail-flagged rows,
-      before vs after. A prompt edit moved this 10× without failing a single gate.
+- [x] **Standing regression test for any persona-prompt change — BUILT 2026-08-03, free + read-only.**
+      `audit-loudness --json <path>` saves a measurement run; `--baseline <path>` diffs a later one and
+      exits 1 on any clip that collapsed and did not before. Pure half + 16 tests in
+      `pipeline/audit-baseline.ts`. The workflow is: capture → change the prompt → regenerate the same
+      places → diff. **Nothing runs it automatically** — a paid regeneration is founder-gated, so this
+      is a tool an operator reaches for, not a gate in `check`.
+      Three disciplines are enforced in code because each already produced a wrong conclusion here:
+      rates are computed on the INTERSECTION (a queue that changed between runs silently re-prices the
+      comparison); `collapsed` is re-derived from the stored dB against ONE threshold on both sides
+      (never two stored booleans — the `prune-corpus --restore` bug class); and an unmeasured clip
+      LEAVES the comparison and is named rather than counting as "did not collapse".
+      MUTATION-CHECKED: counting the numerator over the whole current queue fails exactly 2 tests.
+      ⚠ The noise floor is `tail.ts`'s existing `STRUCTURAL_RETAKE_EPSILON_DB`, not a second number.
+- [ ] **⚠ …and the tool it is built on is SOLO-ONLY, which nobody had written down.** `audit-loudness`
+      inner-joins `pois`, so the **34 fused cluster tellings** (`poi_id` NULL) are never measured — and
+      `resynth-narration` is poi-keyed, so it could not repair them even if they were. Fused clips are
+      where tail collapse was WORST (35% at n=31 before the closer rule shipped, vs ~2% solo), so the
+      blind half is the half with the history. Named in both headers + the SOP table 2026-08-03; the
+      real fix is subject-keyed measurement + resynth, which is a build, not a flag.
+      ⚠ Read a clean `audit-loudness` run accordingly: it is a statement about the SOLO corpus only.
 
 ## The POI legibility layer — cluster / district / road-relevance (founder ask 2026-07-29)
 
@@ -558,12 +576,18 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             **ban 5 → 0.** Across both probes that is 23 → 2 on 20 clips. Voice held (the Nevada State
             Prison take still lands its groaner), and "the cards and dice went out" survived untouched
             in the same clip — the narrow pattern behaving correctly on real subject matter.
-      - [ ] **`--scripts-only` DOES write to the DB, but its blast label says it does not.**
-            `generate-narrations.ts` declares `blast: scriptsOnly ? ['SPENDS $'] : ['SPENDS $',
-            'MUTATES DB']`, yet the run still recorded `eval_runs` + 60 `eval_scores` rows. Harmless
-            in itself (observability tables, not content, and arguably worth keeping), but the blast
-            line is the contract an operator reads before spending — per `ops-scripts-sop.md` it has to
-            be true. Either widen the label or skip the eval record on scripts-only.
+      - [x] **Blast labels that under-declared their eval-row writes — ALL THREE FIXED 2026-08-03.**
+            `generate-narrations.ts --scripts-only` was the reported one and was already widened. ⚠ The
+            same defect was live on TWO SIBLINGS, found only by checking every `announce` call rather
+            than the one named: `generate-cluster-narrations` (its PREVIEW records a dry eval run —
+            deliberately, so withheld clips stay queryable — while declaring `SPENDS $` alone) and
+            `audit-corpus` (`--apply` writes `eval_runs` + `eval_scores` while declaring `SPENDS $`
+            alone). Both widened, header prose + `ops-scripts-sop.md`'s conformance table with them.
+            Solo-vs-cluster again — the axis CLAUDE.md says keeps getting missed.
+            ⚠ Deliberately NOT widened: `judge-voice` (writes only a local markdown file) and every
+            CLI's `runJob` bookkeeping row. If job rows counted, every label would read MUTATES DB and
+            the field would stop carrying signal — `blast` means CORPUS/observability rows, not the
+            job's own ledger.
       - [ ] **Yosemite's 30 clusters** — still un-generatable (zero enriched members); needs a
             founder-gated `enrich-pois --region yosemite` run first. `generate-cluster-narrations.ts` is
             complete: narrate → fail-closed gate with excision retakes → TTS → loudnorm → R2 → upsert

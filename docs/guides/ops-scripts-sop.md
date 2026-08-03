@@ -51,8 +51,9 @@ apply and get the founder go for either.
   group the duplicate merge fuses) and only the DB WRITE is gated on `--apply`.
 - **`generate-cluster-narrations`** — the no-flag run **narrates and gates** every picked cluster, so a
   preview costs an apply minus the TTS; only the synthesis + persistence are gated. Its own header and
-  `announce` say so (`blast: ['SPENDS $']` even without `--apply`), and the admin classifies the kind
-  `spends: true` unconditionally so the confirm dialog fires on Preview too.
+  `announce` say so (`blast: ['SPENDS $', 'MUTATES DB']` in EVERY mode — the preview also records its
+  dry eval run, so it is not read-only either), and the admin classifies the kind `spends: true`
+  unconditionally so the confirm dialog fires on Preview too.
 
 ⚠ This section used to say `classify-treatments` was the ONE such CLI and that "every other CLI's
 preview is genuinely free" — which was false for the whole life of the fused generator, in the one
@@ -173,15 +174,15 @@ are the ops CLIs" rather than "these are the ones anyone checked" — and the un
 | `classify-treatments.ts` | SPENDS $ (~$0.8/region) + MUTATES DB | ⚠ preview SPENDS | ⚠ see above — only the WRITE is gated |
 | `backfill-poi-extent.ts` | MUTATES DB (no spend — WDQS) | dry-run | ✅ |
 | `generate-narrations.ts` | SPENDS $ + MUTATES DB | dry-run (exits before narrating) | ✅ — ⚠ `--scripts-only` SPENDS narration $ and writes the eval run |
-| `generate-cluster-narrations.ts` | SPENDS $ + MUTATES DB | ⚠ preview SPENDS | ⚠ see above — only synth + persistence are gated |
+| `generate-cluster-narrations.ts` | SPENDS $ + MUTATES DB | ⚠ preview SPENDS *and* writes its eval run | ⚠ see above — only synth + persistence are gated |
 | `enrich-pois.ts` | SPENDS $ + MUTATES DB | dry-run | ✅ |
 | `curate-places.ts` | SPENDS $ (Places + LLM) + MUTATES DB | dry-run | ✅ |
 | `discover-pois.ts` | MUTATES DB (no spend — Wikidata/WDQS) | dry-run | ✅ |
 | `classify-registers.ts` | SPENDS $ (Haiku tail) + MUTATES DB | dry-run (structural only, no LLM) | ✅ |
 | `refetch-poi.ts` | MUTATES DB (no spend) | dry-run | ✅ |
-| `audit-corpus.ts` | SPENDS $ (judges) | dry-run (free count + estimate) | ✅ |
+| `audit-corpus.ts` | SPENDS $ (judges) + MUTATES DB (eval rows) on `--apply` | dry-run (free count + estimate) | ✅ |
 | `snapshot-corpus.ts` | READ-ONLY | n/a | ✅ |
-| `audit-loudness.ts` | READ-ONLY (ffmpeg probe) | n/a | ✅ |
+| `audit-loudness.ts` | READ-ONLY on DB + R2 (ffmpeg probe); `--json` writes a local baseline file | preview (no R2 pull); `--run` measures | ✅ — ⚠ SOLO clips only (inner-joins `pois`, so fused tellings are invisible) |
 | `audit-speakable.ts` | READ-ONLY | n/a | ✅ |
 | `test-mastering-chain.ts` | READ-ONLY (local ffmpeg, synthetic input) | n/a | ✅ |
 | `judge-voice.ts` | SPENDS $ (charm judge) on `--apply` | dry-run (free by-ear worksheet + estimate) | ✅ — writes only a local markdown file |

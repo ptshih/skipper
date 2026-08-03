@@ -85,7 +85,11 @@ const includeIds = parseIds(flags.value('include-ids'))
 const excludeIds = new Set(parseIds(flags.value('exclude-ids')))
 const isExplicit = includeIds.length > 0 && !regionRaw && !query
 
-announce({ tool: 'audit-corpus', blast: apply ? ['SPENDS $'] : ['READ-ONLY'], apply })
+// ⚠ --apply MUTATES DB: it never touches narrations/R2, but recording the audit IS a write
+// (`eval_runs` + per-clip `eval_scores`) and the blast line is what an operator reads before saying
+// yes. The preview stays READ-ONLY on the strength of the early return above the judges — it exits
+// before `recordEvalRun`, so nothing lands.
+announce({ tool: 'audit-corpus', blast: apply ? ['SPENDS $', 'MUTATES DB'] : ['READ-ONLY'], apply })
 
 interface Audited {
   poiId: string

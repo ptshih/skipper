@@ -13,12 +13,27 @@
 // (prints clip-count + estimated bytes); pass --run to actually fetch + measure. Exits 1 when any clip is
 // off-spec or collapsed, so it can gate a check/hook later. Conforms to docs/guides/ops-scripts-sop.md.
 //
+// ⚠ SOLO CLIPS ONLY, by construction — the query inner-joins `pois`, so the 34 FUSED cluster tellings
+// (poi_id NULL) are never measured here, and `resynth-narration` is poi-keyed so it could not fix them
+// anyway. Fused clips are where tail collapse was WORST (35% at n=31 before the closer rule). A clean
+// run here is a statement about the solo corpus, never about the whole one.
+//
+// `--json` / `--baseline` make this the standing REGRESSION TEST for a persona-prompt change: capture a
+// baseline, change the prompt, regenerate the same places, then diff. Every eval gate is per-clip and
+// absolute, so a prompt edit that degrades the whole corpus a little passes all of them — that is
+// exactly how tail collapse went 2% → 21% on a $20 run that failed nothing. The rates are computed on
+// the clips the two runs SHARE; see pipeline/audit-baseline.ts for why that and two other disciplines
+// are not optional.
+//
 //   dotenvx run -f .env.development -- bun packages/studio/src/audit-loudness.ts              # preview only
 //   ... --run                     fetch + measure (the whole corpus by default)
 //   ... --region <slug>           scope to a region bbox (default: ALL shipped narrations)
 //   ... --include-ids a,b,c       audit EXACTLY these poi ids
 //   ... --released                only released clips (default: all, incl. staged)
 //   ... --limit N                 smoke a cheap N first
+//   ... --json <path>             save these measurements as a baseline (needs --run)
+//   ... --baseline <path>         diff against a saved baseline on the SHARED clips (needs --run);
+//                                 exits 1 on any clip that collapsed and did not before
 
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -34,16 +49,35 @@ import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { ACTIVE_MASTER_TARGET_LUFS, verifyMasteredLoudness } from './pipeline/loudnorm'
 import { measureTailCollapse, TAIL_COLLAPSE_DB } from './pipeline/tail'
+import {
+  AUDIT_BASELINE_VERSION,
+  collapseRate,
+  diffAudits,
+  parseBaseline,
+  type AuditBaseline,
+  type AuditClipRecord,
+} from './pipeline/audit-baseline'
 
-const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region', 'limit', 'include-ids'] })
+const flags = parseFlags(process.argv.slice(2), {
+  valueFlags: ['region', 'limit', 'include-ids', 'json', 'baseline'],
+})
 const run = flags.has('run')
 const releasedOnly = flags.has('released')
 const limit = numericFlag(flags, 'limit', { fallback: Infinity })
 const regionRaw = flags.value('region') || null
+const jsonOut = flags.value('json') || null
+const baselineIn = flags.value('baseline') || null
 const includeIds = (flags.value('include-ids') ?? '')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean)
+
+// Fail CLOSED rather than run a sweep whose output silently goes nowhere: both flags consume
+// measurements, and a preview makes none. (Same posture as the numeric flags — ops-scripts-sop.md.)
+if ((jsonOut || baselineIn) && !run) {
+  console.error('⛔ --json / --baseline need measurements — add --run (a preview measures nothing).')
+  process.exit(1)
+}
 
 // Audit concurrency: each clip is one R2 GET + a few small ffmpeg decodes (network + CPU bound, no spend).
 const AUDIT_CONCURRENCY = 8
@@ -260,6 +294,81 @@ async function main(): Promise<void> {
   if (unmeasured.length > 0) {
     console.log(`\n  ⚠ ${unmeasured.length} clip(s) could not be measured (R2 fetch or ffmpeg miss) — re-run to retry:`)
     for (const m of unmeasured.slice(0, 8)) console.log(`    ${m.row.poiId}  ${m.row.name}`)
+  }
+
+  // ── BASELINE: capture and/or diff ──
+  // The standing regression test for a persona-prompt change (TODO): capture before, regenerate, diff.
+  // Every gate in the pipeline is per-clip and absolute, so a prompt edit that degrades the WHOLE corpus
+  // a little passes all of them — which is how tail-collapse went 2% → 21% unnoticed.
+  const records: AuditClipRecord[] = results.map((m) => ({
+    poiId: m.row.poiId,
+    name: m.row.name,
+    tailDropDb: m.tailDropDb,
+    integratedLufs: m.integratedLufs,
+    truePeakDb: m.truePeakDb,
+    leadingMs: m.leadingMs,
+    unmeasured: m.unmeasured,
+  }))
+
+  if (baselineIn) {
+    const baseline = parseBaseline(await Bun.file(baselineIn).text())
+    const d = diffAudits(baseline, records, TAIL_COLLAPSE_DB)
+    console.log(`\n── TAIL REGRESSION vs ${baselineIn} ──`)
+    console.log(`  baseline captured ${baseline.capturedAt} [${baseline.scope}]`)
+    if (d.thresholdMoved)
+      console.log(
+        `  ⚠ FLAG BAND MOVED: baseline measured at ${fmt(baseline.tailCollapseDb)} dB, this build flags at ` +
+          `${fmt(TAIL_COLLAPSE_DB)} dB. Both sides are re-classified at ${fmt(TAIL_COLLAPSE_DB)}, so the ` +
+          `rates below are comparable — but the baseline's own printed numbers are NOT.`,
+      )
+    if (d.comparable === 0) {
+      // ⚠ Never let "no shared places" print as 0% — an empty comparison is the one result that looks
+      // like a pass and proves nothing.
+      console.log('  ⛔ NO SHARED CLIPS — nothing was compared. Scope the two runs the same way.')
+    } else {
+      const was = collapseRate(d.collapsedBefore, d.comparable)
+      const now = collapseRate(d.collapsedAfter, d.comparable)
+      console.log(
+        `  on ${d.comparable} shared clip(s):  collapsed ${d.collapsedBefore} → ${d.collapsedAfter}  ` +
+          `(${fmt(was)}% → ${fmt(now)}%)`,
+      )
+      for (const [label, movers] of [
+        ['NEWLY COLLAPSED', d.newlyCollapsed],
+        ['cleared', d.cleared],
+        ['still collapsed', d.stillCollapsed],
+        ['worsened (unflagged)', d.worsened],
+        ['improved (unflagged)', d.improved],
+      ] as const) {
+        if (movers.length === 0) continue
+        console.log(`  ${label}: ${movers.length}`)
+        for (const m of movers.slice(0, 12))
+          console.log(`    ${fmt(m.beforeDb).padStart(5)} → ${fmt(m.afterDb).padStart(5)} dB  ${m.name}  (${m.poiId})`)
+      }
+    }
+    // Say what was NOT compared. A diff that quietly drops half its population is the trap this whole
+    // module exists to avoid, and it reads exactly like a clean run.
+    if (d.excluded.length > 0) {
+      console.log(`  not compared: ${d.excluded.length}`)
+      const byReason = new Map<string, number>()
+      for (const e of d.excluded) byReason.set(e.reason, (byReason.get(e.reason) ?? 0) + 1)
+      for (const [reason, n] of byReason) console.log(`    ${String(n).padStart(4)}  ${reason}`)
+    }
+    if (d.newlyCollapsed.length > 0) {
+      console.log(`\nREGRESSION: ${d.newlyCollapsed.length} clip(s) collapsed that did not before.`)
+      process.exitCode = 1
+    }
+  }
+
+  if (jsonOut) {
+    const baseline: AuditBaseline = {
+      version: AUDIT_BASELINE_VERSION,
+      capturedAt: new Date().toISOString(),
+      scope: `${scope}${released}`,
+      tailCollapseDb: TAIL_COLLAPSE_DB,
+      clips: records,
+    }
+    await Bun.write(jsonOut, JSON.stringify(baseline, null, 2))
+    console.log(`\nBaseline written: ${jsonOut} (${records.length} clip(s)) — diff a later run with --baseline.`)
   }
 
   console.log()

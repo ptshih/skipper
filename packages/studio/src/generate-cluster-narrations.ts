@@ -10,8 +10,9 @@
 // narration until step 6, deliberately — retiring good audio before hearing its replacement has no
 // fallback. `--apply` here only ADDS.
 //
-// Blast radius: SPENDS $ (LLM + TTS) and MUTATES DB + WRITES R2 on `--apply`. ⚠ A preview is NOT
-// free: it narrates and scores, so it costs an apply minus the TTS. Only the persistence is gated.
+// Blast radius: SPENDS $ (LLM + TTS) and MUTATES DB — both in EVERY mode. ⚠ A preview is NOT free
+// and NOT read-only: it narrates and scores (an apply minus the TTS) and records the dry eval run.
+// What `--apply` gates is the CONTENT — the narration upsert and the R2 write.
 //
 //   dotenvx run -f .env.development -- bun packages/studio/src/generate-cluster-narrations.ts --limit 1
 //   ... --apply             synthesize + upload + upsert (the first irreversible step)
@@ -107,7 +108,11 @@ interface GatedFused {
 const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region', 'limit', 'query', 'max-cost', 'include-ids'] })
 const apply = flags.has('apply')
 const maxCostUsd = maxCostFlag(flags)
-announce({ tool: 'generate-cluster-narrations', blast: apply ? ['SPENDS $', 'MUTATES DB'] : ['SPENDS $'], apply })
+// ⚠ MUTATES DB unconditionally — a PREVIEW writes rows too. It persists no narration and no R2
+// object (that half really is gated on --apply), but it records the dry eval run + its score rows
+// (`recordRun(true)`, added so a preview's withheld clips are queryable). The poi path carried the
+// same under-declaration and was widened for the same reason; same label, different rows.
+announce({ tool: 'generate-cluster-narrations', blast: ['SPENDS $', 'MUTATES DB'], apply })
 if (apply) assertReady(['r2', 'tts'])
 // A targeted --include-ids run has no region scope, so it keys on nothing and surfaces as "All".
 const clusterTargetRegion = (flags.value('include-ids') ?? '').trim()
