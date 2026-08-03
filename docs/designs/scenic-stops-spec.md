@@ -453,6 +453,42 @@ name-only wave lands short and evaluatePacing never flags short"). Do not tune i
 
 **Total smoke: 22 clips, $0.25, nothing persisted.** The content question is closed.
 
+### 11.11 ✅ THE TIER EXISTS — first scenic audio in the corpus, 2026-08-03 ($0.34)
+
+`generate-scenic-narrations.ts --apply --limit 3 --spread --max-cost 1.00`. **3/3 synthesized, 0
+withheld, 1.0 min, ~$0.34.** Corpus 458 → **461 narrations**, and for the first time not all of them
+are stories. Verified read-only against the live DB: all three **STAGED** (`released_at` null),
+`poi_id` set with `cluster_id` null (the XOR holds), `attribution` and `facts_hash` both null (both
+correct — see §11.6), audio under the `narration/` prefix so `sweep-orphans` will not reap it.
+
+> *"**Alder Hill.** Somebody looked at this thing and picked that name — Alder Hill. And out there it
+> stands, high country all around, the light doing its slow work on the ridgelines. A mountain, mind
+> you. But they went and called it a hill. Talk about selling yourself short."*
+
+**✅ The gate worked, visibly and on the first paid run**: `✂ Amione Park: excising 2 ungrounded
+claim(s)` — the scenic rules caught over-reach and trimmed it rather than shipping it, taking that
+clip from ~50 words to 30.
+
+**⚠ Two defects the run exposed, both now fixed:**
+
+1. **A primitive grounding verdict scored 1.0 — a fail-OPEN hole in the fail-closed gate.** The
+   warning `model returned non-array 'claims' (string) — coercing` fired **twice in three clips**. A
+   string is not recoverable as a claim, so it coerced to `[]`, and an empty claim list scores
+   `pass: true, score: 1`: a perfect verdict on a clip nobody audited. ⚠ **Most likely on THIS path**
+   — a scenic well is one line, so the judge has almost nothing to decompose. Now throws, joining the
+   absent-key refusal; the clip is recorded WITHHELD instead. ⚠ **Amione Park's confirming score was
+   therefore untrustworthy.** Read by eye it is clean (its only assertions are the name, the kind and
+   the visible day) — but it was not *proved* clean, and a re-score is cheap if anyone wants one.
+2. **Clip 0 of every run opened AND closed on the name.** Both rotations' first entry is the name
+   shape, so index 0 paired them: *"Amione Park — … A park, plain and simple… Amione Park."* Three
+   names in thirty words, on the run's FIRST clip, which is the one a human judges the tier by. Fixed
+   with a `CLOSER_PHASE` of 2 — chosen to clear that collision while preserving the one overlap that
+   is deliberate (the GROANER opening with the JOKE close, which that closer's own text asks for).
+
+**Cost, measured rather than estimated:** ~$0.11/clip all-in (16 model calls for 3 clips — retakes
+and excision are billed too). Against the 312-clip eligible set that projects to **~$35**, close to
+the wave build's $29–31 quote for 378.
+
 ### 11.10 ✅ RESOLVED — the blocker below is FIXED; the drive now plays the tier
 
 **Built 2026-08-03, $0.** `DriveCandidate.glance` + a fill pass in `buildDrive` (step 4b), run AFTER

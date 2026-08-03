@@ -80,6 +80,21 @@ const SCENIC_MAX_SECONDS = 30
 /** The delivery register a scenic call-out is voiced in — every one of these places is a landform. */
 const SCENIC_REGISTER = 'landscape' as const
 
+/**
+ * Phase offset between the opening and closing rotations.
+ *
+ * ⚠ WITHOUT IT, CLIP 0 OF EVERY RUN OPENS AND CLOSES ON THE NAME. The two rotations are independent
+ * lists whose FIRST entries are both the name shape, so index 0 pairs "OPEN ON THE NAME" with "CLOSE
+ * ON THE NAME" — and the first real paid clip proved it: *"Amione Park — and what a fine, easy sky
+ * over it today. A park, plain and simple… Amione Park."* Three names in thirty words, and it lands on
+ * the run's FIRST clip, which is the one a human is most likely to judge the tier by.
+ *
+ * 2 is chosen, not arbitrary: it clears the collision at 0 while leaving the one deliberate overlap
+ * intact — index 5 pairs the GROANER opening with the JOKE close, and that closer's own text says "if
+ * your opening earned a groaner, land it here", so those two belong together.
+ */
+const CLOSER_PHASE = 2
+
 interface Scenic {
   id: string
   name: string
@@ -206,7 +221,7 @@ async function main(): Promise<void> {
       maxSeconds: SCENIC_MAX_SECONDS,
       selfContained: true,
       openingAngle: openingAngleFor(seq),
-      closingAngle: closingAngleFor(seq),
+      closingAngle: closingAngleFor(seq + CLOSER_PHASE),
     }
     const well = buildGroundingWell({ stopType: 'scenic', name: s.name, kind: s.kind })
     return { base, well }
