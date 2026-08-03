@@ -872,6 +872,73 @@ The founder also rejected launch 1's *"Then — where are we headed?"*. Using **
 states** removes the copy dependency §9 flagged entirely: the listen card becomes a **true
 one-element toggle** rather than two authored states. One fewer thing to get wrong.
 
+## 15. The build plan
+
+**Re-verified at HEAD (2026-08-03, tree clean)** — every claim below was re-checked after a full day
+of other agents committing, because these drive real edits:
+
+| Claim | Where | Still true |
+| --- | --- | --- |
+| header-LEFT slot is empty when signed in | `app/index.tsx` `headerLeft` | ✅ |
+| composer absent iff `isOffline \|\| regionsFailed` | `app/index.tsx` `const composer =` | ✅ |
+| dormant region chip row exists | `app/index.tsx` `regions.length > 1` | ✅ |
+| Sunburst is `opacity={0.09}`, absolutely positioned **inside the hero View** | `app/index.tsx` + `styles.heroSunburst` | ✅ |
+| `FilterChip` has no picker/`expand` variant | `src/ui/FilterChip.tsx` | ✅ (0 hits) |
+| `deleteAllDriveDownloads()` has ONE call site (account deletion) | `app/settings.tsx` | ✅ |
+
+### Order of work (dependency order, not importance)
+
+1. **Primitives, no behaviour change.** `FilterChip` gains the picker variant (`expand` caret +
+   `quiet` weight); a listen-row skin; the suggestion-row component. S3's enamel badges can start as
+   the existing Icon set and swap to the SVG assets later — it is the one piece that is an asset
+   build.
+2. **Home layout** — `app/index.tsx` + `voice.ts`. Delete the hero blocks (headline, trail, tagline,
+   kicker), **re-anchor the Sunburst first**, add the region row + atlas rule, promote the question,
+   render suggestions as rows, insert the listen row, remove MY DRIVES, and **delete the dormant chip
+   row**.
+3. **Composer** — the rotating placeholder, composed from `region.exampleAnchors`.
+4. **The drives screen** — new `app/drives/index.tsx`, header-left entry, **and the sign-out purge in
+   the SAME change**.
+5. **The offline split** — two authored components under ONE mounted route, planner state lifted
+   above the branch.
+
+⚠ Another agent reworked `ExampleAsks`/`FilterChip`/`Composer` today; those commits have landed, so
+**re-read those files before editing** rather than working from this document's descriptions.
+
+### The nine quiet failures — none of these are caught by `bun run check`
+
+1. **Re-anchor the Sunburst before deleting the hero View** — it is positioned inside it, so deleting
+   the hero takes the watermark with it, silently removing the thing S1 exists to restore.
+2. **Ship the sign-out purge WITH the drives move** — the move removes the last surface that made
+   those files visible, so shipping one without the other converts a visible leftover into an
+   invisible one.
+3. **Never clamp the region chip to one line** — home is uncapped including AX sizes.
+4. **Delete the dormant chip row**, or two region switchers appear the day region 2 ships.
+5. **Offline is two components under one route, never two routes** — unmounting home kills a *billed*
+   planner turn in flight and bins the transcript.
+6. **Evaluate the listen-row hide flag ONCE AT MOUNT** — a live `played` check yanks the row off
+   screen while the clip is still playing.
+7. **The placeholder must freeze on focus, stop when the screen is unfocused, and gate on Reduce
+   Motion** — home stays MOUNTED under a push, so a bare interval ticks forever behind Settings.
+8. **The region chip degrades on `regionsFailed`** — that is exactly the state with no `displayName`.
+9. **The client flag goes in the document dir, never the cache dir, and is never keyed on the user
+   id** — eviction resurrects the listen row; a user-keyed flag resurrects it right after signup.
+
+### Not in scope
+
+Voice input on the composer (a capability, not a restyle — §5); the pre-existing cross-account
+offline exposure (§7, wants its own decision); the region *picker sheet's* internals beyond following
+`AttributionButton.tsx`'s Modal; and location-based region pre-selection (§11 — deliberately deferred
+so the one-shot iOS prompt is not spent on a guess).
+
+### Done means
+
+Root `bun run check` **and** `apps/mobile` `bun run check` both exit 0 — plus a **device/simulator
+pass**, because this design turns on motion, Dynamic Type and audio-focus behaviour that a typecheck
+structurally cannot see. ⚠ And one docs chore rides along: `app/index.tsx` and
+[sample-ride-postcard.md](../decisions/sample-ride-postcard.md) still assert the sample is the only
+thing an App Review tester can hear — false since 1.1 removed roam (§9).
+
 ## Sources
 
 - [Airbnb design-system breakdown](https://github.com/VoltAgent/awesome-design-md/blob/main/design-md/airbnb/DESIGN.md)
