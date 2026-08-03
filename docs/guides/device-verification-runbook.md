@@ -129,6 +129,22 @@ verified — they share the build, so do them together.
 
 ## §1 — Splash & app icon (native; visible only after a fresh build, never on hot-reload)
 
+> ⚠ **On the SIMULATOR, a changed splash keeps rendering the OLD one long after the build is
+> correct — and neither a rebuild nor deleting the app clears it.** This burned an hour on
+> 2026-08-03. The cache is iOS's launch snapshot (`<data container>/Library/SplashBoard/Snapshots`)
+> plus SpringBoard state, and it survives `simctl uninstall`, `--no-build-cache`, and
+> `launchctl stop com.apple.SpringBoard`. **The fix is `xcrun simctl shutdown <udid>` then `boot`**
+> — a full device restart. (Not `erase`, which wipes every other app on that simulator.)
+> Before assuming the build is wrong, prove it isn't: `xcrun assetutil --info <App>/Assets.car`
+> lists `SplashScreenLogo` / `AppIcon` with their `UIAppearanceDark` and `ISAppearanceTintable`
+> renditions, and compiling `Images.xcassets` yourself with `xcrun actool` should produce
+> byte-identical `SHA1Digest`s. If those match, the bundle is fine and you are chasing a cache.
+> A real first-launch on a real device is unaffected — this is a simulator artifact.
+>
+> Note also that the home screen's icon **appearance is pinned to Default** on a fresh simulator,
+> so flipping system Dark Mode changes nothing — not even Apple's own icons. Dark and tinted are
+> reachable only via long-press → Edit → Customize.
+
 - [ ] **App icon on the home screen.** Do: after a fresh install, find the Skipper icon (home screen,
   app switcher, Settings list); also toggle Dark Mode to check the dusk variant. Expect: the
   **switchback S** — a drawn S with a dashed centre line running through it and a small amber dot
