@@ -622,8 +622,26 @@ body, so the test is literally "would this bill a call we have already made?" an
 request. The claim is released if the propose FAILS (a call that bought nothing owes nothing) and
 cleared when the conversation resets; `needsAccount` keeps its claim, the card being alive.
 ⚠ Still prompt-held: a model emitting a NOVEL route unprompted. The dedupe bounds repeats, not
-invention. The model narrating work it did not do is a separate defect and belongs to the planner
-prompt's own review — do not fix it here.
+invention.
+
+⚠ **The prompt half landed separately, and it needed TWO fixes rather than one.** Root cause: the model
+cannot see that it ever called the tool — `toWire` carries role + text only, the route is client state
+and is dropped, so its whole evidence of having drawn is its own sentence. Everything in the prompt
+described the run-up to a draw and nothing described after it, so an unrelated turn fell back into
+drawing. `== Once it is drawn ==` supplies the after-state, and the example exchange gained a fourth
+beat (chit-chat right after "Consider it drawn") because an example that stops at the draw teaches the
+drive as the end of the conversation. Measured against the live model afterwards: substantive
+post-draw turns stopped re-emitting outright, and bare acknowledgements ("cool", "nice", "thanks")
+went from re-emitting reliably to 5-of-6 clean once the prompt named them.
+⚠ The second fix is the one the first UNCOVERED. A tool call carries no *guaranteed* text block, and on
+those low-content turns the model returned `{ say: '', route }` — which was survivable only while a
+duplicate CARD still appeared beside the empty bubble. With the client refusing to redraw, an empty
+`say` made the whole turn render as NOTHING: the rider types and the screen does not move. `toResponse`
+now backstops an empty `say` on the route branch too (a distinct line from `retry` — the drive is fine
+and about to appear) and counts it as `route_wordless`, a degradation whose spike means the prompt
+slipped rather than an outage. ⚠ A residual re-emit still gets through on words the prompt does not
+name; it is contained by BOTH structural guards (no second billed call, and always a line), which is
+the intended division of labour — the prompt reduces it, the code contains it.
 
 ⚠ **Unverified without a device** (stated rather than implied): that deltas render progressively over
 URLSession; `keyboardVerticalOffset={useHeaderHeight()}` (`ConversationScreen.tsx` carries the concrete

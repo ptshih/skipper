@@ -62,6 +62,11 @@ const VOICE = {
   down: "Radio's out on my end. Give me a minute and try me again.",
   /** A region with no curated endpoints yet — a real state, not an error. */
   noRegion: "That's not my country yet, friend.",
+  /** A route came back with NO line attached. Nothing failed and nothing is owed an apology — the card
+   *  is about to appear — so this is a plain handover, not `retry`'s "say that again". ⚠ It must not
+   *  announce the drawing either (the prompt bans narrating the mechanism), which is why it points at
+   *  the drive without claiming to have just made it. */
+  drawnWordless: 'There she is. Have a look and see what you think.',
 } as const
 
 /** Does this caller want the turn FRAMED, or the single JSON body 1.0 clients already read?
@@ -113,7 +118,17 @@ function toPlannedRoute(raw: unknown): PlannedRoute | null {
 
 /** Why a paid turn produced nothing the rider can use. A CLOSED SET OF LITERALS CHOSEN IN THIS FILE —
  *  see the INV-13 note on `noteDegraded`. */
-type DegradedReason = 'truncated' | 'aborted' | 'empty' | 'refused' | 'route_untranslatable'
+// ⚠ `route_wordless` is the odd one out and belongs here anyway: the rider DOES get something usable
+// (their drive), so it is not a failed turn — but the skipper said nothing, the prompt asked him to
+// speak on every turn, and a rise in this counts as the prompt slipping rather than an outage. That is
+// exactly the "SPIKE means a prompt problem" signal the note below describes.
+type DegradedReason =
+  | 'truncated'
+  | 'aborted'
+  | 'empty'
+  | 'refused'
+  | 'route_untranslatable'
+  | 'route_wordless'
 
 /**
  * ONE structured line when a paid turn produced nothing the rider can use.
@@ -171,7 +186,22 @@ function toResponse(turn: PlannerTurn): DrivePlanResponse {
       // simply are not handed a drive to confirm — which is why this, uniquely, is a degradation the
       // vendor's own stop_reason calls a success.
       if (!route) noteDegraded('route_untranslatable')
-      return route ? { say: turn.say, route, done: false } : { say: turn.say || VOICE.retry, done: false }
+      // ⚠ BOTH BRANCHES BACKSTOP AN EMPTY `say`, and the route branch did not until 2026-08-03. Nothing
+      // structurally guarantees a text block rides with a tool call (see PLAN_ROUTE_TOOL's note on why
+      // `say` is not a tool field) — the prompt's "say a line every single turn" is the only thing
+      // asking for one, and the model drops it on low-content turns: a rider answering "cool" after a
+      // draw got `{ say: "", route }` back, verbatim.
+      //
+      // That used to be survivable by accident: the empty bubble arrived WITH a card, so the turn still
+      // looked like something happened. It stopped being survivable when the client began refusing to
+      // redraw a route it already has — the card is correctly suppressed, and a blank `say` then makes
+      // the whole turn render as nothing at all. The rider types, and the screen does not move.
+      //
+      // A different line from the no-route branch on purpose: `retry` asks them to say it again, which
+      // is wrong when the drive is fine and about to appear.
+      if (!route) return { say: turn.say || VOICE.retry, done: false }
+      if (!turn.say) noteDegraded('route_wordless')
+      return { say: turn.say || VOICE.drawnWordless, route, done: false }
     }
     case 'say':
       return { say: turn.say, done: false }

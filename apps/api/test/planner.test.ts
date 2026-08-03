@@ -45,6 +45,25 @@ describe('planner prompt', () => {
     expect(PLANNER_SYSTEM_PROMPT.toLowerCase()).toContain('never compose one')
   })
 
+  // The model CANNOT SEE that it already called the tool — `toWire` sends role + text only, so the route
+  // never comes back to it and its sole evidence is its own sentence. Without a rule for the turn AFTER a
+  // draw it falls back into drawing: asked "What's your name?" on device it replied "Folks just call me
+  // the Skipper. Consider it drawn." and re-emitted the route. Pinned because the section is the only
+  // thing standing between that gap and a skipper who claims work he did not do.
+  test('it tells the skipper a drawn drive STAYS drawn', () => {
+    expect(PLANNER_SYSTEM_PROMPT.toLowerCase()).toContain('once it is drawn')
+    expect(PLANNER_SYSTEM_PROMPT.toLowerCase()).toContain('you do not say you did a thing you did not do')
+  })
+
+  // The example must not stop at the draw — one that does teaches the drive as the end of the
+  // conversation, which is the failure above in miniature. This is the fourth beat: chit-chat landing
+  // right after "Consider it drawn", answered without re-announcing anything.
+  test('the example exchange carries a beat AFTER the draw', () => {
+    const drawn = PLANNER_SYSTEM_PROMPT.indexOf('Consider it drawn')
+    expect(drawn).toBeGreaterThan(-1)
+    expect(PLANNER_SYSTEM_PROMPT.slice(drawn)).toContain('whole of my paperwork')
+  })
+
   // ⚠ INV-10: the OTHER prompt is written around a fact sheet ("the card") and stop kinds. If any of
   // that vocabulary appears here, someone has edited the wrong prompt — the most likely mistake a
   // future agent makes, because both files say "You are the Skipper" at the top.

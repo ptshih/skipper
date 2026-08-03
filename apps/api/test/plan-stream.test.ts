@@ -622,6 +622,40 @@ describe('POST /drives/plan — plan_degraded', () => {
     expect(reasonsFrom(lines)).toEqual(['route_untranslatable'])
   })
 
+  // ⚠ A ROUTE WITH NO LINE. Nothing STRUCTURALLY guarantees a text block rides with a tool call (see
+  // PLAN_ROUTE_TOOL's note on why `say` is not a tool field) — the prompt asking for one is the whole
+  // mechanism, and the model drops it on low-content turns: a rider answering "cool" after a draw got
+  // `{ say: '', route }` back, verbatim, on 2026-08-03.
+  //
+  // It was survivable only by accident. The empty bubble arrived WITH a card, so the turn still looked
+  // like something happened. Then the client began refusing to redraw a route it already holds — the
+  // card is correctly suppressed, and an empty `say` makes the ENTIRE turn render as nothing: the rider
+  // types and the screen does not move. Both halves are asserted, because both were missing.
+  const wordless = () => ({
+    outcome: 'route' as const,
+    say: '',
+    rawRoute: { start_anchor_id: crypto.randomUUID(), end_anchor_id: crypto.randomUUID() },
+    stopReason: 'tool_use' as const,
+  })
+
+  test.each(both)('a route with no line is COUNTED — a spike here is the prompt slipping (accept=%s)', async (accept) => {
+    impl = async () => wordless()
+    const { lines } = await runTurn(accept)
+    expect(degradedLines(lines)).toEqual([{ evt: 'plan_degraded', reason: 'route_wordless' }])
+  })
+
+  test('the rider still hears something, and it is NOT the retry line', async () => {
+    impl = async () => wordless()
+    const { value } = await capture(async () => (await post(OK)).json())
+    const parsed = drivePlanResponse.parse(value)
+    // The drive is fine and is about to appear on screen, so asking them to say it again would be a
+    // apology for nothing — this branch deliberately does not share the no-route fallback.
+    expect(parsed.say.trim()).not.toBe('')
+    expect(parsed.say).not.toContain('Lost my train of thought')
+    // ...and the route still reaches the map. The fallback is a line, not a downgrade.
+    expect(parsed.route).not.toBeNil()
+  })
+
   // ⚠ THE OTHER HALF OF THE REVIEW'S ERROR, and the reason this signal is worth having. `end_turn` with
   // text is outcome 'say' — the ORDINARY beat, most of a 3-8 exchange conversation. Under the literal
   // `stop_reason !== 'tool_use'` condition this line fires on healthy traffic and the metric measures
