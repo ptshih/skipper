@@ -5,11 +5,11 @@
  * when an operator releases a region or re-runs `curate-places`. A cache in front of a RELEASE-GATED
  * endpoint is exactly the shape that leaks unreleased content, so the rules are pinned here:
  *
- *   1. The default (anonymous) response is memoized and served without touching the DB again.
- *   2. `?includeStaged=1` NEVER reads the memo — an admin checking a staged region must see the real
- *      answer, not a cached public one.
- *   3. A staged response is NEVER written to the memo — otherwise the next anonymous rider would be
- *      served unreleased regions, violating "public read paths serve released_at IS NOT NULL only".
+ *   1. A rider's (anonymous) response is memoized and served without touching the DB again.
+ *   2. An ADMIN never reads the memo — someone checking a staged region before releasing it must see
+ *      the real answer, not a cached public one.
+ *   3. An ADMIN response is never WRITTEN to the memo — otherwise the next rider is served unreleased
+ *      regions, violating "public read paths serve released_at IS NOT NULL only".
  *
  * Rule 3 is the one worth the whole file. It is invisible in review, produces no error, and would
  * hand strangers a region the operator has not published.
@@ -53,8 +53,8 @@ mock.module('@skipper/db', () => ({
 }))
 
 /** Who the next request is. null = an ordinary rider; ADMIN = the founder checking a staged region.
- *  Mocked at ./session rather than at auth so no crypto or env is involved — the route calls
- *  `resolveSessionSafely` directly now that the staged path is opt-in. */
+ *  Mocked at ./session, which is where `withSession` resolves through — so no auth crypto or env is
+ *  involved and the middleware under test is the real one. */
 let sessionToReturn: unknown = null
 const ADMIN = { user: { id: 'admin-1', role: 'admin', isAnonymous: false } }
 const realSession = { ...(await import('../src/session')) }
@@ -71,12 +71,12 @@ console.warn = origWarn
 const RELEASED = { id: 'r1', slug: 'lake-tahoe', displayName: 'Lake Tahoe', bbox: null }
 const STAGED = { id: 'r2', slug: 'yosemite', displayName: 'Yosemite', bbox: null }
 
-const get = (path: string) => app.fetch(new Request(`http://localhost${path}`))
+const get = () => app.fetch(new Request('http://localhost/regions'))
 const names = async (res: Response) =>
   ((await res.json()) as { regions: { displayName: string }[] }).regions.map((r) => r.displayName)
 
-// The memo is module state that survives between tests, so each case starts from a known cache by
-// letting the first request populate it. `selects` is reset per test to measure only that test.
+// The memo is module state that survives between tests, so each case populates what it needs.
+// `selects` resets per test to measure only that test.
 beforeEach(() => {
   selects = 0
   regionRows = [RELEASED]
@@ -84,12 +84,12 @@ beforeEach(() => {
   sessionToReturn = null
 })
 
-describe('the anonymous memo', () => {
+describe('the rider memo', () => {
   test('serves the payload and, on a repeat, without touching the DB again', async () => {
-    expect(await names(await get('/regions'))).toEqual(['Lake Tahoe'])
+    expect(await names(await get())).toEqual(['Lake Tahoe'])
     const afterFirst = selects
     selects = 0
-    expect(await names(await get('/regions'))).toEqual(['Lake Tahoe'])
+    expect(await names(await get())).toEqual(['Lake Tahoe'])
     // The point of the whole change: a second app launch costs zero queries.
     expect(selects).toBe(0)
     // And the first one ran BOTH queries — if this is 1, the parallelisation dropped a query rather
@@ -99,36 +99,37 @@ describe('the anonymous memo', () => {
 })
 
 describe('the release gate the memo must not cross', () => {
-  test('?includeStaged=1 does NOT read the memo', async () => {
-    await get('/regions') // populate
+  test('an admin does NOT read the memo', async () => {
+    await get() // populate as a rider
     selects = 0
     sessionToReturn = ADMIN
-    await get('/regions?includeStaged=1')
-    // A staged request must reach the DB even when a fresh anonymous payload is cached — an admin
-    // checking a region before release cannot be served the public answer.
+    await get()
+    // An admin must reach the DB even when a fresh rider payload is cached — someone checking a
+    // region before release cannot be served the public answer.
     expect(selects).toBeGreaterThan(0)
   })
 
-  test('AN ADMIN PREVIEW IS NEVER MEMOIZED — the leak this file exists for', async () => {
+  test('AN ADMIN RESPONSE IS NEVER MEMOIZED — the leak this file exists for', async () => {
     // The admin sees the unreleased region (the stub stands in for the unfiltered query).
     sessionToReturn = ADMIN
     regionRows = [RELEASED, STAGED]
-    expect(await names(await get('/regions?includeStaged=1'))).toContain('Yosemite')
+    expect(await names(await get())).toContain('Yosemite')
 
     // Now an ordinary rider, and the DB has gone back to serving only released rows. If that admin
     // response had been cached, they would be handed Yosemite — a region the operator has not
     // published — with no error, no log, and nothing else in the system disagreeing.
     sessionToReturn = null
     regionRows = [RELEASED]
-    expect(await names(await get('/regions'))).toEqual(['Lake Tahoe'])
+    expect(await names(await get())).toEqual(['Lake Tahoe'])
   })
 
-  test('the param alone grants nothing — a non-admin sending it still gets the public answer', async () => {
-    // `?includeStaged=1` is a hint about whether the question is worth asking, never a bypass:
-    // `isAdmin` still decides, so a stranger who discovers the param gains no visibility. (They do
-    // spend a session read, which is exactly the cost the opt-in is meant to move onto whoever asks.)
+  test('an admin read does not poison a later rider read either', async () => {
+    await get() // rider payload cached
+    sessionToReturn = ADMIN
+    regionRows = [RELEASED, STAGED]
+    await get()
     sessionToReturn = null
-    const res = await get('/regions?includeStaged=1')
-    expect(await names(res)).toEqual(['Lake Tahoe'])
+    regionRows = [RELEASED]
+    expect(await names(await get())).not.toContain('Yosemite')
   })
 })

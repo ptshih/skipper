@@ -38,8 +38,7 @@ import {
   SERVER_MAX_BODY_BYTES,
 } from './limits'
 import { planRoutes } from './plan-route'
-import { isAdmin, type ApiEnv } from './entitlements'
-import { resolveSessionSafely } from './session'
+import { isAdmin, withSession, type ApiEnv } from './entitlements'
 import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
 import { audioUnavailable, contentTypeForKey, presignGet } from './storage'
@@ -96,43 +95,42 @@ app.get('/version', (c) => c.json({ policies: VERSION_POLICIES }))
 // RELEASE-GATED, same as the drive build: a region exists in the table from the moment
 // discovery starts, long before it has a released corpus or a single endpoint anchor. Listing an
 // unreleased one hands the rider a name they can pick and then a picker with nothing in it — a
-// dead end that reads as a broken app, not as "coming soon". An admin can still see staged regions
-// in-app and check one before releasing — now via `?includeStaged=1` rather than a session read on
-// every request; see the opt-in note below. (region-release-gate)
+// dead end that reads as a broken app, not as "coming soon". `withSession` (fail-open) so an admin
+// still sees staged regions in-app and can check one before releasing. (region-release-gate)
 /** The memoized ANONYMOUS payload. Per-instance and in-memory — the same first-cut shape as
  *  ./rate-limit and better-auth's own store, and acceptable for the same reason: the worst case of a
  *  cold instance is one extra pair of queries, not a wrong answer.
  *
- *  ⚠ IT HOLDS THE ANONYMOUS VARIANT ONLY, and that is the load-bearing part of this whole design. The
+ *  ⚠ IT HOLDS THE RIDER VARIANT ONLY, and that is the load-bearing part of this whole design. The
  *  staged (admin) response is a DIFFERENT answer to the same URL, and a cache that conflated them
  *  would serve unreleased regions to strangers — a direct violation of "public read paths serve
- *  released_at IS NOT NULL only". Making staged preview OPT-IN below is what removes the ambiguity:
- *  the default path no longer depends on who is asking, so there is nothing to key the memo on. */
+ *  released_at IS NOT NULL only". So `canPreview` gates BOTH the read and the write below: an admin
+ *  never reads this and never fills it. Riders are all of the traffic; admins are a handful.
+ *  Pinned by test/regions-cache.test.ts, including a mutation check on both gates. */
 let regionsMemo: { at: number; payload: Region[] } | null = null
 
-// ⚠ STAGED PREVIEW IS OPT-IN (`?includeStaged=1`), AND THAT IS A COST DECISION, NOT A UX ONE.
-// This route used to carry `app.use('/regions', withSession)`, which resolves the session on EVERY
-// request — an auth-DB read, on the separate neon-serverless Pool, that post-D16 never short-circuits
-// because the anonymous mint means every rider carries a cookie. It bought exactly one thing: an admin
-// seeing staged regions IN THE APP (the console's RegionsView shows release state, but not the rider's
-// picker as a rider meets it). That is a real need billed to the wrong people — every rider, on every
-// launch, forever.
+// ⚠ THE MEMO IS KEYED ON `canPreview`, WHICH IS WHY THE SESSION IS STILL RESOLVED FIRST. An earlier
+// pass made staged preview opt-in via `?includeStaged=1` so riders would stop paying the session read
+// — and that was the wrong trade twice over: it answered a COST problem with an API contract change,
+// and it silently broke the feature it claimed to preserve, because the mobile client never learned to
+// send the param. An admin simply stopped seeing staged regions in the app.
 //
-// Opt-in moves the cost to whoever benefits. Riders never send the param and never pay the read; an
-// admin sends it from a dev build and pays it. ⚠ The param ALONE grants nothing — `isAdmin` still
-// decides, so this is not a bypass, it is a hint about whether the question is even worth asking.
+// The session read IS a real cost — an auth-DB round-trip on the separate neon-serverless Pool, which
+// post-D16 never short-circuits because the anonymous mint means every rider carries a cookie. But it
+// is paid on every `withSession` route, not just this one, so the fix belongs at the auth layer
+// (better-auth's `session.cookieCache`), not in a query param here. That is a founder call: cookie
+// caching delays REVOCATION by its maxAge, and the sharp edge for us is account deletion — a cached
+// cookie validating against a user `purgeUserData` just erased would write an orphan of exactly the
+// kind INV-4 exists to prevent. See TODO.
+app.use('/regions', withSession)
 app.get('/regions', async (c) => {
-  const wantsStaged = c.req.query('includeStaged') === '1'
+  const canPreview = isAdmin(c.get('session'))
 
-  if (!wantsStaged && regionsMemo && Date.now() - regionsMemo.at < REGIONS_MEMO_TTL_MS) {
+  // Admins skip the cache entirely — they are asking a different question and there are a handful of
+  // them. Riders, who are all of the traffic, get the memoized answer.
+  if (!canPreview && regionsMemo && Date.now() - regionsMemo.at < REGIONS_MEMO_TTL_MS) {
     return c.json({ regions: regionsMemo.payload })
   }
-
-  // Resolved INSIDE the handler and only when asked. Fail-open to anonymous, exactly as `withSession`
-  // did: a transient auth-DB blip must not 500 an endpoint that needs no session.
-  const canPreview =
-    wantsStaged &&
-    isAdmin(await resolveSessionSafely(() => auth.api.getSession({ headers: c.req.raw.headers })))
 
   // ⚠ RUN IN PARALLEL. The anchors scan references nothing from the regions rows — the two only meet
   // in `pickExampleAnchors` — so awaiting them in sequence spent an extra Neon round-trip on the app's
