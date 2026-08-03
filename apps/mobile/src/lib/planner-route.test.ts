@@ -3,7 +3,7 @@
 // `bun test`.
 import { describe, expect, test } from 'bun:test'
 import type { DriveProposal, PlannedRoute } from '@skipper/shared'
-import { durationDrift, toCreateRequest, toProposeRequest } from './planner-route'
+import { durationDrift, proposeKey, toCreateRequest, toProposeRequest } from './planner-route'
 import { spokenDuration } from '../ui/voice'
 
 const START = '11111111-1111-4111-8111-111111111111'
@@ -64,6 +64,43 @@ describe('toProposeRequest', () => {
     expect(body).not.toContain('lat')
     expect(body).not.toContain('lng')
     expect(body).not.toContain('name')
+  })
+})
+
+describe('proposeKey', () => {
+  test('the same drive keys the same however the object was built', () => {
+    expect(proposeKey(planned())).toBe(proposeKey(planned()))
+    expect(proposeKey(planned({ via: [MID] }))).toBe(proposeKey(planned({ via: [MID] })))
+  })
+
+  test('COLLIDES on targetMinutes alone — the case the dedupe exists for', () => {
+    // /propose never sees targetMinutes, so these two bill the identical Google Routes call and
+    // materialize the identical drive. Treating them as different is what put two identical cards
+    // in one transcript.
+    expect(proposeKey(planned({ targetMinutes: 120 }))).toBe(
+      proposeKey(planned({ targetMinutes: 30 })),
+    )
+  })
+
+  test('separates drives that really are different', () => {
+    const base = proposeKey(planned())
+    expect(proposeKey(planned({ end: MID }))).not.toBe(base)
+    expect(proposeKey(planned({ start: MID }))).not.toBe(base)
+    // A midpoint is a different drive, and so is losing one.
+    expect(proposeKey(planned({ via: [MID] }))).not.toBe(base)
+  })
+
+  test('an absent via and an EMPTY via are the same drive', () => {
+    // `toProposeRequest` omits an empty via rather than sending it, so the key must not split a
+    // one-way ask in two depending on which shape the planner happened to emit.
+    expect(proposeKey(planned({ via: [] }))).toBe(proposeKey(planned({ via: undefined })))
+  })
+
+  test('via ORDER is load-bearing', () => {
+    // A→B via C then D is not A→B via D then C: different roads, different bill.
+    expect(proposeKey(planned({ via: [MID, START] }))).not.toBe(
+      proposeKey(planned({ via: [START, MID] })),
+    )
   })
 })
 

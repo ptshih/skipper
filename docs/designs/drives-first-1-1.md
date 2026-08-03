@@ -600,6 +600,19 @@ confirming tap. That satisfies D11 (the model only emits a route after the rider
 the guarantee is prompt-held, not structural — a model that emitted a route unprompted would bill Google
 Routes. Worth a founder eye before real traffic, alongside RISK-4.
 
+⚠ **THAT PREDICTION CAME TRUE, and half of it is now structural (2026-08-03).** Observed on device: the
+planner answered *"What's your name?"* with *"…drawn up just as you said"* and re-emitted the route it
+had already given, so one transcript held three cards for two distinct drives. Each redraw is another
+billed Routes call for a drive already on screen — and two indistinguishable cards for one drive are two
+chances to spend a non-refundable credit on it. `drawUp` now refuses a route already drawn in this
+conversation, keyed on `proposeKey` (mobile `src/lib/planner-route.ts`) — the stringified `/propose`
+body, so the test is literally "would this bill a call we have already made?" and cannot drift from the
+request. The claim is released if the propose FAILS (a call that bought nothing owes nothing) and
+cleared when the conversation resets; `needsAccount` keeps its claim, the card being alive.
+⚠ Still prompt-held: a model emitting a NOVEL route unprompted. The dedupe bounds repeats, not
+invention. The model narrating work it did not do is a separate defect and belongs to the planner
+prompt's own review — do not fix it here.
+
 ⚠ **Unverified without a device** (stated rather than implied): that deltas render progressively over
 URLSession; `keyboardVerticalOffset={useHeaderHeight()}` (`ConversationScreen.tsx` carries the concrete
 on-device check — do it first); the three client timers; `AbortSignal.any` on device; and that closing

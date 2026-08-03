@@ -50,7 +50,7 @@ import {
   shouldRotatePlaceholder,
   PLACEHOLDER_ROTATE_MS,
 } from '@/lib/placeholder-util'
-import { durationDrift, toCreateRequest, toProposeRequest } from '@/lib/planner-route'
+import { durationDrift, proposeKey, toCreateRequest, toProposeRequest } from '@/lib/planner-route'
 import {
   appendRider,
   appendSkipper,
@@ -214,6 +214,12 @@ export default function HomeScreen() {
   // React re-rendered — on POST /drives that is two non-refundable credits.
   const sendingRef = useRef(false)
   const creatingRef = useRef<Set<string>>(new Set())
+  // Every route already DRAWN in this conversation, by `proposeKey`. Not an in-flight guard like the
+  // two above — it lasts the whole conversation, because the thing it prevents is not a double-tap
+  // but the PLANNER re-emitting a route it already gave (see `drawUp`). A ref rather than derived
+  // state for the same reason `creatingRef` is one: the decision is made synchronously, before the
+  // setCards it would otherwise have to read back.
+  const drawnRef = useRef<Set<string>>(new Set())
 
   /** Bumped by "Start fresh", and its ONLY job is to schedule the autofocus below.
    *
@@ -540,7 +546,16 @@ export default function HomeScreen() {
           // quietly walled itself — the shape being `requireAccount` back on the `driveRoutes` wildcard
           // mount instead of per-route. A line on this dashboard is a FINDING, not a funnel step.
           track('wall_shown', { source: 'propose' })
-        } else patchCard(cardId, { state: 'error', errorMessage: errorMessage(e, voice.proposal.drawFailed) })
+        } else {
+          // ⚠ RELEASE THE DRAW CLAIM ON A FAILURE, and only on this branch. `drawUp` refuses a route
+          // it has already drawn, so a propose that died holding the claim would lock that drive out
+          // of the conversation for good: the rider asks again, the planner re-emits the same route,
+          // and the screen silently declines to retry it. A failed call bought nothing, so it owes
+          // nothing. (`needsAccount` above KEEPS its claim — that card is alive and showing the wall,
+          // and re-drawing behind it would bill Routes a second time to put up the same ask.)
+          drawnRef.current.delete(proposeKey(route))
+          patchCard(cardId, { state: 'error', errorMessage: errorMessage(e, voice.proposal.drawFailed) })
+        }
       }
     },
     [patchCard],
@@ -551,6 +566,26 @@ export default function HomeScreen() {
    *  happened; the tap that costs money is the one INSIDE the card. */
   const drawUp = useCallback(
     (route: PlannedRoute, afterTurn: number) => {
+      // ⚠ ONE ROUTE, ONE CARD, ONE BILLED CALL — per conversation. The planner re-emits a route it
+      // has already drawn: observed answering "What's your name?" with "…drawn up just as you said"
+      // and a second identical card, and a transcript ended up holding three cards for two distinct
+      // drives (device, 2026-08-03). Each redraw is another Google Routes call bought for a result
+      // already on screen, and it lets the rider spend a credit twice on the same drive from two
+      // cards that cannot tell each other apart.
+      //
+      // Enforced HERE, in code, rather than by asking the prompt not to repeat itself — the same
+      // reason the endpoint allowlist is asserted at the wire: a prompt cannot be relied on to hold a
+      // spend guard. (The model saying it "drew that up" when it did not is a separate defect, and it
+      // belongs to the planner prompt's own review.)
+      //
+      // The rider is still taken to the drive — the bump alone, since the card it names is already in
+      // the transcript above.
+      const key = proposeKey(route)
+      if (drawnRef.current.has(key)) {
+        bumpScroll()
+        return
+      }
+      drawnRef.current.add(key)
       const id = uuidV4()
       // Minted WITH the card and reused across every retry of that same create, so a lost-ACK retry
       // dedupes server-side; a new route is a new card and therefore a new key.
@@ -799,6 +834,9 @@ export default function HomeScreen() {
     preview.stop()
     setCards([])
     creatingRef.current.clear()
+    // A fresh conversation may draw a route the old one already had — the claim is scoped to the
+    // conversation, exactly like the cards it stands for.
+    drawnRef.current.clear()
     applyBuf(emptySayBuffer)
     setDone(false)
     setPlannerOutage(false)
@@ -994,9 +1032,16 @@ export default function HomeScreen() {
   // it never got drawn. Every route is drawn on arrival, so this is normally empty — it exists for
   // the case where a route landed and the card was dropped, and it is what stops the bar from
   // offering a second billed Routes call for a card already sitting in the transcript.
+  //
+  // ⚠ COMPARED BY `proposeKey`, NOT BY REFERENCE (===), and the two stopped agreeing the moment
+  // `drawUp` began refusing duplicates. A re-emitted route rides on its own turn as a distinct
+  // OBJECT, so reference equality called it undrawn and the bar offered "Draw it up" for a drive
+  // already on screen — a button whose only remaining effect is a scroll. Both sides now ask the one
+  // question that matters: would this bill a call we have already made?
   const pendingRoute = lastRouteOf(turns)
+  const pendingKey = pendingRoute ? proposeKey(pendingRoute) : null
   const undrawnRoute =
-    pendingRoute && !cards.some((c) => c.route === pendingRoute) ? pendingRoute : null
+    pendingRoute && !cards.some((c) => proposeKey(c.route) === pendingKey) ? pendingRoute : null
 
   const settingsButton = (
     <HeaderIconButton name="settings" accessibilityLabel="Settings" onPress={() => router.push('/settings')} />

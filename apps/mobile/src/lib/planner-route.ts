@@ -33,6 +33,30 @@ export const toProposeRequest = (r: PlannedRoute): DriveProposeRequest => ({
 })
 
 /**
+ * The identity of the BILLED call a route would make: its `/drives/propose` body, stringified.
+ *
+ * Exists because the planner re-emits a route it has already drawn — observed on device 2026-08-03
+ * answering "What's your name?" with "…drawn up just as you said" and a second, identical card. Every
+ * one of those is another Google Routes call for a drive the rider is already looking at, so the
+ * screen dedupes on this key before drawing (app/index.tsx `drawUp`).
+ *
+ * ⚠ DERIVED FROM `toProposeRequest`, never a hand-listed field set, and that is the whole point: the
+ * question it answers is "would sending this bill a second call for a result we already have?", which
+ * only the request itself can answer. A field added to the request joins the key for free; a key that
+ * re-listed the fields would keep answering the old question after the request changed — the
+ * two-copies-of-one-set drift this codebase keeps paying for.
+ *
+ * ⚠ `targetMinutes` is therefore ABSENT BY INHERITANCE, not by oversight. `toProposeRequest` drops it,
+ * so two routes differing only in the duration the rider asked for materialize the SAME drive from the
+ * SAME billed call — they must collide here, or the dedupe misses the case it exists for.
+ *
+ * ⚠ Key order is fixed by the literal above (`start`, `end`, then an optional `via`), so
+ * `JSON.stringify` is stable without sorting. `via` ORDER is load-bearing and deliberately preserved:
+ * A→B via C is not the drive A→B via D, nor the same as reversing two midpoints.
+ */
+export const proposeKey = (r: PlannedRoute): string => JSON.stringify(toProposeRequest(r))
+
+/**
  * The confirmed proposal → `POST /drives` (this one SPENDS a non-refundable credit).
  *
  * `idempotencyKey` is minted once per proposal by the caller and REUSED across retries of that same
