@@ -103,6 +103,23 @@ export async function gateNarration(
   } = deps
   const { seq, name, base, well, targetSeconds, maxSeconds, diversityContext, systemPrompt } = input
 
+  // ⚠ STOP TYPE IS HARDCODED 'story', AND THAT IS CORRECT ONLY BECAUSE STORY IS THE ONLY THING
+  // GENERATED. Both live callers narrate story clips (a scenic pin gets no telling — the passing
+  // call-out that would have voiced one was cut with roam; break audio is the STUBBED `detours`
+  // table, which nothing writes). So there is no non-story clip for this to be wrong about today.
+  //
+  // ⚠ WHAT MAKES IT A TRAP RATHER THAN A SHORTCUT: the grounding judge's rules are STRICTER for the
+  // other two types — a scenic stop may assert no place-fact beyond geology and its own name/kind/side,
+  // and a break may name only the given place plus its category (see the SYSTEM prompt in
+  // eval/grounding.ts). `buildGroundingWell` implements all three branches faithfully; this call site
+  // can only ever ask for one. So the day break audio un-defers, a break clip routed through here is
+  // scored under STORY rules — the loosest set — and the failure is silent: the gate returns a clean
+  // verdict, the clip ships, and nothing in the panel or the tests distinguishes it.
+  //
+  // The real fix is a REQUIRED `stopType` on GateNarrationInput, so a new generator cannot omit it (a
+  // defaulted field would re-create exactly this bug). That is deliberately not done here: it changes
+  // the signature both generators call, and they are owned elsewhere right now. Whoever adds the break
+  // path owes that change in the same commit as the path.
   const evaluate = async (script: string): Promise<StopEval[]> => {
     const evals: StopEval[] = [
       evaluateTts({ seq, script }),
