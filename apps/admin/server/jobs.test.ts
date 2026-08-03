@@ -240,10 +240,14 @@ describe('buildJobArgs — targetId is per-region, aligned with the studio begin
     expect(a).not.toBe(b)
   })
 
-  test('an explicit-id generate run spans no single region — slug + target are NULL (shown as "All")', () => {
+  test('an explicit-id generate run spans no single region — the SLUG is NULL (shown as "All")', () => {
     const r = buildJobArgs({ kind: 'generate_narrations', includeIds: ['a', 'b'] })
-    expect(r.targetId).toBeUndefined() // → stored NULL, never the old 'roam-corpus' sentinel
-    expect(r.targetSlug).toBeUndefined()
+    expect(r.targetSlug).toBeUndefined() // → stored NULL, never the old 'roam-corpus' sentinel
+    // ⚠ targetId is NO LONGER null here (changed 2026-08-03). It keys on the SELECTION, because a
+    // null target_id cannot collide on `studio_jobs_active_target_uq` at all — Postgres treats NULLs
+    // as distinct in a unique index — so the "atomic backstop against a double-submit / retry" the
+    // schema promises did not exist for exactly these runs. See scopeTarget.
+    expect(r.targetId).toMatch(/^ids:[0-9a-f]{16}$/)
   })
 
   // ⚠ Added 2026-08-02 with the id-list change. The console now ALWAYS sends includeIds, so the
@@ -257,9 +261,28 @@ describe('buildJobArgs — targetId is per-region, aligned with the studio begin
       scopeLabel: '2 hand-picked',
     })
     expect(r.targetSlug).toBe('2 hand-picked')
-    expect(r.targetId).toBeUndefined() // hand-picked deliberately does NOT lock
+    // ⚠ hand-picked still does not lock the REGION — but it now locks its own SELECTION (2026-08-03).
+    // The display label is not a lock key: two different hand-picked runs carry different labels, so
+    // keying the check on it let them both proceed while `target_id` stayed NULL and the unique index
+    // could never fire. Same selection ⇒ same key ⇒ the retry 409s.
+    expect(r.targetId).toMatch(/^ids:[0-9a-f]{16}$/)
     expect(r.args.join(' ')).not.toContain('scopeLabel')
     expect(r.args.join(' ')).not.toContain('2 hand-picked')
+  })
+
+  test('the selection lock is order-invariant, exclusion-aware, and distinguishes selections', () => {
+    // The three properties the retry guard actually rests on. Order-invariance matters because the
+    // console builds the id list from a Set: the same 40 rows can serialize in a different order on a
+    // retry, and a second key for one selection is exactly the double-spend this closes.
+    const key = (b: Record<string, unknown>) => buildJobArgs({ kind: 'generate_narrations', ...b }).targetId
+    expect(key({ includeIds: ['b', 'a'] })).toBe(key({ includeIds: ['a', 'b'] })!)
+    expect(key({ includeIds: ['a', 'b'] })).not.toBe(key({ includeIds: ['a', 'c'] })!)
+    // A select-all-minus-a-few run that carries no region lock is a DIFFERENT selection from the same
+    // include set with nothing excluded.
+    expect(key({ includeIds: ['a', 'b'], excludeIds: ['b'] })).not.toBe(key({ includeIds: ['a', 'b'] })!)
+    // ⚠ An explicit region lock still WINS — select-all must keep colliding with a CLI run of the same
+    // region, which is what keeps admin- and CLI-triggered runs on one lock (audit #9).
+    expect(key({ includeIds: ['a', 'b'], lockRegion: 'lake-tahoe' })).toBe('lake-tahoe')
   })
 
   test('a select-all run carries its region as the LOCK key while the ids stay the selection', () => {

@@ -7,6 +7,7 @@
 // the metadata server (ADC, cloud-platform scope), the same mechanism TTS uses.
 
 import { GoogleAuth } from 'google-auth-library'
+import { createHash } from 'node:crypto'
 import { isAbsolute, resolve } from 'node:path'
 import type { JobKind } from '@skipper/shared'
 
@@ -86,7 +87,7 @@ export interface BuildResult {
   /** Does this run spend money or delete bytes → a typed confirm is required (spec §8). */
   spends: boolean
   targetSlug?: string
-  targetId?: string
+  targetId: string
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
@@ -94,9 +95,16 @@ const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 // = studio's DEFAULT_REGION_SLUG (packages/studio/src/config.ts). buildJobArgs sets each region run's
 // targetSlug+targetId to MATCH the studio script's beginJob (per-region), so the in-flight lock + the
 // studio_jobs_active_target_uq unique index scope per-region — two regions run concurrently, and an
-// admin- vs CLI-triggered run of the same target agree. A whole-corpus explicit-id run leaves both NULL
-// (no fake-region sentinel); the both-null path in POST /admin/jobs over-blocks the kind, which errs
-// safe (it can't double-trigger a paid run). (audit #9 / #1)
+// admin- vs CLI-triggered run of the same target agree. (audit #9 / #1)
+//
+// ⚠ `targetId` is REQUIRED on BuildResult, and that is a spend control rather than a tidiness rule.
+// The unique index is `(kind, target_id) WHERE status in (queued,running)`, and Postgres treats NULLs
+// as DISTINCT in a unique index — so a run that stored NULL could not collide with ANYTHING and the
+// index's whole purpose ("a concurrent double-submit / retry can't double-trigger a paid Cloud Run
+// run") silently did not apply to it. An explicit-id run used to be exactly that, in TWO independent
+// places: here via `scopeTarget`, and again in `generate_cluster_narrations`, which hand-rolls the same
+// derivation and is the one kind that spends even on a DRY RUN. The required type is what stops a third.
+// A run with no region now locks on its SELECTION instead (`selectionLock`).
 const DEFAULT_REGION_SLUG = 'lake-tahoe'
 
 /** Append a `--flag=N` only when the body carries a POSITIVE-number value; REJECT a present-but-invalid
@@ -131,16 +139,54 @@ const MAX_JOB_IDS = 5000
  *  (2026-08-02): every corpus run then rendered as "All" on the Jobs page, i.e. a one-clip regenerate
  *  advertised as a whole-corpus paid generation, and select-all silently stopped taking the per-region
  *  lock it used to hold. Neither field is ever pushed as a CLI flag — narrowing is the ids' job. */
-function scopeTarget(body: Record<string, unknown>): { targetSlug?: string; targetId?: string } {
+function scopeTarget(body: Record<string, unknown>): { targetSlug?: string; targetId: string } {
   // The ORIGINAL derivation, kept as the fallback: a run scoped by region (and not by an id list)
   // keys on that region. ⚠ This is not just legacy support — `targetId` must agree with what the
   // studio script's own beginJob writes, so an admin-triggered run and a CLI-triggered run of the
   // same target collide on the in-flight lock instead of both proceeding. Dropping it would have
   // silently unaligned the two (caught by the audit #9/#11 tests, which is what they are for).
-  const byRegion = idCsv(body.includeIds, 'includeIds') ? undefined : str(body.region) || DEFAULT_REGION_SLUG
+  const ids = idCsv(body.includeIds, 'includeIds')
+  const byRegion = ids ? undefined : str(body.region) || DEFAULT_REGION_SLUG
   const label = typeof body.scopeLabel === 'string' && body.scopeLabel.trim() ? body.scopeLabel.trim() : byRegion
-  const lock = typeof body.lockRegion === 'string' && body.lockRegion.trim() ? body.lockRegion.trim() : byRegion
+  const explicitLock =
+    typeof body.lockRegion === 'string' && body.lockRegion.trim() ? body.lockRegion.trim() : undefined
+  // ⚠ A HAND-PICKED RUN NOW LOCKS ON ITS SELECTION, and the reason is the unique index, not tidiness.
+  // `studio_jobs_active_target_uq` is `(kind, target_id) WHERE status in (queued,running)` — and
+  // Postgres treats NULLs as DISTINCT in a unique index (migration 0026 declares no NULLS NOT
+  // DISTINCT). So while an id-list run stored `target_id` NULL, that index could not fire for it AT
+  // ALL: the schema calls the index "the DB-enforced ATOMIC backstop … so a concurrent double-submit /
+  // retry can't double-trigger a paid Cloud Run run", and for exactly these runs it was not one. The
+  // SELECT-then-insert check in POST /admin/jobs was the only guard, and it has a real TOCTOU window —
+  // on the most expensive action in the console, for the case ("a lost-response retry") the guarantee
+  // names first.
+  //
+  // Hashing the SELECTION rather than a region preserves the intent that a hand-picked run does not
+  // lock the region: the SAME set of ids collides (killing the retry double-spend), a DIFFERENT set
+  // gets a different key and still runs concurrently. Sorted so id ORDER cannot mint a second key for
+  // one selection, and hashed so a 5000-id list does not land 185 KB in a `text` column.
+  //
+  // ⚠ It replaces an ACCIDENTAL guard, not nothing. With both fields null, `POST /admin/jobs` built
+  // `targetCond === undefined`, which drizzle's `and()` drops — so the check matched EVERY active run
+  // of that kind and over-blocked. Safe, but a side effect rather than a design, and it went away the
+  // moment the console started sending `scopeLabel` (which keys the check on a human display string —
+  // "2 hand-picked" — so two different selections stopped colliding anyway). This is the deliberate
+  // version of the same protection, and it is the one the index can enforce.
+  const lock = explicitLock ?? byRegion ?? selectionLock(ids, body.excludeIds)
   return { targetSlug: label, targetId: lock }
+}
+
+/** A deterministic in-flight lock key for an explicit-id selection: `ids:<sha256 prefix>`.
+ *
+ *  Order-invariant (the set is what identifies the run, not the order the console happened to send it
+ *  in) and exclusion-aware (a select-all-minus-a-few run that carries no region lock is a different
+ *  selection from the same include set without the exclusions). 16 hex chars is 64 bits — collision is
+ *  not a correctness risk here anyway, since the only cost of one is a spurious 409 on two genuinely
+ *  different selections, which the operator retries. */
+function selectionLock(includeCsv: string, excludeIds: unknown): string {
+  const sorted = (csv: string): string => csv.split(',').filter(Boolean).sort().join(',')
+  const exclude = sorted(idCsv(excludeIds, 'excludeIds'))
+  const basis = exclude ? `${sorted(includeCsv)}|-${exclude}` : sorted(includeCsv)
+  return `ids:${createHash('sha256').update(basis).digest('hex').slice(0, 16)}`
 }
 
 /** Comma-join a list of string ids for a `--include-ids=` / `--exclude-ids=` flag. Non-strings are
@@ -251,8 +297,21 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     // "A preview is NOT free: it narrates and scores, so it costs an apply minus the TTS. Only the
     // persistence is gated." So the confirm gate must fire on Preview too — the operator is about to
     // spend Anthropic money either way, and a gate that only guards `--apply` would wave that through.
-    const clusterRegion = idCsv(body.includeIds, 'includeIds') ? undefined : str(body.region) || DEFAULT_REGION_SLUG
-    return { args, dryRun: !apply, spends: true, targetSlug: clusterRegion, targetId: clusterRegion }
+    // ⚠ This kind hand-rolls the region derivation instead of calling `scopeTarget`, and that is how it
+    // carried the SAME null-lock defect independently: with an id list, `clusterRegion` is undefined, so
+    // `target_id` stored NULL and `studio_jobs_active_target_uq` could not fire (Postgres treats NULLs as
+    // distinct in a unique index). Worse here than anywhere else — this is the one kind that `spends`
+    // even on a DRY RUN (see above), so every double-submit of it costs money, not just the applied ones.
+    // Same selection-keyed lock as `scopeTarget`, so the two derivations cannot drift apart again.
+    const clusterIds = idCsv(body.includeIds, 'includeIds')
+    const clusterRegion = clusterIds ? undefined : str(body.region) || DEFAULT_REGION_SLUG
+    return {
+      args,
+      dryRun: !apply,
+      spends: true,
+      targetSlug: clusterRegion,
+      targetId: clusterRegion ?? selectionLock(clusterIds, body.excludeIds),
+    }
   }
 
   if (kind === 'offline_audit') {

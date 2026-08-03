@@ -976,6 +976,13 @@ export const studioJobs = pgTable(
     // target for a re-run. Keys on target_id, which buildJobArgs sets to MATCH the studio script's
     // beginJob (per-region for a region run) — so admin- and CLI-triggered runs of the same target agree
     // and two regions can run concurrently. (audit #1 / #9)
+    // ⚠ IT ONLY PROTECTS A NON-NULL `target_id`, and the claim above is only true because the writer
+    // guarantees one. Postgres treats NULLs as DISTINCT in a unique index (this one declares no NULLS
+    // NOT DISTINCT), so rows with `target_id` NULL never collide with each other — the backstop is
+    // simply absent for them. Explicit-id runs stored NULL until 2026-08-03, in two independent places,
+    // one of which spends even on a dry run; they now key on a hash of the selection. `BuildResult`
+    // makes `targetId` REQUIRED so a future job kind cannot reintroduce the hole (apps/admin/server
+    // jobs.ts `selectionLock`). Do not relax that type without also fixing this index.
     uniqueIndex('studio_jobs_active_target_uq')
       .on(t.kind, t.targetId)
       .where(sql`${t.status} in ('queued', 'running')`),
