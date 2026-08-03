@@ -455,6 +455,84 @@ flight); otherwise keep the online screen and show the offline notice inside it.
   sign-out purge): no drives, no planner. It gets the honest "can't plan out here" card alone — which
   is correct, not a dead end, precisely because the purge guarantees there is nothing to show.
 
+## 9. ✅ CHOSEN: V2 "hear him first", with a first-launch amendment
+
+Founder, 2026-08-03: *"i like V2, lets go with that, except maybe we should make the 'have a listen'
+card/cta only show on the first app launch"*. **V2 is the design**: the worked example is the hero — a
+minute of the actual product before a single word is asked of the rider, which for an audio product is
+the most honest thing a cold open can do.
+
+### ⚠ THE APP-REVIEW OBJECTION TO THIS AMENDMENT IS WRONG — corrected by the founder, 2026-08-03
+
+I argued the card must stay reachable because it is "the only thing an App Review tester 200 miles
+outside the corpus can hear in one permission-free tap". **That is false, and the premise is stale.**
+A reviewer is given demo credentials, so they have an ACCOUNT — and **creating a drive is not
+location-gated** (CLAUDE.md: "the whole pre-drive flow is location-free"; only starting a LIVE drive
+needs GPS). So a reviewer in Cupertino can plan and create a **Tahoe** drive and hear real clips on
+the drive-detail page. They experience the whole thing, not a taste of it.
+
+⚠ The claim survives verbatim in `apps/api`/`app/index.tsx` comments and in
+[sample-ride-postcard.md](../decisions/sample-ride-postcard.md), where it was TRUE — it was written
+for the pre-1.1 world in which **roam** required Tahoe proximity, so a first-timer elsewhere hit "I
+don't know these roads yet". 1.1 removed roam and moved the wall to `POST /drives`; the sentence did
+not get re-derived. **Those comments should be corrected when someone next touches them.**
+
+⚠ **The anonymous case is also weaker than the comment claims:** an anonymous rider already gets ONE
+presigned preview clip from their own proposed route (D14/INV-5), so the sample is not their only
+audio either.
+
+### ✅ What DOES survive as a reason to keep it — and it is narrow
+
+**A planner outage.** With the planner down there is no conversation, so no proposed route and no
+preview clip; the sample is a static presigned clip that does not care. Another agent encoded exactly
+this today, moving its gate from `showExamples` to `coldOpen` so it survives an outage — *"at the
+exact moment it is the only audio in the app that still works"*.
+
+### The shape, as amended
+
+- **Launch 1 = V2** — the listen card is the hero, the question follows it.
+- **Launch 2+ = V1** — the question reclaims the hero slot and the card is **gone**, as the founder
+  asked.
+- ⚠ **Exception: `plannerDown` shows the card regardless of launch count.** It is the only audio left
+  when the conversation cannot happen.
+
+⚠ **The copy dependency still stands, and is independent of all the above.** V2's line is *"**Then**
+tell me where we're headed."* — the "Then" refers to the listen. With the card gone that sentence is a
+non-sequitur, so launch 2+ must revert to *"Well now — where are we headed?"*. **Two AUTHORED STATES,
+not one element toggled.**
+
+**Optional refinement, still open:** hide once the clip has been PLAYED rather than after launch 1 —
+a rider who ignored it still gets offered it, one who listened is never nagged. Same single flag.
+
+### Copy is GENERIC, and that is an invariant
+
+The card says *"Have a listen · A minute of the real thing"* and **names no place**. DESIGN §7 and the
+studio's matching rule are explicit: **voice is DELIVERY, never FACTS — no place names, hours or data
+live in `voice.ts`.** If the card ever shows which place the clip covers, that string comes from the
+SERVER alongside the clip. It also means the copy survives the sample clip being swapped, which it
+will be.
+
+### Implementation notes for the flag
+
+- **No first-launch/onboarding flag exists anywhere in the app today** — one must be added.
+- Follow `src/lib/region-cache.ts`: `expo-file-system` `File`/`Paths.document`, defensive, never
+  throws. A few hundred bytes.
+- ⚠ **Document dir, NOT cache dir** — the OS may evict the cache dir, which would silently resurrect
+  the card (`region-cache.ts` documents this exact reasoning for the same reason).
+- ⚠ **Client-side, and NEVER keyed on the user id.** The anonymous user row is hard-deleted at
+  link-to-account (CLAUDE.md), so a flag keyed to it vanishes the moment a rider signs up — the card
+  would reappear immediately after they made an account.
+
+### ✅ Clarified 2026-08-03 — the drive wall STANDS
+
+The founder's *"not true anymore, they can create a drive"* referred to the anonymous **preview**, not
+to drive creation. Verified at HEAD: `POST /drives` still carries `requireAccount`
+(`apps/api/src/drives.ts`, commented *"THIS IS THE WALL"*). An anonymous rider gets the whole planner
+conversation, a proposed route with map and stops, and one real narration clip from their own route —
+everything up to "Make this drive". **So §7 and §8 stand unchanged**, including "MY DRIVES is dead
+weight on the anonymous cold open" and O2's *empty by construction*. Recorded because the question
+will recur.
+
 ## Sources
 
 - [Airbnb design-system breakdown](https://github.com/VoltAgent/awesome-design-md/blob/main/design-md/airbnb/DESIGN.md)
