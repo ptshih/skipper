@@ -1,7 +1,11 @@
-// The home cold open's region affordance: a place badge that names the region the skipper is
-// pinned to, with a dashed atlas rule running off it toward the right edge — a route line leaving
-// a marker (design §13 S1). It is the last poster element on a screen that lost its kicker, so the
-// glyph and the rule are doing the charm work, not decoration on top of a control.
+// The home cold open's region affordance: a quiet pill naming the region the skipper is pinned to.
+//
+// ⚠ NO TRAILING ATLAS RULE, and it was removed on purpose (founder, 2026-08-03). §13's S1 put a
+// dashed rule running off the chip to the right edge so the chip would not look lonely. It cost four
+// failed fixes — `Divider dashed` paints via `borderTopWidth` and a border-only View in a ROW renders
+// nothing, which I misread twice as layout and once as contrast before proving it with a temporary
+// coloured box. The pill skin gives the chip its own presence, so the rule was buying little for what
+// it cost. ⚠ The underlying trap is still live for anyone else: do not put `Divider dashed` in a row.
 //
 // ⚠ THE DESIGN DOC NAMES `FilterChip` FOR THIS (§10 R3, §15 step 1) AND THAT IS THE ONE CALL NOT
 // FOLLOWED. `FilterChip`'s own header states the condition that makes it the wrong host: it carries
@@ -20,7 +24,6 @@
 import { Pressable, StyleSheet, View } from 'react-native'
 import { radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
-import { Divider } from './Divider'
 import { Icon } from './Icon'
 import { Text } from './Text'
 
@@ -81,25 +84,24 @@ export function RegionChip({ regionName, onPress }: RegionChipProps) {
           <Icon name="expand" size={14} color="accent" />
         </Pressable>
       ) : (
-        // `accessible` groups the glyph and the name into one element so the field name is read
-        // once; no role, because a label that does nothing must not announce itself as a button.
-        <View style={styles.mark} accessible accessibilityLabel={a11yLabel}>
+        // ⚠ THE PILL SKIN IS WORN IN BOTH STATES — only the CARET and the press behaviour are
+        // conditional. The approved design shows a quiet pill, and rendering bare text at one region
+        // made the screen look unlike it for the only configuration that ships today. What must not
+        // appear without a picker behind it is the CARET, which is the thing that promises one.
+        // `accessible` groups glyph and name so the field name is read once; no role, because a label
+        // that does nothing must not announce itself as a button.
+        <View
+          style={[
+            styles.mark,
+            styles.pill,
+            { backgroundColor: colors.surfaceRaised, borderColor: colors.rule },
+          ]}
+          accessible
+          accessibilityLabel={a11yLabel}
+        >
           <RegionMark regionName={regionName} />
         </View>
       )}
-      {/* ⚠ SOLID, NOT `dashed`, AND THAT IS A WORKAROUND FOR A REAL BUG — not a design preference.
-          `Divider dashed` paints via `borderTopWidth`, and a border-only View laid out in a ROW
-          renders NOTHING here: proven by giving this box a temporary background, which showed the
-          trail at the right width and position with no rule in it, and by four failed attempts to
-          give the border a box to paint on (explicit height on the Divider, on this wrapper, and a
-          nested column context). The non-dashed variant paints via `backgroundColor` and works.
-          ⚠ The design (§13 S1) asks for a DASHED atlas rule, so this is a knowing downgrade: the rule
-          exists and reads, but it is a hairline rather than a trail. Restoring dashes needs a real
-          dashed primitive (a repeated View run or react-native-svg), not another style tweak — and
-          the same trap is waiting for anyone who puts `Divider dashed` in a row. */}
-      <View style={styles.trail}>
-        <Divider />
-      </View>
     </View>
   )
 }
@@ -127,11 +129,11 @@ function RegionMark({ regionName }: { regionName: string }) {
 }
 
 const styles = StyleSheet.create({
-  // ⚠ `flexShrink` on the badge and the name, not a width: at AX sizes a long region name would
-  // otherwise hold its intrinsic width and push the trail off the screen edge. Shrinking lets the
-  // name wrap inside the chip and the trail collapse to nothing — the rule is the ornament, the
-  // name is the content, and that is the order they should give way in.
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  // ⚠ `flexShrink`, not a width: at AX sizes a long region name would otherwise hold its intrinsic
+  // width and push past the screen edge. Shrinking lets it wrap inside the pill instead.
+  // ⚠ `alignSelf: 'flex-start'` on the row is what keeps the pill hugging its content — without it
+  // the row stretches and the pill becomes a full-width bar.
+  row: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start' },
   mark: { flexDirection: 'row', alignItems: 'center', gap: space.xs, flexShrink: 1 },
   name: { flexShrink: 1 },
   // No `alignSelf` (FilterChip needs it because it lands in COLUMN containers that would stretch
@@ -141,10 +143,8 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
     borderRadius: radius.pill,
     // Hairline, not `border.keyline` — the quiet weight is the whole point of §14.1, and this is
-    // the same physical rule `Divider` draws so the chip and the trail read as one system.
+    // the same physical hairline `Divider` draws, so the chip sits in the same system.
     borderWidth: StyleSheet.hairlineWidth,
   },
-  // Width only; the Divider brings its own height.
-  trail: { flex: 1 },
   pressed: { opacity: 0.7 },
 })

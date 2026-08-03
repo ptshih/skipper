@@ -48,6 +48,11 @@ export interface ComposerProps {
    *  moments a keyboard is wanted. Never on mount: a keyboard on cold start covers the hero,
    *  the example asks and MY DRIVES, which is everything a first-timer needs to orient. */
   inputRef?: Ref<TextInput>
+  /** Focus edges, so the screen can FREEZE the rotating placeholder while the rider is deciding what
+   *  to type. ⚠ On focus, not on the first keystroke: text changing under someone mid-thought is the
+   *  distraction the rotation has to avoid, and they are thinking before they type. */
+  onFocus?: () => void
+  onBlur?: () => void
 }
 
 export function Composer({
@@ -57,6 +62,8 @@ export function Composer({
   sending = false,
   placeholder,
   inputRef,
+  onFocus,
+  onBlur,
 }: ComposerProps) {
   const { colors } = useTheme()
   // Shape, not a cap: an empty turn is nothing to say. The server drops blank turns anyway, so
@@ -71,6 +78,8 @@ export function Composer({
         onChangeText={onChangeText}
         placeholder={placeholder}
         accessibilityLabel={voice.plan.composerA11yLabel}
+        onFocus={onFocus}
+        onBlur={onBlur}
         // The field grows with what's typed (intrinsic content height) until FIELD_MAX_HEIGHT,
         // then scrolls inside itself — no onContentSizeChange bookkeeping.
         multiline

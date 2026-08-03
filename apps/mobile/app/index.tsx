@@ -44,6 +44,12 @@ import { cleanPlaceName } from '@/lib/labels'
 import { isPlanAborted, planTurn } from '@/lib/planner'
 import { buildExampleAsks, type ExampleAsk } from '@/lib/planner-examples'
 import { markListenRowSeen, shouldShowListenRow } from '@/lib/client-flags'
+import {
+  buildPlaceholderExamples,
+  placeholderAt,
+  shouldRotatePlaceholder,
+  PLACEHOLDER_ROTATE_MS,
+} from '@/lib/placeholder-util'
 import { durationDrift, toCreateRequest, toProposeRequest } from '@/lib/planner-route'
 import {
   appendRider,
@@ -58,7 +64,7 @@ import { readCachedRegion, writeCachedRegion } from '@/lib/region-cache'
 import { emptySayBuffer, pushDelta, settle, tickHold, type SayBuffer } from '@/lib/say-buffer'
 import { useRoutePreview } from '@/lib/useRoutePreview'
 import { uuidV4 } from '@/lib/uuid'
-import { useTheme } from '@/theme'
+import { useReducedMotion, useTheme } from '@/theme'
 import { hit, radius, space } from '@/theme/tokens'
 import {
   AttributionButton,
@@ -429,7 +435,14 @@ export default function HomeScreen() {
   )
   // The degraded cards' roster: this region's names when we have them, else the last good ones on
   // disk. Offline, the cache is the only source there is.
-  const anchorNames = region?.exampleAnchors ?? cachedRegion?.exampleAnchors ?? []
+  // ⚠ MEMOISED, and not for speed: a fresh `[]` every render made it an unstable dependency of the
+  // two useMemos below, which ESLint flagged once and then twice as consumers were added. The
+  // stable identity is what stops the example asks and the placeholder set rebuilding on every
+  // keystroke — and rebuilding the placeholder list would restart its rotation timer.
+  const anchorNames = useMemo(
+    () => region?.exampleAnchors ?? cachedRegion?.exampleAnchors ?? [],
+    [region, cachedRegion],
+  )
   // The region's own display name, on the same live-then-cached ladder as the anchors above. Feeds the
   // open-ended suggestion so all three rows name this region, and the chip so both read from one place.
   const regionLabel = region?.displayName ?? cachedRegion?.displayName ?? null
@@ -852,6 +865,35 @@ export default function HomeScreen() {
   const multiRegion = (regions?.length ?? 0) > 1
   const [regionPickerOpen, setRegionPickerOpen] = useState(false)
 
+  // ── The rotating placeholder ────────────────────────────────────────────────────────────────
+  // The rows teach WHAT kinds of thing to ask for; this teaches HOW CASUALLY you may say it. Every
+  // decision lives in `placeholder-util` (pure, tested); this is only the timer and the vetoes.
+  const [fieldFocused, setFieldFocused] = useState(false)
+  const [tick, setTick] = useState(0)
+  const reduceMotion = useReducedMotion()
+  const placeholderExamples = useMemo(
+    () => buildPlaceholderExamples(anchorNames, voice.plan.placeholderShapes),
+    [anchorNames],
+  )
+  const rotating = shouldRotatePlaceholder({
+    exampleCount: placeholderExamples.length,
+    reduceMotion,
+    screenFocused: focused,
+    fieldFocused,
+    coldOpen,
+  })
+  // ⚠ The interval is torn down rather than paused, and the counter is LEFT WHERE IT SITS — that is
+  // what makes freeze-on-focus and stop-when-unfocused the same mechanism. A rider who blurs the
+  // field resumes on the next shape rather than jumping three forward in one frame.
+  // ⚠ `focused` is in the veto because home stays MOUNTED under a push: without it this ticks forever
+  // behind Settings and the player, re-rendering a screen nobody is looking at.
+  useEffect(() => {
+    if (!rotating) return
+    const id = setInterval(() => setTick((n) => n + 1), PLACEHOLDER_ROTATE_MS)
+    return () => clearInterval(id)
+  }, [rotating])
+  const placeholder = placeholderAt(placeholderExamples, tick, voice.plan.composerPlaceholder)
+
   // Burn the one launch the rider is owed only when the row was ACTUALLY on screen. Keyed on the same
   // two conditions that render it, so the offline home — which carries no listen row — can never spend
   // it on a screen that offered nothing. Writing the flag does not re-render: `showListenRow` was
@@ -902,7 +944,7 @@ export default function HomeScreen() {
   // the burst was cropped to that box. That — not the opacity — is why it read as invisible.
   const watermark = (
     <View style={styles.watermark} pointerEvents="none">
-      <Sunburst size={168} opacity={0.09} />
+      <Sunburst size={128} opacity={0.09} />
     </View>
   )
 
@@ -1092,9 +1134,15 @@ export default function HomeScreen() {
           <Text variant="display" color="ink" style={styles.opening}>
             {voice.plan.openingQuestion}
           </Text>
-          <Text variant="dim" color="inkDim">
-            {voice.plan.openingHint}
-          </Text>
+          {/* The skipper's mark on the line he says. With the enamel kicker gone this is the only
+              thing on the cold open that signals "he is talking" rather than "the app is labelling
+              things" — cheap persona in a screen that just lost most of it. */}
+          <View style={styles.hintRow}>
+            <Icon name="spark" size={13} color="accentWarm" style={styles.hintSpark} />
+            <Text variant="dim" color="inkDim" style={styles.flex}>
+              {voice.plan.openingHint}
+            </Text>
+          </View>
         </>
       )}
       {transcript}
@@ -1257,7 +1305,9 @@ export default function HomeScreen() {
       // regions call lands there genuinely IS something in flight. Disabled, not hidden — the field
       // stays typeable, so a rider composing during a cold start loses nothing.
       sending={sending || !regionId}
-      placeholder={voice.plan.composerPlaceholder}
+      placeholder={placeholder}
+      onFocus={() => setFieldFocused(true)}
+      onBlur={() => setFieldFocused(false)}
       inputRef={composerRef}
     />
   )
@@ -1378,8 +1428,14 @@ function DriveCardSkeleton() {
 const styles = StyleSheet.create({
   body: { gap: space.md },
   flex: { flex: 1 },
+  hintRow: { flexDirection: 'row', gap: space.sm },
+  // Optically centres the mark on the first line of a 13.5pt row.
+  hintSpark: { marginTop: 2 },
   // Pinned to the screen's content box, not to any block inside it — see `watermark`'s comment.
-  watermark: { position: 'absolute', top: -54, right: -38 },
+  // ⚠ THE OFFSETS ARE SMALL ON PURPOSE. At 168 with -54/-38 the burst's outer rays were cut by BOTH
+  // screen edges hard enough to read as a rendering fault rather than a poster bleed. Smaller, and
+  // barely overhanging, it reads as one whole sunburst that happens to sit in the corner.
+  watermark: { position: 'absolute', top: -8, right: -8 },
   // The cold open is prose on the paper, like every other skipper turn — but it carries no speaker
   // rule: nothing has been said yet for it to be answering.
   opening: { marginTop: space.sm },

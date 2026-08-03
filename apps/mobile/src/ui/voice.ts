@@ -80,6 +80,20 @@ export const voice = {
     openingUncurated:
       'I don’t run any roads around here yet, friend. Check back — I’m always picking up new ones.',
     composerPlaceholder: 'Tell me where to',
+    // ⚠ SHAPES, not sentences — `{a}`/`{b}` are filled from the region's own curated names, so the
+    // placeholder can never name a road the skipper does not run. The rows teach WHAT kinds of thing
+    // to ask for; these teach HOW CASUALLY you may say it, which is why they are lowercase and
+    // sloppy. Anything that does not fit the field is dropped rather than wrapped (a field that
+    // changes height every few seconds under a thumb is worse than the rotation is good).
+    // ⚠ The name-free ones are load-bearing: they are what still rotates in a region with no curated
+    // anchors at all.
+    placeholderShapes: [
+      '{a} to {b}, the scenic way',
+      'a loop out of {a}',
+      'somewhere pretty, back by five',
+      'the long way round',
+      'two hours, no highways',
+    ],
     composerA11yLabel: 'Tell the skipper where to',
     sendA11yLabel: 'Send',
     // The beat between the rider's line and the first token coming back. ⚠ Never "checking the map" —

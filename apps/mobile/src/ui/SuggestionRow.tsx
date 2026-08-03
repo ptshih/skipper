@@ -134,8 +134,13 @@ export function SuggestionRow({
         // ⚠ `Badge` cannot supply this: it takes a `glyph: string` rendered through `Glyph` (the
         // system font), not an `IconName` — so reusing it would force an emoji, and this build has
         // no colour-emoji fallback (they come out as tofu).
-        <View style={[styles.mark, styles.askMark, { backgroundColor: colors.surfaceSunken }]}>
-          <Icon name={icon} size={20} color="accent" />
+        // ⚠ S3 (design §13): a FILLED enamel disc, not a sunken square. The square read as a form
+        // field's leading affordance; the disc reads as a travel badge, which is the charm S3 was
+        // chosen to put back. `accent` fill + `onPrimary` glyph is the system's contrast-safe pine
+        // pairing — the same one `Badge`'s pine tone and `FilterChip`'s active state use.
+        // ⚠ These discs are the screen's pine load; the region chip stays QUIET to keep it in budget.
+        <View style={[styles.mark, styles.askMark, { backgroundColor: colors.accent }]}>
+          <Icon name={icon} size={20} color="onPrimary" />
         </View>
       }
       title={title}
@@ -219,7 +224,7 @@ const styles = StyleSheet.create({
   },
   body: { flex: 1, gap: 1 }, // StopRow's deliberate 1pt column gap (off-grid; a grid step is too loose)
   mark: { width: MARK_SIZE, height: MARK_SIZE, alignItems: 'center', justifyContent: 'center' },
-  askMark: { borderRadius: radius.sm },
+  askMark: { borderRadius: radius.pill },
   listenDisc: { borderRadius: radius.pill },
   listenGroup: { gap: space.md },
   pressed: { opacity: 0.7 },

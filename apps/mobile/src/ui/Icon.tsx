@@ -30,6 +30,7 @@ export type IconName =
   | 'settings'
   | 'expand'
   | 'region'
+  | 'spark'
   | 'chevronRight'
   | 'downloaded'
   | 'notDownloaded'
@@ -76,6 +77,9 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   // spoken for by the live-drive Map VIEW) and not a mountain: the chip names a stretch of country,
   // and the glyph has to stay true when the region is a city.
   region: 'pin-outline',
+  // The skipper's own mark, next to the line he says under the question. Four-point sparkle: it is
+  // the one place the screen signals "this is him talking" now that the enamel kicker is gone.
+  spark: 'sparkles-outline',
   // The affordance on a row that opens something. `upcoming` is a caret and means "a stop you have
   // not reached yet" — a different sentence, and reusing it here would make a suggestion row look
   // like an itinerary entry.
