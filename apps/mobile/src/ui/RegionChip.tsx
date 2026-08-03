@@ -111,9 +111,6 @@ export function RegionChip({ regionName, onPress }: RegionChipProps) {
 function RegionMark({ regionName }: { regionName: string }) {
   return (
     <>
-      {/* Decorative (Icon is already hidden from the a11y tree). `inkDim`, not pine — see the
-          caret's note on the pine budget. */}
-      <Icon name="region" size={16} color="inkDim" />
       {/* ⚠ NO `numberOfLines`, and no `style` prop on this component for a caller to smuggle one in
           through: home is a scrollable, non-driving surface and is therefore UNCAPPED through the AX
           Dynamic Type sizes (§8), while the region name is a server fact of arbitrary length.

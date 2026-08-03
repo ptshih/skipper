@@ -102,7 +102,7 @@ import {
 // One glyph per ask SHAPE — keyed on `ExampleAsk.shape`, never on list position, because the list
 // degrades in regions with fewer than two curated names and position stops identifying a shape there.
 const EXAMPLE_ICONS: Record<ExampleAsk['shape'], IconName> = {
-  aToB: 'region', // a pin: somewhere to somewhere
+  aToB: 'trailSign', // a routed signpost: somewhere to somewhere
   loop: 'restart', // a closed circuit — out and back around
   open: 'scenic', // the skipper's own eye picks it
 }

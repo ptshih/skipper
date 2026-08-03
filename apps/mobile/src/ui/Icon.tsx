@@ -29,7 +29,7 @@ export type IconName =
   | 'auto'
   | 'settings'
   | 'expand'
-  | 'region'
+  | 'trailSign'
   | 'spark'
   | 'chevronRight'
   | 'downloaded'
@@ -73,10 +73,11 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   auto: 'contrast-outline', // half-lit disc = "follow the phone" (system appearance)
   settings: 'settings-outline',
   expand: 'chevron-down', // a filter chip that opens a picker
-  // The REGION the conversation is pinned to, on the home chip. A pin, not `map` (which is already
-  // spoken for by the live-drive Map VIEW) and not a mountain: the chip names a stretch of country,
-  // and the glyph has to stay true when the region is a city.
-  region: 'pin-outline',
+  // A routed signpost — "somewhere to somewhere". DESIGN's opening reference for the whole language is
+  // "carved-and-routed ranger trail signs", so this is the one Ionicon that is already the thing the
+  // design system says it wants, rather than a stand-in for it. Replaces a map PIN, which read as a
+  // generic location marker and said nothing about going anywhere.
+  trailSign: 'trail-sign-outline',
   // The skipper's own mark, next to the line he says under the question. Four-point sparkle: it is
   // the one place the screen signals "this is him talking" now that the enamel kicker is gone.
   spark: 'sparkles-outline',
