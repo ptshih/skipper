@@ -1075,12 +1075,10 @@ export function sweepOrphanClips(): number {
  * ⚠ IT MUST CLEAR THE SHARED STORE TOO (App Store 5.1.1(v)). The drive dirs now hold little more than
  * manifests; every megabyte of AUDIO is in `clips/`, and deleting only the dirs would leave all of it
  * on the phone — unreferenced, invisible to every code path, and chargeable to the rider's storage.
- * That is `reclaimLegacyRoamPack`'s lesson repeated inside the same file. And it must NOT be routed
+ * Bytes outlive the code that knew how to find them — the lesson stated in full above. And it must NOT be routed
  * through `sweepOrphanClips`: that sweep is deliberately fail-toward-KEEPING, and for a purge, keeping
  * bytes is the wrong direction.
  *
- * ⚠ Deliberately does NOT touch the legacy roam pack — that is `reclaimLegacyRoamPack`'s job, and it
- * runs for EVERY rider at launch, not only one deleting an account.
  */
 export function deleteAllDriveDownloads(): number {
   // Keep NOTHING. Still excludes an in-flight download's DIR, which would otherwise have its files
@@ -1176,24 +1174,16 @@ export async function resignPlayback(driveId: string): Promise<Map<number, strin
   }
 }
 
-/** One-shot reclaim of the deleted roam mode's offline pack (`Paths.document/roam-pack/`).
- *
- *  ⚠ THIS EXISTS BECAUSE DELETING A FEATURE DOES NOT DELETE ITS BYTES. Roam let a rider save the
- *  region's pins + audio — up to ~138 MB — and `deleteRoamPack()` in the (now removed) roam-pack
- *  module was the ONLY code that could ever reclaim it. `deleteAllDriveDownloads` deliberately never
- *  touched it, and the Settings row that offered "Remove saved stories" went with roam. So on every
- *  device that ever tapped Save, that directory would have become permanently unreachable garbage —
- *  invisible to the app, chargeable to the rider's storage, removable only by deleting the app.
- *
- *  Idempotent and best-effort: a missing directory is the normal case (a rider who never saved), and
- *  a failure here must never block launch. Safe to delete this function once no install predating the
- *  roam removal plausibly survives — until then it is the only thing holding the promise that
- *  uninstalling a feature gives the space back. */
-export function reclaimLegacyRoamPack(): void {
-  try {
-    const dir = new Directory(Paths.document, 'roam-pack')
-    if (dir.exists) dir.delete()
-  } catch {
-    // Nothing to do and nothing to report — the rider cannot act on it, and retrying next launch is free.
-  }
-}
+// ⚠ `reclaimLegacyRoamPack()` LIVED HERE until 2026-08-02. It deleted `Paths.document/roam-pack/` at
+// launch — up to ~138 MB that roam's Save let a rider write and that nothing else could ever free
+// once roam's own `deleteRoamPack()` and the "Remove saved stories" Settings row went with the mode.
+// REMOVED on a founder call: no build that shipped roam's Save path ever reached a device, so no
+// install can hold that directory and the reclaim could never fire. It was insurance against a
+// population that turned out not to exist.
+//
+// ⚠ THE LESSON IT CARRIED IS NOT DELETED WITH IT, because it is load-bearing elsewhere in this file
+// and in `clip-store.ts`: DELETING A FEATURE — OR AN ACCOUNT — DOES NOT DELETE ITS BYTES. Bytes
+// outlive the only code that knew how to find them, and what is left is unreachable garbage:
+// invisible to the app, chargeable to the rider's storage, removable only by deleting the app. That
+// is why `deleteAllDriveDownloads` clears the shared clip store rather than only the drive dirs
+// (App Store 5.1.1(v)), and why the launch sweep runs for drives dropped on a 404.

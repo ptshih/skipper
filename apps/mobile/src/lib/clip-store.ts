@@ -370,8 +370,8 @@ export function sweepOrphanClips(input: StoreSweepInput): number {
  * ⚠ ACCOUNT DELETION ONLY — App Store 5.1.1(v) / CLAUDE.md: erasure is immediate and total. Under the
  * shared store, deleting the drive directories reclaims only the manifests; every megabyte of audio
  * would survive an account purge, unreferenced, invisible to every other code path, and chargeable to
- * the rider's storage. That is `reclaimLegacyRoamPack`'s lesson repeated — DELETING A FEATURE (or an
- * account) DOES NOT DELETE ITS BYTES.
+ * the rider's storage. DELETING A FEATURE — OR AN ACCOUNT — DOES NOT DELETE ITS BYTES: they outlive
+ * the only code that knew how to find them (see the tombstone in `offline.ts`).
  *
  * ⚠ Deliberately NOT routed through `sweepOrphanClips`: that sweep is fail-toward-KEEPING (it aborts
  * on an unreadable manifest, an in-flight download and an empty keep-set), and for a purge keeping

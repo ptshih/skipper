@@ -5,7 +5,7 @@ import * as SplashScreen from 'expo-splash-screen'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { AnalyticsProvider, captureError, track } from '@/lib/analytics'
 import { useAnonymousMint } from '@/lib/anon-session'
-import { reclaimLegacyRoamPack, sweepOrphanClips } from '@/lib/offline'
+import { sweepOrphanClips } from '@/lib/offline'
 import { SimModeProvider, readStoredSimMode } from '@/lib/sim-mode'
 import { ThemeProvider, readStoredThemeMode, useAppFonts, useTheme, type ThemeMode } from '@/theme'
 import { fonts } from '@/theme/tokens'
@@ -75,17 +75,19 @@ export default function RootLayout() {
     if (ready) SplashScreen.hideAsync().catch(() => {})
   }, [ready])
 
-  // Launch-time disk reclamation, both deliberately AFTER `ready` so neither can delay first paint.
+  // Launch-time disk reclamation, deliberately AFTER `ready` so it cannot delay first paint.
   //
-  // 1. The deleted roam mode's offline pack — up to ~138 MB that nothing else can ever free (see
-  //    reclaimLegacyRoamPack). Synchronous-but-trivial on the common path (one `exists` check).
-  // 2. The shared clip store's orphans. Clip bytes are keyed by SUBJECT and shared across drives, so
-  //    no per-drive delete may remove one; the sweep is the ONLY path allowed to, and it is a
-  //    mark-and-sweep re-derived from every saved manifest (fail-closed: an unreadable manifest or an
-  //    in-flight download frees nothing this pass). ⚠ It must run at LAUNCH and not only after a
-  //    delete: a drive removed on the SERVER is dropped locally on its 404 without any sweep of its
-  //    own, so launch is the only pass that ever reclaims its exclusive subjects. Leaving it out is
-  //    exactly the reclaimLegacyRoamPack failure again — bytes nothing can find and nothing can free.
+  // The shared clip store's orphans. Clip bytes are keyed by SUBJECT and shared across drives, so
+  // no per-drive delete may remove one; the sweep is the ONLY path allowed to, and it is a
+  // mark-and-sweep re-derived from every saved manifest (fail-closed: an unreadable manifest or an
+  // in-flight download frees nothing this pass). ⚠ It must run at LAUNCH and not only after a
+  // delete: a drive removed on the SERVER is dropped locally on its 404 without any sweep of its
+  // own, so launch is the only pass that ever reclaims its exclusive subjects. Leaving it out
+  // strands bytes nothing can find and nothing can free — see the tombstone in `lib/offline.ts`
+  // for the case that taught it.
+  //
+  // (A second reclaim ran here until 2026-08-02, for the deleted roam mode's offline pack. Removed
+  // on a founder call: no install ever shipped roam's Save path, so it could never fire.)
   //
   // ⚠ The v4→v5 store MIGRATION is not INVOKED here — it is lazy inside `loadManifest`, where every
   // reader already funnels, so no reader can observe a half-migrated drive. But be clear about what
@@ -96,7 +98,6 @@ export default function RootLayout() {
   // several long drives, and it is UNMEASURED on a device. Do not read "not here" as "not now".
   useEffect(() => {
     if (!ready) return
-    reclaimLegacyRoamPack()
     sweepOrphanClips()
   }, [ready])
 
