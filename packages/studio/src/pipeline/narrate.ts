@@ -65,20 +65,25 @@ export interface NarrationRequest {
   /**
    * Coordinate-keyed geology facts (the rock underfoot). Grounded like `facts`; allowed on STORY and SCENIC.
    *
-   * ⚠ NOTHING SETS THIS ON ANY LIVE PATH (verified 2026-07-30: the only two `narrateStop` callers are
-   * generate-narrations and generate-cluster-narrations, and neither passes it). V2 enrichment folds
+   * ⚠ NOTHING SETS THIS ON ANY LIVE PATH (re-verified 2026-08-03: the three `narrateStop` callers are
+   * generate-narrations, generate-cluster-narrations and generate-scenic-narrations — the last one is
+   * script-only and persists nothing — and NONE passes it). V2 enrichment folds
    * macrostrat sentences into `facts` as ordinary sheet bullets instead, so `geologyLines` below —
    * including its careful "do not close on the rock / no deep-time reflection" cues — never fires.
    * That is why the geology monotony it was written to prevent happened anyway. Kept because an
    * authored-tour path may want the separate channel; do not trust it as live coverage.
    */
+  geology?: string[]
   /** SCENIC-NAMED only: the assigned OPENING SHAPE for this clip (see `SCENIC_ANGLES`). A story varies
    *  its opener naturally because its facts differ; a named scenic call-out has only a name and a kind,
    *  so left alone the model converges on one template across the whole corpus. Assigning the shape
    *  makes the spread STRUCTURAL and deterministic instead of hoping for emergent variety. Ignored on
    *  every other stop type. */
   openingAngle?: string
-  geology?: string[]
+  /** SCENIC-NAMED only: the assigned CLOSING shape (see `SCENIC_CLOSERS`). A separate assignment from
+   *  `openingAngle` because they fail separately — measured, fixing the opener left the closer
+   *  collapsing on its own. Ignored on every other stop type. */
+  closingAngle?: string
   /** STORY only: co-located landmarks merged into this stop — each {name, facts}. Grounded;
    *  the narrator may name them and weave them into ONE telling of the place.
    *
@@ -281,6 +286,38 @@ export function openingAngleFor(index: number): string {
   return SCENIC_ANGLES[((index % SCENIC_ANGLES.length) + SCENIC_ANGLES.length) % SCENIC_ANGLES.length]!
 }
 
+/**
+ * The SCENIC closing rotation — and it is a SEPARATE failure from the opening one.
+ *
+ * ⚠ MEASURED 2026-08-03, and the wave build never saw this: assigning the OPENING shape fixed openers
+ * completely (six mountains, six distinct openings) while the CLOSERS collapsed anyway — "Some of them
+ * you just look at" / "Some of them you just tip your hat to and keep rolling" / "Some peaks you just
+ * tip your hat to and let stand", with "tip your hat" spanning three clips across two runs. Roughly 10
+ * of the 16 smoke clips ended on the same "Some X you just Y" move. Wave escaped it because a ~15 s
+ * wave is one breath with no room for a closing gesture; at 20-30 s there is room, and the model
+ * reaches for the same one every time.
+ *
+ * ⚠ Assigned rather than BANNED, deliberately. Banning the construction is the move that already
+ * failed once in this repo: the persona prompt banned three completions of "here's the …" while the
+ * lint banned nine, so the model wrote a fourth nobody had thought to forbid. Structure beats
+ * prohibition for a form this low-input.
+ *
+ * ⚠ FIVE shapes against the opening's SIX, on purpose — co-prime, so opening/closing PAIRINGS cycle 30
+ * clips before repeating instead of locking into the same six couples.
+ */
+export const SCENIC_CLOSERS: readonly string[] = [
+  'CLOSE ON THE NAME — say the place\'s name one last time, flat and plain, and stop there. No lesson, no summary, no "some of them".',
+  'CLOSE ON THE DAY — end on what is plainly visible right now (the light, the sky, the colour of the water), not on the place and not on a thought about places in general.',
+  'CLOSE ON THE JOKE — if your opening earned a groaner, land it here and stop dead. If it did not, end on the plainest true thing you can say and stop; do NOT manufacture a payoff.',
+  'CLOSE MID-GESTURE — end as though your eyes are already back on the road: short, clipped, unfinished-feeling. No wrap-up, no verdict on the place.',
+  'DO NOT CLOSE AT ALL — end on the last plain thing you said about the place and stop. ⚠ Add no closing thought whatsoever: no "some of them", no "you just", no reflection on what places like this are worth. Stopping early IS the shape.',
+]
+
+/** The assigned closing shape for clip number `index` (round-robin over `SCENIC_CLOSERS`). */
+export function closingAngleFor(index: number): string {
+  return SCENIC_CLOSERS[((index % SCENIC_CLOSERS.length) + SCENIC_CLOSERS.length) % SCENIC_CLOSERS.length]!
+}
+
 /** Build the per-stop USER fact sheet, matching the system prompt's "Reading the fact sheet" contract. */
 export function buildFactSheet(req: NarrationRequest): string {
   const lines: string[] = []
@@ -385,6 +422,10 @@ export function buildFactSheet(req: NarrationRequest): string {
       if (req.openingAngle) {
         lines.push('')
         lines.push(`HOW TO OPEN THIS ONE (assigned, so the corpus does not all start alike): ${req.openingAngle}`)
+      }
+      if (req.closingAngle) {
+        lines.push('')
+        lines.push(`HOW TO END THIS ONE (assigned, and it is a SEPARATE choice from the opening): ${req.closingAngle}`)
       }
     } else {
       lines.push(

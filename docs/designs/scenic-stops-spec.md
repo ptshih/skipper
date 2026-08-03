@@ -393,9 +393,45 @@ direction). Fixed in `narrate.ts` by dropping the scenic half; the self-containe
 architecturally correct one. ⚠ It is inside `if (namedScenic)`, so no story or break telling was ever
 affected.
 
-**Cost discipline, for the next run's estimate:** 10 script-only clips cost **$0.11** total ($0.06 +
-$0.05), heavily prompt-cached. That is scripts only — TTS, loudnorm, R2 and the eval gate are all
-still ahead of any real run.
+### 11.8 Round 3 — the WORST case, and a failure the wave build never saw
+
+Ran six MOUNTAINS (`--kind mountain --offset 2`) — same kind on purpose, which is the case `--spread`
+cannot test, since a lake and a peak diverge for free on vocabulary alone.
+
+**✅ THE OPENING ROTATION HOLDS AT THE WORST CASE.** Six distinct openings, each visibly following its
+assigned angle: *"See that peak lifting up out there…"* (the thing, unnamed) · *"**Basalt Mesa** —
+somebody looked at that thing and picked those two words and made them stick"* (turning the name
+over) · *"I love this kind of light…"* (own reaction) · *"They call it **Billy Hill** — which is a
+funny name for a mountain, but nobody asked me. Billy went and got himself a promotion, hill to
+mountain, and never looked back."* That last is a genuinely free groaner off a name and a kind and
+nothing else — the form's best argument for itself so far.
+
+**⚠ AND IT EXPOSED A SEPARATE FAILURE: the CLOSERS collapse on their own.** *"Some of them you just
+look at" · "Some of them you just tip your hat to and keep rolling" · "Some peaks you just tip your
+hat to and let stand"*, plus *"doing all the talking anyway"* twice in six. Across all **16** smoke
+clips, roughly **10 end on the same "Some X you just Y" move**, and "tip your hat" now spans three
+clips in two runs.
+
+⚠ **The wave build could not have found this**, which is why `81f6ca5` reports "six distinct openers"
+and stops there: a ~15 s wave is one breath with no room for a closing gesture. At the 20–30 s band
+this tier needs, there IS room, and the model reaches for the same move every time. **Fixing the
+opener does not fix the closer** — they are independent failures of the same low-input cause.
+
+✅ Fixed the same way, since the mechanism just proved itself: `SCENIC_CLOSERS` + `closingAngleFor`,
+assigned by index. ⚠ **FIVE closers against SIX openers, on purpose** — co-prime, so pairings cycle 30
+clips before repeating rather than locking into six fixed couples. ⚠ One shape is **"DO NOT CLOSE AT
+ALL"**, which is the direct antidote: stopping early is itself a shape.
+⚠ **Assigned, not BANNED**, and that is a repo lesson, not a preference: the persona prompt once
+banned three completions of *"here's the …"* while the lint banned nine, so the model wrote a fourth
+nobody had forbidden. Structure beats prohibition in a form this low-input.
+
+**⏳ NOT YET VERIFIED against the model** — the closing rotation is wired and green (studio typecheck
+0, 454 tests, and a preview confirms six distinct opening/closing pairings) but has not been run. 💸
+That is a paid run and needs its own go.
+
+**Cost discipline, for the next run's estimate:** 16 script-only clips cost **$0.19** total ($0.06 +
+$0.05 + $0.08), heavily prompt-cached. That is scripts only — TTS, loudnorm, R2 and the eval gate are
+all still ahead of any real run.
 
 ### 11.6 💸 Spend gate — and note the trap
 

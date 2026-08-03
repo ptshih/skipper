@@ -46,7 +46,13 @@ import { and, eq, isNull, isNotNull } from 'drizzle-orm'
 // `recordModelUsage` is NOT imported — `runNarration` already records every call, so tallying here
 // too would double-count the exact spend this run exists to report.
 import { llmSpendLines } from '@skipper/shared'
-import { narrateStop, buildFactSheet, openingAngleFor, type NarrationRequest } from './pipeline/narrate'
+import {
+  narrateStop,
+  buildFactSheet,
+  openingAngleFor,
+  closingAngleFor,
+  type NarrationRequest,
+} from './pipeline/narrate'
 import { regionLabel } from './pipeline/geo'
 import { SKIPPER_SYSTEM_PROMPT } from './persona/skipper'
 
@@ -147,6 +153,7 @@ const requestFor = (
   maxSeconds: SCENIC_MAX_SECONDS,
   selfContained: true,
   openingAngle: openingAngleFor(index),
+  closingAngle: closingAngleFor(index),
 })
 
 console.log(
