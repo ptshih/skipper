@@ -785,10 +785,14 @@ a narration-only product is unusable to a deaf rider, and **the script text is a
 `narrations`** — the data to caption every stop exists today, unshipped. That's a real feature with the
 hard part done, not an accessibility chore. Revisit it as product work, not compliance.
 
-⚠ The declaration sits in `state=DRAFT`. The ASC API refuses `state` on an update
-(`can not be included in a 'UPDATE' operation`), so publishing is either a UI action under
-**App Accessibility** or happens with the version submission — unverified. Check the UI before relying
-on it appearing.
+⚠ The declaration sits in `state=DRAFT`, and **that is now CONFIRMED to be un-fixable from the API**
+(re-tested 2026-08-03): `PATCH /v1/accessibilityDeclarations/{id}` with `state: PUBLISHED` returns
+**409 `ENTITY_ERROR.ATTRIBUTE.NOT_ALLOWED` — "The attribute 'state' can not be included in a 'UPDATE'
+operation"**. So publishing is a UI action under **App Accessibility**, or it rides the version
+submission. Don't re-test it; check the UI. Read it at `/v1/apps/{id}/accessibilityDeclarations`
+(app-level, NOT under the version — the version-scoped path 404s).
+⚠ The two claims are still TRUE under 1.1 — `theme.test.ts` still asserts 4.5:1 in both themes and the
+app still ships real light/dark — so the declaration needs no content change, only publishing.
 
 **Still by hand, and still required:** the App Privacy label (§8) — Apple exposes no public API for it —
 and the submission itself.
