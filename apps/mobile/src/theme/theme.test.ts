@@ -98,17 +98,29 @@ const MAP_LAYERS = (t: Theme): Record<string, string> => ({
   roadMinor: t.isDark ? '#3A4A3E' : '#CDB988',
   park: t.isDark ? '#163326' : '#DDE3C9',
 })
-// The brand colours DriveMap paints onto the basemap, each drawn with a `colors.surface` casing (the
-// route line) or ring (every marker fill).
-// ⚠ SCOPE, STATED RATHER THAN SILENT: `amberToken` (the active marker + the puck) is NOT here. It
-// fails this rule on the DAYLIGHT basemap — #DD7A33 on paper is ~2.5, and its `surface` ring cannot
-// help because `surface` IS the land. That is a REAL open finding, recorded in TODO.md, not a pair
-// this rule gets wrong: a saturated orange on cream separates by hue for most riders, which is
-// precisely the reassurance a low-vision rider does not get. It is excluded because fixing it means
-// changing the LIVE DRIVE's puck, which is deliberately frozen until the first real drive — not
-// because it passes. Add it here the moment that ships.
-const MAP_MARKS: (keyof ThemeColors)[] = ['routeTrail', 'trackActive']
+// Every brand colour DriveMap paints onto the basemap. `amberToken` (the active stop + the rider
+// puck) joined this list on 2026-08-03 when the last exclusion was closed — see SEPARATOR below.
+const MAP_MARKS: (keyof ThemeColors)[] = ['routeTrail', 'trackActive', 'amberToken']
 const NON_TEXT_AA = 3
+
+/**
+ * The two-tone edge a mark is drawn with — an inner `surface` ring inside an outer `ink` hairline.
+ *
+ * ⚠ IT IS A PAIR BECAUSE ONE TONE PROVABLY CANNOT DO IT. The edge used to be `surface` alone, and
+ * `mapStyle.ts` paints the basemap's LAND from that same token — so it scored a flat **1.00 against
+ * land in both themes**, separating marks from water and roads and doing nothing on the surface a
+ * route mostly lies on. Dusk hid that (the amber fill clears dark land unaided at 7.90); daylight did
+ * not (amber on paper: 2.47).
+ * ⚠ AND SWAPPING IT FOR `ink` IS NOT THE FIX — measured, that repairs land (12.99) and breaks the
+ * lake (4.69 → 2.77), which this gate caught the moment it was tried. Day land is pale and day water
+ * is dark; no single edge colour clears both, exactly as no single stroke could carry the route line.
+ * `ink` is the inverse of `surface` in BOTH themes (ink-brown on paper, parchment at dusk), so the
+ * pair covers pale layers and dark layers at once.
+ *
+ * The rule to keep: a mark needs SOME edge that opposes whatever is under it. Collapse this back to
+ * one tone and the land column — or the water column — silently returns to failing.
+ */
+const SEPARATOR = (t: Theme): string[] => [t.colors.surface, t.colors.ink]
 
 for (const theme of [lightTheme, darkTheme] as Theme[]) {
   const layers = MAP_LAYERS(theme)
@@ -116,8 +128,8 @@ for (const theme of [lightTheme, darkTheme] as Theme[]) {
     for (const [layer, hex] of Object.entries(layers))
       test(`${theme.name}: ${mark} is separable on map ${layer}`, () => {
         const own = contrast(theme.colors[mark], hex)
-        const ring = contrast(theme.colors.surface, hex)
-        expect(Math.max(own, ring)).toBeGreaterThanOrEqual(NON_TEXT_AA)
+        const edge = Math.max(...SEPARATOR(theme).map((c) => contrast(c, hex)))
+        expect(Math.max(own, edge)).toBeGreaterThanOrEqual(NON_TEXT_AA)
       })
 
   // The route line additionally has to carry ITSELF against the roads. A road runs underneath it for
@@ -130,9 +142,9 @@ for (const theme of [lightTheme, darkTheme] as Theme[]) {
     })
 
   // ⚠ `surface` IS the basemap's land colour, deliberately (mapStyle draws land from the same token).
-  // That is why a ring vanishes ON land and does not need to be there — the mark itself contrasts
-  // land. Asserted so the relationship is a FACT rather than a coincidence: retint land away from
-  // `surface` and the sentence above stops being true, loudly, here.
+  // Asserted so it stays a FACT rather than a coincidence — and because it is the REASON the
+  // separator above cannot be `surface` in daylight: a ring the colour of the land is not a ring.
+  // Retint land away from `surface` and that reasoning stops holding, loudly, here.
   test(`${theme.name}: basemap land is exactly \`surface\``, () => {
     expect(layers.land).toBe(theme.colors.surface)
   })

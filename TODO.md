@@ -1034,27 +1034,25 @@ None of this is a build; all of it is config. The premise changed on 2026-07-28:
       (no `--apply` gate by design), so re-running it is free; the STOP rule wants a current one before
       any destructive step, and there has been one since.
 
-## The amber puck under-contrasts on the DAYLIGHT basemap (2026-08-03, measured)
+## ✅ CLOSED — the amber puck under-contrasted on the DAYLIGHT basemap (2026-08-03)
 
-⚠ **The one instance of the map-contrast class left OPEN, and it is open on purpose.** The 2026-08-03
-sweep that produced `theme.test.ts`'s map-layer gate found four instances of one bug: a brand colour
-drawn on a basemap layer the contrast gate never checked. Three are fixed (the route polyline, the
-`passed` marker, the `upcoming` marker's ring). This is the fourth.
+Kept as the record of how the map-contrast class was finally closed, because the shape recurs.
 
-**The number:** `amberToken` in DAYLIGHT is `#DD7A33` on paper land `#F2E7CC` ≈ **2.5**, under the 3:1
-graphical-object bar (WCAG 2.1 SC 1.4.11). Its `colors.surface` ring cannot rescue it the way every
-other mark's does, because on the map `surface` **IS** the land colour — the ring is invisible exactly
-where the fill needs it. Dusk is fine; this is a light-theme-only finding.
+**Was:** `amberToken` in daylight is `#DD7A33` on paper land ≈ **2.47**, under the 3:1 graphical bar
+(WCAG 2.1 SC 1.4.11), and its `surface` ring could not help — on the map `surface` **IS** the land, so
+the ring measured 1.00 there in both themes. It was deferred because fixing it meant touching the live
+drive's puck; the founder then asked for the whole class closed.
 
-**Why it is not fixed:** it affects the ACTIVE stop marker and the live-position PUCK — i.e. the
-in-drive map, deliberately frozen until the first real drive is done. Every other fix in that sweep
-was on the proposal card or made a mark strictly MORE visible; changing the puck is neither.
+**The fix, and the part worth remembering:** swapping the ring to `ink` is the obvious move and it is
+WRONG — measured, it repairs land (1.00 → 12.99) and breaks the lake (4.69 → 2.77), which the gate
+caught immediately. Day land is pale and day water is dark, so no single edge colour clears both, the
+same way no single stroke colour could carry the route line. The answer is a **two-tone edge**: an
+inner `surface` ring inside an outer `ink` hairline. `ink` is the inverse of `surface` in both themes,
+so the pair covers pale and dark layers at once — which is how a map pin has always been built.
 
-**When it ships:** add `'amberToken'` to `MAP_MARKS` in `apps/mobile/src/theme/theme.test.ts` — the
-gate is written to accept it and will hold the fix. The exclusion is stated in a comment there, not
-baselined into a passing assertion.
-⚠ A saturated orange on cream DOES separate by hue for most riders. That is exactly the reassurance a
-low-vision rider does not get, so "it looks fine" is not the counter-argument it appears to be.
+`amberToken` is now IN `MAP_MARKS` in `apps/mobile/src/theme/theme.test.ts`; the exclusion comment that
+used to point here is gone. All four instances of the class (water labels, the route polyline, `passed`
+markers, `upcoming` markers) plus this one are closed, and the gate covers every mark on every layer.
 
 ## When YOSEMITE ships: the metadata that goes stale (founder ask 2026-07-28)
 

@@ -271,6 +271,21 @@ function DriveMapBase({
     ? null
     : { boxShadow: [{ offsetX: 0, offsetY: 2, blurRadius: 6, color: colors.shadowCast }] }
 
+  // THE SEPARATING EDGE IS TWO-TONE, and it has to be — one ring cannot do this job.
+  //
+  // ⚠ Every ring was `colors.surface`, and `mapStyle.ts` paints the basemap's LAND from that same
+  // token — so the edge scored a flat **1.00 against land in both themes**. It separated a mark from
+  // water and roads and did nothing on the surface a route mostly lies on. Dusk hid it (the amber fill
+  // clears dark land unaided at 7.90); daylight did not (amber on paper is 2.47, under the 3:1 bar).
+  // ⚠ AND SWAPPING IT FOR `ink` DOES NOT WORK EITHER — measured, that fixes land (12.99) and breaks
+  // the lake (4.69 → 2.77). Day land is pale and day water is dark, so NO single edge colour clears
+  // both, the same way no single stroke colour could carry the route line.
+  // So: two tones, one always opposite the other. `ink` IS the inverse of `surface` in both themes
+  // (ink-brown on paper, parchment at dusk), so an inner `surface` ring inside an outer `ink` hairline
+  // covers pale layers and dark layers at once — which is how a map pin has always been built.
+  const ringInner = colors.surface
+  const ringOuter = { boxShadow: [{ offsetX: 0, offsetY: 0, blurRadius: 0, spreadDistance: 1, color: colors.ink }] }
+
   return (
     <View style={styles.fill}>
       <MapView
@@ -326,7 +341,12 @@ function DriveMapBase({
             // ⚠ `routeTrail` on a basemap, NOT `trackInactive` — that one is the trail on our own
             // surfaces, and on the MAP it is the byte-identical twin of the minor roads underneath
             // (contrast 1.00, both themes). See the role's note in theme.ts.
-            strokeColor={hidePuck ? colors.routeTrail : colors.trackInactive}
+            // ⚠ BOTH modes now, not just the static one. The live drive kept `trackInactive` for a
+            // day on the theory that its untraveled line is a BACKDROP and may recede — but "recedes"
+            // is a matter of WEIGHT, and this was a matter of IDENTITY: drawn in the roads' exact
+            // colour, the road ahead was not quiet, it was absent. It still recedes, and by the means
+            // it should: a thinner stroke and a sparser dash than the static overview's.
+            strokeColor={colors.routeTrail}
             strokeWidth={hidePuck ? STATIC_ROUTE_W : 4}
             lineDashPattern={hidePuck ? STATIC_ROUTE_DASH : [2, 10]}
           />
@@ -377,6 +397,7 @@ function DriveMapBase({
                 <View
                   style={[
                     styles.stopDot,
+                    ringOuter,
                     dayLift,
                     active
                       ? {
@@ -384,7 +405,7 @@ function DriveMapBase({
                           height: 22,
                           borderRadius: 11,
                           backgroundColor: amber,
-                          borderColor: colors.surface,
+                          borderColor: ringInner,
                           borderWidth: border.keyline,
                         }
                       : endpoint
@@ -393,7 +414,7 @@ function DriveMapBase({
                             height: ENDPOINT_DOT,
                             borderRadius: ENDPOINT_DOT / 2,
                             backgroundColor: colors.trackActive,
-                            borderColor: colors.surface,
+                            borderColor: ringInner,
                             borderWidth: border.keyline,
                           }
                         : passed
@@ -406,7 +427,7 @@ function DriveMapBase({
                               // i.e. every Tahoe drive — a played stop simply vanished into the water.
                               // Same idiom as the route casing: `surface` is what the map is not.
                               backgroundColor: colors.trackActive,
-                              borderColor: colors.surface,
+                              borderColor: ringInner,
                               borderWidth: border.keyline,
                             }
                           : {
@@ -448,8 +469,9 @@ function DriveMapBase({
               <View
                 style={[
                   puckStyles.dot,
+                  ringOuter,
                   dayLift,
-                  { backgroundColor: amber, borderColor: colors.surface },
+                  { backgroundColor: amber, borderColor: ringInner },
                 ]}
               />
             </View>

@@ -102,6 +102,15 @@ light↔dark swap for free. **The contrast footguns are designed out:**
   regression test (§11): the route must clear 3:1 on the roads *unaided*, since a `surface` casing
   can't rescue a line lost in the road it traces. ⚠ The dusk value is the DAYLIGHT tan on purpose —
   over a night basemap a light atlas tan is the legible mark, and this is a route, not text.
+- **The separating edge on a map mark is TWO-TONE, and that is forced, not decorative** (2026-08-03).
+  Every marker ring was `surface` — the token `mapStyle.ts` also paints the basemap's LAND from — so
+  the edge measured **1.00 against land in both themes**: it separated marks from water and roads and
+  did nothing on the surface a route mostly lies on. ⚠ Swapping it for `ink` is the obvious fix and is
+  WRONG: measured, that repairs land (12.99) and breaks the lake (4.69 → 2.71), which the §11 gate
+  caught the moment it was tried. Day land is pale and day water is dark, so no single edge colour
+  clears both — the same reason the route line needed a casing. `ink` is the inverse of `surface` in
+  both themes, so an inner `surface` ring inside an outer `ink` hairline covers pale and dark layers
+  at once, which is how a map pin has always been built.
 - The amber **glow** (`glow` token) is applied via RN's cross-platform `boxShadow`,
   not iOS-only `shadow*` props, so the night-drive halo renders on Android too.
   ⚠ **AND IT IS A DUSK EFFECT, FULL STOP** (2026-08-03). Measured, the halo composites to 2.45 against
@@ -396,7 +405,7 @@ A review found the real failure mode is **drift between this doc and the code** 
      measurably dip there in daylight (§4), so the test's job is to stop that set growing quietly;
   3. each paired **fill + on-fill** combo, including every `filled` Badge tone;
   4. (2026-08-03) a **non-text 3:1 separability gate for marks on the BASEMAP** —
-     `routeTrail`/`trackActive` against land/water/roadMajor/roadMinor/park, plus `routeTrail`
+     `routeTrail`/`trackActive`/`amberToken` against land/water/roadMajor/roadMinor/park, plus `routeTrail`
      *unaided* on the roads (the one case a casing can't fix: the ring would trace the same road).
      This is the executable form of the `routeTrail` bug in §4 — nothing asked whether a brand
      colour collided with a map layer we style from the same palette, and all three instances were
