@@ -26,7 +26,13 @@ export interface ThemeColors {
   // brand accents
   accent: string // pine — active bullets, icons, links, success TEXT
   accentWarm: string // contrast-safe warm accent TEXT (kickers, badges)
-  amberToken: string // bright amber FILL/shape only (moving token, meter pips)
+  // Bright amber FILL/shape ONLY — never text (there is no amber-text role, and `TextColorRole` below
+  // now makes that a compile error rather than a convention).
+  // ⚠ This comment used to name "meter pips", which have never existed in this app. DESIGN §4 copied
+  // the phantom from here and a reviewer read the list as exhaustive — the same failure the `glow`
+  // row caused the same week. So: do NOT re-list the consumers here. They move, the list rots, and a
+  // rotted list is worse than none. §4 names them; `grep colors.amberToken` is the truth.
+  amberToken: string
   onAmber: string // dark ink that reads on an amber fill (enamel discs/badges)
   water: string // teal — scenic/water motif
   // interactive

@@ -30,7 +30,7 @@ export const palette = {
   trailInk: '#6B552F',
   rustError: '#A8401F', // errors — brick-and-clay, never clinical blue-red
 
-  // Dusk / night-drive-first
+  // Dusk — a first-class peer, NOT the reference theme (that's day; DESIGN §2.4, founder 2026-08-03)
   night: '#14201B', // app background — deep dusk-pine, calmer than true black
   nightRaised: '#1E2B24', // raised placard at dusk
   nightSunken: '#101A15', // inset wells at dusk

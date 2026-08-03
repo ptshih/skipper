@@ -122,7 +122,11 @@ and the assertion at `packages/db/test/schema.test.ts:138`. M4 can re-derive 15 
 caching actually lands.
 `effort M · ⚠ contradicts a build note the implementer will read as settled — announce it`
 
-**3.2 — `GET /sources` and `apps/api/src/sources.ts`.** Verified both lists carry the same four entries
+**3.2 — `GET /sources` and `apps/api/src/sources.ts`. ✅ DONE** — cut in the 1.1 sweep; the route, the
+file, the two DTOs, `getSources()` and the `useEffect` are all gone, and `packages/shared/src/schemas.ts`
+carries the tombstone recording why. One home now: `apps/mobile/src/lib/licenses.ts`, where the rename
+landed as `DATA_SOURCES` — the "fallback" was never a fallback. ⚠ CATALOG only: per-clip `attribution`,
+frozen on the narration row, is untouched and is what CC BY-SA actually requires. Verified both lists carry the same four entries
 and `getSources()` has exactly one caller (`legal.tsx:52`), which already seeds from the bundled copy.
 The endpoint's justification — "credit a new source without an App Store release" — is a scale argument
 for a list that has changed twice, and it isn't even satisfied, since the bundle must be maintained in
@@ -173,7 +177,15 @@ carry no DTO type at all — so an optional field is invisible to tsc in *both* 
 to require `attribution`: 457 released narrations, **zero** null or empty.
 `effort M · downside: noisier literals in a file steps 4 and 8a both edit — claim paths`
 
-**3.7 — Move `tierOf`/`isAdmin` to `@skipper/shared`.** The drift has already happened and it is
+**3.7 — Move `tierOf`/`isAdmin` to `@skipper/shared`. ✅ DONE 2026-08-03** — `packages/shared/src/access.ts`
+is the one implementation (plus `isSignedIn` and a structural `AccessSession` both sides satisfy);
+`apps/api/src/tiers.ts` is deleted and `apps/mobile/src/lib/auth.ts` re-exports. ⚠ The move was NOT the
+mechanical one predicted below: unifying the copies surfaced that they encoded two DIFFERENT correctness
+rules and each side needs its own — an ABSENT `isAnonymous` must read `free` (the client's: a session
+cached before the plugin was registered, where reading anonymous logs a real rider out of their drives),
+while PRESENT-and-not-exactly-`false` must read `anonymous` (the server's fail-closed direction, since
+`free` is what mints a grant and takes ownership). Both branches are in `tierOf` on purpose; read its
+comment before "simplifying" them. The drift has already happened and it is
 structural, not a dropped condition: `apps/mobile/src/lib/auth.ts:51-55` types the session as
 `{user?: {role?: string|null}}` — it **cannot even see** `isAnonymous`, while `tiers.ts:27-29` excludes
 it. `tiers.ts` has exactly one import (`AccessTier`, already in shared), so the move is mechanical.
@@ -187,7 +199,13 @@ staged but "intentionally NOT used yet". A rider on a two-hour drive hears three
 shuffle-from-six is indistinguishable from shuffle-from-seventeen.
 `effort S · ⚠ contradicts D28 (drive music is out of scope for 1.1) · downside: pure founder taste — nobody else can pick; the win is build time and repo weight, not a blocked install`
 
-**3.9 — One region-bbox parser.** Three independently-written implementations
+**3.9 — One region-bbox parser. ✅ DONE** — `parseRegionBbox` lives in `@skipper/engine` (`geo.ts`) and
+every caller imports it: studio's `pipeline/region.ts` (which re-exports `RegionBbox` so its own importers
+didn't move), `apps/admin/server/bbox.ts`, `apps/api/src/drives.ts` — and a FOURTH the count below missed,
+`apps/api/src/example-anchors.ts`. `bboxError` was the last hold-out and now validates THROUGH the reader
+(2026-08-03); a validator that parses differently from the reader is the worst version of this bug, since
+it approves the string the reader then misreads. ⚠ `MAX_BBOX_SPAN_DEG` stayed in admin, per the note below.
+Three independently-written implementations
 (`studio/pipeline/region.ts:28-33`, `admin/server/bbox.ts:47-53`, and inline at `drives.ts:90-92`) that
 agree only by luck — one trims, one doesn't, and two disagree on sw/ne vs min/max. `@skipper/engine` is
 zero-dep and already a declared dependency of all three. **First thing to cut if step 10 is time-boxed.**

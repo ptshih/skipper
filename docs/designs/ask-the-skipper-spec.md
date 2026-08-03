@@ -412,7 +412,9 @@ Do **not** widen the existing `SynthResult` (the studio pipeline's batch path ke
 ### 6.6 Gating + rate-limiting (no primitive exists in the repo today — must be built)
 Tour-access: reuse `loadTourGated` verbatim (tour exists/ready; its preview-wall is auto-satisfied for accounts). Identity: the **account `session.user.id`** (step 2's `requireAccount` guarantees a real free/paid account past the gate — no anonymous bucket, no `null` audit row; anonymous or no-cookie clients are 401'd and routed to free sign-up). Rate limit doubles off the `ask_turns` table — a **single windowed COUNT** (neon-http-safe, no txn):
 ```ts
-// in ask.ts; config in apps/api/src/tiers.ts
+// in ask.ts; the two constants go in apps/api/src/limits.ts — every rider-facing cap has ONE home
+// there (INV-12), and an ask is up to three paid calls a rider triggers with no --apply in front of it.
+// (NOT beside tierOf: the access predicates left apps/api entirely — see the file list at the bottom.)
 export const ASK_RATE_LIMITS: Record<'free' | 'paid', number> = { free: 30, paid: 120 } // per hour; anonymous can't reach the endpoint (requireAccount)
 export const ASK_WINDOW_MS = 60 * 60 * 1000
 async function overAskLimit(userId: string, tier: AccessTier): Promise<boolean> {
@@ -611,7 +613,8 @@ Run the API with creds (`bun run dev` wraps dotenvx). Use the existing `emerald-
 - `/Users/ptshih/code/skipper/apps/api/src/index.ts` — register route after line 201; **move `loadTourGated` (line 108) to a neutral module** (no entry-module cycle, §6.1); corridor select pattern (`:134-138`); `withSession`.
 - `/Users/ptshih/code/skipper/apps/api/src/entitlements.ts` — `withSession` sets `session`/`tier` (`:21-24`); **`requireAccount` (`:29`, currently zero callers) is Ask's account gate** (anonymous/none → 401); past it the handler reads the account `c.get('session').user.id`.
 - `/Users/ptshih/code/skipper/apps/api/src/auth.ts` — anonymous plugin (`:61`) still backs anonymous preview *playback*, but Ask requires a real account; email/password sign-up is the upgrade path.
-- `/Users/ptshih/code/skipper/apps/api/src/tiers.ts` — `tierOf` (`isAnonymous`→`anonymous`, used by `requireAccount` to reject); add `ASK_RATE_LIMITS` (free/paid only)/`ASK_WINDOW_MS`.
+- `/Users/ptshih/code/skipper/packages/shared/src/access.ts` — `tierOf` (`isAnonymous`→`anonymous`, used by `requireAccount` to reject). ⚠ This spec was written when it was `apps/api/src/tiers.ts`; that file is deleted — the predicates are shared with `apps/mobile` now, so an ask-shaped constant must NOT be added here (the app would import it).
+- `/Users/ptshih/code/skipper/apps/api/src/limits.ts` — where `ASK_RATE_LIMITS`/`ASK_WINDOW_MS` go instead: it owns the NUMBERS for every rider-triggered cap so they can be audited as a whole. Read its header before adding any — it imports nothing on purpose, and the per-tier `Record` above assumes a `paid` tier that no longer exists.
 - `/Users/ptshih/code/skipper/apps/api/src/ask.ts` — **new** handler + rate-limit helper + corridor/stop selects + threaded deadline.
 - `/Users/ptshih/code/skipper/apps/api/package.json` — add `@skipper/studio: workspace:*`.
 - `/Users/ptshih/code/skipper/packages/studio/src/ask.ts` — **new** side-effect-free entrypoint (`answerQuestion`/`buildAnswerSheet`/`synthesizeAsk`/`transcribe`/`ASK_SKIPPER_SYSTEM_PROMPT`); must NOT import `generate.ts`.

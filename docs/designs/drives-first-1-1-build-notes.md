@@ -122,7 +122,9 @@ guard, the planner's token tally reads **$0 forever with nothing failing**.
 - **The seven bare-`session` call sites** (INV-9): `index.tsx:56,180,183`; `settings.tsx:36,182,185`;
   `play.tsx:111`.
 - `apps/mobile/src/lib/auth.ts:51-55` — `isAdmin` has **already drifted** from the server's `tierOf`
-  (`apps/api/src/tiers.ts:19`) by omitting the `isAnonymous` exclusion. Fix it with the helper.
+  (then `apps/api/src/tiers.ts:19`) by omitting the `isAnonymous` exclusion. Fix it with the helper.
+  ⚠ Since done, and further than "fixed": step 8b unified both copies into `packages/shared/src/access.ts`
+  and `tiers.ts` is gone, so this drift is now unrepresentable rather than merely repaired.
 - `anonymousClient` is **not registered** (`auth.ts:26-36`); it is exported by the installed better-auth.
 - INV-14's rate rule goes in `auth.ts:143-146` (`customRules`) — the spec assigns it to no step.
 - **The wall sheet has no primitive.** No `Sheet` in `src/ui`, no `@gorhom/bottom-sheet`. Precedent to build

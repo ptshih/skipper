@@ -210,7 +210,11 @@ Preview is the open funnel; the wall is the **live drive + offline download** fo
   not the account gate; dismiss with "Start anyway"), and a *location* permission gate may follow —
   that's GPS, §7. Download shows the not-saved→saving→saved chip; no AccountGate. Watch-for: a signed-in user still hitting "Grab your ticket" (session cookie not sent);
   or staying stuck on the gate after signing in from it (the play-screen session-retry should drop
-  them into the drive). (`apps/api/src/tiers.ts:25-27`, `apps/api/src/index.ts:128-137`)
+  them into the drive). (`tierOf` in `packages/shared/src/access.ts` — the one implementation both the
+  server and the app now derive "signed in" from; `withSession`/`requireAccount` in
+  `apps/api/src/entitlements.ts` are what turn that into the 401 the gate renders. Cited by SYMBOL, not
+  file:line: this entry pointed at a deleted `apps/api/src/tiers.ts` and at unrelated `index.ts` lines
+  for exactly one sweep before anyone read it on a drive.)
 
 ## §4 — The route card (shared StopList): static on detail, fixed-shell on the player
 

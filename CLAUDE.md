@@ -21,9 +21,11 @@ desk passes — its §0 owns what they can't prove, so don't re-argue it here.
   for a human yes, never a guess. ("Correctness over cost" governs the DESIGN, never a license to RUN.)
 - **💸 RIDER-triggered spend is a DIFFERENT rule — it is governed by CAPS, not by a go-per-run.**
   `POST /drives/plan` (model tokens) and `POST /drives/propose` (Google Routes) spend on EVERY rider
-  request, forever, anonymously, with no `--apply` and no human in the loop. Their only guards are: an
-  explicit model + `max_tokens` in code, a bounded request body, the rate limiter, and a recorded token
-  tally — all single-sourced in `apps/api/src/limits.ts`. **Adding a new rider-triggered paid call is
+  request, forever, anonymously, with no `--apply` and no human in the loop. Their only guards are:
+  `max_tokens`, a bounded request body and the limiter's numbers — single-sourced in
+  `apps/api/src/limits.ts`, which imports NOTHING on purpose, so the other two guards live where they
+  can: the pinned model id (`CLAUDE_MODELS.planner`, `@skipper/shared`) and the token tally
+  `planner.ts` records. **Adding a new rider-triggered paid call is
   itself a founder decision; weakening an existing cap is a cost regression, not a UX tweak.**
 - **🌳 The working tree AND git index are SHARED across agents.** NEVER `git stash` / `reset --hard` /
   `checkout -- .` / `restore .` / `clean` / `rebase` (they silently eat everyone's uncommitted work —
@@ -131,8 +133,10 @@ desk passes — its §0 owns what they can't prove, so don't re-argue it here.
   telling off one member's `poi_id` — that first cut made `narrations.poi_id → 3rd Street Flats` for a clip
   about downtown Reno. `audio_url` is NOT NULL at the DB boundary. **Break audio is a SEPARATE
   place-anchored `detours` table** (1:1 per place, **DEFERRED/stubbed — nothing writes it yet**); a break is
-  NOT a `narrations` row. Only story narrations carry a `facts_hash`; scenic/break are never fact-stale. A
-  drive can't be `ready` until every selected stop resolves to audio.
+  NOT a `narrations` row. Only story narrations carry a `facts_hash`; scenic/break are never fact-stale.
+  ⚠ There is no drive readiness STATE to wait on (`drives` has no status column; the `'ready'` you'll find
+  is a client player phase) — both corpus loaders inner-join the audio, so a silent stop can never enter a
+  selection in the first place.
 - **Break stops MAY name the place + category, but bake NO VOLATILE data** (hours, rating, popularity) —
   a baked Places name in a frozen R2 clip outlives the DB anchor; mind Places ToS. Volatile data is fetched
   fresh at drive-load.
@@ -202,7 +206,7 @@ desk passes — its §0 owns what they can't prove, so don't re-argue it here.
   `snap-speakable-anchors`, `prune-corpus`, `backfill-poi-extent`, `snapshot-corpus` are FREE (run the last
   before ANY destructive work); `classify-treatments` + `curate-places` SPEND — founder go. ⚠ `curate-places`
   is LOAD-BEARING: the curated `places` set IS the planner's allowlist.
-- **Local dev servers stay UP** (the human runs them) — ports: API `bun run dev`; admin `bun run dev:admin`
+- **Local dev servers stay UP** (the human runs them) — ports: API `bun run dev:api`; admin `bun run dev:admin`
   = vite client **:5173** proxying `/admin`+`/health` → Hono admin-api **:8788** (`ADMIN_DEV_BYPASS=1` skips
   IAP locally); site `bun run dev:site`.
 - **Shell is zsh; Claude Code snapshots `~/.zshrc` (options + aliases) onto every Bash command.** Two zsh

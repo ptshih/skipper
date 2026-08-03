@@ -38,8 +38,8 @@ _star_.
    reserved for **non-driving** surfaces and **large** sizes. When ornament fights
    the glance, ornament loses.
 2. **Charm lives in voice, motif, and warmth — not clutter.** One signature move
-   per screen (the car on the trail; the glowing NOW card; the passport-stamp on
-   a passed stop). Never six.
+   per screen (the car on the trail; the glowing NOW card; the passport-stamp cascade
+   when the drive ENDS — §9, the live per-stop ink is still unbuilt). Never six.
 3. **Contrast is enforced by the token set, not by discipline.** See §4. There is
    intentionally no "amber text on paper" role to misuse.
 4. **DAY IS THE REFERENCE THEME; dusk is a first-class peer** (founder, 2026-08-03 — this reverses
@@ -71,9 +71,16 @@ Raw values + scales. Components reference the **semantic roles** in §4, not the
 Two themes (`lightTheme` / `darkTheme`) map the raw palette onto one role set, so
 light↔dark swap for free. **The contrast footguns are designed out:**
 
-- `amberToken` is a **fill/shape color only** — used for the moving car token, meter
-  pips, the Scrubber thumb. There is **no** amber-text-on-surface role. (The route list's
-  active row is a **pine/sunken** cue, not amber — the card owns the one glow.)
+- `amberToken` is a **fill/shape color only**, and this is the whole of what wears it: the car
+  token (`RouteTrack`), the `Scrubber` thumb, the lit `NowCard`'s border, a `filled` amber `Badge`,
+  the map's active-stop dot + rider puck (`DriveMap`), the collapsed player's peek-bar edge, and
+  the low-opacity `Sunburst` watermark (home + `/sample`). The route list's active row is a
+  **pine/sunken** cue, not amber — the card owns the one glow. There is **no** amber-text-on-surface
+  role, and since 2026-08-03 that is a compile error rather than a convention: `Text`'s `color` takes
+  `TextColorRole` (a `Pick` off `ThemeColors`), so `<Text color="amberToken">` no longer typechecks.
+  ⚠ This bullet used to name "meter pips", and the app has never drawn one. Same failure shape as
+  the `glow` row below: a phantom entry in a list a reader takes as exhaustive is how a hand-rolled
+  amber surface gets talked into existing. Grep the role before trusting any consumer list here.
 - Warm accent **text** (the NOW kicker, badge labels) uses `accentWarm`, which is a
   **burnt** amber in daylight (`#9A4D17`, ~5:1 on paper) and lantern amber at dusk.
 - A **filled** amber disc takes `onAmber` (= ink-brown in both themes, 5.25:1 light /
@@ -87,6 +94,14 @@ light↔dark swap for free. **The contrast footguns are designed out:**
   `accentWarm` (4.35) all dip under 4.5:1 — so as _text_ on an inset well use only
   `ink`, `inkDim`, or `accent` (the set `theme.test.ts` now gate-enforces on
   `surfaceSunken`). Dark-mode sunken clears all of them.
+- **`routeTrail` exists because a role can collide with the BASEMAP** (2026-08-03). The route was
+  drawn in `trackInactive` — correct on our own surfaces, where nothing competes — but
+  `theme/mapStyle.ts` paints the basemap's minor roads from that exact value, so the line sat on the
+  roads at **contrast 1.00 in both themes**. On device it did not read as faint, it read as a
+  MISSING polyline, and was only found in the accessibility tree. Its own role now, with its own
+  regression test (§11): the route must clear 3:1 on the roads *unaided*, since a `surface` casing
+  can't rescue a line lost in the road it traces. ⚠ The dusk value is the DAYLIGHT tan on purpose —
+  over a night basemap a light atlas tan is the legible mark, and this is a route, not text.
 - The amber **glow** (`glow` token) is applied via RN's cross-platform `boxShadow`,
   not iOS-only `shadow*` props, so the night-drive halo renders on Android too.
   ⚠ **AND IT IS A DUSK EFFECT, FULL STOP** (2026-08-03). Measured, the halo composites to 2.45 against
@@ -103,6 +118,7 @@ light↔dark swap for free. **The contrast footguns are designed out:**
 | `surface`       | `#F2E7CC` paper | `#14201B` night | app background                                   |
 | `surfaceRaised` | `#FBF3DD`       | `#1E2B24`       | cards / placards                                 |
 | `surfaceSunken` | `#E7D9B5`       | `#101A15`       | inset wells (timer chips, track bed)             |
+| `surfaceFade`   | `surface` @ 0 α | `surface` @ 0 α | the transparent end of a scroll-edge fade (`EdgeFade`) — derived from `surface`, never CSS `transparent` (which interpolates through black and tints the dissolve) |
 | `keyline`       | `#FFF8E6`       | `#2A3A30`       | carved inner rule                                |
 | `ink`           | `#2A2014`       | `#ECE0C4`       | primary text                                     |
 | `inkDim`        | `#5C4A30`       | `#A99D80`       | secondary text                                   |
@@ -116,8 +132,10 @@ light↔dark swap for free. **The contrast footguns are designed out:**
 | `onPrimary`     | `#FBF3DD`       | `#2A2014`       | text on `primaryFill`                            |
 | `trackActive`   | `#1E5B40`       | `#5FA877`       | traveled portion of the route trail              |
 | `trackInactive` | `#CDB988`       | `#3A4A3E`       | dashed untraveled trail + hairlines              |
+| `routeTrail`    | `#6B552F`       | `#CDB988`       | the route line **on a basemap** — distinct from `trackInactive`, the same trail on our OWN surfaces |
 | `rule`          | `#CDB988`       | `#3A4A3E`       | dividers, card keylines                          |
 | `danger`        | `#A8401F` rust  | `#E97559` ember | errors                                           |
+| `onDanger`      | `#FBF3DD`       | `#2A2014`       | text on a `danger` fill (the `rust` filled Badge) — a `TextColorRole`, gate-tested as an ON_FILL pair |
 | `glow`          | (unused — see ⚠) | amber 42% α     | campfire halo (boxShadow) — DUSK only: NOW card, CTA, car token, map puck + active stop |
 | `shadowCast`    | ink 20% α       | black 50% α     | neutral daylight cast shadow                     |
 | `scrim`         | ink 42% α       | black 55% α     | behind sheets / gates                            |
@@ -137,8 +155,12 @@ Three families, loaded via `@expo-google-fonts` (held behind the splash by
   display uses; the token bakes the weight in — never set display to 400). **Large only (~18pt+).**
 - **Lora** — calligraphic screen slab; road-notebook warmth carried to UI scale
   (400 / 600 / 700). All body, headings, labels.
-- **Overpass Mono** — highway-sign / odometer numerals (timers, coords, mileage).
-  Designed with US federal highway-signage DNA; SemiBold 600 is the badge weight.
+- **Overpass Mono** — highway-sign / odometer numerals, designed with US federal
+  highway-signage DNA. Numbers that must not reflow as they tick: the player's elapsed/remaining
+  timers, the ±15 jog labels. ⚠ This bullet claimed "coords" and no screen renders a coordinate —
+  there is no call site and never was. And SemiBold 600 is **not** "the badge weight":
+  a `Badge` renders `variant="label"` (Lora 600). `monoStrong`'s one call site is the drive-detail
+  permit line ("N STOPS · ~M MIN") — a stamped placard number, not a pill.
 
 | Variant             | Family / size           | Use                                |
 | ------------------- | ----------------------- | ---------------------------------- |
@@ -150,7 +172,7 @@ Three families, loaded via `@expo-google-fonts` (held behind the splash by
 | `body`/`bodyStrong` | Lora 400/600 · 16       | paragraphs, list names             |
 | `label`             | Lora 600 · 12.5 UPPER   | kickers, badges, section labels    |
 | `dim`               | Lora 400 · 13.5         | sublabels, metadata                |
-| `mono`/`monoStrong` | Overpass Mono 400/600 · 14/15 | timers, coordinates, mileage  |
+| `mono`/`monoStrong` | Overpass Mono 400/600 · 14/15 | player timers + ±15 jogs / the drive-detail permit line |
 
 **Rule:** Zilla Slab is reserved for large sizes (~18pt+); small in-car-critical
 text stays Lora (never Zilla Slab below ~18pt — it muddies the glance).
@@ -169,12 +191,34 @@ All token-driven and theme-aware. Compose these; don't restyle from scratch.
 - **`Icon`** — vector icons (Ionicons via `@expo/vector-icons`); semantic names
   (`play`, `car`, `story`…) mapped in `Icon.tsx`. **Use these, NOT emoji** — this
   build has no color-emoji fallback, so emoji render as tofu (`?`).
+- **`Glyph`** — the escape hatch `Icon` doesn't cover: an emoji/symbol character rendered in the
+  SYSTEM font, because a custom-font run does not fall back and would render tofu. Decorative
+  (hidden from the a11y tree); a placeholder until the §9 enamel-badge SVGs land.
 - **`Card`** — the ranger placard. Plain by default (glanceable); `framed` adds the
   carved double-keyline + corner screw-dots — **non-driving surfaces only**.
 - **`Badge`** — enamel pill for stop types and lengths. `tone`
   (`pine·amber·teal·rust·neutral`) maps to a contrast-safe text color; `filled` for
   a solid disc.
 - **`Divider`** — hairline or `dashed` (the atlas-trail rule).
+- **`Segmented`** — the sunken track of 2+ exclusive options, selected one lifted to a raised enamel
+  segment. This **is** the drive-detail List⇄Map toggle; `ThemeModePicker` and `SimModePicker` are its
+  two hand-built siblings, not wrappers. Placard/settings surfaces only — an eyes-on-road surface
+  wants a floating icon button.
+- **`Skeleton` / `SkeletonGroup`** — inert `surfaceSunken` blocks in the shape of the content that's
+  coming, replacing a spinner on a blank screen. ⚠ The **group** breathes, never the blocks: one shared
+  opacity pulse so the screen is never a field of animating rectangles (§8). Neutral, never amber, and
+  Reduce Motion holds it static.
+- **`EdgeFade`** + **`useScrollEdgeFades`** — content dissolves into `surface` at a clipped scroll
+  edge instead of hard-cutting under the header (the iOS-26 scroll-edge read). ⚠ Always the pair: the
+  hook decides whether an edge is *genuinely* overflowing, and a fade shown over a short screen
+  dissolves real content at rest, which reads as a rendering bug.
+- **`Sunburst`** — the WPA travel-poster watermark behind the home and `/sample` mastheads. Tapered
+  rays built from border-triangle Views (no SVG dep), decorative, pointer-events off. Ornament —
+  §2.1 keeps it off driving surfaces.
+- **`AttributionButton`** — the quiet ⓘ that reveals **this clip's** sources; wraps `SourceCredit` in a
+  sheet. Not decoration: naming the specific work + linking the deed is what CC BY-SA requires wherever
+  the adapted work is presented, so a Settings-level catalog cannot stand in for it. Renders nothing
+  when a clip has no attribution (scenic/break ground on no source text, so an empty ⓘ would lie).
 - **`RouteTrack`** — the signature motif: a dashed trail with the **car token**
   gliding along it. Driven by an `Animated.Value` in `[0,1]` (JS-driven — keep it
   the only thing animating per frame).
@@ -184,34 +228,110 @@ All token-driven and theme-aware. Compose these; don't restyle from scratch.
 - **`StopList`** — the route itinerary: one card of `StopRow`s, hairline-ruled, shared by
   drive detail (`app/drives/[id]`) and the player. A `scroll` mode makes it a fixed shell
   (rows scroll inside, the player) vs content-sized (the host page scrolls, drive detail).
-- **`NowCard`** — the now-playing placard; the one surface that earns the amber glow. Holds a
-  kicker + title (+ optional mono timer/badge), a state-dependent middle, and the transport.
+- **`NowCard`** — the now-playing placard. Holds a kicker + title (+ optional mono timer/badge), a
+  state-dependent middle, and the transport. It **takes** the amber glow when it's lit, but it is one
+  of five surfaces that can (§4's `glow` row) — §8's rule is one glowing amber **at a time**, not one
+  glowing amber component. When a clip is playing, the others dim themselves for it.
 - **`TransportBar`** — the player transport: a glow-less center play/pause flanked by ±15
   jogs, plus a `single`-CTA mode (ready/done) with an optional ghost secondary.
 - **`Scrubber`** — the in-clip position bar (sunken bed, pine fill, amber car-token thumb).
-- **`FilterChip`** — the home "Where to?" region chip. **`HeaderIconButton`** — the
-  self-drawn circular nav-bar chip (strips the iOS-26 Liquid Glass capsule).
+- **`FilterChip`** — the home region chip (rendered only if a second region ever ships), and the
+  pill `ExampleAsks` builds on. **`HeaderIconButton`** — the self-drawn circular nav-bar chip
+  (strips the iOS-26 Liquid Glass capsule).
 - **`Input`** — themed field, ≥48pt, pine focus ring.
 - **`ThemeModePicker`** — Auto / Day / Dusk segmented control (lives on Settings).
 - **`StateView`** — the shared loading / error / empty centered state (`loading`,
   `tone`, `action`, `title`). Kills the repeated `<Screen center>…` boilerplate.
 - **`AccountGate`** — the shared freemium wall (drive detail + player). A "smart" composite:
   unlike the pure primitives it knows the sign-in route + gate copy.
+- **`LocationGate`** — the same idea for GPS permission: it owns the three-state message/action pick
+  (still-askable → in-app re-prompt; denied *or* approximate-only → Settings), so the two calling
+  screens can't drift.
+- **`LocationPrime`** — the one-shot pre-permission explainer shown right before iOS's single-shot
+  prompt. ⚠ **Never add a "Not Now"** — App Store 5.1.1(iv) forbids a dismiss on a pre-prompt; its only
+  action leads into the system prompt.
+- **`VersionGate`** — mounted once above the navigator: blocks below `minimum`, nudges (dismissibly,
+  per version) below `recommended`, and **fails open** on any error. ⚠ The one surface written in plain
+  English, not the persona — a forced update is a utility moment.
+- **`SimModePicker`** — Real GPS ⇄ Simulated, on the admin-only Developer screen.
+
+**Planner (1.1).** Presentation only — none of these fetch, spend, or hold the transcript; `app/index.tsx`
+does. That split is what keeps a non-refundable credit out of a view component.
+
+- **`ConversationScreen`** — the planner's shell: a scroll region with a pinned, keyboard-aware footer
+  and an auto-scroll state machine. Deliberately **not** a flag on `Screen` (thirteen call sites want
+  none of it), but it shares the same `useScrollEdgeFades`/`EdgeFade` pair. ⚠ Must render inside a Stack
+  screen — `useHeaderHeight()` throws without a header context.
+- **`TurnBubble`** — one turn. The asymmetry carries the speaker: skipper = full-width prose behind a
+  2pt pine rule (no card — he *is* the page); rider = right-aligned, pressed into `surfaceSunken`.
+  ⚠ It renders what it's handed and never buffers; the streaming say-buffer is `src/lib/say-buffer.ts`.
+- **`TypingDots`** — the "he's about to speak" beat. ONE shared opacity breath, not three staggered
+  dots (§8: one moving thing). `inkFaint`, never amber. ⚠ Its a11y label is static and its live region
+  is off — a pulsing node inside an open region buries the announce the settled turn makes.
+- **`Composer`** — the growing multiline field + one enamel send disc. ⚠ No `maxLength` (the turn caps
+  live in `apps/api/src/limits.ts` and come back in persona) and Return does **not** send — on a
+  multiline field that costs the rider their paragraph.
+- **`ExampleAsks`** — the tappable opening asks under the cold open. They're `FilterChip`s typed to
+  `body`, not `label`: an ask is a whole sentence, and small-caps shouts it. Actions, never a selector —
+  `active` is never passed.
+- **`PreviewCard`** — the route as DRAWN, inline in the transcript, one tap from a spent credit. Its
+  `state` union carries the whole wall, including `needsAccount` — a state of the *card*, never
+  `<AccountGate>`, which is a whole `<Screen>` and would unmount home along with the only copy of the
+  transcript. ⚠ Only the newest card renders its `DriveMap` (each is a real native `MapView`).
+- **`PlannerUnavailableCard`** — offline or outage, replacing the composer rather than greying it out.
+  It exists to still say something **true** (the region's curated anchor names) instead of only
+  apologising. ⚠ `outage` is a transport failure only — the server answers 200 in persona, so never
+  build a heuristic on what `say` contains.
+- **`ClipBar`** — the pinned preview-clip transport in the footer slot, so a clip that scrolls away
+  can still be stopped (roam paid for that lesson). Deliberately **flat** — no glow: the proposal CTA
+  already spends the screen's amber.
+
+**Map.** ⚠ `DriveMap`, `SourceCredit` and `mapChrome` are deliberately **not** barrel-exported from
+`src/ui/index.ts` — deep-import them. They're compositions with real native/licence weight, not
+primitives to reach for.
+
+- **`DriveMap`** — the tinted Google basemap plus our overlay: route line, stop markers, and the puck,
+  which rides the route at the same 0..1 `progress` the car token uses (so live GPS, sim and the couch
+  preview all drive it identically, and it's always on the road). Without a Maps key iOS falls back to
+  untinted Apple Maps — List mode stays the offline + accessibility-complete equivalent.
+- **`mapChrome`** — the shared map chrome: base `MapView` props, puck styles, the recenter chip, and
+  `toLatLng`. ⚠ That converter is why this file exists rather than a second copy: the wire is GeoJSON
+  `[lng, lat]`, RN-maps wants `{latitude, longitude}`, and swapping them draws in the Indian Ocean
+  and throws nothing.
+- **`SourceCredit`** — the "work · license" rows inside the ⓘ sheet. Mounted only by
+  `AttributionButton`; named so it can't be confused with the `Attribution` wire type.
 
 ## 7. Voice in the UI (`src/ui/voice.ts`)
 
 Microcopy is brand-critical and **centralized** — every empty/error/loading/CTA
-string speaks as the skipper. Keep it warm, corny, and short (glanceable). Examples:
+string speaks as the skipper. Keep it warm, corny, and short (glanceable).
 
-- Loading: _"Firing up the engine, folks. She starts when she's good and ready."_
-- Empty: _"No drives charted here yet. We’re still out mapping the good roads."_
-- Error: _"Well, that’s a kink in the hose. Give her another pull?"_
-- Play CTA: _"Let’s roll — start the drive."_
-- Gate: _"Anonymous riders get the sampler. Hop in for free and the whole lake’s yours."_
-- Drive complete: _"That’s the end of the road, folks. Watch your step climbing out."_
+⚠ Cited **by key**, never quoted loose: four of the six examples that used to sit here were strings
+the app had already stopped shipping, and a doc that quotes copy verbatim rots on the next copy edit.
+Read the key; the file is the text.
 
-**Invariant:** voice is _delivery_, never _facts_. No place names, hours, or data
-live in `voice.ts`. (Mirrors the studio pipeline's "persona lives in DELIVERY" rule.)
+- `voice.loading.drives` — _"Charting the good roads…"_ (and `.drive`, _"Pulling the logbook…"_)
+- `voice.empty.drive` — _"This drive took a wrong turn. Head back and pick another."_
+- `voice.error.generic` — _"Well, that’s a kink in the hose. Give her another pull?"_
+- `voice.cta.play` — _"Let’s roll."_ Short **because** the center CTA is flanked by the ±15s jogs.
+- `voice.gate.body` — _"The full drive needs a (free) ticket — ten seconds, and the skipper never
+  stops talking."_
+- `voice.driveComplete` — _"That’s the end of the road, folks. Watch your step climbing out."_
+
+**Invariant:** voice is _delivery_, never _facts_ (mirrors the studio pipeline's "persona lives in
+DELIVERY" rule). Concretely: nothing volatile or per-place is authored here — a poi name, hours, a
+rating, a count, a duration. A string that VARIES by region templates from the API instead
+(`voice.plan.example*` fill `{a}`/`{b}` from `region.exampleAnchors`, so a chip can never name a road
+the skipper doesn't run).
+
+⚠ **The `/sample` postcard is a deliberate carve-out** (founder, 2026-08-03): `voice.sample.kicker`
+("POSTCARD FROM LAKE TAHOE") and `voice.sample.homeLink` ("Not near Tahoe?…") name a region on
+purpose, because that screen is about ONE fixed curated clip and there is nothing to template from —
+a region-free version would just be vaguer, not more correct. The same call went the other way for
+`voice.offline.saveHint`, which sits on a drive-detail button whose `DriveManifest` carries no
+region: naming one there would have been wrong for every drive outside it, so it speaks about the
+ROAD instead. The rule the two share is not "no place name ever" — it's **never author a fact the
+API owns**.
 
 ## 8. In-car & accessibility rules
 
@@ -270,8 +390,26 @@ A review found the real failure mode is **drift between this doc and the code** 
 
 - **`bun run lint:tokens`** — fails if any file in `app/` or `src/ui/` hardcodes a
   hex / rgba / `fontFamily` string. Colors + fonts live in `src/theme` ONLY.
-- **`bun test`** (`src/theme/theme.test.ts`) — asserts every text role clears 4.5:1
-  on `surface` + `surfaceRaised` in both themes (this §4 guarantee). A palette tweak
-  that breaks it fails the test.
-- **`bun run check`** runs lint:tokens + typecheck + test together. Run it when you
-  touch the design system; wire it into CI/precommit when there is one.
+- **`bun test`** (`src/theme/theme.test.ts`) — four gates, in both themes:
+  1. every text role clears **4.5:1** on `surface` + `surfaceRaised` (the §4 guarantee);
+  2. the **safe sunken set** (`ink`/`inkDim`/`accent`) on `surfaceSunken` — the other roles
+     measurably dip there in daylight (§4), so the test's job is to stop that set growing quietly;
+  3. each paired **fill + on-fill** combo, including every `filled` Badge tone;
+  4. (2026-08-03) a **non-text 3:1 separability gate for marks on the BASEMAP** —
+     `routeTrail`/`trackActive` against land/water/roadMajor/roadMinor/park, plus `routeTrail`
+     *unaided* on the roads (the one case a casing can't fix: the ring would trace the same road).
+     This is the executable form of the `routeTrail` bug in §4 — nothing asked whether a brand
+     colour collided with a map layer we style from the same palette, and all three instances were
+     caught by eye instead. ⚠ The rule is a **disjunction** — a mark passes if its own colour OR its
+     `surface` ring clears the layer; demanding both failed six honest pairs and is a *wrong* rule,
+     not a stricter one. ⚠ And **3:1, not 4.5**: these are graphical objects (WCAG 1.4.11), so
+     raising it would fail honest marks and teach the next person to baseline it away.
+     ⚠ `amberToken` is knowingly EXCLUDED (it's ~2.5 on the day basemap, TODO.md) because the fix
+     means changing the live drive's puck, frozen until the first real drive. It does not pass.
+     A fifth assertion holds the whole thing up: **basemap land is exactly `surface`** — which is
+     why a mark's ring can vanish on land and needn't be there. Retint land and that stops being
+     true, loudly, in the test rather than on a device.
+- **`bun run check`** (in `apps/mobile`) runs lint:tokens + **lint** + typecheck + test. ⚠ `lint` is
+  ESLint, and it is the ONLY tool that reads the hooks — they import native modules `bun test` can't
+  load, so a green test run says nothing about them. Run `check` in this workspace whenever you touch
+  the design system; the root `check` does not carry lint:tokens or lint.
