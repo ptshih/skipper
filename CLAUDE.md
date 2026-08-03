@@ -34,10 +34,14 @@ desk passes — its §0 owns what they can't prove, so don't re-argue it here.
   file is still SOLELY yours first (`git diff --stat path/a path/b`) and leave a now-mixed file for its
   owner. No repo-wide auto-fixers (`prettier --write .`, `eslint --fix`, codemods). ⚠ 1.1 orders a
   "repo-wide simplification sweep" — that means **by explicit path, atomic commits**, never a codemod.
+  This bullet and the spend rules above are ENFORCED, not merely documented: a `PreToolUse` hook
+  (`scripts/guard-hook.ts`) hard-denies the NEVER list and prompts on spend. `/guard` is the
+  cheat-sheet — read it before working around a block, and every rule must trace back to a line here.
 - **🖥 Don't boot or restart dev servers** — the human keeps them running continuously; just use them
   (find ports with `lsof -nP -iTCP:<port> -sTCP:LISTEN`).
-- **✅ Verify before committing:** root `bun run check` (= `lint:docs` + `lint:types` + `lint:enums` +
-  `typecheck` + `test`). If you touched `apps/mobile`, ALSO run `bun run check` there (the real delta is
+- **✅ Verify before committing:** root `bun run check` — the doc/type/enum lints, then every typecheck
+  and test suite, `scripts/` included (`package.json` holds the list; don't re-enumerate it here, it
+  drifts). If you touched `apps/mobile`, ALSO run `bun run check` there (the real delta is
   `lint:tokens` + `lint` — root `test`/`typecheck` already filter into the workspace). ⚠ `lint` is ESLint,
   which exists ONLY in `apps/mobile` and only for `react-hooks` (the hooks are unreachable by `bun test`);
   pin it to 9.x and treat `eslint-suppressions.json` as a backlog — see `apps/mobile/CLAUDE.md`.

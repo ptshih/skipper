@@ -22,12 +22,13 @@
     "asc:metadata": "dotenvx run -f .env.development -- bun scripts/asc-metadata.ts",
     "shot:compose": "bun scripts/compose-screenshot.ts",
     "typecheck": "bun --filter '*' typecheck",
+    "typecheck:scripts": "tsc -p scripts/tsconfig.json",
     "test": "bun --filter '*' test",
     "test:scripts": "bun test scripts/",
     "lint:docs": "bun scripts/lint-docs.ts",
     "lint:types": "bun scripts/lint-type-collisions.ts",
     "lint:enums": "bun scripts/lint-enums.ts",
-    "check": "bun run lint:docs && bun run lint:types && bun run lint:enums && bun run typecheck && bun run test && bun run test:scripts",
+    "check": "bun run lint:docs && bun run lint:types && bun run lint:enums && bun run typecheck && bun run typecheck:scripts && bun run test && bun run test:scripts",
     "reinstall": "rm -rf node_modules && bun install",
     "prepare": "dotenvx ext precommit --install || true",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yaml,yml}\"",
@@ -41,6 +42,8 @@
   },
   "devDependencies": {
     "@dotenvx/dotenvx": "^2.14.0",
+    "@types/bun": "^1.3.14",
+    "@types/node": "^26.1.1",
     "concurrently": "^10.0.3",
     "prettier": "^3.9.5",
     "typescript": "^6.0.3"

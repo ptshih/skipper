@@ -15,7 +15,7 @@
 // not a workspace, so `bun --filter '*' test` does not reach it.
 
 import { describe, expect, test } from 'bun:test'
-import { decide } from './guard-hook.ts'
+import { decide } from './guard-hook'
 
 describe('deny — the CLAUDE.md NEVER list', () => {
   const cases = [

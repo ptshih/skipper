@@ -6,6 +6,8 @@
       "name": "skipper",
       "devDependencies": {
         "@dotenvx/dotenvx": "^2.14.0",
+        "@types/bun": "^1.3.14",
+        "@types/node": "^26.1.1",
         "concurrently": "^10.0.3",
         "prettier": "^3.9.5",
         "typescript": "^6.0.3",
