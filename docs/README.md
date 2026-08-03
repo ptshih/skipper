@@ -173,6 +173,14 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   ANTICIPATE a moment; pick the one anonymous preview clip by ear), 11 cuts to feed D36's step-10 sweep
   (⚠ `drives.route_sig` has no reader at all), and a list of things **explicitly not worth doing**, each
   with the condition that expires it. Idea shelf, nothing greenlit; 2026-07-31.
+- [home-cold-open-declutter.md](designs/home-cold-open-declutter.md) — three founder notes on the
+  shipped 1.1 home screen (cluttered · prompts too loud · sample CTA too prominent) traced to **one
+  inversion**: the composer is the primary action and is styled as the quietest element, while the
+  asks, the sample link and the hero are all drawn at button weight. Carries the before/after, the
+  ⚠ that `ghost` is not a quiet tier (it renders Lora 700 · 17pt), the ⚠ that the 35pt chips are NOT
+  a hit-target defect (`hitSlop={12}`), and the constraint that bounds it — the sample clip stays
+  above the fold because it is the only thing an App Review tester can hear. Design pass 2026-08-03,
+  **not greenlit**, and written while another agent was mid-edit in the same files.
 - [fused-cluster-generation-spec.md](designs/fused-cluster-generation-spec.md) — **phase 4** of the
   legibility layer: one fused telling per cluster, and the read-path work that makes it audible.
   **BUILT, GENERATED AND RELEASED** — 37 fused tellings, all released (counted 2026-08-02); only
