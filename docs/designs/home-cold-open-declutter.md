@@ -243,20 +243,48 @@ flavour of one of these:
 | **D · Straight in** | field, bottom | **none** | all three; biggest reduction that keeps the conversation immediate | Medium. ⚠ Deletes the WPA poster from the front door — DESIGN.md's entire identity claim. The persona absorbs the explainer ("Narrated road trips, folks — you pick the road, I do the talking"), which is either the charming answer or the loss of the one poster-shaped screen. |
 | **E · Poster once** | field, bottom | **first launch only** | note 1 for everyone past launch 1 | Low-med; one persisted flag, re-keying `collapsed` off `riderTurnCount`. ⚠ Makes the screen the founder reviews rarely the screen most riders see. |
 
-**Recommended: I + H's suggestion rows + §7's MY DRIVES rule** (recommendation moved from B+E once the
-reference apps landed). Concretely: promote `voice.plan.opening` into the `display` slot and delete
-the headline/trail/tagline blocks (I); render the three asks as short-title + subtitle rows rather
-than wrapped all-caps pills (H); drop MY DRIVES entirely when anonymous-and-empty and hoist it above
-the planner when the rider has drives (§7). That combination answers all five notes, needs no new
-colour decision (I keeps the cold open glow-free, so the amber invariant is never touched), and the
-poster survives as a sunburst watermark. **E remains available as a cheap add-on** if the founder
-wants the full poster on the very first launch for App Review's benefit.
+### THE RECOMMENDATION
 
-⚠ **Amended after the non-travel research: add the WORKED EXAMPLE.** Promote `GET /sample` from a
-ghost text link to a small playable card — the one piece of real content on the cold open. It answers
-note 3 better than demoting does (different object class, so it stops competing as a fourth text CTA)
-and it is the only way a newcomer experiences the product without first inventing a prompt. For an
-audio product, letting them hear the skipper should outrank asking them to type at him.
+**I + H's suggestion rows + the worked example + §7's move.** (Moved from B, then B+E, as the
+reference apps and the non-travel research landed; the earlier "hoist MY DRIVES above the planner"
+clause is SUPERSEDED by the founder's §7 ruling and must not be re-proposed.) Six changes, in
+dependency order:
+
+1. **Promote the question.** `voice.plan.opening` takes the `display` slot; the headline, the trail
+   and the tagline blocks are deleted (**I**). The poster survives as a sunburst watermark. This alone
+   removes most of note 1, and the duplicate "I'll do the talking" goes with it.
+2. **Re-shape the asks as rows** — short VERB title + the literal utterance as subtitle, uniform
+   height, chevron (**H**). Presentation only: `pickExample` already seeds both halves with no model
+   call, so this does not reopen the picker decision.
+3. **Promote `GET /sample` from a ghost text link to a small playable card** — the WORKED EXAMPLE the
+   research puts first. It answers note 3 better than demoting does (different object class, so it
+   stops competing as a fourth text CTA), and it is the only way a newcomer experiences the product
+   without first inventing a prompt. For an audio product, letting them hear the skipper should
+   outrank asking them to type at him. Pair it with the limit named in persona ("I only know the roads
+   around Lake Tahoe so far") rather than offered as an apology.
+4. **Move MY DRIVES to `app/drives/index.tsx`, gated on `signedIn`** (§7, founder-decided). The entry
+   point is the header-LEFT slot, which is already conditionally empty for signed-in riders — zero new
+   chrome.
+5. ✅ **Purge downloads on SIGN-OUT, not only on account deletion.** This is what makes step 4's
+   premise — *drives belong to a specific user* — true on disk rather than only in the UI. Without it
+   a signed-out rider's drive dirs sit on the phone unreachable by any screen and unreclaimed by any
+   sweep (`sweepOrphanClips` keeps every drive dir regardless of owner), and the offline fallback
+   still lists them to whoever signs in next. `deleteAllDriveDownloads()` already does exactly the
+   right thing — including clearing the shared clip store, the half that is easy to get wrong, since
+   every megabyte of audio lives in `clips/`, a SIBLING of `drives/`. **One new call site.**
+   ⚠ Ship it in the SAME change as step 4: step 4 removes the last surface that made those files
+   visible, so shipping 4 without 5 converts a visible leftover into an invisible one.
+6. **Keep the offline inversion as a `signedIn` branch** (§7): offline + signed in renders the drives
+   list inline on home exactly as today; offline + signed out gets the outage card alone, which is
+   correct once 5 has run.
+
+That combination answers all five notes and **needs no new colour decision** — I keeps the cold open
+glow-free, so the one-amber invariant below is never touched. **E remains a cheap add-on** if the
+founder wants the full poster on the very first launch for App Review's benefit.
+
+⚠ **Not in the recommendation, deliberately:** voice input on the composer (a new capability, not a
+restyle — see §5) and any fix for the cross-account offline exposure §7 raises, which is pre-existing
+and wants its own decision.
 
 ### ⚠ Option B moves the one amber, and that is an invariant, not a style
 
@@ -342,6 +370,90 @@ stops being a dead end precisely because sign-out purges.
   `app/drives/index.tsx`, which makes `/drives → /drives/[id]` a real hierarchy with a proper back
   affordance. ⚠ A new `app/*.tsx` breaks `typecheck` until `.expo/types/router.d.ts` regenerates —
   expected, not a real error.
+
+## 8. Note 7 — two explicit home experiences, online and offline
+
+Founder, 2026-08-03: *"i wonder if there should be 2 explicit home screen experiences, one for online
+and one for offline"*. **Yes — and it is the natural conclusion of §7**, which otherwise leaves an
+awkward exception (MY DRIVES leaves home… except offline, where it comes back inline). Two authored
+experiences makes that not an exception: **the offline home simply IS the drives list.**
+
+The two screens have genuinely different jobs, and the code already says so — the offline branch's
+own comment is *"out here MY DRIVES is not the archive, it is the product — the only thing on the
+phone that still works"*. Online home's job is **plan a drive**; offline home's job is **get me to my
+saved drive**. Today the second is expressed as *absences* (composer removed, order flipped) — a
+subtraction from the online screen rather than a designed one.
+
+### ⚠ Two EXPERIENCES, not two ROUTES — and this is not a style preference
+
+Both reasons are verified in the code, and the first costs money:
+
+1. **`app/index.tsx` stays MOUNTED under a push, deliberately, and only unmount aborts an in-flight
+   turn.** Its comment: *"A turn in flight is not aborted when the rider leaves (only unmount aborts
+   it)"*. A `router.replace('/offline')` on a connectivity edge would unmount home, **killing a
+   billed `/drives/plan` turn mid-flight and discarding the whole transcript** — for a rider whose
+   only crime was driving through a tunnel.
+2. **The connectivity verdict is event-driven and self-healing, not debounced.** It comes only from
+   `addNetworkStateListener` events, and a stale OFFLINE verdict is deliberately re-probed rather than
+   trusted. So it *can* flip. `connectivity.ts` states the stakes outright: *"a false OFFLINE verdict
+   is CATASTROPHIC"*. Route churn on a flapping verdict is far worse than a layout swap.
+
+So: **one mounted route, two explicitly authored components** (`HomeOnline` / `HomeOffline`) chosen by
+`isOffline`. ⚠ **The planner state must be LIFTED above the branch** — today the conditional is only
+in the returned JSX so state survives it, but splitting into two child components unmounts whichever
+is not rendered, which reintroduces hazard 1 through the back door.
+
+### What comparable apps do — and why Skipper is not shaped like them
+
+Founder asked for prior art on apps carrying a full online experience plus a degraded offline one
+(2026-08-03). ⚠ **This round of research was thinner than the earlier ones** — Google Design's offline
+article turns out to be about LABELLING, not structure, and the podcast-app results were listicles.
+What holds up:
+
+- **Spotify: same screen, content GREYED OUT, plus a "You're Offline" message.** Undownloaded items
+  stay visible but disabled; the terminology is "Downloaded".
+- **Podcast apps (Pocket Casts et al.): no offline screen at all** — the library IS the product either
+  way, so offline is unremarkable. Downloads are a first-class shelf, not a mode.
+- **General 2026 guidance:** *"Loaded / loading / empty / error are four different screens, not a
+  single spinner"*, and a hybrid rule — **banners for transient status, separate purpose-built screens
+  for major offline workflows where the user must act on cached content.** That second half is exactly
+  Skipper's offline case, so the literature supports the founder's instinct.
+- **Google Design** is worth one thing only: pair the icon with the WORD — an offline pin plus
+  "offline" for downloaded content, a cloud-off icon plus "no internet" for the state. Cheap and
+  directly actionable on the offline home.
+
+⚠ **THE REASON SPOTIFY IS THE CONTRAST CASE, NOT THE MODEL.** Spotify, Google Maps and podcast apps
+all have a primary action with a **degraded form** — play cached music, show cached tiles, play a
+downloaded episode. Greying out works there because most of the product still functions.
+**Skipper's primary online action has NO degraded form:** planning a drive needs a model call AND a
+billed Routes call, so it is binary, not degraded. A greyed-out composer would be a tease for
+something that cannot happen at any fidelity.
+
+✅ **And the codebase already made exactly that call, one control at a time:** *"⚠ The composer is
+REPLACED, never greyed out — a disabled field reads as broken."* The founder's two-experiences
+instinct extends a decision that is already in the tree from a single control to the whole screen.
+
+The cleanest framing that falls out: **Skipper is two products in one app** — a PLANNER (online-only)
+and a PLAYER (offline-capable). The offline home is not a degraded planner; it is **the player's front
+door**.
+
+### The transition rule — do not swap out from under work in progress
+
+Even within one route, flipping to the archive screen mid-conversation would yank a rider's transcript
+off screen. Rule: **swap only when there is nothing to lose** (`riderTurnCount === 0` and nothing in
+flight); otherwise keep the online screen and show the offline notice inside it. `voice.offline.home`
+("No signal out here — showing the drives you've saved") already exists for the first case.
+
+### What each screen actually is
+
+- **Online home** — the recommendation above: question as hero → suggestion rows → the sample card →
+  composer. **No MY DRIVES** (§7).
+- **Offline home** — the saved drives, first and large, because out here they are the product; the
+  in-persona no-signal note; **no composer**; and ⚠ **no sample card** — `GET /sample` is a presigned
+  R2 URL and needs the network, so that surface genuinely cannot exist offline.
+- ⚠ **Offline + signed out is a third state, and it is empty by construction** (§7 ruling 1 + the
+  sign-out purge): no drives, no planner. It gets the honest "can't plan out here" card alone — which
+  is correct, not a dead end, precisely because the purge guarantees there is nothing to show.
 
 ## Sources
 
