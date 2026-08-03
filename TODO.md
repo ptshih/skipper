@@ -771,16 +771,23 @@ schema-introspected and mutation-checked.
       3. **Accept it, explicitly.** The window is 60s and needs a two-device delete race. The residual
          artifact is a single grant row with no drives attached. Cheapest, but it leaves personal data
          surviving a deletion request, which is the thing 5.1.1(v) is actually about.
-      **DECIDED: option 2** (founder: "go with your rec", 2026-08-02) — `withFreshSession` on
-      `POST /drives` + `GET /drives`, now that option 1 is ruled out on evidence rather than left as
-      an open question. ⚠ **NOT YET IMPLEMENTED: both files it needs were mid-edit by another agent**
-      (`drives.ts` ~172 lines in flight, `entitlements.ts` being re-pointed at `@skipper/shared`).
-      Pick it up when they are free; nothing about the decision is open.
-      A reaper for orphaned ledger rows was considered and rejected — it is new machinery for a
-      bounded race, and CLAUDE.md's existing wariness about reapers touching rider identity applies.
-      **Test plan:** extend `test/drive-access.test.ts` (it already enumerates the route table for
-      INV-15) to assert the two exposed routes carry the fresh-session middleware, so adding a third
-      inserting route without it fails there — the same shape as the existing gate assertion.
+      ✅ **DONE 2026-08-02 (`5b2286d`)** — option 2, founder call. `withFreshSession` on `POST /drives`
+      and `GET /drives`; the other three owner routes keep the cache.
+      ⚠ **The ordering is the design, and the obvious version is wrong.** It runs LAST — after
+      `requireAccount` (and after `createDriveLimiter` on POST) — not first. Leading with it reads more
+      correct and hands an anonymous flood an auth-DB query per request, because `requireAccount` is a
+      pure in-memory check placed first precisely so a flood costs nothing. The existing route-table
+      test caught that on the first attempt.
+      ⚠ **Which promotes the handlers' tier-keyed backstops.** A deleted account passes
+      `requireAccount` (it decided on the cached session); what rejects it is
+      `c.get('tier') === 'free' ? … : undefined` inside each handler, reading the session
+      `withFreshSession` just replaced. Those read as defence-in-depth against a dropped gate — they
+      are now also what catches an erased user. **Deleting one as "unreachable" reopens the orphan.**
+      Guarded by two assertions in `test/drive-access.test.ts`: the exact SET of fresh routes (so a
+      third inserting route fails until it opts in, and nobody "optimises" `GET /` off the list for
+      looking like a read) and the ordering rule. Mutation-checked.
+      A reaper for orphaned ledger rows was considered and rejected — new machinery for a bounded
+      race, and CLAUDE.md's wariness about reapers touching rider identity applies.
 - [ ] **PLAN: cookie growth is now a per-request cost — write the rule down.** No action needed today:
       `auth.ts` configures **no user `additionalFields`**, and the cached payload is nine small fields
       (`id, email, name, emailVerified, createdAt, updatedAt, role, isAnonymous, banned` — verified by
