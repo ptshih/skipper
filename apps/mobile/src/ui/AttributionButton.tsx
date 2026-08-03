@@ -36,7 +36,10 @@ export function AttributionButton({ items }: AttributionButtonProps) {
         accessibilityLabel={voice.attribution.open}
         // A 48pt-floor tap target around an 18pt glyph — the ⓘ sits in a tight header row, so the
         // slop is symmetric and generous rather than pushing neighbours.
-        hitSlop={{ top: space.md, bottom: space.md, left: space.md, right: space.md }}
+        // ⚠ space.lg, NOT space.md: the icon is 18pt, so 12 each side reached only 42 — under 00a78's
+        // 48pt floor, on the control that opens the CC BY-SA credit. That one is a licence obligation,
+        // not a nicety, so it is the last affordance that should be hard to hit. 18 + 200d716 = 50.
+        hitSlop={{ top: space.lg, bottom: space.lg, left: space.lg, right: space.lg }}
       >
         <Icon name="info" size={18} color="inkFaint" />
       </Pressable>

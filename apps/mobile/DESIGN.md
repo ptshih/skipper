@@ -42,10 +42,18 @@ _star_.
    a passed stop). Never six.
 3. **Contrast is enforced by the token set, not by discipline.** See §4. There is
    intentionally no "amber text on paper" role to misuse.
-4. **Dark mode is a peer, not an afterthought.** Night is the headline drive. **Auto**
-   follows the phone (dusk-dark at night by default); the explicit Auto/Day/Dusk picker
-   (`ThemeModePicker`) lives on Settings behind the home gear — deliberately NOT in global
-   chrome, so nothing tempts a mid-drive fiddle.
+4. **DAY IS THE REFERENCE THEME; dusk is a first-class peer** (founder, 2026-08-03 — this reverses
+   the earlier "night is the headline drive"). Most drives happen in daylight, so DAY is what gets
+   designed, reviewed and measured FIRST, and a daylight contrast failure is blocking rather than a
+   follow-up. ⚠ This changed the PRIORITY, not the RUNTIME: **Auto** still follows the phone, so a day
+   driver already gets day and a night driver still gets dusk — flipping the default would hand a
+   night driver a bright screen, which is the thing dusk exists to prevent. The explicit
+   Auto/Day/Dusk picker (`ThemeModePicker`) lives on Settings behind the home gear — deliberately NOT
+   in global chrome, so nothing tempts a mid-drive fiddle.
+   ⚠ The reversal was earned, not stylistic: reviewing dusk first is exactly why two daylight-only
+   defects shipped and were caught by measurement rather than by eye — the route line at 2.07 on the
+   day roads, and the amber puck at ~2.5 on the day basemap (TODO.md). When a theme is reviewed
+   second, its bugs are found second.
 5. **Big thumbs, gloves, potholes.** Nothing tappable below 48pt; primary CTAs ≥60pt.
 
 ## 3. Tokens (`src/theme/tokens.ts`)

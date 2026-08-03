@@ -269,6 +269,19 @@ function DriveMapBase({
         style={styles.fill}
         initialRegion={routeRegion}
         // See `locked` — a preview map inside a scroll view is a picture, not a control.
+        // ⚠ `pointerEvents` IS THE LOAD-BEARING HALF, and `scrollEnabled={false}` ALONE DOES NOT WORK
+        // — verified on device 2026-08-03, twice: a swipe that began on the map still scrolled
+        // nothing. Disabling the gestures stops the map panning ITSELF; the native view goes on
+        // swallowing the touch instead of letting it reach the ScrollView underneath, so the effect
+        // for a rider is identical to the bug (drag on the card, nothing moves). `none` is what
+        // actually forwards it. The gesture flags stay: they are what keeps the camera from being
+        // moved programmatically off-route, and they document the intent even where they cannot
+        // enforce it.
+        // ⚠ SAFE ONLY BECAUSE A LOCKED MAP HAS NO TAP TARGETS: `locked` is set by the proposal card,
+        // which passes no `onPressStop`. The drive-detail preview DOES (tap a pin to play that stop)
+        // and is never locked. Setting `locked` on a surface with tappable markers would silently
+        // kill them.
+        pointerEvents={locked ? 'none' : 'auto'}
         scrollEnabled={!locked}
         zoomEnabled={!locked}
         onPanDrag={() => following && setFollowing(false)}
