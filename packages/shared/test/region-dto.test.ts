@@ -45,7 +45,32 @@ describe('the rollout is additive in BOTH directions', () => {
   })
 
   test('regionList round-trips a populated list', () => {
-    const payload = { regions: [{ ...base, exampleAnchors: ['Tahoe City'] }] }
+    const payload = { regions: [{ ...base, ready: true, exampleAnchors: ['Tahoe City'] }] }
     expect(regionList.parse(payload)).toEqual(payload)
+  })
+})
+
+// `ready` answers a different question from `exampleAnchors` and carries the OPPOSITE bias, which is
+// the whole reason it is a separate field: the anchors are decoration that degrades to "show nothing",
+// this is a capability that degrades to "assume plannable". A false negative here hides the composer
+// and tells a rider the skipper runs no roads where he does — so every unreadable input must land on
+// `true`, and only an explicit `false` from a server that actually looked may turn the screen off.
+describe('region.ready fails OPEN', () => {
+  test('OLD SERVER, new client: a missing key parses to true, not false', () => {
+    // The deploy-order guarantee. A client that knows this field talking to an API that does not yet
+    // send it must degrade to the old always-on composer, never to a home screen with no input.
+    expect(region.parse(base).ready).toBe(true)
+  })
+
+  test('null and a wrong type both degrade to true — the values `.default()` would throw on', () => {
+    expect(region.parse({ ...base, ready: null }).ready).toBe(true)
+    expect(region.parse({ ...base, ready: 'yes' }).ready).toBe(true)
+    expect(region.parse({ ...base, ready: 0 }).ready).toBe(true)
+  })
+
+  test('an explicit false is HONOURED — the degrade must not swallow a real answer', () => {
+    // The other half, and the one a `.catch(true)` could quietly break: a server that looked and found
+    // nothing plannable has to be able to say so.
+    expect(region.parse({ ...base, ready: false }).ready).toBe(false)
   })
 })

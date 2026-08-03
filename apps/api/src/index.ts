@@ -204,7 +204,13 @@ app.get('/regions', async (c) => {
     id: r.id,
     slug: r.slug,
     displayName: r.displayName,
-    exampleAnchors: byRegion.get(r.id) ?? [],
+    // ⚠ `?? false` — the honest default for a CAPABILITY the server could not establish, and the
+    // opposite of the DTO's `.catch(true)`. They are not in conflict: here we know the region and
+    // found nothing plannable in it, so "no" is a fact; there the client has no answer at all and
+    // must not invent a "no" that would hide the composer. Fail closed where you know, open where
+    // you don't. (`pickExampleAnchors` gives every region an entry, so this is belt to that brace.)
+    ready: byRegion.get(r.id)?.ready ?? false,
+    exampleAnchors: byRegion.get(r.id)?.names ?? [],
   }))
   // ⚠ Only the anonymous variant is stored. Memoizing a staged response here is the one edit that
   // would turn this cache into a release-gate leak.

@@ -556,17 +556,29 @@ when idle.
 Also landed, and each was a decision rather than an inheritance:
 - **`region.exampleAnchors`** (review §1.11) — names only, `.catch([])` so a cosmetic field can never
   brick home through mobile's ContractError wall. See the commit for the sort/collation reasoning.
-  ⚠ **IT STOPPED BEING COSMETIC ON 2026-08-03.** An empty array is now the client's whole test for
-  "this region has no curated endpoints", and that test HIDES THE COMPOSER (founder — every turn in
-  such a region is a billed Opus call the planner can only refuse). The two causes of `[]` are no
-  longer equivalent: a genuinely uncurated region, and `.catch([])` swallowing a malformed payload.
-  The second now reads as the first, so one sloppy `?? null` in the handler would tell a rider in a
-  fully curated region that the skipper runs no roads there and leave them nothing to type into —
-  the exact brick the `.catch` was chosen to prevent, arriving by another door. The escape hatch is
-  the region chip (gated on `hasRegions`, never on the selection), and the durable fix is to stop
-  inferring: have `GET /regions` state curatedness outright rather than leaving the client to read it
-  out of a field whose contract is "degrade silently". Not built — it is an API change and a founder
-  call.
+  ⚠ **IT BRIEFLY STOPPED BEING COSMETIC ON 2026-08-03, AND THEN GOT ITS OWN FIELD.** For one commit
+  an empty array was the client's whole test for "this region has no curated endpoints", and that
+  test HIDES THE COMPOSER (founder — every turn in such a region is a billed Opus call the planner
+  can only refuse). That conflated the two causes of `[]`: a genuinely uncurated region, and
+  `.catch([])` swallowing a malformed payload. The second read as the first, so one sloppy `?? null`
+  in the handler would have told a rider in a fully curated region that the skipper runs no roads
+  there and left them nothing to type into — the exact brick the `.catch` was chosen to prevent,
+  arriving by another door.
+- **`region.ready`** — the fix for that, and now the ONLY thing the composer gate reads. A capability
+  (`does this region hold ≥1 curated endpoint-eligible place`), computed server-side in the same
+  containment pass that picks the anchors — one pass, because two readers of "is this point in this
+  bbox" is the drift this file was already burned by. It is set from CONTAINMENT ALONE, above the
+  display cap and the blank/duplicate name filtering, so a region whose only endpoint has an
+  unpublishable name stays drivable. Biases are deliberately OPPOSITE and in both places: the server
+  fails CLOSED (`?? false` — it looked and found nothing, which is a fact), the DTO fails OPEN
+  (`.catch(true)` — an absent or malformed field means the client has no answer and must not invent a
+  "no" that blanks the screen). That also makes the rollout safe in the direction it will actually
+  happen: a client that knows the field against an API that does not yet send it degrades to the old
+  always-on composer. ⚠ `ready` inherits `EXAMPLE_ANCHOR_SCAN_LIMIT` — a region whose only endpoints
+  sit in the un-featured tail beyond that limit would be reported not-ready and lose its composer.
+  Harmless at tens of curated rows; a second reason to revisit the constant as it fills.
+  ⚠ The escape hatch out of a not-ready region is the region chip, gated on `hasRegions` and never on
+  the selection. Remove that and this becomes a dead screen.
 - **`GET /drives/anchors` deleted end to end.** Not deferred: step 8a moves `requireAccount` off the
   `/drives*` mount and `/anchors` is not one of the five owner routes, so it would have become an
   unauthenticated dump of the curated allowlist **with exact lat/lng** the day 8a deployed.

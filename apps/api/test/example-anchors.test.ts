@@ -26,18 +26,28 @@ const place = (name: string, lat: number, lng: number, featured = false): Exampl
 
 const region = (id: string, bbox: string | null): ExampleAnchorRegion => ({ id, bbox })
 
+// `pickExampleAnchors` returns BOTH halves per region now (names + ready). The name assertions below
+// are unchanged on purpose — they are the ones that pin INV-1, the ordering and the hygiene rules —
+// so they read through this projection rather than being rewritten around the new shape. `ready` gets
+// its own block at the bottom, where it can be asserted against cases the names cannot express.
+const pickNames = (
+  regions: readonly ExampleAnchorRegion[],
+  places: readonly ExampleAnchorPlace[],
+): Map<string, string[]> =>
+  new Map([...pickExampleAnchors(regions, places)].map(([id, r]) => [id, r.names]))
+
 describe('pickExampleAnchors — geometry-first bucketing', () => {
   test('a place inside a region bbox is published for it; one outside is published for nobody', () => {
     const inside = place('Tahoe City', 39.17, -120.14)
     const outside = place('Sacramento', 38.58, -121.49)
-    const out = pickExampleAnchors([region('r1', TAHOE)], [inside, outside])
+    const out = pickNames([region('r1', TAHOE)], [inside, outside])
     expect(out.get('r1')).toEqual(['Tahoe City'])
   })
 
   test('bbox edges are INCLUSIVE — mirrors the between() in loadRegionAnchors', () => {
     // Exactly on latMin and on lngMax: both corners of the box a `between()` would admit.
     const onEdge = place('Corner Cove', 38.8, -119.9)
-    const out = pickExampleAnchors([region('r1', TAHOE)], [onEdge])
+    const out = pickNames([region('r1', TAHOE)], [onEdge])
     expect(out.get('r1')).toEqual(['Corner Cove'])
   })
 
@@ -45,20 +55,20 @@ describe('pickExampleAnchors — geometry-first bucketing', () => {
     const shared = place('Mount Rose', 39.32, -119.88)
     const a = region('a', '-120.2,38.8,-119.8,39.4')
     const b = region('b', '-119.95,39.3,-119.6,39.7')
-    const out = pickExampleAnchors([a, b], [shared])
+    const out = pickNames([a, b], [shared])
     expect(out.get('a')).toEqual(['Mount Rose'])
     expect(out.get('b')).toEqual(['Mount Rose'])
   })
 
   test('every region gets an entry, even one with no places in range', () => {
-    const out = pickExampleAnchors([region('r1', TAHOE), region('r2', RENO)], [place('Tahoe City', 39.17, -120.14)])
+    const out = pickNames([region('r1', TAHOE), region('r2', RENO)], [place('Tahoe City', 39.17, -120.14)])
     expect(out.get('r2')).toEqual([])
   })
 })
 
 describe('pickExampleAnchors — deterministic order', () => {
   test('featured floats above alphabetically-earlier un-featured names', () => {
-    const out = pickExampleAnchors(
+    const out = pickNames(
       [region('r1', TAHOE)],
       [place('Aaa Bay', 39.1, -120.0), place('Zzz Cove', 39.1, -120.0, true)],
     )
@@ -70,7 +80,7 @@ describe('pickExampleAnchors — deterministic order', () => {
   // point of not using it (see buildRosterBlock: an ICU difference between Cloud Run instances would
   // reshuffle the chips between launches).
   test('name order is CODEPOINT, not locale', () => {
-    const out = pickExampleAnchors(
+    const out = pickNames(
       [region('r1', TAHOE)],
       [place('echo Lake', 39.1, -120.0), place('Zephyr Cove', 39.05, -119.95)],
     )
@@ -85,9 +95,9 @@ describe('pickExampleAnchors — deterministic order', () => {
       place('Incline Village', 39.25, -119.97, true),
       place('Camp Richardson', 38.93, -120.04),
     ]
-    const one = pickExampleAnchors([region('r1', TAHOE)], rows)
-    const shuffled = pickExampleAnchors([region('r1', TAHOE)], [rows[3]!, rows[0]!, rows[4]!, rows[1]!, rows[2]!])
-    const reversed = pickExampleAnchors([region('r1', TAHOE)], [...rows].reverse())
+    const one = pickNames([region('r1', TAHOE)], rows)
+    const shuffled = pickNames([region('r1', TAHOE)], [rows[3]!, rows[0]!, rows[4]!, rows[1]!, rows[2]!])
+    const reversed = pickNames([region('r1', TAHOE)], [...rows].reverse())
     expect(shuffled.get('r1')).toEqual(one.get('r1')!)
     expect(reversed.get('r1')).toEqual(one.get('r1')!)
     // Pinned literally so a re-order isn't just self-consistently wrong.
@@ -98,7 +108,7 @@ describe('pickExampleAnchors — deterministic order', () => {
 describe('pickExampleAnchors — bounds, hygiene, and the D9 shape', () => {
   test(`caps at EXAMPLE_ANCHORS_PER_REGION (${EXAMPLE_ANCHORS_PER_REGION})`, () => {
     const many = Array.from({ length: 20 }, (_, i) => place(`Stop ${String(i).padStart(2, '0')}`, 39.1, -120.0))
-    const out = pickExampleAnchors([region('r1', TAHOE)], many)
+    const out = pickNames([region('r1', TAHOE)], many)
     expect(out.get('r1')).toHaveLength(EXAMPLE_ANCHORS_PER_REGION)
   })
 
@@ -106,7 +116,7 @@ describe('pickExampleAnchors — bounds, hygiene, and the D9 shape', () => {
   // would put the billable identity of a curated endpoint on an anonymous route.
   test('emits NAMES ONLY — no ids, no coordinates', () => {
     const rows = [place('Sand Harbor', 39.198, -119.929, true), place('Spooner Summit', 39.106, -119.895)]
-    const names = pickExampleAnchors([region('r1', TAHOE)], rows).get('r1')!
+    const names = pickNames([region('r1', TAHOE)], rows).get('r1')!
     for (const n of names) {
       expect(typeof n).toBe('string')
       for (const r of rows) {
@@ -119,7 +129,7 @@ describe('pickExampleAnchors — bounds, hygiene, and the D9 shape', () => {
 
   test('a null or malformed bbox yields [] rather than throwing (a draft region has no extent)', () => {
     const rows = [place('Tahoe City', 39.17, -120.14)]
-    const out = pickExampleAnchors(
+    const out = pickNames(
       [region('none', null), region('garbage', 'not,a,box,here'), region('short', '1,2,3'), region('empty', '')],
       rows,
     )
@@ -127,7 +137,7 @@ describe('pickExampleAnchors — bounds, hygiene, and the D9 shape', () => {
   })
 
   test('names are flattened, blanks dropped, duplicates collapsed', () => {
-    const out = pickExampleAnchors(
+    const out = pickNames(
       [region('r1', TAHOE)],
       [
         place('Tahoe\n  City', 39.17, -120.14),
@@ -139,9 +149,44 @@ describe('pickExampleAnchors — bounds, hygiene, and the D9 shape', () => {
     expect(out.get('r1')).toEqual(['Tahoe City', 'Zephyr Cove'])
   })
 
+  test('ready is TRUE for a region holding a curated endpoint whose NAME never publishes', () => {
+    // The case that makes `ready` worth a field: one contained place, blank name, so nothing to show.
+    // The region is perfectly drivable and its composer must stay. Deriving readiness from the
+    // published names would hide it over a cosmetic defect.
+    const out = pickExampleAnchors([region('r1', TAHOE)], [place('   ', 39.17, -120.14)])
+    expect(out.get('r1')).toEqual({ names: [], ready: true })
+  })
+
+  test('ready is FALSE only when nothing curated falls inside the bbox', () => {
+    const out = pickExampleAnchors(
+      [region('r1', TAHOE), region('r2', RENO)],
+      [place('Tahoe City', 39.17, -120.14)],
+    )
+    expect(out.get('r1')?.ready).toBe(true)
+    expect(out.get('r2')?.ready).toBe(false)
+  })
+
+  test('a region with no usable extent is NOT ready — it cannot be planned', () => {
+    // Distinct from the degraded read on the client: here we know the region and know it has no box,
+    // so false is a fact rather than an assumption. (The DTO fails OPEN; the server fails closed.)
+    const rows = [place('Tahoe City', 39.17, -120.14)]
+    const out = pickExampleAnchors([region('none', null), region('garbage', 'not,a,box,here')], rows)
+    expect(out.get('none')?.ready).toBe(false)
+    expect(out.get('garbage')?.ready).toBe(false)
+  })
+
+  test('ready survives the display cap — it is not names.length in disguise', () => {
+    const many = Array.from({ length: EXAMPLE_ANCHORS_PER_REGION + 5 }, (_, i) =>
+      place(`Stop ${String(i).padStart(2, '0')}`, 39.1, -120.0),
+    )
+    const got = pickExampleAnchors([region('r1', TAHOE)], many).get('r1')!
+    expect(got.names).toHaveLength(EXAMPLE_ANCHORS_PER_REGION)
+    expect(got.ready).toBe(true)
+  })
+
   test('empty inputs are not an error', () => {
-    expect(pickExampleAnchors([], [place('Tahoe City', 39.17, -120.14)]).size).toBe(0)
-    expect(pickExampleAnchors([region('r1', TAHOE)], []).get('r1')).toEqual([])
+    expect(pickNames([], [place('Tahoe City', 39.17, -120.14)]).size).toBe(0)
+    expect(pickNames([region('r1', TAHOE)], []).get('r1')).toEqual([])
   })
 })
 
@@ -156,6 +201,7 @@ describe('the Region DTO requires exampleAnchors', () => {
       id: '3582ed8a-a55e-4fb2-b8af-59dcd9eef16c',
       slug: 'lake-tahoe',
       displayName: 'Lake Tahoe',
+      ready: true,
       exampleAnchors: ['Tahoe City'],
     }
     expect(r.exampleAnchors).toEqual(['Tahoe City'])

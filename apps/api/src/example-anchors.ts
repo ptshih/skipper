@@ -58,8 +58,23 @@ export interface ExampleAnchorPlace {
  *  heuristic here — this stays deterministic. */
 const byRank = byAnchorRank<ExampleAnchorPlace>
 
+/** What one region publishes, and whether it can be driven at all.
+ *
+ *  ⚠ BOTH COME FROM ONE PASS, deliberately. They answer different questions off the same containment
+ *  test, and computing them in two places is how this file already got burned once — it used to carry
+ *  its own bbox parser AND its own containment test, and two readers disagreeing about axis order or
+ *  edge-inclusivity puts a region's anchors on the wrong side of the lake. A second function asking
+ *  "is anything in this bbox" would be that mistake again, one refactor later. */
+export interface RegionAnchors {
+  /** Up to `EXAMPLE_ANCHORS_PER_REGION` display names. DECORATION — see the DTO. */
+  names: string[]
+  /** At least one curated endpoint-eligible place falls inside this region's bbox. A CAPABILITY: the
+   *  client hides the composer when it is false, so this must never be read off `names`. */
+  ready: boolean
+}
+
 /**
- * regionId → up to `EXAMPLE_ANCHORS_PER_REGION` display names.
+ * regionId → its display names and whether it is plannable.
  *
  * Bucketing is point-in-bbox in JS from ONE scan of the curated set, not a query per region: `places`
  * carries no region_id (geometry-first, docs/decisions/geometry-first-regions.md), and a per-region
@@ -67,21 +82,29 @@ const byRank = byAnchorRank<ExampleAnchorPlace>
  * place, which is correct — there is no single-assignment rule.
  *
  * NEVER THROWS. Every region gets an entry; a missing bbox, a malformed bbox, or no curated places all
- * map to `[]`, because this feeds decoration and a decoration must not be able to 500 the region list.
+ * map to no names and `ready: false`, because this feeds decoration and a decoration must not be able
+ * to 500 the region list. A region with no EXTENT cannot be planned, so `false` is the honest answer
+ * there rather than a degradation.
+ *
+ * ⚠ `ready` INHERITS THE SCAN CAP and that is the one way it can lie. The handler's single query is
+ * `.limit(EXAMPLE_ANCHOR_SCAN_LIMIT)` ordered `featured DESC` first, so a region whose ONLY curated
+ * endpoints sit in the un-featured tail beyond that limit would be reported not-ready and lose its
+ * composer. Harmless while the whole curated set is tens of rows; the constant's own note already says
+ * to revisit as it approaches the limit, and this is now a second reason to.
  */
 export function pickExampleAnchors(
   regionRows: readonly ExampleAnchorRegion[],
   placeRows: readonly ExampleAnchorPlace[],
-): Map<string, string[]> {
+): Map<string, RegionAnchors> {
   // Sorted ONCE for all regions, and re-sorted here even though the SQL already ordered: `asc(name)` in
   // Postgres runs under the DATABASE COLLATION, not codepoint. Same technique, same reason as the
   // planner's roster block — make the guarantee local instead of dependent on a query staying sorted.
   const ranked = [...placeRows].sort(byRank)
-  const out = new Map<string, string[]>()
+  const out = new Map<string, RegionAnchors>()
   for (const r of regionRows) {
     const box = parseRegionBbox(r.bbox)
     if (!box) {
-      out.set(r.id, [])
+      out.set(r.id, { names: [], ready: false })
       continue
     }
     // ⚠ The engine owns BOTH halves of "is this poi in this region" (1.1 sweep) — this file used to
@@ -92,9 +115,18 @@ export function pickExampleAnchors(
     // here as it is in the planner's allowlist.
     const names: string[] = []
     const seen = new Set<string>()
+    let ready = false
     for (const p of ranked) {
-      if (names.length >= EXAMPLE_ANCHORS_PER_REGION) break
       if (!pointInRegionBbox(box, p.lat, p.lng)) continue
+      // ⚠ SET FROM CONTAINMENT ALONE, ABOVE every filter below — that is what makes `ready` a real
+      // answer rather than `names.length > 0` spelled differently. A region whose only curated
+      // endpoint has a blank or duplicated display NAME is still perfectly drivable; deriving this
+      // from the published list would hide its composer over a cosmetic defect, which is the whole
+      // class of bug this field was added to end.
+      ready = true
+      // Safe to stop once the display list is full: reaching the cap took that many contained places,
+      // so `ready` is necessarily already true and cannot be missed by breaking here.
+      if (names.length >= EXAMPLE_ANCHORS_PER_REGION) break
       const name = flatten(p.name)
       // Two curated rows can legitimately share a display name; a duplicate chip reads as a bug, and a
       // blank one reads as a broken render.
@@ -102,7 +134,7 @@ export function pickExampleAnchors(
       seen.add(name)
       names.push(name)
     }
-    out.set(r.id, names)
+    out.set(r.id, { names, ready })
   }
   return out
 }

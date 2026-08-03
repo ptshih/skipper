@@ -14,6 +14,24 @@ export const region = z.object({
   id: z.uuid(),
   slug: z.string(),
   displayName: z.string(),
+  /** Can the skipper plan a drive here at all — i.e. does this region hold at least one curated
+   *  endpoint-eligible place? A CAPABILITY, and the only field on this DTO that is one.
+   *
+   *  ⚠ IT EXISTS TO STOP THE CLIENT INFERRING THIS FROM `exampleAnchors` (2026-08-03). That field is
+   *  decoration carrying `.catch([])` precisely so a malformed payload degrades quietly — so once the
+   *  client began reading "empty" as "region not ready" and HIDING THE COMPOSER on it, a server-side
+   *  glitch in a cosmetic field became indistinguishable from a genuinely uncurated region, and would
+   *  have told a rider in a fully curated one that the skipper runs no roads there. Two questions, two
+   *  fields; the degrade contract only makes sense on the cosmetic one.
+   *
+   *  ⚠ `.catch(true)` — FAIL OPEN, and the direction is the whole point. Absent or malformed must mean
+   *  "assume plannable", because the failure this field guards against is a false NEGATIVE bricking the
+   *  screen. It also makes deploy order safe in one direction only: a client that knows this field
+   *  talking to a server that does not yet send it degrades to the old always-on behaviour rather than
+   *  to a home screen with no composer. `.catch`, not `.default`, for the same reason the sibling below
+   *  carries one — `.default` covers a MISSING key but still throws on a null or a wrong type, and any
+   *  throw here is mobile's blocking "please update the app" wall on the critical path. */
+  ready: z.boolean().catch(true),
   /** A few curated endpoint NAMES from this region — names only, no ids, no coordinates. Feeds the
    *  tappable example asks and the in-persona offline/outage copy, so rider-facing strings never
    *  hardcode a place name. It is DECORATION, never an input: the client must not turn one of these

@@ -922,7 +922,14 @@ export default function HomeScreen() {
   // he can't help here, offering a drive he'd have to refuse (founder, 2026-08-03).
   // ⚠ `region &&` is load-bearing: before `/regions` lands `region` is undefined, and that is NOT an
   // uncurated region — it reads as the normal open, which is what it becomes for every curated one.
-  const uncuratedRegion = !!region && region.exampleAnchors.length === 0
+  // ⚠ READS THE SERVER'S `ready`, NEVER `exampleAnchors.length` (2026-08-03). The anchors are
+  // DECORATION carrying `.catch([])` so a malformed payload degrades quietly; inferring capability
+  // from them made a server-side glitch in a cosmetic field indistinguishable from a genuinely
+  // uncurated region — and once this began hiding the composer, that glitch would have told a rider
+  // in a fully curated region that the skipper runs no roads there, with nothing to type into.
+  // `ready` is a capability with its own fail-OPEN default, so the degraded read is now "assume
+  // plannable" instead of a dead screen.
+  const uncuratedRegion = !!region && !region.ready
   const showExamples = coldOpen && !plannerDown && !sending && !uncuratedRegion
 
   // ⚠ LAZY INITIALISER, NOT A LIVE CALL — the contract `shouldShowListenRow` states, and §16's guard
@@ -985,7 +992,7 @@ export default function HomeScreen() {
   const [tick, setTick] = useState(0)
   const reduceMotion = useReducedMotion()
   // ⚠ EMPTY IN AN UNCURATED REGION, and that is the ROTATION's veto as well as the copy's: the
-  // name-free shapes ("the long way round") survive a region with no anchors by design, so without
+  // name-free shapes ("just take the long way") survive a region with no anchors by design, so without
   // this the cycle would happily run — re-rendering home every few seconds to update a placeholder
   // belonging to a composer that is no longer mounted there. Routed through `exampleCount` rather
   // than a new flag on `shouldRotatePlaceholder`: zero examples already means "no rotation", and
@@ -1015,7 +1022,7 @@ export default function HomeScreen() {
   // ⚠ THE SAME `coldOpen` THAT VETOES THE ROTATION SWAPS THE COPY — one expression, deliberately, so
   // the two cannot drift into "the cycle stopped but the teaching line stayed". Tearing the interval
   // down freezes the example that was up; without this the reply box would keep showing an ask shape
-  // ("two hours, no highways") under a skipper turn that just asked the rider a question.
+  // ("2 hours, no highways") under a skipper turn that just asked the rider a question.
   const placeholder = coldOpen
     ? placeholderAt(placeholderExamples, tick, voice.plan.composerPlaceholder)
     : voice.plan.composerReplyPlaceholder
