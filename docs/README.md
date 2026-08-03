@@ -357,10 +357,6 @@ The rest are post-MVP features, gated behind the proven phone player:
   a physical iPhone can verify, with the duck-flip + open native risks called out. ⚠ **Written against
   the M1 player, before the conversation was the home screen — for 1.1 use
   [1-1-submission-sweep.md](guides/1-1-submission-sweep.md).**
-- [sdk57-posthog-rebuild.md](guides/sdk57-posthog-rebuild.md) — turnkey checklist for the one native
-  rebuild that validates SDK 57 (RN 0.86) on-device + PostHog Stage 2 native crashes + the
-  Create-a-Drive empty-corpus fix; pre-build state already verified, the PostHog symbol-upload secret
-  gate flagged. One-time (2026-07-24) — prune once the pass is done.
 - [gcp-cloud-run-deploy.md](guides/gcp-cloud-run-deploy.md) — deploying `@skipper/api` to Cloud Run
   (us-east4, co-located with the Neon DB); push-to-`main` continuous deployment via Cloud Build,
   the dotenvx-secret-from-Secret-Manager model, and the one-time IAM/DRS gotchas.
