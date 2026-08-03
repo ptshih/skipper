@@ -23,7 +23,7 @@
 //   ... --apply                  run it (drafts + resolves + upserts role-tagged `places`)
 //   ... --region <slug>          curate a region (default: lake-tahoe; resolves to its bbox)
 //   ... --model sonnet           draft with Sonnet instead of the default Opus (cheaper A/B)
-//   ... --target 30              roughly how many places to draft (guidance to the model)
+//   ... --target 100             roughly how many places to draft (guidance to the model; 8-120)
 //   ... --max-cost 1             abort before any spend if the LLM estimate exceeds this
 
 import { sql } from 'drizzle-orm'
@@ -36,18 +36,57 @@ import { runJob } from './pipeline/job-progress'
 import { withRetry, sleep } from './pipeline/http'
 import { resolveCuratedPlace, type CuratedPlace, type PlacesBbox } from './pipeline/places'
 import { ENRICH_MODELS, getAnthropic, type EnrichModelChoice } from './models'
-import { llmSpendLines, llmSpentUsd, recordModelUsage } from '@skipper/shared'
+import { llmSpendLines, llmSpentUsd, recordModelUsage, usageUsd } from '@skipper/shared'
 import { ANTHROPIC_READY, DEFAULT_REGION_SLUG, GOOGLE_READY, requireEnv } from './config'
 
-/** Rough USD for the single draft call, by model (pre-run estimate only; the real tally prints after). */
-const EST_USD_DRAFT: Record<EnrichModelChoice, number> = { sonnet: 0.03, opus: 0.08 }
+/** The draft call's pre-run estimate, priced through the SAME `usageUsd` the real tally uses rather
+ *  than a hand-kept dollar constant (pre-run estimate only; the real tally prints after).
+ *
+ *  ⚠ IT SCALES WITH `--target`, which is the whole point. This was a flat `{sonnet: 0.03, opus: 0.08}` —
+ *  correct while a draft was always ~30 places, and quietly wrong the moment the default became 100:
+ *  the dry run would promise $0.08 for a call costing several times that, and `--max-cost` would
+ *  authorise a spend it had mis-measured. Bounding one quantity with a number derived from a DIFFERENT
+ *  quantity is the bug this repo keeps re-paying for, so the estimate reads the same `targetN` the
+ *  prompt asks for.
+ *
+ *  Token figures are deliberately generous — one drafted place is a name + Places query + role +
+ *  featured + a short rationale, and an estimate that UNDER-promises ahead of a paid run is the failure
+ *  that actually costs money. */
+const EST_INPUT_TOKENS = 1_400
+const EST_TOKENS_PER_PLACE = 80
+
+/** ⚠ FAILS CLOSED on an unpriced model. `usageUsd` returns 0 for one it does not recognise — honest
+ *  for a post-hoc tally, but as a PRE-SPEND bound a $0 estimate silently clears every `--max-cost`,
+ *  which is the opposite of what this number exists for. */
+function estimateDraftUsd(modelId: string, targetN: number): number {
+  const usd = usageUsd(modelId, { input_tokens: EST_INPUT_TOKENS, output_tokens: targetN * EST_TOKENS_PER_PLACE })
+  if (usd === 0) {
+    throw new Error(
+      `curate-places: ${modelId} is not in MODEL_PRICING — refusing to estimate a paid draft at $0. Add it in @skipper/shared (spend.ts).`,
+    )
+  }
+  return usd
+}
 
 const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region', 'model', 'target', 'max-cost'] })
 const apply = flags.has('apply')
 const regionKey = flags.value('region') ?? DEFAULT_REGION_SLUG
 const modelChoice: EnrichModelChoice = flags.value('model') === 'sonnet' ? 'sonnet' : 'opus'
 const model = ENRICH_MODELS[modelChoice]
-const targetCount = Math.max(8, Math.min(60, Number(flags.value('target')) || 30))
+// ⚠ THE CEILING IS COUPLED TO TWO THINGS, so do not raise it alone.
+// (1) `max_tokens` on the draft call below — the whole candidate list is ONE forced tool call, and a
+//     truncated one is HTTP 200 carrying a half-parsed list. Raised to 120 from 60 when curation moved
+//     to bbox scoping (a box spanning Tahoe AND Reno AND the Comstock needs a bigger budget than a
+//     shoreline ring did), and max_tokens went up with it + a stop_reason guard.
+// (2) MAX_PLAN_ANCHORS (apps/api/src/limits.ts) — the curated endpoint set rides in the planner's
+//     CACHED prompt prefix on every rider turn, so the region's total must stay well under it. 120 per
+//     RUN with an OR-merge upsert keeps a couple of passes clear of that ceiling.
+// ⚠ THE DEFAULT WAS SIZED FOR A UI THAT NO LONGER EXISTS. 30 was right when this set fed the
+// tap-to-pick create form — a list a human THUMB-SCROLLED, where 120 is a wall. `GET /drives/anchors`
+// was deleted end to end in 1.1 and the set's only consumer is now the PLANNER's roster, which Opus
+// reads whole from a cached prefix. Thumb-scrolling stopped binding; MAX_PLAN_ANCHORS (200) and model
+// attention are what bind, and every name added is one fewer in-persona "do not know that one".
+const targetCount = Math.max(8, Math.min(120, Number(flags.value('target')) || 100))
 const maxCostUsd = maxCostFlag(flags)
 
 announce({ tool: 'curate-places', blast: ['SPENDS $', 'MUTATES DB'], apply })
@@ -124,11 +163,11 @@ const DRAFT_TOOL: Anthropic.Tool = {
 function draftSystem(regionName: string, bbox: RegionBbox, targetN: number): string {
   return `You are curating the set of real-world PLACES a rider can pick to start, end, or break a self-guided driving audio tour of ${regionName}, narrated by a charming Jungle-Cruise-style skipper.
 
-Optimize for CHARM, not coverage: every place must be intentional, recognizable, and a real place a visitor would actually name. A short list of beloved hubs beats an exhaustive directory.
+Optimize for CHARM: every place must be intentional, recognizable, and a real place a visitor would actually name — never a gazetteer of everything with a signpost. Length is not the virtue here; being real and recognizable is. Spread the set across the WHOLE box rather than clustering it in one corner. But never pad to reach the number: if the box honestly holds fewer good ones, return fewer.
 
 Draft roughly ${targetN} places:
 - ENDPOINT hubs (most of the list): towns and villages, marinas and boat launches, famous scenic lookouts and state-park gateways, major trailheads — the kind of place someone says "let's drive from ___ to ___".
-- BREAK pitstops (a handful): well-known coffee spots, gas stations at natural stopping points, rest areas, and viewpoint pull-offs along the main routes.
+- BREAK pitstops (a smaller share): well-known coffee spots, gas stations at natural stopping points, rest areas, and viewpoint pull-offs along the main routes.
 - Mark role="both" for a hub that is also a natural pitstop.
 - Mark featured=true for ONLY the few most iconic, popular start points (think 4–8).
 
@@ -141,13 +180,26 @@ For each place give a precise Google Places \`query\` that uniquely identifies i
 async function draftCuratedPlaces(regionName: string, bbox: RegionBbox, targetN: number): Promise<PlaceDraft[]> {
   const response = await getAnthropic('curate-places needs it to draft the candidate set').messages.create({
     model,
-    max_tokens: 4_000,
+    // Sized for the LARGEST draft the clamp allows (120 places, each a name + Places query + role +
+    // rationale), not for the default 30. A ceiling is not a charge — only tokens actually emitted are
+    // billed — so headroom here is free, while too little silently truncates the list.
+    max_tokens: 16_000,
     system: draftSystem(regionName, bbox, targetN),
     tools: [DRAFT_TOOL],
     tool_choice: { type: 'tool', name: DRAFT_TOOL.name },
     messages: [{ role: 'user', content: `Draft the curated places for ${regionName}.` }],
   })
   recordModelUsage(model, response.usage)
+  // ⚠ CHECK THIS BEFORE READING THE TOOL BLOCK. The entire candidate list is ONE tool call, so a
+  // max_tokens stop leaves a half-written JSON list that the SDK still surfaces as a `tool_use` block —
+  // HTTP 200, no error, and a SHORTER list than asked for, which is indistinguishable from the model
+  // simply being selective. That is exactly the "a run that did nothing must not settle green" trap:
+  // the operator would prune and resolve a truncated set believing it was the whole draft.
+  if (response.stop_reason === 'max_tokens') {
+    throw new Error(
+      `curate-places: the draft was TRUNCATED at max_tokens (asked for ~${targetN} places) — the list is incomplete. Raise max_tokens or lower --target.`,
+    )
+  }
   const toolUse = response.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
   if (!toolUse) throw new Error('curate-places: the draft model returned no tool call.')
   const out = toolUse.input as { places?: PlaceDraft[] }
@@ -175,7 +227,7 @@ async function main(): Promise<void> {
   const placesBbox: PlacesBbox = bbox // structurally identical corners
   console.log(`Region: ${region.displayName} (${region.slug})\n`)
 
-  const estUsd = EST_USD_DRAFT[modelChoice]
+  const estUsd = estimateDraftUsd(model, targetCount)
   if (!apply) {
     console.log(
       `DRY RUN — no paid calls made. --apply will:\n` +

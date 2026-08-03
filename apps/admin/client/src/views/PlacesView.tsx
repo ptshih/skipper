@@ -298,9 +298,13 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
   const [kept, setKept] = useState<Set<number>>(new Set())
   const [results, setResults] = useState<CurateResult[] | null>(null)
   const [added, setAdded] = useState<number | null>(null)
+  // Held as a STRING so the field can be cleared/retyped without fighting a number cast mid-edit.
+  // Never clamped here: the server owns the range (see the route's targetN) and falls back to 30 on
+  // anything unparseable, so this input is an affordance and the clamp stays a single expression.
+  const [target, setTarget] = useState('100')
 
   const draftMut = useMutation({
-    mutationFn: () => api.draftPlaces({ region }),
+    mutationFn: () => api.draftPlaces({ region, target: Number(target) || undefined }),
     onSuccess: (res) => {
       setDrafts(res.drafts)
       setKept(new Set(res.drafts.map((_, i) => i))) // keep all by default; the operator prunes down
@@ -358,9 +362,30 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
               <span className="font-medium text-foreground">Resolve &amp; add</span> spends a few cents of Google
               Places and writes the keepers. You can fine-tune roles in the table afterward.
             </Callout>
-            <Button onClick={() => draftMut.mutate()}>
-              <Sparkles className="h-4 w-4" /> Draft places
-            </Button>
+            <div className="flex items-end gap-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="curate-target">How many</Label>
+                <Input
+                  id="curate-target"
+                  type="number"
+                  min={8}
+                  max={120}
+                  value={target}
+                  onChange={(e) => setTarget(e.target.value)}
+                  className="w-24"
+                />
+              </div>
+              <Button onClick={() => draftMut.mutate()}>
+                <Sparkles className="h-4 w-4" /> Draft places
+              </Button>
+            </div>
+            {/* The draft is scoped by the region BBOX, which is routinely WIDER than the region's name
+                suggests — so the count is a budget spread over that whole box. 30 covers a shoreline;
+                a box reaching several towns wants more, or the far ones get squeezed out. */}
+            <p className="text-xs text-muted-foreground">
+              Spread over the region’s whole bounding box, not just what its name suggests. These names are the
+              planner’s entire world — every one it lacks is a “don’t know that one” to a rider. 8–120.
+            </p>
           </>
         )}
 

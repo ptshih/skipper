@@ -22,6 +22,17 @@
 > together. ⚠ The "every one Tahoe-basin" measurement above is HISTORY on both counts — the rule changed,
 > and a `Truckee` endpoint was added by hand on 2026-08-03. Trust the DB for live counts, never this line.
 >
+> ⚠ **The draft COUNT was picker-era sizing too, and moved 30 → 100 (2026-08-03).** §Rationale below
+> argues curated-over-autocomplete partly on "a short curated list is mostly *tapping*" and "curating
+> ~30 places is trivial" — the CONCLUSION still holds, but that premise is gone: the tap-to-pick form
+> was deleted in 1.1 and this set's only consumer is the planner's roster, which Opus reads whole from a
+> cached prefix. Thumb-scrolling stopped binding; `MAX_PLAN_ANCHORS` (200) and model attention bind now,
+> and every name missing is one more in-persona "don't know that one". The admin panel exposes the count
+> (8–120) and the prompt's old "a short list beats an exhaustive directory" line went with it — it would
+> have fought any high count. ⚠ The `--max-cost` estimate is no longer a flat constant either: it scales
+> with the count and prices through `usageUsd`, because a bound computed from a different quantity than
+> the one it bounds is exactly how this repo has under-counted spend before.
+>
 > ⚠ **The rider-facing half of §Runtime below is GONE: `GET /drives/anchors` was DELETED end to end in
 > 1.1** ([drives-first-1-1.md](drives-first-1-1.md) D7 + its removal table), together with the
 > tap-to-pick create form this spec was written to feed. Read every mention of that endpoint below as

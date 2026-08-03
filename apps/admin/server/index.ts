@@ -594,7 +594,18 @@ app.post('/admin/places/draft', async (c) => {
   if (!process.env.ANTHROPIC_API_KEY) {
     return c.json({ error: 'anthropic_unconfigured', message: 'ANTHROPIC_API_KEY is not set.' }, 503)
   }
-  const targetN = Math.max(8, Math.min(60, Number(body.target) || 30))
+  // ⚠ THE CLAMP IS THE ONE AUTHORITY on this number — the panel's min/max are affordance, not a guard.
+  // Coupled to two things, so do not raise it alone: (1) `max_tokens` on the draft call (the list is ONE
+  // forced tool call; a truncated one is a 200 carrying a half-parsed list — see draftCuratedPlaces),
+  // and (2) MAX_PLAN_ANCHORS (apps/api/src/limits.ts), since the curated set rides in the planner's
+  // cached prompt prefix on every rider turn. Raised 60 -> 120 with bbox scoping: a box spanning Tahoe
+  // AND Reno AND the Comstock needs a bigger budget than a shoreline ring did.
+  // ⚠ THE DEFAULT WAS SIZED FOR A UI THAT NO LONGER EXISTS. 30 was right when this set fed the
+  // tap-to-pick create form — a list a human THUMB-SCROLLED, where 120 is a wall. `GET /drives/anchors`
+  // was deleted end to end in 1.1 and the set's only consumer is now the PLANNER's roster, which Opus
+  // reads whole from a cached prefix. Thumb-scrolling stopped binding; MAX_PLAN_ANCHORS (200) and model
+  // attention are what bind, and every name added is one fewer in-persona "do not know that one".
+  const targetN = Math.max(8, Math.min(120, Number(body.target) || 100))
   try {
     const drafts = await draftCuratedPlaces(region.displayName, bbox, {
       targetN,

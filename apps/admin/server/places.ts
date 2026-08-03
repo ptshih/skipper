@@ -182,11 +182,11 @@ const DRAFT_TOOL: Anthropic.Tool = {
 function draftSystem(regionName: string, bbox: BboxCorners, targetN: number): string {
   return `You are curating the set of real-world PLACES a rider can pick to start, end, or break a self-guided driving audio tour of ${regionName}, narrated by a charming Jungle-Cruise-style skipper.
 
-Optimize for CHARM, not coverage: every place must be intentional, recognizable, and a real place a visitor would actually name. A short list of beloved hubs beats an exhaustive directory.
+Optimize for CHARM: every place must be intentional, recognizable, and a real place a visitor would actually name — never a gazetteer of everything with a signpost. Length is not the virtue here; being real and recognizable is. Spread the set across the WHOLE box rather than clustering it in one corner. But never pad to reach the number: if the box honestly holds fewer good ones, return fewer.
 
 Draft roughly ${targetN} places:
 - ENDPOINT hubs (most of the list): towns and villages, marinas and boat launches, famous scenic lookouts and state-park gateways, major trailheads — the kind of place someone says "let's drive from ___ to ___".
-- BREAK pitstops (a handful): well-known coffee spots, gas stations at natural stopping points, rest areas, and viewpoint pull-offs along the main routes.
+- BREAK pitstops (a smaller share): well-known coffee spots, gas stations at natural stopping points, rest areas, and viewpoint pull-offs along the main routes.
 - Mark role="both" for a hub that is also a natural pitstop.
 - Mark featured=true for ONLY the few most iconic, popular start points (think 4–8).
 
@@ -214,12 +214,25 @@ export async function draftCuratedPlaces(
   const client = new Anthropic({ maxRetries: 1, timeout: 90_000 })
   const res = await client.messages.create({
     model: opts.model,
-    max_tokens: 4_000,
+    // Sized for the LARGEST draft the route's clamp allows (120 places, each a name + Places query +
+    // role + rationale), not for the default 30. A ceiling is not a charge — only tokens actually
+    // emitted are billed — so headroom here is free, while too little silently truncates the list.
+    max_tokens: 16_000,
     system: draftSystem(regionName, bbox, opts.targetN),
     tools: [DRAFT_TOOL],
     tool_choice: { type: 'tool', name: DRAFT_TOOL.name },
     messages: [{ role: 'user', content: `Draft the curated places for ${regionName}.` }],
   })
+  // ⚠ CHECK THIS BEFORE READING THE TOOL BLOCK. The entire candidate list is ONE tool call, so a
+  // max_tokens stop leaves a half-written JSON list that the SDK still surfaces as a `tool_use` block —
+  // HTTP 200, no error, and a SHORTER list than asked for, which is indistinguishable from the model
+  // simply being selective. The operator would then prune and PAY to resolve a truncated set believing
+  // it was the whole draft. Surfaces as the route's 502 with this message.
+  if (res.stop_reason === 'max_tokens') {
+    throw new Error(
+      `the draft was TRUNCATED at max_tokens (asked for ~${opts.targetN} places) — the list is incomplete. Lower the count and draft again.`,
+    )
+  }
   const toolUse = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
   if (!toolUse) throw new Error('the draft model returned no tool call')
   const out = toolUse.input as { places?: PlaceDraft[] }
