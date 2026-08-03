@@ -161,6 +161,23 @@ export const voice = {
   drive: {
     ready: 'READY TO ROLL', // pre-drive placard kicker
     readyBody: 'Mount up and start when you’re on the road. I’ll pipe up when we reach the good stuff.',
+    /**
+     * REPLACES `readyBody` when the download is incomplete — the ONE time the rider is told, on the
+     * ready card, while still parked and able to act on it.
+     *
+     * ⚠ It exists because the gap was otherwise SILENT BY CONSTRUCTION: a partial copy plays with the
+     * same "Playing from download" chip a complete one shows, and a stop with no audio is skipped
+     * after 400 ms with no note — so the rider drove past it hearing nothing and being told nothing.
+     *
+     * ⚠ Owning the gap out loud is the PERSONA, not an apology bolted onto it: the honest streak is
+     * the heart of him, so he names the number and says plainly what it will sound like. No hedging,
+     * no "some content may be unavailable". And no boat — "all aboard" and its family are banned
+     * (see the planner + narration prompts), which is why this says "the rest of the drive is all
+     * here" rather than the nautical line that wants to go there.
+     */
+    readyBodyPartial: (missing: number): string =>
+      `${missing} ${missing === 1 ? 'stop' : 'stops'} didn’t finish saving, so I’ll be quiet when we pass ` +
+      `${missing === 1 ? 'it' : 'them'}. The rest of the drive is all here.`,
     blurb: 'The skipper talks as you reach each stop on the real roads.', // drive-detail explainer under the Start CTA
     sim: 'SIMULATED DRIVE', // the on-device sim setup — no real GPS yet
     nextStop: 'next stop', // "ROLLING · next stop: <name>"

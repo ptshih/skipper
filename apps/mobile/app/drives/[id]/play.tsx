@@ -321,7 +321,12 @@ export default function DriveScreen() {
     card = {
       kicker: voice.drive.ready,
       title: d.driveName,
-      body: voice.drive.readyBody,
+      // ⚠ A partial download REPLACES the usual line rather than stacking under it — this card is
+      // built around ONE body line, and the generic "mount up" copy is the one worth losing. This is
+      // also the ONLY place the rider is told: the offline chip says "Playing from download" for a
+      // partial copy exactly as it does for a complete one, and a stop with no audio is skipped after
+      // 400 ms in silence. Here they are still parked and can go back and finish the download.
+      body: d.missingClipCount > 0 ? voice.drive.readyBodyPartial(d.missingClipCount) : voice.drive.readyBody,
       glow: false,
     }
   } else if (d.activeSeq != null) {

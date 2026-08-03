@@ -37,6 +37,10 @@ import { track } from './analytics'
 import { ApiError, errorMessage } from './api'
 import { cleanPlaceName } from './labels'
 import { loadPlayback, resignPlayback } from './offline'
+// Pure + native-free (offline-util.ts's whole reason for existing), so importing it here costs this
+// hook nothing and keeps "which stops SHOULD have audio" a single definition shared with the
+// downloader — a second local predicate is how the count and the download disagree.
+import { expectedAudioSeqs } from './offline-util'
 import { getDrivePermission, liveSource, simulatedSource, type FixSubscription } from './gps'
 import { useLocationPriming } from './useLocationPriming'
 import { useDriveMusic } from './driveMusic'
@@ -177,6 +181,25 @@ export interface UseDrive {
   /** True when playback is served entirely from the on-disk download (no network) — drives a quiet
    *  "playing from download" chip so the rider knows a dead zone won't interrupt the drive. (M7) */
   offline: boolean
+  /**
+   * How many stops this session has NO audio for — the size of the silent gap, surfaced ONCE on the
+   * ready card before the drive rolls.
+   *
+   * ⚠ WHY THIS EXISTS AT ALL. `loadPlayback` deliberately serves a PARTIAL local map when the network
+   * is unreachable (offline.ts — the alternative was error-walling a rider who has 39 of 40 stops), and
+   * a seq with no uri is then skipped after 400 ms with NO note. So the gap was SILENT BY
+   * CONSTRUCTION: the rider drove past those stops hearing nothing while the offline chip said
+   * "Playing from download", the same words a COMPLETE copy shows. The drive-detail screen tracked the
+   * gap the whole time; it simply never reached the player.
+   *
+   * ⚠ It is deliberately NOT a mid-drive warning. The rider is told while PARKED, on the ready card,
+   * where they could still act on it — and never again, because a note that fires at each silent stop
+   * is exactly the eyes-off-the-road interruption the in-car doctrine forbids.
+   *
+   * 0 whenever playback is streaming (the online map covers every clip that has a url), so this is a
+   * partial-download signal specifically, not a general "clips missing" count.
+   */
+  missingClipCount: number
   paused: boolean
 
   // In-clip scrub (drive/quiet segments have no timeline).
@@ -234,6 +257,10 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   // True when playback is served entirely from the on-disk download (zero network) — surfaced as a
   // quiet "playing from download" chip so the rider knows a dead zone won't bite. (M7)
   const [offline, setOffline] = useState(false)
+  // See `missingClipCount` on the returned surface for why the gap is measured at all. Computed ONCE,
+  // from the map actually handed to the player, so it counts what will really be silent rather than
+  // what the manifest hoped for.
+  const [missingClipCount, setMissingClipCount] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [needsAccount, setNeedsAccount] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
@@ -325,6 +352,11 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
           (c): c is typeof c & { lat: number; lng: number } => c.lat != null && c.lng != null,
         )
         setUrls(urls)
+        // The silent gap, measured against the map the player will actually read. `expectedAudioSeqs`
+        // is the downloader's own "should have audio" predicate, so this can never disagree with what
+        // the download tried to fetch. Streaming yields 0 (the online map covers every url-bearing
+        // clip), so a non-zero count means a partial download specifically.
+        setMissingClipCount(expectedAudioSeqs(manifest.clips).filter((s) => !urls.has(s)).length)
         setData({
           driveName: manifest.label,
           hostName: DRIVE_HOST_NAME,
@@ -1037,6 +1069,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     stallNote,
     gpsSearching,
     offline,
+    missingClipCount,
     paused,
     positionMs,
     durationMs,
