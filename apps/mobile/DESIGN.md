@@ -89,6 +89,14 @@ light↔dark swap for free. **The contrast footguns are designed out:**
   `surfaceSunken`). Dark-mode sunken clears all of them.
 - The amber **glow** (`glow` token) is applied via RN's cross-platform `boxShadow`,
   not iOS-only `shadow*` props, so the night-drive halo renders on Android too.
+  ⚠ **AND IT IS A DUSK EFFECT, FULL STOP** (2026-08-03). Measured, the halo composites to 2.45 against
+  the night surface and **1.30** against paper — in daylight it rendered *nothing* while still costing
+  a shadow pass. Every consumer now theme-gates it and uses `shadowCast` in day, which is what this
+  table already calls "neutral daylight cast shadow": a lantern glows at dusk, a painted ranger sign
+  in the sun casts a shadow. `Button` had done this correctly since it was written; the pattern simply
+  never propagated to `NowCard`, `RouteTrack` or `DriveMap`, which is why day looked flat.
+  ⚠ So the light theme's `glow` value is now read by NOTHING. It stays only because `ThemeColors`
+  requires the key — do not "wire it up" to make it useful.
 
 | Role            | Daylight        | Dusk            | Use                                              |
 | --------------- | --------------- | --------------- | ------------------------------------------------ |
@@ -110,7 +118,7 @@ light↔dark swap for free. **The contrast footguns are designed out:**
 | `trackInactive` | `#CDB988`       | `#3A4A3E`       | dashed untraveled trail + hairlines              |
 | `rule`          | `#CDB988`       | `#3A4A3E`       | dividers, card keylines                          |
 | `danger`        | `#A8401F` rust  | `#E97559` ember | errors                                           |
-| `glow`          | amber 30% α     | amber 42% α     | campfire halo (boxShadow) — NOW card, CTA, token |
+| `glow`          | (unused — see ⚠) | amber 42% α     | campfire halo (boxShadow) — DUSK only: NOW card, CTA, car token, map puck + active stop |
 | `shadowCast`    | ink 20% α       | black 50% α     | neutral daylight cast shadow                     |
 | `scrim`         | ink 42% α       | black 55% α     | behind sheets / gates                            |
 

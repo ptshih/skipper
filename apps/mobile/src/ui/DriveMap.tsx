@@ -261,6 +261,16 @@ function DriveMapBase({
 
   const amber = clipActive ? colors.trackInactive : colors.amberToken // dim while a clip owns the glow
 
+  // DAYLIGHT LIFT — the day half of the dusk halo. A marker on a pale basemap reads by sitting ABOVE
+  // it, which is a shadow with an offset, not a glow: `shadowCast` is exactly what §4 reserves for
+  // "daylight elevation". Null at dusk, where the amber halo does this job and a second dark shadow
+  // under it would only smudge the night basemap.
+  // ⚠ Inline rather than in `StyleSheet` because the colour is themed — a StyleSheet entry cannot
+  // reach `colors`.
+  const dayLift = isDark
+    ? null
+    : { boxShadow: [{ offsetX: 0, offsetY: 2, blurRadius: 6, color: colors.shadowCast }] }
+
   return (
     <View style={styles.fill}>
       <MapView
@@ -350,7 +360,13 @@ function DriveMapBase({
               }
             >
               <View style={styles.markerBox}>
-                {active && !hidePuck ? (
+                {/* ⚠ DUSK ONLY (2026-08-03). This halo is a translucent DISC, not a shadow, and in
+                    daylight it measured 1.30 against the land — it rendered nothing while still
+                    costing a view. Day gets a real drop shadow on the dot instead (below), which is
+                    both what §4 calls "daylight elevation" and what every map draws under a marker.
+                    A grey disc would NOT have been the daylight equivalent: a shadow needs an
+                    offset to read as lift, and a centred ink disc just muddies the dot. */}
+                {active && !hidePuck && isDark ? (
                   <View
                     style={[
                       styles.activeHalo,
@@ -361,6 +377,7 @@ function DriveMapBase({
                 <View
                   style={[
                     styles.stopDot,
+                    dayLift,
                     active
                       ? {
                           width: 22,
@@ -421,12 +438,19 @@ function DriveMapBase({
         {!hidePuck && puck ? (
           <Marker coordinate={puck} anchor={{ x: 0.5, y: 0.5 }} flat>
             <View style={styles.markerBox}>
-              <View style={[puckStyles.halo, { backgroundColor: colors.glow }]} />
+              {/* Dusk only — see the stop halo above. In daylight this disc composited to 1.15
+                  against the land (its `opacity: 0.55` on top of a 30% amber), i.e. it was not a
+                  faint halo, it was nothing. The puck's own `dayLift` shadow does the job there. */}
+              {isDark ? <View style={[puckStyles.halo, { backgroundColor: colors.glow }]} /> : null}
               <View style={[styles.puckWedge, { transform: [{ rotate: `${heading}deg` }] }]}>
                 <View style={[styles.wedgeTriangle, { borderBottomColor: amber }]} />
               </View>
               <View
-                style={[puckStyles.dot, { backgroundColor: amber, borderColor: colors.surface }]}
+                style={[
+                  puckStyles.dot,
+                  dayLift,
+                  { backgroundColor: amber, borderColor: colors.surface },
+                ]}
               />
             </View>
           </Marker>

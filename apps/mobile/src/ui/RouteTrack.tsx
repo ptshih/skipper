@@ -23,7 +23,7 @@ export interface RouteTrackProps {
 const TOKEN = 24
 
 export function RouteTrack({ progress, height = 6, glow = true, style }: RouteTrackProps) {
-  const { colors } = useTheme()
+  const { colors, isDark } = useTheme()
   const reduced = useReducedMotion()
 
   // Reduce Motion: the signature token must NOT glide. We track the progress value's
@@ -88,9 +88,16 @@ export function RouteTrack({ progress, height = 6, glow = true, style }: RouteTr
             {
               left: pct,
               backgroundColor: colors.amberToken,
-              boxShadow: glow
-                ? [{ offsetX: 0, offsetY: 0, blurRadius: 6, color: colors.glow }]
-                : undefined,
+              // ⚠ Theme-gated like `Button` and `NowCard` (2026-08-03): the campfire halo is a NIGHT
+              // effect — `glow` measures 1.30 against paper, so in daylight it rendered nothing while
+              // still costing a shadow pass. Day gets the cast shadow §4 calls "daylight elevation",
+              // which also suits the token better there: the car reads as a physical enamel pip
+              // sitting ON the trail rather than a lamp glowing above it.
+              boxShadow: !glow
+                ? undefined
+                : isDark
+                  ? [{ offsetX: 0, offsetY: 0, blurRadius: 6, color: colors.glow }]
+                  : [{ offsetX: 0, offsetY: 2, blurRadius: 5, color: colors.shadowCast }],
             },
           ]}
         >

@@ -127,6 +127,11 @@ export const lightTheme: Theme = {
     rule: palette.tanRule,
     danger: palette.rustError,
     onDanger: palette.paperRaised,
+    // ⚠ READ BY NOTHING IN THIS THEME (2026-08-03), and that is correct rather than an oversight. The
+    // campfire halo is a DUSK effect: it composites to 1.30 against paper, so in daylight it rendered
+    // nothing while still costing a shadow pass. Every consumer theme-gates it now and uses
+    // `shadowCast` in day. The key stays because `ThemeColors` requires it — do NOT wire a component
+    // to it to make it earn its keep.
     glow: 'rgba(221,122,51,0.30)',
     shadowCast: 'rgba(42,32,20,0.20)',
     scrim: 'rgba(42,32,20,0.42)',

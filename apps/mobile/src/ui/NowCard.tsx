@@ -46,10 +46,19 @@ export function NowCard({
         {
           backgroundColor: colors.surfaceRaised,
           borderColor: glow ? colors.amberToken : colors.rule,
-          // boxShadow renders the amber halo on both platforms; off = genuinely flat
-          boxShadow: glow
-            ? [{ offsetX: 0, offsetY: 0, blurRadius: 16, color: colors.glow }]
-            : undefined,
+          // ⚠ THEME-GATED, the way `Button` already does it — and it was not, until 2026-08-03.
+          // The campfire halo is a NIGHT effect: measured, `glow` composites to 2.45 against the dusk
+          // surface and **1.30** against paper, i.e. in daylight it rendered nothing at all while
+          // still costing a shadow pass. Day gets `shadowCast` instead, which is what §4 calls it —
+          // "neutral ambient cast shadow (daylight elevation)". A lantern glows at dusk; a painted
+          // ranger sign in the sun casts a shadow. Same signal, told the way each mood tells it.
+          // (The amber BORDER above already carried the day signal on its own, which is why nothing
+          // looked broken — the halo was simply absent, not missed.)
+          boxShadow: !glow
+            ? undefined
+            : theme.isDark
+              ? [{ offsetX: 0, offsetY: 0, blurRadius: 16, color: colors.glow }]
+              : [{ offsetX: 0, offsetY: 3, blurRadius: 10, color: colors.shadowCast }],
         },
       ]}
     >
