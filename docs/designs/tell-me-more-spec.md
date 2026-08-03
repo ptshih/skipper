@@ -6,6 +6,11 @@
 > [downtime-callouts-spec](downtime-callouts-spec.md); it's the pre-canned rung of the pull ladder
 > formalized in [ask-the-skipper-spec](ask-the-skipper-spec.md) §4.6.
 >
+> **✅ The §8.5 ear check RAN and PASSED (founder go, 2026-08-03) — see §8.0.1.** A median stop and a
+> rich stop both produced genuine b-sides; two thin stops correctly DECLINED rather than padding. The
+> content risk is retired; what remains is `narrations_poi_uq` (§3), the half-the-corpus button
+> question (§8.0), and one prompt tweak (§8.0.1).
+>
 > **⚠ §8's build order was deliberately INVERTED (founder, 2026-08-03) — read §8.0 before following it.**
 > `narrateDeeperCut` (`pipeline/narrate.ts`) + `generate-bside-narrations.ts` exist and can print a
 > b-side script for any live story stop. No schema change, no TTS, no DTO, no player, and **no
@@ -197,10 +202,43 @@ to the front and answered on its own:
   373/421 pois, and a b-side has no two-minute budget forcing it to choose. Widening the source is
   free and it raises the eligible pool. (Same argument as
   [ask-the-skipper-spec](ask-the-skipper-spec.md) §0.1.)
-- **Not done:** the ear check itself. Generating even one script is an **operator paid run** and needs
-  an explicit founder go.
+### 8.0.1 The ear check RAN (founder go, 2026-08-03) — §8.5 is ANSWERED: it's a B-side, not scraps
 
-Resume the numbered phases below only once the ear check says the b-side is worth having.
+Four stops sampled ACROSS the material range via `--spread`, not the top of it. That selection is the
+point: skimming the richest N would have tested only the ceiling and never fired the exhaustion gate,
+and "green on rich proves nothing about thin."
+
+| Stop | Unspoken | Result |
+|---|---|---|
+| Riverside Hotel (Reno) | 2,978 chars | b-side, 212 words (~85s) — did NOT sprawl |
+| Reese–Johnson–Virgin House | **446 chars (the corpus median)** | b-side, 149 words (~60s) |
+| Station Casino Reno | 82 chars | **declined** |
+| Pope Estate | 0 chars | **declined** |
+
+`generated=2 exhausted=2 failed=0`, 4 calls, $0.13, prompt cache reading (13.7k).
+
+**The three things it proves.** (1) The MEDIAN stop works — the case most likely to sink the feature.
+Its b-side found that the Pink House was listed on the National Register *twice*, once inside the 1975
+Genoa Historic District and once on its own in 2004, a distinction the main telling passed straight
+over: *"once for keeping good company, and once all by itself."* That is a genuine deeper cut, not
+leftovers. (2) A fact-rich stop goes deeper without turning into a lecture — the Riverside cut lands
+*"one fellow designed the building where you got your divorce and the building where you slept it off.
+Full service."* and gets out at 85 seconds. (3) **The exhaustion gate fires rather than pads** — the
+two thin stops returned `DEEPER_CUT_NONE` instead of stretching one leftover fact, which was the
+failure mode that would have quietly filled the corpus with scraps.
+
+⚠ **One prompt tweak owed before a corpus run:** the Riverside cut opens *"Since you're curious about
+the man who drew all this"* — an acknowledgment open the b-side block explicitly asks it to avoid.
+Harmless once, grating at 200 clips (this is the repo's structural-monotony trap: a low-input form
+converges on one shape). Tighten the "do not open by acknowledging the request" line, or drop it and
+let §2's "since you asked" charm freebie be deliberate rather than accidental — but pick one.
+
+**Where this leaves the numbered phases.** The content risk is retired; what remains is the
+`narrations_poi_uq` reconciliation (§3), and the player question §8.0 raised — the button is present on
+roughly half the corpus, so a design that assumes it is usually there will be wrong. Neither is a
+content question any more.
+
+Resume the numbered phases below now that the ear check has passed.
 
 1. **Generation.** `narrate.ts`: a `narrateDeeperCut` (conditioned on the main script, exhaustion-
    gated). Wire into `generate-narrations.ts` as a post-narration pass; persist a `form='bside'`

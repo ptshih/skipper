@@ -120,7 +120,18 @@ for (const row of rows) {
 }
 
 candidates.sort((a, b) => b.leftoverChars - a.leftoverChars)
-const picked = candidates.slice(0, limit)
+
+// `--spread` samples ACROSS the material range instead of skimming the top.
+//
+// ⚠ WHY IT EXISTS: taking the N richest stops tests only the best case. It can show that a fact-rich
+// place yields a real B-side while saying nothing about the MEDIAN stop (which is half the corpus) or
+// about whether the exhaustion gate ever fires — and a model that pads instead of returning
+// DEEPER_CUT_NONE is the failure that would quietly fill the corpus with scraps. Green on rich proves
+// nothing about thin; "a new gate is blind to some subject kind — name which before shipping".
+const picked = argv.includes('--spread')
+  ? [...new Set([0, 0.5, 0.85, 1].map((f) => Math.min(candidates.length - 1, Math.floor(f * (candidates.length - 1)))))]
+      .map((i) => candidates[i]!)
+  : candidates.slice(0, limit)
 
 console.log(`\ncorpus: ${rows.length} live story tellings · candidates: ${candidates.length} · previewing ${picked.length}\n`)
 
@@ -145,7 +156,7 @@ let exhausted = 0
 let failed = 0
 for (const c of picked) {
   console.log('═'.repeat(100))
-  console.log(`${c.row.name}`)
+  console.log(`${c.row.name}  —  ~${c.leftoverChars} chars unspoken (rank ${candidates.indexOf(c) + 1}/${candidates.length})`)
   console.log('═'.repeat(100))
   console.log(`\n--- THE MAIN TELLING (already heard) ---\n${c.row.script}\n`)
   try {
