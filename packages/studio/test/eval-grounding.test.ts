@@ -341,4 +341,20 @@ describe('claimsFromResponse — a truncated audit is never a clean audit', () =
     expect(claimsFromResponse(toolCall({ claims: null }), 0)).toEqual([])
     expect(claimsFromResponse(toolCall({ claims: { claim: 'one', status: 'grounded' } }), 0)).toHaveLength(1)
   })
+
+  // ⚠ A PRIMITIVE is the half of "coerce it" that was dangerous, and it is not hypothetical: it fired
+  // TWICE in the first three-clip paid scenic run (2026-08-03). A lone OBJECT is recoverable as a
+  // one-element list (above); a string or number is NOT, so it fell through to [] — and an empty claim
+  // list scores `pass: true, score: 1`. That is a PERFECT grounding verdict on a clip nobody audited,
+  // out of a fail-CLOSED gate.
+  //
+  // ⚠ Most likely on the SCENIC path specifically: that well is one line, so the judge has almost
+  // nothing to decompose and is the most prone to answering with a bare string.
+  test('a PRIMITIVE claims value THROWS — coercing it to [] scored an unaudited clip 1.0', () => {
+    expect(() => claimsFromResponse(toolCall({ claims: 'no claims found' }), 0)).toThrow(/primitive/i)
+    expect(() => claimsFromResponse(toolCall({ claims: 42 }), 0)).toThrow(/primitive/i)
+    // The control: the shapes either side of it must still behave as before.
+    expect(claimsFromResponse(toolCall({ claims: [] }), 0)).toEqual([])
+    expect(claimsFromResponse(toolCall({ claims: null }), 0)).toEqual([])
+  })
 })

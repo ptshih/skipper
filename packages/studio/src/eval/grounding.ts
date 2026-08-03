@@ -246,10 +246,25 @@ export function claimsFromResponse(response: Anthropic.Message, seq: number): Cl
         'incomplete verdict; refusing to score it as clean.',
     )
   }
-  if (rawClaims !== null && !Array.isArray(rawClaims)) {
-    // Visibility for recurrence — this shape used to crash `.map`; it is now coerced, not dropped.
-    console.warn(
-      `Grounding eval: model returned non-array 'claims' (${typeof rawClaims}) for stop ${seq} — coercing.`,
+  // ⚠ A PRIMITIVE `claims` FAILS CLOSED. It used to warn and coerce, and coercing is what made it
+  // dangerous: `normalizeClaims` recovers a lone OBJECT as a one-element list, but a string or number
+  // is not recoverable and falls through to `[]` — and an empty claim list scores `pass: true,
+  // score: 1` further down. So a judge that returned a degenerate shape produced a PERFECT grounding
+  // verdict on a clip nobody had actually audited, which is the one outcome a fail-closed gate must
+  // never have.
+  //
+  // ⚠ Found on the first paid SCENIC run (2026-08-03), and that path is where it is most likely: a
+  // scenic well is ONE line, so the judge has almost nothing to decompose and is the most prone to
+  // answering with a bare string — it fired twice in three clips. Throwing costs exactly one clip
+  // (the generators' fault-isolation block records it WITHHELD), which is the right price.
+  //
+  // ⚠ `null` is deliberately NOT swept in here. An absent key already throws above, `claims: []` is a
+  // legitimate "this clip asserts no place-facts" verdict, and null sits between the two — closing it
+  // as well is defensible but changes behaviour on the story path, which nothing has shown to need it.
+  if (rawClaims !== null && !Array.isArray(rawClaims) && typeof rawClaims !== 'object') {
+    throw new Error(
+      `Grounding eval: judge returned a primitive 'claims' (${typeof rawClaims}) for stop ${seq} — ` +
+        'unrecoverable verdict; refusing to score it as clean.',
     )
   }
   // Never trust the wire — the schema constrains the model, but coerce defensively anyway.
