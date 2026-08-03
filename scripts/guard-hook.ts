@@ -15,7 +15,21 @@
 // rule must trace to a line in CLAUDE.md — this file is not a second doctrine.
 
 type Tier = 'deny' | 'ask'
-type Rule = { re: RegExp; tier: Tier; why: string; exempt?: RegExp }
+type Rule = {
+  re: RegExp
+  tier: Tier
+  why: string
+  exempt?: RegExp
+  // Claude Code already prompts for these in the default permission mode, and a
+  // second prompt for the same action just trains click-through — the habit the
+  // deny tier exists to prevent. So they stay silent there and fire only when
+  // the built-in gate is relaxed (acceptEdits / bypassPermissions / dontAsk),
+  // which is exactly where an ungated push or delete would otherwise slip by.
+  whenPermissive?: boolean
+}
+
+// 'plan' executes nothing, so it needs no guard of its own.
+const PERMISSIVE_MODES = new Set(['acceptEdits', 'bypassPermissions', 'dontAsk'])
 
 // Anchored on `git` etc. so a match inside a commit message or a filename does
 // not fire. Each segment is tested separately (see splitSegments), so a rule
@@ -43,12 +57,16 @@ const RULES: Rule[] = [
     why: '`git restore .` reverts the whole shared tree, not just your files.',
   },
   {
-    re: /\bgit\s+clean\b/,
+    // `-n` / `--dry-run` only lists what would go; nothing to guard.
+    re: /\bgit\s+clean\b(?![^\n]*(?:-[A-Za-z]*n\b|--dry-run\b))/,
     tier: 'deny',
     why: '`git clean` deletes untracked files other agents have not committed yet.',
   },
   {
-    re: /\bgit\s+rebase\b/,
+    // The escape hatches are the opposite of a rewrite — `--abort` undoes one.
+    // Denying the way out of a bad state is backwards, and blocks recovery
+    // precisely when the tree is already in trouble.
+    re: /\bgit\s+rebase\b(?!\s+--(?:abort|continue|skip|quit)\b)/,
     tier: 'deny',
     why: 'Rebase rewrites shared history and can strand other agents mid-change.',
   },
@@ -104,6 +122,14 @@ const RULES: Rule[] = [
     re: /\bgit\s+push\b/,
     tier: 'ask',
     why: 'A push deploys the API at 100% with no canary. Ask first.',
+    whenPermissive: true,
+  },
+  {
+    // Listed before the branch rule so a file-looking argument gets the honest
+    // reason. `git checkout -- .` is denied outright by a rule above.
+    re: /\bgit\s+checkout\s+(?:--\s+)?\S*\.\w{1,5}(?:\s|$)/,
+    tier: 'ask',
+    why: 'This reverts that file\'s uncommitted changes — make sure they are yours.',
   },
   {
     re: /\bgit\s+(?:switch|checkout)\s+(?:-c\b|-b\b|-{0,2}[A-Za-z][\w./-]*)/,
@@ -119,6 +145,7 @@ const RULES: Rule[] = [
     re: /\brm\s+-[A-Za-z]*[rR][A-Za-z]*f|\brm\s+-[A-Za-z]*f[A-Za-z]*[rR]/,
     tier: 'ask',
     why: 'Recursive force delete.',
+    whenPermissive: true,
     // Build artifacts are safe to blow away and are the overwhelming majority
     // of legitimate `rm -rf` here; exempting them keeps the prompt meaningful.
     // Dot-prefixed names need their own alternative: `\b` cannot match between
@@ -159,10 +186,11 @@ function splitSegments(command: string): string[] {
   return normalized.split(/&&|\|\||[;\n|]/)
 }
 
-export function classify(command: string): { tier: Tier; why: string } | null {
+export function classify(command: string, permissive = false): { tier: Tier; why: string } | null {
   let asked: { tier: Tier; why: string } | null = null
   for (const segment of splitSegments(command)) {
     for (const rule of RULES) {
+      if (rule.whenPermissive && !permissive) continue
       if (!rule.re.test(segment)) continue
       if (rule.exempt?.test(segment)) continue
       // deny wins outright; keep scanning only to see if something worse shows up.
@@ -174,8 +202,8 @@ export function classify(command: string): { tier: Tier; why: string } | null {
 }
 
 /** The rule table's verdict for one command. Exported for scripts/guard-hook.test.ts. */
-export function decide(command: string): Tier | 'allow' {
-  return classify(command)?.tier ?? 'allow'
+export function decide(command: string, permissive = false): Tier | 'allow' {
+  return classify(command, permissive)?.tier ?? 'allow'
 }
 
 function emit(decision: Tier, reason: string): never {
@@ -197,16 +225,18 @@ if (import.meta.main) {
   try {
     const input = await Bun.stdin.text()
     let command = ''
+    let permissive = false
     try {
       const parsed = JSON.parse(input)
       if (parsed?.tool_name !== 'Bash') process.exit(0)
       command = parsed?.tool_input?.command ?? ''
+      permissive = PERMISSIVE_MODES.has(parsed?.permission_mode ?? 'default')
     } catch {
       process.exit(0)
     }
     if (!command) process.exit(0)
 
-    const hit = classify(command)
+    const hit = classify(command, permissive)
     if (!hit) process.exit(0)
 
     if (hit.tier === 'deny') {

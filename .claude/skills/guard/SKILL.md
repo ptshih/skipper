@@ -22,8 +22,8 @@ git index are shared, so these silently eat other agents' uncommitted work.
 | `git stash` (except `list`/`show`) | Leave the work; commit your own paths |
 | `git reset --hard` | Revert your own files by explicit path |
 | `git checkout -- .` · `git restore .` | Name the file: `git restore path/a` |
-| `git clean` | Delete the specific files you created |
-| `git rebase` | Don't. History on `main` is shared |
+| `git clean` | Delete the specific files you created (`-n` / `--dry-run` is allowed) |
+| `git rebase` | Don't. History on `main` is shared (`--abort` / `--continue` / `--skip` / `--quit` are allowed — they undo a rebase rather than write one) |
 | `git add -A` · `git add .` | `git add path/a path/b` |
 | `git commit -a` / `-am` | `git commit path/a path/b -m "…"` |
 | `prettier --write .` · `bun run format` | Format the paths you touched |
@@ -40,10 +40,17 @@ move, ask the human to run it in their own shell.
 | any `--apply` | Spends real GCP credits; needs an explicit go, per run |
 | `gcloud run jobs execute` · `run deploy` · `builds submit` | Spends, and can deploy |
 | `db:push` · `drizzle-kit push` | Push **DROPS** to match the schema — and dev/prod share one Neon DB |
-| `git push` | Deploys the API at 100% with no canary |
 | `git switch` · `git checkout <branch>` | Never switch branches without confirming |
+| `git checkout <path>` | Reverts that file's uncommitted changes |
 | `dev:api` · `dev:admin` · `dev:site` | The human keeps these running; don't restart them |
-| `rm -rf` | Recursive delete (build artifacts are exempt) |
+
+Two rules — `git push` and `rm -rf` — are **mode-dependent**. Claude Code
+already prompts for them in the default permission mode, and a second prompt for
+the same action only trains click-through, which is the habit the deny tier
+exists to prevent. So they stay silent by default and fire only when the
+built-in gate is relaxed (`acceptEdits` / `bypassPermissions` / `dontAsk`) —
+which is exactly where an ungated push or delete would otherwise slip through.
+Everything else, both tiers, is mode-independent.
 
 ## When you get blocked
 

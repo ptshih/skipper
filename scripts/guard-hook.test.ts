@@ -49,13 +49,12 @@ describe('ask — spend and one-way doors', () => {
     'bun packages/studio/src/generate-narrations.ts --apply',
     'bun run db:push',
     'bunx drizzle-kit push',
-    'git push origin main',
     'git switch -c feature/x',
     'git checkout -b feature/x',
     'git switch main',
+    'git checkout apps/api/src/limits.ts',
     'gcloud run jobs execute generate --region us-east4',
     'gcloud builds submit',
-    'rm -rf /tmp/scratch',
     'bun run dev:admin',
   ]
   for (const command of cases) {
@@ -107,6 +106,45 @@ describe('quoted text is data, not a command', () => {
 
 test('deny wins over ask when a command chains both', () => {
   expect(decide('git push origin main && git stash')).toBe('deny')
+})
+
+describe('recovery and dry runs are not destructive', () => {
+  // Denying the way out of a bad rebase blocks recovery exactly when the tree
+  // is already in trouble.
+  for (const command of [
+    'git rebase --abort',
+    'git rebase --continue',
+    'git rebase --skip',
+    'git rebase --quit',
+    'git clean -n',
+    'git clean --dry-run',
+  ]) {
+    test(command, () => expect(decide(command)).toBe('allow'))
+  }
+
+  test('the real thing is still denied', () => {
+    expect(decide('git rebase main')).toBe('deny')
+    expect(decide('git clean -fd')).toBe('deny')
+  })
+})
+
+describe('rules that duplicate the built-in prompt', () => {
+  // Silent in default mode (Claude Code already asks; a second prompt just
+  // trains click-through), active where the built-in gate is relaxed.
+  for (const command of ['git push origin main', 'rm -rf /tmp/scratch']) {
+    test(`${command} — silent in default mode`, () => expect(decide(command)).toBe('allow'))
+    test(`${command} — gated when permissive`, () => expect(decide(command, true)).toBe('ask'))
+  }
+
+  test('spend rules fire regardless of permission mode', () => {
+    expect(decide('bun run studio enrich --apply')).toBe('ask')
+    expect(decide('bun run studio enrich --apply', true)).toBe('ask')
+  })
+
+  test('the deny core is never mode-dependent', () => {
+    expect(decide('git stash')).toBe('deny')
+    expect(decide('git stash', true)).toBe('deny')
+  })
 })
 
 describe('heredoc bodies are data', () => {
