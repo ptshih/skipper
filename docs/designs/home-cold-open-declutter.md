@@ -600,15 +600,29 @@ Spec, with the system's own answers where they exist:
   `FilterChip` look, loudest), or **K-b** `surfaceRaised` fill + `rule` hairline + `ink` label +
   `accent` caret (quieter). ⚠ Judge them on **launch 1**, where the sample disc already owns the one
   amber — K-a puts the screen's most saturated non-amber element at the very top.
-- ✅ **RIGHT-ALIGNED** (founder, 2026-08-03): kicker left, chip pushed to the trailing edge. It earns
-  it three ways — a departures board *is* label-left / destination-right, so the gap reinforces the
-  metaphor instead of reading as disconnection; it lines the chip up with the suggestion rows'
-  chevrons and the nav gear, giving the screen **one consistent right edge for interactive things**;
-  and it puts the control under the thumb.
-  ⚠ **It must be allowed to WRAP, not squeeze.** At AX Dynamic Type sizes an uppercase kicker plus a
-  long region name will not fit one line, and a `space-between` row that cannot wrap will either clip
-  the name or crush the chip's padding. This is the same hazard as the "never clamp to one line" note
-  above, and it is the more likely of the two to be missed.
+- ✅ **"NOW DEPARTING" IS CUT, and the chip is LEFT-aligned** (founder, 2026-08-03 — right-align was
+  tried first and superseded within the hour). With no label to sit opposite, a lone right-aligned
+  chip reads as adrift, so left follows from the cut. ✅ It also **removes the AX wrap hazard** the
+  paired row had: a single element cannot squeeze against a neighbour.
+- ✅ **The opening line shortens to "Where are we headed?"** (founder). At `display` size it fits in
+  fewer lines, which is the point of a hero. ⚠ It is display prose, NOT a wire turn — `voice.plan.opening`
+  renders as standalone text above the transcript, so changing it does not touch what the planner sees.
+- ⚠ **THE TRADE, STATED ONCE.** That kicker was the last poster element on the cold open, and it
+  carried persona at zero interaction cost; "Well now —" was the skipper's verbal tic. With both gone,
+  the screen's charm rests entirely on the sub-line and the suggestion-row copy, and the sunburst
+  watermark is the only thing still holding Trailhead 89's identity at the top. **This is the drift
+  toward the generic assistant empty state the §5 research warns about** ("every AI tool launched since
+  2023 ships a variation of the same blank prompt"). Not a blocker and not re-argued — but worth an
+  explicit look on device before it ships, because the whole product doctrine is *the persona is the
+  product*.
+- ⚠ **`voice.home.kicker` becomes dead** with this cut, and the `hero` block currently anchors the
+  Sunburst behind it — so removing the kicker needs the watermark re-anchored rather than removed with
+  it, or the last poster reference goes too, silently.
+- ⚠ **The limit line and the chip now overlap.** With the region named in the chip, "I only know the
+  roads around Lake Tahoe so far" was dropped from the sub-line. That is right at N>1 (the chip is a
+  real switcher) but weak at **N=1**, where an inert chip is a poor statement of *"this is the only
+  country I know"* — and §5's research explicitly wants limits named. Open: keep a short limit clause
+  while N=1, drop it once the chip switches.
 - ⚠ **At `regions.length === 1` it must NOT be pressable and must NOT show the caret.** Still show the
   region NAME (it is informative), but a dead affordance at 1.1 launch — when Tahoe is the only
   region — would be worse than no affordance.
