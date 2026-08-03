@@ -13,18 +13,36 @@
 
 import { cleanPlaceName } from './labels'
 
-/** One chip: the rider's line, and the skipper's hand-authored answer to it. */
+/** One suggestion: how it is LABELLED, the rider's line, and the skipper's hand-authored answer.
+ *
+ *  ⚠ `title` and `ask` are two different registers on purpose. The title says what SHAPE of drive
+ *  this is and never names a place (pure delivery, safe to author in voice.ts); the ask is the literal
+ *  sentence the tap will say, filled from the region's own curated names. Cramming the second into a
+ *  chip-sized label is the defect this split exists to remove. */
 export interface ExampleAsk {
+  /** Which of the three shapes this is.
+   *
+   *  ⚠ EXISTS SO THE SCREEN NEVER INDEXES BY POSITION. The list DEGRADES — one curated name drops the
+   *  A→B entry, none drops the loop too — so `asks[0]` is not always the same shape, and anything the
+   *  screen pairs positionally (an icon, a glyph, an analytics label) silently mis-pairs in exactly
+   *  the degraded regions nobody is looking at. A discriminator costs one field and cannot drift. */
+  shape: 'aToB' | 'loop' | 'open'
+  title: string
   ask: string
   reply: string
 }
 
 /** The `{a}`/`{b}` templates, straight from `voice.plan`. */
 export interface ExampleAskTemplates {
+  // ⚠ The three `*Title`s carry no `{a}`/`{b}` and are passed straight through unfilled — they are
+  // delivery, not facts. The leftover-brace wall below therefore never has to consider them.
+  aToBTitle: string
   aToB: string
   aToBReply: string
+  loopTitle: string
   loop: string
   loopReply: string
+  openTitle: string
   open: string
   openReply: string
 }
@@ -66,9 +84,26 @@ export function buildExampleAsks(
   const a = clean[0]
   const b = clean[1]
   const out: ExampleAsk[] = []
-  if (clean.length >= 2) out.push({ ask: fill(t.aToB, a, b), reply: fill(t.aToBReply, a, b) })
-  if (clean.length >= 1) out.push({ ask: fill(t.loop, a, b), reply: fill(t.loopReply, a, b) })
-  out.push({ ask: fill(t.open, a, b), reply: fill(t.openReply, a, b) })
+  if (clean.length >= 2)
+    out.push({
+      shape: 'aToB',
+      title: t.aToBTitle,
+      ask: fill(t.aToB, a, b),
+      reply: fill(t.aToBReply, a, b),
+    })
+  if (clean.length >= 1)
+    out.push({
+      shape: 'loop',
+      title: t.loopTitle,
+      ask: fill(t.loop, a, b),
+      reply: fill(t.loopReply, a, b),
+    })
+  out.push({
+    shape: 'open',
+    title: t.openTitle,
+    ask: fill(t.open, a, b),
+    reply: fill(t.openReply, a, b),
+  })
 
   // A structural wall, not a belt: voice.ts changes under a different review than this file, so a
   // `{b}` added to the loop template one day must degrade to "one fewer chip", never render braces at

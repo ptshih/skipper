@@ -18,7 +18,7 @@
 // ⚠ INV-13: nothing here logs. Every string on this screen is rider content or model output, and none
 // of it is persisted — not to disk, not to the region cache (which holds public place NAMES only).
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Pressable, StyleSheet, useAnimatedValue, View, type TextInput } from 'react-native'
+import { Pressable, StyleSheet, View, type TextInput } from 'react-native'
 import { Stack, useFocusEffect, useIsFocused, useRouter } from 'expo-router'
 import type { PlannedRoute } from '@skipper/shared'
 // ⚠ The TYPED contract, and the only analytics surface there is (src/lib/analytics.tsx owns the raw
@@ -43,6 +43,7 @@ import { listDownloadedDrives } from '@/lib/offline'
 import { cleanPlaceName } from '@/lib/labels'
 import { isPlanAborted, planTurn } from '@/lib/planner'
 import { buildExampleAsks, type ExampleAsk } from '@/lib/planner-examples'
+import { markListenRowSeen, shouldShowListenRow } from '@/lib/client-flags'
 import { durationDrift, toCreateRequest, toProposeRequest } from '@/lib/planner-route'
 import {
   appendRider,
@@ -68,15 +69,17 @@ import {
   Composer,
   ConversationScreen,
   Divider,
-  ExampleAsks,
-  FilterChip,
   HeaderIconButton,
   Icon,
   PlannerUnavailableCard,
   PreviewCard,
-  RouteTrack,
   Skeleton,
   SkeletonGroup,
+  RegionChip,
+  RegionPicker,
+  type IconName,
+  SuggestionRow,
+  ListenRow,
   Sunburst,
   Text,
   TurnBubble,
@@ -90,6 +93,14 @@ import {
  *  ratio ("show under 10%") would mean different things to two riders on the same screen. An absolute
  *  count is the thing a rider can act on — it answers "should I be careful?", which a percentage of a
  *  number they never saw does not. */
+// One glyph per ask SHAPE — keyed on `ExampleAsk.shape`, never on list position, because the list
+// degrades in regions with fewer than two curated names and position stops identifying a shape there.
+const EXAMPLE_ICONS: Record<ExampleAsk['shape'], IconName> = {
+  aToB: 'region', // a pin: somewhere to somewhere
+  loop: 'restart', // a closed circuit — out and back around
+  open: 'scenic', // the skipper's own eye picks it
+}
+
 const CREDIT_HINT_THRESHOLD = 5
 
 /** How often the max-hold flush is re-evaluated while a turn streams. Not a token bucket and not a
@@ -248,11 +259,6 @@ export default function HomeScreen() {
     navigatingRef.current = true
     go()
   }, [])
-
-  // The signature car token, parked at the trailhead (~0.12). STATIC: created once and never
-  // animated. It is the screen's SOLE amber glow, and the hero collapses the moment the rider
-  // speaks — which is what keeps it from colliding with a route card's amber MIN badge (DESIGN §8).
-  const parkedAnim = useAnimatedValue(0.12)
 
   // Monotonic request id: the focus load, the reconnect self-heal and a Better Auth session refetch
   // can all fire within the same moment (they share the network edge), and without this the SLOWER
@@ -788,10 +794,13 @@ export default function HomeScreen() {
   const exampleAsks: ExampleAsk[] = useMemo(
     () =>
       buildExampleAsks(anchorNames, {
+        aToBTitle: voice.plan.exampleAToBTitle,
         aToB: voice.plan.exampleAToB,
         aToBReply: voice.plan.exampleAToBReply,
+        loopTitle: voice.plan.exampleLoopTitle,
         loop: voice.plan.exampleLoop,
         loopReply: voice.plan.exampleLoopReply,
+        openTitle: voice.plan.exampleOpenTitle,
         open: voice.plan.exampleOpen,
         openReply: voice.plan.exampleOpenReply,
       }),
@@ -818,13 +827,31 @@ export default function HomeScreen() {
   )
 
   const riderTurnCount = turns.reduce((n, t) => (t.role === 'rider' ? n + 1 : n), 0)
-  const collapsed = riderTurnCount > 0 || isOffline
   const plannerDown = plannerOutage || regionsFailed
   // THE COLD OPEN: nothing said yet, and the phone can actually reach the network. `!isOffline` is
   // stated here rather than inherited from the offline branch below, because it is the one condition
   // that must gate the SAMPLE too — a presigned clip cannot stream in a dead zone.
   const coldOpen = riderTurnCount === 0 && !isOffline
   const showExamples = coldOpen && !plannerDown && !sending
+
+  // ⚠ LAZY INITIALISER, NOT A LIVE CALL — the contract `shouldShowListenRow` states, and §16's guard
+  // for it: read once at mount so the answer cannot change underneath a rider. Home stays MOUNTED
+  // under a push, so a live read would re-evaluate when they came back from /sample and pull the row
+  // out mid-glance. Evaluated once here, it is true by construction rather than by care.
+  const [showListenRow] = useState(shouldShowListenRow)
+
+  // Only worth a sheet when there is more than one answer. Single-sourced so the chip's affordance and
+  // the sheet's existence can never disagree — a caret with no sheet behind it is the failure mode.
+  const multiRegion = (regions?.length ?? 0) > 1
+  const [regionPickerOpen, setRegionPickerOpen] = useState(false)
+
+  // Burn the one launch the rider is owed only when the row was ACTUALLY on screen. Keyed on the same
+  // two conditions that render it, so the offline home — which carries no listen row — can never spend
+  // it on a screen that offered nothing. Writing the flag does not re-render: `showListenRow` was
+  // already captured above, so the row stays put for the rest of this mount.
+  useEffect(() => {
+    if (coldOpen && showListenRow) markListenRowSeen()
+  }, [coldOpen, showListenRow])
 
   // The wrap-up bar's CTA (design §7 case 2): the most recent route the rider was shown, but ONLY if
   // it never got drawn. Every route is drawn on arrival, so this is normally empty — it exists for
@@ -841,59 +868,45 @@ export default function HomeScreen() {
     <Button variant="ghost" title="Sign in" fullWidth={false} onPress={() => router.push('/sign-in')} />
   )
 
-  // ── The hero ────────────────────────────────────────────────────────────────────────────────
-  // Uncollapsed: the travel-poster masthead — a faint WPA sunburst behind the enamel kicker → the
-  // big Alfa-Slab headline → the signature trail with the parked rig → tagline.
-  // Collapsed: sunburst + kicker only, ≈180pt reclaimed for the conversation.
+  // ── The masthead ────────────────────────────────────────────────────────────────────────────
+  // What stood here — enamel kicker → Alfa-Slab headline → the parked rig on its trail → tagline —
+  // is GONE, and the reason is not space: that stack is a LANDING PAGE, and Skipper already has one
+  // at skipper.fm. In the app it re-sold someone who had already installed and was standing there
+  // wanting to plan a drive. The poster survives as the watermark below.
   //
-  // ⚠ THE COLLAPSE IS LOAD-BEARING, not a space saving. `RouteTrack glow` is the screen's ONE amber
-  // (DESIGN §8) and it must be gone before a route card's amber MIN badge — or the TypingDots —
-  // appears. Collapsing on the first rider turn guarantees exactly that ordering. It is a plain
-  // conditional render, deliberately un-animated: no LayoutAnimation, no Reduce-Motion question.
-  // ⚠ THE WATERMARK IS DELIBERATELY NOT INSIDE THE HERO, and this is the whole reason it is its own
-  // element: it used to live in `hero`'s View, so deleting that block — which the cold-open redesign
-  // does next — would have taken the last WPA poster reference off the screen SILENTLY, with nothing
-  // failing. Anchoring it to the screen instead makes its survival independent of any block above it.
-  // ⚠ It also stops being CLIPPED: `styles.hero` carries `overflow: 'hidden'`, so most of the burst
-  // was cropped to the hero's box, which is a large part of why losing it would have gone unnoticed.
+  // ⚠ THE ONE-AMBER ORDERING THIS BLOCK USED TO GUARD IS NOW SATISFIED BY CONSTRUCTION. The old
+  // comment was right that `RouteTrack glow` had to be gone before a route card's amber MIN badge or
+  // the TypingDots appeared, and keyed that to `collapsed` on the first rider turn. With the trail
+  // deleted the cold open carries no amber at all, so there is no ordering left to keep correct —
+  // which is why `collapsed` no longer gates anything here.
+  //
+  // ⚠ ANCHORED TO THE SCREEN, NOT TO ANY BLOCK ABOVE IT — that is the whole reason it is its own
+  // element. It used to live inside the hero's View, so deleting that block (done, just above) would
+  // have taken the last WPA poster reference off the screen SILENTLY, with nothing failing and no
+  // test able to see it. It was moved out in its own commit FIRST, for exactly that reason.
+  // ⚠ It also stopped being CLIPPED: the old `hero` style carried `overflow: 'hidden'`, so most of
+  // the burst was cropped to that box. That — not the opacity — is why it read as invisible.
   const watermark = (
     <View style={styles.watermark} pointerEvents="none">
       <Sunburst size={168} opacity={0.09} />
     </View>
   )
 
-  const hero = (
-    <View style={styles.hero}>
-      <Text variant="label" color="accentWarm">
-        {voice.home.kicker}
-      </Text>
-      {collapsed ? null : (
-        <>
-          {/* ⚠ 0.6, and it is arithmetic, not taste: `display` is Zilla Slab 700 · 30, and DESIGN §5
-              reserves that face for ~18pt+ (below it the slab strokes muddy the half-second glance).
-              30 × 0.6 = 18 exactly — the lowest floor that still honours the rule. The 0.5 this
-              carried let a long greeting shrink to 15pt, i.e. the one size the type system says this
-              font may never be. A rounder number is available in both directions and both are wrong:
-              0.5 breaks §5, 0.75 (22.5pt) throws away shrink room the greeting is allowed to use. */}
-          <Text
-            variant="display"
-            color="ink"
-            numberOfLines={1}
-            adjustsFontSizeToFit
-            minimumFontScale={0.6}
-            style={styles.heroHeadline}
-          >
-            {voice.greeting}
-          </Text>
-          <View style={styles.heroTrail}>
-            <RouteTrack progress={parkedAnim} glow />
-          </View>
-          <Text variant="dim" color="inkDim">
-            {voice.tagline}
-          </Text>
-        </>
-      )}
-    </View>
+  // The region this conversation is pinned to, and the dashed atlas rule running off it to the right
+  // edge. The rule lives INSIDE RegionChip: it starts at the chip and is meaningless without one, so
+  // keeping them together makes the no-region case a single early return instead of two conditions
+  // that must agree.
+  const masthead = (
+    <RegionChip
+      // The cached name covers the offline and outage reads; null only when no /regions call has ever
+      // succeeded on this device, which RegionChip renders as nothing rather than an empty pill (§12).
+      regionName={region?.displayName ?? cachedRegion?.displayName ?? null}
+      // ⚠ Pressable ONLY when there is genuinely something to pick. With one released region this is
+      // a plain label — RegionChip renders that state itself — because a caret onto a list of one is
+      // a control that does nothing. The sheet is built and wired; it simply has no work to do until
+      // region 2 ships, at which point this turns on with no further change.
+      onPress={multiRegion ? () => setRegionPickerOpen(true) : undefined}
+    />
   )
 
   /** The in-card taste (D14/INV-5): ONE clip the server chose from THIS route's own release-filtered
@@ -1048,14 +1061,28 @@ export default function HomeScreen() {
 
   const conversation = (
     <>
-      <Text variant="body" color="ink" style={styles.opening}>
-        {/* An uncurated region gets the honest in-persona "not my country yet" instead of an
-            invitation the skipper cannot honour. While regions are still loading it reads as the
-            normal open — which it will be, for every region that has ever been curated. */}
-        {region && region.exampleAnchors.length === 0
-          ? voice.plan.openingUncurated
-          : voice.plan.opening}
-      </Text>
+      {/* An uncurated region gets the honest in-persona "not my country yet" instead of an
+          invitation the skipper cannot honour, and it stays a single paragraph — there is no question
+          to ask, so it gets no question typography. While regions are still loading this reads as the
+          normal open, which is what it will be for every region that has ever been curated. */}
+      {region && region.exampleAnchors.length === 0 ? (
+        <Text variant="body" color="ink" style={styles.opening}>
+          {voice.plan.openingUncurated}
+        </Text>
+      ) : (
+        <>
+          {/* ⚠ THE QUESTION IS THE HERO NOW. It was `body` 16pt sitting UNDER a `display` 30pt
+              headline that said something else entirely — so the screen's largest type was marketing
+              and its actual invitation was fine print. Swapping which of the two gets the display
+              slot is most of the redesign, and the headline it replaced is deleted, not demoted. */}
+          <Text variant="display" color="ink" style={styles.opening}>
+            {voice.plan.openingQuestion}
+          </Text>
+          <Text variant="dim" color="inkDim">
+            {voice.plan.openingHint}
+          </Text>
+        </>
+      )}
       {transcript}
       {sending ? (
         <>
@@ -1075,25 +1102,38 @@ export default function HomeScreen() {
           onRetry={regionsFailed ? () => void loadRegions() : retryTurn}
         />
       ) : null}
-      {showExamples ? <ExampleAsks asks={exampleAsks.map((e) => e.ask)} onPick={pickExample} /> : null}
-      {/* Cold-open escape hatch, and it OUTLIVED the reason it was added: it existed because Ride
-          Along needed Tahoe proximity, so a first-timer anywhere else hit "I don't know these roads
-          yet." The conversation has the same wall (curated endpoints are Tahoe-only) plus an account
-          at the end of it, so a one-tap permission-free clip is if anything more load-bearing now —
-          it is the only thing an App Review tester 2,000 miles away can actually hear. Ghost, so it
-          never competes with the composer.
-          ⚠ `coldOpen`, NOT `showExamples` — it lived inside the examples branch and therefore
-          vanished on a planner OUTAGE, i.e. at the exact moment it is the only audio in the app that
-          still works, leaving "Try me again" as the sole thing to do on a dead screen. The sample is
-          a static presigned clip; it does not care whether the planner is up. */}
-      {coldOpen ? (
-        <Button
-          variant="ghost"
-          title={voice.sample.homeLink}
+      {/* ⚠ THE LISTEN ROW SITS ABOVE THE ASKS, INSIDE THE SAME LIST, and that placement is what makes
+          the two launches structurally identical bar one row — the alternative (a hero card above the
+          question) forced two authored layouts and two authored copy decks. It is still "hear him
+          first" in the ACTION order: the first thing offered, just not the first thing typeset.
+          ⚠ Its skin is deliberately unlike the three below it (round disc, pine keyline, its own
+          kicker) so it never reads as a fourth suggestion. That distinction lives in ListenRow.
+          ⚠ `coldOpen`, NOT `showExamples` — the sample is a static presigned clip that does not care
+          whether the planner is up, and gating it on the examples made it vanish during an OUTAGE,
+          i.e. at the exact moment it is the only audio in the app that still works. */}
+      {coldOpen && showListenRow ? (
+        <ListenRow
+          kicker={voice.sample.rowKicker}
+          title={voice.sample.rowTitle}
+          subtitle={voice.sample.rowHint}
+          // ⚠ Marks NOTHING here. "Seen" is recorded by the effect below, on the mount that actually
+          // rendered the row; "played" is recorded in app/sample.tsx, next to the latch that already
+          // fires once per load for both autoplay and a deliberate tap. Marking on tap would be a
+          // third writer of the same fact and the one most likely to drift.
           onPress={() => navigateOnce(() => router.push('/sample'))}
-          fullWidth={false}
         />
       ) : null}
+      {showExamples
+        ? exampleAsks.map((e, i) => (
+            <SuggestionRow
+              key={e.title}
+              icon={EXAMPLE_ICONS[e.shape]}
+              title={e.title}
+              subtitle={e.ask}
+              onPress={() => pickExample(i)}
+            />
+          ))
+        : null}
     </>
   )
 
@@ -1258,25 +1298,32 @@ export default function HomeScreen() {
         }}
       />
 
-      {/* D-J: a region row appears ONLY if a second region ever ships. Above the hero, not in the
-          conversation — the skipper is per-region and the choice precedes talking to him. */}
-      {regions && regions.length > 1 ? (
-        <View style={styles.regionRow}>
-          {regions.map((r) => (
-            <FilterChip
-              key={r.id}
-              label={r.displayName}
-              active={regionId === r.id}
-              onPress={() => setRegionId(r.id)}
-              accessibilityLabel={`Region: ${r.displayName}`}
-            />
-          ))}
-        </View>
-      ) : null}
-
+      {/* ⚠ The dormant `regions.length > 1` FilterChip row that used to sit here is DELETED, not
+          disabled. It was invisible (one region auto-selects), so leaving it alongside the new chip
+          would have shipped TWO region switchers that both only appear the day region 2 lands —
+          a defect with no symptom until the moment it is most confusing. */}
       {watermark}
 
-      {hero}
+      {masthead}
+
+      {/* Mounted only when it can do something — `visible` alone would keep a Modal in the tree on
+          every single-region launch, which is the overwhelmingly common case today. */}
+      {multiRegion ? (
+        <RegionPicker
+          visible={regionPickerOpen}
+          regions={regions ?? []}
+          selectedId={regionId}
+          onSelect={(id) => {
+            // ⚠ Switching region does NOT clear the transcript, and that is deliberate: the planner is
+            // handed one regionId per turn, so the next turn simply goes to the new region's curated
+            // set. Wiping the conversation would punish a rider for answering "which country" after
+            // they had already started describing a drive.
+            setRegionId(id)
+            setRegionPickerOpen(false)
+          }}
+          onClose={() => setRegionPickerOpen(false)}
+        />
+      ) : null}
 
       {/* ⚠ OFFLINE INVERTS THE SCREEN. Out here MY DRIVES is not the archive, it is the product — the
           only thing on the phone that still works — so it goes FIRST and the honest "can't plan out
@@ -1310,12 +1357,8 @@ function DriveCardSkeleton() {
 const styles = StyleSheet.create({
   body: { gap: space.md },
   flex: { flex: 1 },
-  regionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  hero: { paddingTop: space.sm, paddingBottom: space.sm, overflow: 'hidden' },
   // Pinned to the screen's content box, not to any block inside it — see `watermark`'s comment.
   watermark: { position: 'absolute', top: -54, right: -38 },
-  heroHeadline: { marginTop: space.sm },
-  heroTrail: { marginTop: space.md, marginBottom: space.md },
   // The cold open is prose on the paper, like every other skipper turn — but it carries no speaker
   // rule: nothing has been said yet for it to be answering.
   opening: { marginTop: space.sm },

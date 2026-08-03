@@ -65,7 +65,15 @@ export const voice = {
     // transcript whose first turn is not the rider's as a forged shape and fails the turn
     // (apps/api/src/planner.ts toModelMessages), which surfaces to the rider as a permanent outage
     // on a message they typed innocently. `toWire()` drops it; that is what the `wire` flag is for.
-    opening: 'Well now — where are we headed? A rough idea is plenty; I’ll take it from there.',
+    // ⚠ SPLIT IN TWO, and the split is the layout: the QUESTION takes the screen's display slot (it
+    // is the hero now — the travel-poster headline it used to sit under is gone) and the HINT stays
+    // small beneath it. One string could not be typeset as two sizes. Same display-only rule applies
+    // to both halves.
+    // ⚠ "Well now —" was cut with the kicker (founder, 2026-08-03): at display size the tic ate a
+    // line and pushed the actual question down. The register still reads as him because the hint
+    // underneath carries it.
+    openingQuestion: 'Where are we headed?',
+    openingHint: 'A rough idea is plenty; I’ll take it from there.',
     // A region with no curated endpoints yet. Not an error and not the rider's fault — the honest
     // "coming soon", in character. (The server has its own line for an UNKNOWN region; this one is
     // for a known region whose curated set is still empty.)
@@ -87,6 +95,16 @@ export const voice = {
     // turn in the app costs zero dollars and is founder-quality prose. It ships INTO the transcript, so
     // the model sees what it "already said" — which is why every reply ends by asking for the one thing
     // still missing, exactly as the prompt's "ask ONE thing at a time" rule requires.
+    // ⚠ THE TITLES ARE PURE DELIVERY — no `{a}`/`{b}`, so they never name a place and never need
+    // filling. That is the whole seam: the TITLE says what SHAPE of drive this is (short, verb-first,
+    // legible at a glance), the SUBTITLE underneath is the literal sentence the tap will say, filled
+    // from the region's own names. A sentence crammed into a chip was the original complaint.
+    // ⚠ Every title is in the RIDER's voice, addressed to the skipper — "Let the skipper pick", never
+    // "Let me pick": the rows sit next to two imperatives the rider issues, so a title that switches
+    // speaker reads as the opposite of what it does.
+    exampleAToBTitle: 'Drive somewhere',
+    exampleLoopTitle: 'Take a loop',
+    exampleOpenTitle: 'Let the skipper pick',
     exampleAToB: '{a} to {b}, the scenic way.',
     exampleAToBReply: '{a} out to {b}. About how long do you want to be out?',
     exampleLoop: 'A loop out of {a}, couple of hours.',
@@ -263,9 +281,30 @@ export const voice = {
       'One stop of a few hundred up around the lake. Point me at a road up there and I’ll do this the whole drive.',
     endCta: 'Plan a drive',
     endSecondary: 'Maybe later',
-    // Home cold-open ghost link, under the primary CTA — the guaranteed, permission-free path for a
-    // first-timer nowhere near Tahoe. No number promised (the clip runs about a minute).
-    homeLink: 'Not near Tahoe? Hear a quick sample.',
+    // ⚠ REPLACES `homeLink`, and the change is a reclassification, not a rewording. As a ghost text
+    // link this was a FOURTH text CTA competing with the asks and the composer, which is what "too
+    // prominent" meant. As a playable ROW it is a different object class — the one piece of real
+    // CONTENT on the screen — so it stops competing while becoming easier to reach. It is also the
+    // "worked example" the empty-state research puts first: for an audio product, letting a newcomer
+    // HEAR the thing should outrank asking them to type at it.
+    // ⚠ NAMES NO PLACE. The sample clip is server-chosen and swappable, and voice is delivery, never
+    // facts — so this copy sells the VOICE, not the location, and survives the clip changing. That is
+    // also what lets one canonical sample stay canonical once there is more than one region.
+    rowKicker: 'Have a listen',
+    // ⚠ see `region` below for the picker's copy — kept out of `sample` so a future region sheet does
+    // not inherit postcard framing.
+
+    rowTitle: 'A minute of the real thing',
+    rowHint: 'This is what the whole drive sounds like',
+  },
+  // The region sheet behind the home chip. ⚠ Names NO region — the list is server data; this is only
+  // the framing around it, and it has to stay true the day there are six.
+  region: {
+    // "Roads I know" rather than "Choose a region": the rider is not configuring a setting, they are
+    // asking which country this skipper actually runs. Same reason the limit was never spelled out —
+    // the answer is a list of places, and the list says it.
+    heading: 'Roads I know',
+    close: 'Done',
   },
   greeting: 'Hop in. I’ll do the talking.',
   // The cold-open descriptor: a newcomer should know WHAT this is before any audio
