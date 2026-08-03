@@ -7,6 +7,14 @@
 > ⚠ The §§3/4/10 code blocks are the SOURCE the script extracts (`<!-- asc:… -->` markers) — edit the
 > block, re-run the script; never hand-paste, and never delete a marker.
 >
+> ⚠⚠ **ASC IS NOW ONE EDIT BEHIND THIS DOC (2026-08-03).** The em-dash sweep re-punctuated §3
+> promotional text and §4 description (founder ask: no em-dashes in anything a rider reads). Wording
+> is otherwise unchanged and promotional text re-measured at **168/170 chars**; §10 review notes were
+> already clean. **The live listing still has the old punctuation until someone re-runs
+> `bun run asc:metadata -- --apply --version=1.1.0`.** Run the no-flag preview first: it should report
+> a diff on exactly those two fields and nothing else. Until then the read-back claim above is stale
+> for §§3/4 — deliberately, because pushing to ASC is a founder call, not a side effect of a sweep.
+>
 > **What is still owed before submitting** (see [1-1-submission-sweep.md](1-1-submission-sweep.md) for
 > the order): §9's screenshots, §8's App Privacy label (no public API — hand entry, and the free-text
 > question is a founder call), the two builds, and the on-device passes.
@@ -160,7 +168,7 @@ place, per the rule above:
 
 <!-- asc:promotionalText — scripts/asc-metadata.ts reads the block below. Keep the marker attached to its fence. -->
 ```
-A corny old guide plans your drive from a sentence, then narrates it — timed to the road, hands-free, honest enough to hush when he doesn't know. Starting in Lake Tahoe.
+A corny old guide plans your drive from a sentence, then narrates it, timed to the road, hands-free, honest enough to hush when he doesn't know. Starting in Lake Tahoe.
 ```
 
 ---
@@ -185,7 +193,7 @@ because that is what changed and it is what the marketing site now leads with to
 ```
 A corny old tour guide rides shotgun and narrates your drive.
 
-Tell Skipper where you're headed, in your own words. He plans the drive — the route, the stops, and a story for each one — then rides along and tells them, timed to the road, so the tale about the bay lands while you can still see the bay.
+Tell Skipper where you're headed, in your own words. He plans the drive (the route, the stops, and a story for each one), then rides along and tells them, timed to the road, so the tale about the bay lands while you can still see the bay.
 
 Mount your phone and go. He starts himself at every stop, so you never touch the screen.
 
@@ -195,13 +203,13 @@ RIGHT NOW: LAKE TAHOE ONLY
 Every story is researched and recorded for a specific place, and the finished collection covers Lake Tahoe. Ask him for a road he doesn't know and he'll tell you so, honestly and in character. More regions are the plan, but we'd rather ship one place done properly than a nationwide map of nothing much.
 
 PLANNING IS A CONVERSATION, NOT A FORM
-No dropdowns, no pins to drag. Tell him "Tahoe City down to South Lake Tahoe, and I've got about two hours" and he'll lay out the route and what's on it. Change your mind — longer, shorter, take the west shore instead — and he'll redo it.
+No dropdowns, no pins to drag. Tell him "Tahoe City down to South Lake Tahoe, and I've got about two hours" and he'll lay out the route and what's on it. Change your mind (longer, shorter, take the west shore instead) and he'll redo it.
 
 HEAR IT BEFORE YOU COMMIT
-When he's drawn up a drive, he'll play you the first stop on that road — a real clip from your actual route, not a generic demo. No account needed to get that far.
+When he's drawn up a drive, he'll play you the first stop on that road: a real clip from your actual route, not a generic demo. No account needed to get that far.
 
 HONEST ABOUT THE MONEY
-Planning is free and needs no account. Keeping a drive — saved, downloaded, ready to go — takes a free account and spends one of your free credits, because building one does real work. No subscription, nothing to buy inside the app, and we never sell your data.
+Planning is free and needs no account. Keeping a drive (saved, downloaded, ready to go) takes a free account and spends one of your free credits, because building one does real work. No subscription, nothing to buy inside the app, and we never sell your data.
 
 BUILT FOR AN ACTUAL CAR
 Audio-first, so it works from a mount or over Bluetooth with your eyes on the road. Lock-screen controls. Nothing to look at, nothing to tap.
@@ -819,9 +827,11 @@ Re-run the list; don't inherit last release's ticks.
       with no session. This is 1.1's primary review path (§10) and it needs `ANTHROPIC_API_KEY` set
       in the deployed service — if it isn't, every reviewer attempt gets the in-persona outage line
       and the app looks broken rather than unconfigured.
-- [x] ✅ **The 1.1 metadata is entered in ASC** — done 2026-08-03 via `bun run asc:metadata --apply`,
-      read back independently. Re-verify with a no-flag `bun run asc:metadata` (it prints
-      "already matches" for all three) rather than trusting this tick.
+- [ ] **The 1.1 metadata is entered in ASC — RE-PUSH OWED.** It was pushed and independently read back
+      on 2026-08-03, but the em-dash sweep later that day re-punctuated §3 and §4, so ASC is one edit
+      behind (see the Status block). Re-run `bun run asc:metadata -- --apply --version=1.1.0`, then
+      re-verify with the no-flag preview (it should print "already matches" for all three) rather than
+      trusting this tick.
 - [ ] **A build whose short version is `1.1.0` is attached.** The record deliberately has NONE right
       now — see the Status block. ⚠ ASC does not warn about a mismatch; `asc:metadata` does.
 - [ ] The demo account exists, its password is in ASC, and it has credits left to create a drive.
