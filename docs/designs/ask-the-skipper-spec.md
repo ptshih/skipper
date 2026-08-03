@@ -1,8 +1,10 @@
 # Ask the Skipper — Build Spec
 
-> **Status:** build-ready spec, UNBUILT — post-MVP (v2), gated behind the proven phone player (M1).
-> §4.6 (on-device fallback) is exploratory, not decided. Canonical-preview tour ids in this doc drift
-> as the preview is regenerated — resolve "the canonical preview" fresh, don't trust a hardcoded id.
+> **Status:** build-ready spec, UNBUILT — post-MVP (v2), gated behind the proven phone player (M1),
+> and as of **2026-08-03 additionally gated behind a MEASUREMENT, not a build** — see §0, which is the
+> first thing to read and supersedes this doc's grounding column. §4.6 (on-device fallback) is
+> exploratory, not decided. Canonical-preview tour ids in this doc drift as the preview is regenerated
+> — resolve "the canonical preview" fresh, don't trust a hardcoded id.
 
 > **Schema-names note (2026-06-13):** identifiers below predate the 2026-06-12 segments/tracks refactor — read `corridors`→`tours`, `tour_stops`/`roam_clips`→`segments`+`tracks`, `poi_content`→dropped (narration lives on `tracks`, attribution on `tracks.attribution`), `saved_tours`→dropped, `personaForRegion`→`personaFromKey` (persona is `tours.persona_key`). The narration model is `claude-opus-4-8` (Fable 5 was the interim pick but went unavailable 2026-06-14) and the voice is "Charon" (NOT the "Algenib" mentioned in older notes below; the live Q&A model is still Sonnet 4.6). **(V2 2026-06-18):** the segments/tracks model was further collapsed — read `tracks`→`narrations`, `tours`→user-owned `drives`, and the `/tours*` routes → `/drives*`; hand-authored tours are deferred.
 >
@@ -19,6 +21,93 @@
 > **Reconciliation (2026-06-08, after the review above):** two production changes landed post-review, and this spec's body has been updated to match. (1) The TTS voice switched **Sulafat → Algenib** (`models.ts` `SKIPPER_VOICE_ID`; Sulafat retired as female). (2) The persona was recast **boat-captain → road-trip guide** (`skipper.ts`, `apps/mobile`) — so build against `SKIPPER_VOICE_ID`, never a hard-coded voice name, and read any lingering `[DECIDED 2026-06-07]` boat flavor through the road-trip persona. The live canonical preview is tour `9ac50db5` (`emerald-bay-run`, Algenib, road-trip; the `9813e519` id below predates the Phase-2 wipe).
 
 > **Reconciliation (2026-06-10):** the TTS voice switched **Algenib → Charon** (`models.ts` `SKIPPER_VOICE_ID`; founder six-voice audition under the anti-fade delivery prompt). Same rule as above: build against `SKIPPER_VOICE_ID`, never a hard-coded voice name — read "Algenib" below as the persona voice. The live canonical audio stays Algenib until the next regen/resynth.
+
+---
+
+## 0. The 2026-08-03 pass — the well was measured, and the gate moved
+
+A skipper-hours session pitched a broader "AMA — ask him anything about the drive or the region."
+It resolved back INTO this spec, and two of its three tiers were rejected on the way:
+
+- **Tier 1, drive meta** ("how much longer?", "how many stops left?", "what's next?") — **rejected as
+  an ask.** The client already holds all of it in `DriveManifest` (`distanceMeters`, `durationSeconds`,
+  `clips[]`), the play screen already shows most of it, and answering "what's next" **spends the
+  anticipate beat on purpose** — the same reveal §2 already protects with its forward-looking
+  deflection, and the same one the planner's whole deflection register exists to manufacture. An ask
+  that answers it is a feature actively undoing a designed effect.
+- **Tier 3, region-general** ("what's the deal with Tahoe?") — **rejected outright.** `regions` carries
+  `slug`, `display_name`, `bbox`, `released_at` and NO factual content whatsoever. There is nothing to
+  ground a region answer on, which makes it the one tier that is pure invention. This is the exact
+  surface D9 (`apps/api/src/planner-prompt.ts`) was written to prevent.
+- **Tier 2, place facts** — this spec, unchanged in intent. The founder's stated thesis for it:
+  **"serve me the cut material"** — the clip is a ~2-minute curation, and the ask returns what it left
+  out. That needs no new data source, which is why it survived.
+
+### ⚠ 0.1 — THIS SPEC'S GROUNDING COLUMN IS STALE. Read this before §2 or §5.
+
+Everything below grounds on **`pois.facts.extract`**. That is no longer where a narration is grounded.
+Live precedence (`packages/db/src/schema.ts:343`) is: **`fact_sheet` when present, else the positional
+`facts.extract` head.** `pois.fact_sheet` is the PAID `enrich` step's curated verbatim sheet
+(`FactSheetEntry[]` = `{text, source, sourceId, license, url?}`) and it **postdates this document**
+(`../decisions/corpus-enrichment.md`). Treat every "the well = `facts.extract`" claim below as naming
+the wrong column.
+
+This is not a rename — it changes the feature's shape. The narration grounds on the *curated sheet*;
+the ask is free to ground on **the sheet PLUS the raw extract**, because an ask does not have to be a
+tight two-minute telling. The union is strictly wider than what the clip could ever use, and the data
+is already sitting there. **That union is the honest technical statement of "the cut material," and it
+is the design change this pass contributes.**
+
+### 0.2 — What was measured (read-only, no spend, 2026-08-03)
+
+Against the live corpus, joining `pois` to poi-anchored `narrations` with non-null audio (**n = 421**,
+all `form=story`, 420 released):
+
+| Measure | Result |
+|---|---|
+| have a `fact_sheet` (paid enrich) | **421 / 421 — 100%** |
+| `fact_sheet` entries per poi | median **9** (p25 6, p75 14, max 24) |
+| `fact_sheet` total chars | median **974** (p75 1,691, max 3,277) |
+| `facts.extract` chars (raw well) | median **1,349** (p75 3,105, max 3,995) |
+| extract is the DEEP one (>1,200 chars) | **233 / 421 — 55%**; the other 45% are still the ~600-char lead |
+| headroom (`extract` chars − `sheet` chars) | median **277**, mean 680, **positive on 373 / 421** |
+| **sheet facts the shipped clip never speaks** | **~52%** — median **4** per poi, p75 **9** |
+
+That last row is the one that matters, and it is robust to the threshold: a crude
+distinctive-token-overlap heuristic puts unspoken sheet facts at **41% (loose) to 68% (strict)**, median
+3–5 per poi either way. So **roughly half of every curated sheet never reaches the rider's ears.**
+
+**Verdict: SUPPLY is real; MATCH is still unmeasured.** There genuinely is unheard, curated, verbatim,
+attribution-carrying material at the median stop — about four facts' worth, plus ~277 chars of raw
+extract beyond the sheet. What nobody has measured is whether a rider's ACTUAL questions land on those
+four facts. Supply is necessary and not sufficient; §2's warning that "a non-trivial refusal rate is
+correct behavior" is exactly the risk this does not retire.
+
+⚠ **Two limits on the numbers, stated so they are not over-read.** (1) The overlap heuristic is lexical,
+not semantic — it over- and under-counts at the margins and bounds the number rather than settling it.
+(2) It counts **poi-anchored tellings only**: a FUSED cluster telling joins via `narrations.cluster_id`,
+not `poi_id`, so the ~37 non-poi clips in the corpus are outside this sample entirely. Solo-vs-cluster
+is a documented blind spot for new gates in this repo — a cluster ask grounds on several members'
+sheets at once and is NOT covered by anything measured here or designed below.
+
+### 0.3 — The gate, and what is NOT authorised
+
+**Before Phase A (§8), run the answerability probe: does a realistic rider question set actually hit
+the unspoken material?** Generate natural questions per stop from the live sheets, then judge each
+answerable / not-answerable from the sheet+extract union, and report the hit rate. Design it so a run
+that judged nothing cannot settle green.
+
+- 💸 **That probe is an OPERATOR PAID RUN and is NOT authorised by this document.** It needs an
+  explicit founder go, per run, like every other `--apply`/model job.
+- 💸 **Phase A adds a NEW rider-triggered paid call** (`POST /drives/:id/ask` spends model tokens on
+  every rider tap, forever, with no `--apply` and no human in the loop). Per CLAUDE.md that is a
+  founder decision in its own right, separate from any go on the probe above.
+- The probe's by-product is a first cut of `ASK_SKIPPER_SYSTEM_PROMPT` — the artifact everything else
+  hangs off, and the one worth having in hand before any endpoint exists.
+
+**Sequencing left as-is deliberately:** RISK-1 (drive it once for real) is still open and 1.1 has not
+been released, so nobody has yet confirmed that a rider mid-drive even WANTS to ask. Nothing here
+argues for jumping that queue; the measurement is cheap enough to do alongside it, the build is not.
 
 ---
 
