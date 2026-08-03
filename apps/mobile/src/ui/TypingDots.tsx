@@ -65,7 +65,14 @@ export function TypingDots({ label }: TypingDotsProps) {
 }
 
 const styles = StyleSheet.create({
-  // Left-aligned under the skipper's column: the dots stand in for the turn he is about to take.
-  row: { flexDirection: 'row', alignItems: 'center', gap: space.xs, alignSelf: 'flex-start' },
+  // ⚠ NO `alignSelf` HERE — it was `'flex-start'` until 2026-08-03, written to mean "left-aligned
+  // under the skipper's column". That is what flex-start means in a COLUMN parent; this component's
+  // only parent (`styles.thinking` in app/index.tsx) is a ROW, where the cross axis is VERTICAL and
+  // `alignSelf` OVERRIDES the parent's `alignItems: 'center'` — so the dots pinned to the TOP of the
+  // line box and rode up level with the cap-height of "Chewing on that…" instead of centering on it.
+  // Dropping it hands the cross-axis decision back to the parent, which is the only place that knows
+  // what this sits beside. Left-packing is unaffected either way: the dots are laid out by this row's
+  // own `flexDirection: 'row'`, not by how the row aligns itself.
+  row: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   dot: { width: DOT, height: DOT, borderRadius: radius.pill },
 })
