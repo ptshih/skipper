@@ -453,7 +453,32 @@ name-only wave lands short and evaluatePacing never flags short"). Do not tune i
 
 **Total smoke: 22 clips, $0.25, nothing persisted.** The content question is closed.
 
-### 11.12 ✅ BUILT — the whole tier, 2026-08-03. 309 clips, 114 min, ~$44, ALL STAGED.
+### 11.13 🚀 RELEASED — 2026-08-03 (founder, via the admin console)
+
+**309 of 309 scenic clips released; 114 minutes live.** Lake Tahoe was already open, so the region
+Release re-ran and published every staged clip in the bbox. Verified read-only afterwards: exactly one
+narration is staged anywhere in the corpus now, and that one is a pre-existing story holdout, not from
+this tier. Yosemite correctly stays DRAFT.
+
+**Verified through the PUBLIC read path** — the release-filtered corpus a non-admin gets, not the
+admin preview: on `Tahoe City → South Lake Tahoe` a rider's drive goes **8 stops → 13**, coverage
+23% → 27%, and the worst silence **6:12 → 3:40**. The eight stories are unchanged.
+
+The chain is live end to end: generated → released → served by `loadCorpusForRoute` → flagged
+`glance` from the form in `candidateOf` → placed by `buildDrive`'s fill pass → rendered by the client
+as "Enjoy the view". API revision `skipper-api-00144-czl`, canary healthy.
+
+⚠ **NOBODY HAS LISTENED TO ANY OF IT.** 114 minutes went from generated to public in one session on
+the strength of the gate, the eval scorecard and 22 read scripts. The gate is real — it withheld 2 and
+excised claims in 59 — but it audits GROUNDING, not whether a clip is any good. ⚠ And release is a
+one-way latch: these cannot be un-published, only regenerated in place. The first ear on this tier
+will be a rider's or a reviewer's.
+
+⚠ **It changes what App Review sees.** The 1.1 submission sweep has a reviewer build a Tahoe drive;
+that drive now carries glances. Better product, but it is a material change inside a submission
+window, and the sweep stands at 2 of 30.
+
+### 11.12 ✅ BUILT — the whole tier, 2026-08-03. 309 clips, 114 min, ~$44, then RELEASED (§11.13).
 
 Founder go for the full build. Run in waves, and the staging paid for itself twice over.
 
