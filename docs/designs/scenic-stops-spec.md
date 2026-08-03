@@ -356,6 +356,47 @@ survives. The question this tier actually answers is narrower and worth stating 
 the thing you are looking at worth 15 seconds?** That is an ear question, and it is the one the
 smallest run should be sized to answer.
 
+### 11.7 ✅ SMOKED 2026-08-03 (founder go) — 10 clips, $0.11, nothing persisted
+
+Ran `generate-scenic-narrations.ts` (new; modelled on the b-side CLI — preview by default, `--apply`
+makes the model calls, persists NOTHING). Two rounds: 4 clips across 4 kinds, then **6 FRESH places
+across 6 kinds** with `--offset 1` so the re-test never touched the first round's population.
+
+**✅ THE EAR QUESTION IS ANSWERED: yes, naming what you are looking at is worth twenty seconds.**
+The form carries the voice on two input fields:
+
+> *"That one out there, standing tall — that's **Alder Hill**. Now, hill's right there in the name,
+> but it's a mountain, so somebody was clearly aiming low."*
+
+**✅ Trap #2 (name-derived claims) is handled BY THE EXISTING PROMPT** — no new guard needed. The
+model actively refuses what the name implies: *"**Badger Spring**… Now I cannot promise you a badger,
+and I cannot even promise you the water from here"*; *"**Amazon Gulch** — big name for a quiet cut of
+ground, and no jungle in sight"*; *"**Butler Peak** — called a peak, but really it is more of a
+hill."* The `namedScenic` block is doing exactly the job it was written for.
+
+**⚠ Trap #1 (monotony) is NOT fixed by a rolling buffer — the round-robin-by-index fix in `81f6ca5`
+is REQUIRED.** Measured: feeding `recentOpeners` alone left **4 of 4** clips closing on the same wry
+generalisation. Adding `recentClosers` took it to **3 of 6** — and the three that collapsed were clips
+**1, 2 and 3**, while 4–6 diverged cleanly once the buffer had content. That is precisely the failure
+`cut-wave-form.md` predicted: *"a rolling buffer leaves the first `NARRATION_CONCURRENCY` clips
+generating against an empty history and colliding with each other."*
+⚠ Worse, a buffer does not persist ACROSS runs: round 1's park opened *"Off out there, that green
+patch — that's Amione Park"* and round 2's opened *"Out there, that green patch — that is Ardmore
+Park."* Same kind ⇒ same sentence.
+⚠ **And the worst case has NOT been tested.** These rounds spread across KINDS, which is the easy
+case; the wave build verified its fix on **6 pins of the SAME kind**. Do that before any full run.
+
+**⚠ A prompt contradiction was found by the FREE preview, before any spend** — and it had never fired
+because this branch has never been generated. The `namedScenic` block granted *"say… which side it is
+on"* while the `selfContained` block forbids naming a side outright (the shared atom cannot know
+direction). Fixed in `narrate.ts` by dropping the scenic half; the self-contained rule is the
+architecturally correct one. ⚠ It is inside `if (namedScenic)`, so no story or break telling was ever
+affected.
+
+**Cost discipline, for the next run's estimate:** 10 script-only clips cost **$0.11** total ($0.06 +
+$0.05), heavily prompt-cached. That is scripts only — TTS, loudnorm, R2 and the eval gate are all
+still ahead of any real run.
+
 ### 11.6 💸 Spend gate — and note the trap
 
 Any real test **SPENDS**: `--scripts-only` narrates and prints (`apply: apply || scriptsOnly`), so

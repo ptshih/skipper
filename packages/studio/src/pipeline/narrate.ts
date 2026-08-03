@@ -316,8 +316,14 @@ export function buildFactSheet(req: NarrationRequest): string {
       lines.push(
         'SCENIC stop, NAMED — a natural feature you are passing. You MAY name the PLACE above and say',
       )
+      // ⚠ "and which side it is on" was REMOVED here 2026-08-03: it flatly contradicted the
+      // SELF-CONTAINED block below ("you do NOT know the direction of travel or which side of the
+      // road the place is on — never name a side"), which is the architecturally correct half — a
+      // narration is the SHARED ATOM, reused in an order and a direction it cannot know. The
+      // contradiction had never fired because this branch has never been generated: every one of the
+      // 458 live narrations is a `story`. Found by the free preview of the scenic smoke, before spend.
       lines.push(
-        'what KIND it is (a bay, a beach, a cove — plainly), and which side it is on. That is ALL the',
+        'what KIND it is (a bay, a beach, a cove — plainly). That is ALL the',
       )
       lines.push(
         'name buys you: no history, no how it got its name, no size/depth/temperature, no "famous",',
