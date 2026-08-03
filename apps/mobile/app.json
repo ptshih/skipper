@@ -128,7 +128,7 @@
           }
         }
       ],
-      ["posthog-react-native/expo", { "uploadNativeSymbols": true }]
+      ["posthog-react-native/expo", { "uploadNativeSymbols": true, "skipOnConflict": true }]
     ],
     "experiments": {
       "typedRoutes": true
