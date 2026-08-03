@@ -86,11 +86,11 @@ desk passes — its §0 owns what they can't prove, so don't re-argue it here.
   that creates accounts must delete them from inside; removing this = rejection). `drives.user_id` /
   `credit_entries.user_id` are SOFT refs across the auth pool boundary — **no FK, so no cascade**:
   Better Auth's `deleteUser` alone would orphan a rider's drives + ledger. `purgeUserData`
-  (`apps/api/src/account.ts`) runs in **`databaseHooks.user.delete.before`** — before, never after (a
-  post-delete throw strands rows behind a vanished user with no session left to retry) — and on the
-  DATABASE hook, not `deleteUser.beforeDelete`, because that one fires on the self-serve routes ONLY and
-  `POST /api/auth/admin/remove-user` (mounted, live) skipped it. That rests on a vendor implementation
-  detail, pinned by `apps/api/test/auth-delete-hook.test.ts` — don't delete that test. Erasure is
+  (`apps/api/src/account.ts`) runs on **`databaseHooks.user.delete.before`** — the DATABASE hook (not
+  `deleteUser.beforeDelete`, which misses the live admin remove-user route), and BEFORE, never after.
+  Both choices rest on vendor implementation details and are pinned by
+  `apps/api/test/auth-delete-hook.test.ts` — **don't delete that test**; the full argument is in the
+  decision record below. Erasure is
   immediate + total; re-signup mints a fresh grant, knowingly. ⚠ The ANONYMOUS mint is NOT account
   creation under 5.1.1(v) — anonymous riders get no in-app delete (founder, 2026-08-03). See
   `docs/decisions/account-deletion-and-recovery.md` + `anonymous-mint-and-account-deletion.md`.
@@ -213,12 +213,10 @@ desk passes — its §0 owns what they can't prove, so don't re-argue it here.
 - **Local dev servers stay UP** (the human runs them) — ports: API `bun run dev:api`; admin `bun run dev:admin`
   = vite client **:5173** proxying `/admin`+`/health` → Hono admin-api **:8788** (`ADMIN_DEV_BYPASS=1` skips
   IAP locally); site `bun run dev:site`.
-- **Shell is zsh; Claude Code snapshots `~/.zshrc` (options + aliases) onto every Bash command.** Two zsh
-  defaults bite agents: an unmatched glob ABORTS the whole command (`no matches found`, where bash passes the
-  literal through), and interactive aliases apply (`c`→`bat`, `g`→`git`, `ll`→`eza`). A `CLAUDECODE`-gated
-  guard in the founder's `~/.zshrc` (`setopt no_nomatch` + `unalias -m '*'`) neutralizes both for NEW sessions,
-  but it's MACHINE-LOCAL (not in-repo) — so still prefer the Read/Grep/Glob tools over shell, guard globs
-  (`… 2>/dev/null`, or `find`), and use absolute paths (a `cd` in a compound command can trigger a prompt).
+- **Shell is zsh and `~/.zshrc` rides every Bash command** — an unmatched glob ABORTS the command and
+  interactive aliases apply. A `CLAUDECODE`-gated guard in the founder's `~/.zshrc` neutralizes both, but
+  it is MACHINE-LOCAL: prefer Read/Grep/Glob over shell, guard globs (`2>/dev/null`, `find`), absolute
+  paths. ⚠ Redirect to a file and read it when output matters — some commands' stdout arrives empty here.
 - **There are TWO skipper prompts and they are NOT interchangeable.** (1) The **narration** prompt
   (`packages/studio/src/persona/skipper.ts`) governs baked audio, is written around the fact sheet and stop
   kinds, and is enforced by the fail-closed eval gate — still the highest-leverage prose in the repo, iterate
@@ -275,15 +273,13 @@ desk passes — its §0 owns what they can't prove, so don't re-argue it here.
 (The ladder is ONE artifact: the user-owned DRIVE. Roam removed in 1.1; hand-authored tours stay DEFERRED.
 The phone-player bet is unchanged — the artifact is a region's shared `narrations` corpus, reused in order.)
 
-0. **Content + phone-player spike.** Skipper prompt; a Tahoe corpus; stand up the **phone** audio player
-   — the MVP target, whose build sets the SDK pin (Expo/RN versions live in `apps/mobile/package.json`; new
-   arch). CarPlay is deferred past the MVP (the phone plays via mount / Bluetooth).
-1. **Walking skeleton.** ONE user-created **drive** — plan it by CONVERSATION → route → reuse the region's
-   narrations, one fixed corny delivery: discover → enrich → generate → TTS → R2 → Neon, the drive simulator,
-   and the player (offline → simulated drive → speed-adaptive triggering + debounce → audio + lock-screen Now
-   Playing). Then drive it once for real. _This is the whole bet._
-2. **`apps/api`:** `/sample` + `/regions` + `/drives/plan` + `/drives/propose` (anonymous, capped); the
-   rest of `/drives*` behind PER-ROUTE `requireAccount`; signed R2 URLs.
+0–2. **BUILT** — Tahoe corpus, the phone player (offline → simulated drive → speed-adaptive triggering +
+   debounce → audio + lock-screen Now Playing), the conversational planner, and `apps/api` (`/sample`,
+   `/regions`, `/drives/plan`, `/drives/propose` anonymous+capped; the rest of `/drives*` behind PER-ROUTE
+   `requireAccount`; signed R2 URLs). CarPlay stays deferred past the MVP — the phone plays via
+   mount/Bluetooth. ⚠ **The one step still owed is the one that was always the point: drive it once for
+   real** (RISK-1 — off the 1.1 critical path by founder call; `docs/guides/1-1-submission-sweep.md` §0
+   owns what the desk passes can and cannot prove in its place).
 3. **Breadth:** more regions' corpora; live break-stop Places data.
 4. **Earn the machinery:** `route_sig` dedup + caching, human-review/feedback, more regions
    (Yosemite → Moab; mind seasons).
@@ -296,11 +292,10 @@ bet); Android Auto; multilingual; the **GROUNDED place-facts Q&A agent** + its o
 (`docs/designs/ask-the-skipper-spec.md`). ⚠ That is NOT the drive PLANNER — the planner IS built in 1.1 and
 IS a live conversational agent; what stays deferred is letting it answer questions about PLACES.
 
-The **automated grounding gate** is no longer deferred — the founder reversed "human ear instead"
-(2026-06-19). `generate-narrations.ts` now scores every clip through the eval panel and is FAIL-CLOSED:
-a clip whose grounding/tts gate stays dirty after the bounded `optimize()` retakes is WITHHELD (never
-synthesized/persisted) and flagged in `eval_scores`. Veracity stays advisory (no auto-judge for
-world-truth). See `docs/decisions/automated-grounding-gate.md`.
+⚠ The **automated grounding gate is BUILT, not deferred**, and it is FAIL-CLOSED: `generate-narrations.ts`
+scores every clip through the eval panel and WITHHOLDS one whose grounding/tts gate stays dirty after the
+bounded `optimize()` retakes — never synthesized, never persisted, flagged in `eval_scores`. Veracity
+stays advisory (no auto-judge for world-truth). `docs/decisions/automated-grounding-gate.md`.
 
 ## Future ideas (post-MVP, not scheduled)
 
