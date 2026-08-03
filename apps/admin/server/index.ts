@@ -584,7 +584,11 @@ app.post('/admin/places/draft', async (c) => {
     await db.select({ displayName: regions.displayName, bbox: regions.bbox }).from(regions).where(eq(regions.slug, slug)).limit(1)
   )[0]
   if (!region) return c.json({ error: 'not_found' }, 404)
-  if (!parseBbox(region.bbox)) {
+  // ⚠ Parse ONCE and pass the RESULT down — the bbox is no longer merely a precondition, it is what
+  // SCOPES the draft (see draftSystem). Re-parsing at the call site would be the same string read twice
+  // by two expressions, which is the drift this repo keeps paying for.
+  const bbox = parseBbox(region.bbox)
+  if (!bbox) {
     return c.json({ error: 'bbox_required', message: 'Set a valid region bbox before curating.' }, 400)
   }
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -592,7 +596,7 @@ app.post('/admin/places/draft', async (c) => {
   }
   const targetN = Math.max(8, Math.min(60, Number(body.target) || 30))
   try {
-    const drafts = await draftCuratedPlaces(region.displayName, {
+    const drafts = await draftCuratedPlaces(region.displayName, bbox, {
       targetN,
       model: process.env.ADMIN_CURATE_MODEL ?? CLAUDE_MODELS.opus,
     })

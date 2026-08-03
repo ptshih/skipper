@@ -159,7 +159,27 @@ const DRAFT_TOOL: Anthropic.Tool = {
   },
 }
 
-function draftSystem(regionName: string, targetN: number): string {
+/**
+ * The draft prompt.
+ *
+ * ⚠ SCOPE IS THE BBOX, NEVER THE DISPLAY NAME — that is why this takes a `BboxCorners` at all.
+ * It used to read "Stay strictly inside ${regionName}", and a model told "strictly inside Lake Tahoe"
+ * correctly excludes Truckee, Reno, Carson City and Virginia City: none of them are in the Tahoe Basin.
+ * But the lake-tahoe bbox reaches every one of them, `discover-pois` swept them, and 28 released fused
+ * tellings sat out there with no curated endpoint a rider could name to drive to one — finished audio
+ * nobody could route to. The name is prose and is routinely NARROWER than the geometry; a region IS a
+ * bbox (geometry-first regions), so the bounds do the scoping and the name is demoted to flavour.
+ *
+ * ⚠ The "never a latitude or longitude" clause is load-bearing now that coordinates appear in this
+ * prompt at all. The model's job is still to NAME places; `resolvePlaceInBbox` is what turns a name
+ * into a canonical pin, and a drafted coordinate would route around that resolve entirely.
+ *
+ * ⚠ DUPLICATED ON PURPOSE: packages/studio/src/curate-places.ts carries a byte-identical copy — this
+ * server deliberately does not pull in the @skipper/studio graph (see this file's header). The two must
+ * move TOGETHER — there is no shared home for it, since @skipper/shared and @skipper/engine both ship
+ * into the mobile bundle and this is operator-only prose.
+ */
+function draftSystem(regionName: string, bbox: BboxCorners, targetN: number): string {
   return `You are curating the set of real-world PLACES a rider can pick to start, end, or break a self-guided driving audio tour of ${regionName}, narrated by a charming Jungle-Cruise-style skipper.
 
 Optimize for CHARM, not coverage: every place must be intentional, recognizable, and a real place a visitor would actually name. A short list of beloved hubs beats an exhaustive directory.
@@ -170,7 +190,9 @@ Draft roughly ${targetN} places:
 - Mark role="both" for a hub that is also a natural pitstop.
 - Mark featured=true for ONLY the few most iconic, popular start points (think 4–8).
 
-Stay strictly inside ${regionName}. For each place give a precise Google Places \`query\` that uniquely identifies it (add the town/state when the name alone is ambiguous), so it resolves to the right pin. Do NOT invent coordinates — name the place; resolution happens separately.`
+Stay inside this region's BOUNDS — southwest corner ${bbox.swLat}, ${bbox.swLng} to northeast corner ${bbox.neLat}, ${bbox.neLng} (decimal degrees). The BOUNDS are the region. "${regionName}" is only what riders call this area, and that name is usually narrower than the box: include every recognizable town, hub and lookout inside those corners, including ones a visitor would file under a neighboring name. If it is in the box, it is in scope.
+
+For each place give a precise Google Places \`query\` that uniquely identifies it (add the town/state when the name alone is ambiguous), so it resolves to the right pin. Do NOT invent coordinates — name the place, never a latitude or longitude; resolution happens separately.`
 }
 
 /** Draft a region's curated candidates with one forced-tool Anthropic call. Spends a few cents and
@@ -178,6 +200,7 @@ Stay strictly inside ${regionName}. For each place give a precise Google Places 
  *  to 502). `model` is the caller's choice (the admin defaults to Opus, the house judgment tier). */
 export async function draftCuratedPlaces(
   regionName: string,
+  bbox: BboxCorners,
   opts: { targetN: number; model: string },
 ): Promise<PlaceDraft[]> {
   // ⚠ EXPLICIT TIMEOUT + LOW maxRetries, and this is a rule, not a preference. A bare `new Anthropic()`
@@ -192,7 +215,7 @@ export async function draftCuratedPlaces(
   const res = await client.messages.create({
     model: opts.model,
     max_tokens: 4_000,
-    system: draftSystem(regionName, opts.targetN),
+    system: draftSystem(regionName, bbox, opts.targetN),
     tools: [DRAFT_TOOL],
     tool_choice: { type: 'tool', name: DRAFT_TOOL.name },
     messages: [{ role: 'user', content: `Draft the curated places for ${regionName}.` }],

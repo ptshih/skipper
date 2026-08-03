@@ -218,7 +218,7 @@ const RUN_KINDS: RunKind[] = [
   },
   {
     kind: 'Curate places',
-    does: "Build a region's curated drive endpoints + break pitstops on the Places page — interactive: Opus DRAFTS the hubs (writes nothing), you prune the list, then RESOLVE the keepers against Google Places and upsert them role-tagged. Re-runnable (OR-merges roles). Runs inline on the Places page — NOT a Jobs-page run. Add a place is the single-place manual form.",
+    does: "Build a region's curated drive endpoints + break pitstops on the Places page — interactive: Opus DRAFTS the hubs (writes nothing), you prune the list, then RESOLVE the keepers against Google Places and upsert them role-tagged. Re-runnable (OR-merges roles). Runs inline on the Places page — NOT a Jobs-page run. Add a place is the single-place manual form. ⚠ The draft is scoped by the region's BBOX, not its name — expect hubs the region's name would not suggest (Lake Tahoe's box reaches Truckee, Reno and Carson City), because the narration corpus is swept from that same box. Prune what does not belong; a name-scoped draft is what left released audio with no endpoint to reach it.",
     cost: <span>LLM (Opus draft) + <span className="text-foreground">Google Places</span> (resolve) — a few cents each (when applied).</span>,
     safe: 'Draft writes nothing — review the picks first; “Resolve & add” is the spend.',
   },

@@ -10,6 +10,18 @@
 > 💸 **Do NOT re-run `curate-places` to "fix an empty allowlist" — it is not empty, and that run SPENDS.**
 > A curation run is now only for a NEW region (and still needs an explicit founder go).
 >
+> ⚠ **THE DRAFT IS SCOPED BY THE BBOX, NOT THE REGION NAME (2026-08-03).** The draft prompt used to read
+> "Stay strictly inside `<display_name>`" — and a model told *strictly inside Lake Tahoe* correctly
+> excludes Truckee, Reno, Carson City and Virginia City, none of which are in the Tahoe Basin even though
+> the lake-tahoe bbox reaches every one of them. `discover-pois` sweeps that BBOX, so the corpus grew
+> released fused tellings for those towns while the allowlist stayed basin-only: **28 released fused
+> tellings with no curated endpoint a rider could name as a start or end.** Both copies of the prompt
+> (`packages/studio/src/curate-places.ts` + `apps/admin/server/places.ts` — byte-identical BY HAND, since
+> the admin deliberately does not depend on `@skipper/studio` and the only shared packages ship into the
+> mobile bundle) now scope on the region's BBOX CORNERS and demote the name to flavour. They must move
+> together. ⚠ The "every one Tahoe-basin" measurement above is HISTORY on both counts — the rule changed,
+> and a `Truckee` endpoint was added by hand on 2026-08-03. Trust the DB for live counts, never this line.
+>
 > ⚠ **The rider-facing half of §Runtime below is GONE: `GET /drives/anchors` was DELETED end to end in
 > 1.1** ([drives-first-1-1.md](drives-first-1-1.md) D7 + its removal table), together with the
 > tap-to-pick create form this spec was written to feed. Read every mention of that endpoint below as
