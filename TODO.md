@@ -697,6 +697,31 @@ unvalidated by construction. dev and prod are ONE Neon database; there is no sta
 - [ ] `sweep-orphans` deletes R2 objects. Its preview LISTING is byte-identical to before (every key
       is logged before any delete now), so a `--apply`-less run is a safe first check.
 
+## `apps/api` diligence pass (2026-08-02)
+
+Read the whole surface — mount order, limits, credits, erasure, planner config, logging. **It is in
+unusually good shape**; almost every hazard is already documented at the line where it lives, usually
+with the measurement that settled it. Two things came out.
+
+✅ DONE (`8de0827`): nothing guarded that account ERASURE stays complete. `purgeUserData` hard-codes
+`drives` + `credit_entries`, both SOFT refs with no FK and no cascade, so a third `user_id` table
+would be erased by nothing and fail nothing — under an App Store 5.1.1(v) requirement. Now
+schema-introspected and mutation-checked.
+
+- [ ] **`GET /regions` is the only anonymous DB-touching route with NO rate limit**, and the
+      inconsistency runs the wrong way: `GET /sample` — ONE indexed limit-1 query plus a presign — is
+      capped, while `/regions` runs TWO queries (the region list, plus a 500-row scan of `places`) and
+      is hit on **every app launch**. `index.ts` states the principle itself at the `/sample` mount:
+      "every anonymous, uncapped DB-touching route is a standing invitation."
+      ⚠ Severity is moderate, not urgent — no vendor spend, and the `places` scan rides a PARTIAL index
+      (`places_endpoint_idx`). The real exposure is that **DB capacity is shared with the paid
+      endpoints**: hammering `/regions` degrades `/drives/plan` and `/drives/propose`, which do spend.
+      ⚠ **Picking the number is the judgement call, which is why this is a proposal and not a commit.**
+      It is the app's COLD-START call, so a tight cap presents as a broken launch; it also degrades
+      gracefully (the client falls back to `region-cache.ts`, which holds the last good answer). Suggest
+      something generous — well above any real launch pattern — single-sourced in `limits.ts` with
+      every other rider-facing cap (INV-12), then `app.use('/regions', rateLimit(REGIONS_RATE))`.
+
 ## Production ops hardening — from the 2026-07-30 ship-readiness audit
 
 None of this is a build; all of it is config. The premise changed on 2026-07-28: 1.0.0 is submitted, so
