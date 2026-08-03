@@ -1,139 +1,30 @@
-// The swappable GPS fix source — the one seam between the simulated drive and the
-// real one. The driving player consumes a `GpsFixSource`. Two implementations exist:
-// the *simulated* source (replays `generateDrive` on a wall-clock timer, no device GPS),
-// so the whole trigger→play→duck→lock-screen loop is couch-testable on the iOS Simulator;
-// and the live `liveSource()` (expo-location `watchPositionAsync` →
-// GpsFix), which implement the SAME `GpsFixSource` shape — the hooks swap which one they
-// subscribe and nothing else changes. See docs/designs/gps-player-spec.md §3.4 / §7.
+// The NATIVE half of the GPS seam: location permissions + `liveSource`, the expo-location watch.
+// Everything pure — the `GpsFixSource` contract, `simulatedSource`, `replaySource`, the headless
+// replay — lives in `gps-source.ts` so `bun test` can reach it, and is re-exported below so call sites
+// keep importing from one place. See docs/designs/gps-player-spec.md §3.4 / §7 and
+// docs/designs/desk-drive-harness.md.
 import * as Location from 'expo-location'
-import { cumulativeMeters, generateDrive, haversineMeters, type GpsFix, type LngLat } from '@skipper/engine'
-import {
-  accuracyOk,
-  isReducedAccuracy,
-  projectForwardIndex,
-  reachedRouteEnd,
-  saneNonNeg,
-} from './gps-util'
+import type { LngLat } from '@skipper/engine'
+import { createFixMapper, isReducedAccuracy, type RawFix } from './gps-util'
+import type { GpsFixSource } from './gps-source'
 
-/**
- * A controller for an active fix stream. `stop()` ends it for good; `pause()`/`resume()`
- * suspend and continue emission (the simulator can freeze the road so you can inspect a
- * stop — a real GPS source maps these to stopping/restarting the watch, or no-ops them).
- *
- * This is a deliberate superset of the spec's bare `(onFix) => () => void` seam: the extra
- * lifecycle is what lets the on-device drive *simulator* pause without losing position.
- */
-export interface FixSubscription {
-  stop: () => void
-  pause: () => void
-  resume: () => void
-}
-
-/**
- * Subscribe to a stream of GPS fixes.
- * - `onEnd` fires when the route is done — a finite source (the sim) running out of fixes, or the
- *   live source's position reaching the final vertex. It's what queues the outro + finishes the drive.
- * - `onError` fires when the source fails to produce fixes at all (e.g. the live watch can't acquire);
- *   the consumer surfaces it instead of hanging silently.
- */
-export type GpsFixSource = (
-  onFix: (fix: GpsFix) => void,
-  onEnd?: () => void,
-  onError?: (err: unknown) => void,
-) => FixSubscription
-
-export interface SimSourceOptions {
-  /** Constant drive speed (mph), passed to `generateDrive`. Default 60. */
-  mph?: number
-  /** Fix rate (Hz), passed to `generateDrive` — real GPS at BestForNavigation is ~1–4 Hz. Default 4. */
-  tickHz?: number
-  /**
-   * Wall-clock compression for couch testing. 1 = real time (fixes spaced 1/tickHz s, so a
-   * 30-min drive takes 30 min); 8 = 8× faster (same fix DATA, emitted 8× sooner) so you can
-   * watch a whole drive trigger in a few minutes. Does NOT change speeds the trigger sees —
-   * each GpsFix still reports its real `speedMps`/`tSec`; only the delivery cadence compresses.
-   */
-  timeScale?: number
-}
-
-/**
- * The simulated `GpsFixSource`: pre-generates the fix stream with `generateDrive` (a
- * constant-speed walk along the polyline) and replays it on a timer at the route's real
- * cadence (or compressed via `timeScale`). The fix DATA is identical to what a real drive
- * at this speed would produce, so the trigger engine behaves exactly as it will on the road.
- */
-export function simulatedSource(polyline: LngLat[], opts: SimSourceOptions = {}): GpsFixSource {
-  const { mph = 60, tickHz = 4, timeScale = 1 } = opts
-  return (onFix, onEnd, onError) => {
-    let fixes: GpsFix[]
-    try {
-      fixes = generateDrive(polyline, { mph, tickHz })
-    } catch (e) {
-      // generateDrive throws synchronously on a bad polyline — route it to the same 'error' phase the
-      // live source uses (onError) instead of an uncaught throw to beginDrive's caller. (audit #942)
-      onError?.(e)
-      return { stop: () => {}, pause: () => {}, resume: () => {} }
-    }
-    // Real spacing between fixes is 1/tickHz seconds; compress by timeScale for testing.
-    const dtMs = Math.max(1, 1000 / tickHz / Math.max(0.0001, timeScale))
-    let i = 0
-    let timer: ReturnType<typeof setTimeout> | null = null
-    let halted = false
-
-    const tick = () => {
-      timer = null
-      if (halted) return
-      if (i >= fixes.length) {
-        onEnd?.()
-        return
-      }
-      onFix(fixes[i]!)
-      i++
-      timer = setTimeout(tick, dtMs)
-    }
-
-    const arm = () => {
-      if (timer === null && !halted) timer = setTimeout(tick, dtMs)
-    }
-    const clear = () => {
-      if (timer !== null) {
-        clearTimeout(timer)
-        timer = null
-      }
-    }
-
-    // Kick off on the next tick so the subscriber's first render settles first.
-    timer = setTimeout(tick, 0)
-
-    return {
-      stop: () => {
-        halted = true
-        clear()
-      },
-      pause: () => {
-        halted = true
-        clear()
-      },
-      resume: () => {
-        if (halted) {
-          halted = false
-          arm()
-        }
-      },
-    }
-  }
-}
+export {
+  replayHeadless,
+  replaySource,
+  simulatedSource,
+  type FixSubscription,
+  type GpsFixSource,
+  type ReplaySourceOptions,
+  type SimSourceOptions,
+} from './gps-source'
+export type { RawFix } from './gps-util'
 
 // The accuracy gate (accuracyOk), the iOS -1 sentinel sanitize (saneNonNeg), the monotonic forward
-// projection (projectForwardIndex), and the end-of-route predicate (reachedRouteEnd) are the pure,
-// safety-critical cores — extracted to gps-util.ts so they unit-test without mocking expo-location.
-
-// Fire onEnd once the projected position is within this of the final route vertex (m). (review #1)
-const ROUTE_END_EPSILON_M = 25
-
-// Forward search window for the monotonic projection, in polyline vertices (~13 m apart → ~5 km).
-// Big enough to span a multi-second GPS gap without an O(n) full-polyline scan per fix. (review #10/#12)
-const PROJECT_WINDOW_VERTS = 400
+// projection (projectForwardIndex), the end-of-route predicate (reachedRouteEnd) AND the pipeline that
+// composes them (createFixMapper) are the pure, safety-critical cores — they live in gps-util.ts so
+// they unit-test without mocking expo-location. `liveSource` below is now ONLY the watch: acquire,
+// hand each LocationObject to the shared mapper, tear down. Everything else it used to do is the
+// mapper, which a replayed trace runs identically. (docs/designs/desk-drive-harness.md §4.1)
 
 // True when iOS granted location but only at REDUCED (approximate) accuracy — the Precise Location
 // toggle is off. Such fixes land ~1–3 km wide, so the accuracy gate would reject EVERY fix → the drive
@@ -180,11 +71,17 @@ export async function getDrivePermission(): Promise<{
 
 /**
  * The live `GpsFixSource`: wraps expo-location `watchPositionAsync` into the SAME
- * `FixSubscription` the simulated source returns, so the driving hook swaps one for the other
- * and nothing else changes. Maps each `LocationObject → GpsFix` (spec §3.3): sanitizes the iOS
- * -1, gates on accuracy, projects the fix onto `polyline` so the route dot's `alongM` tracks the
- * real position (a live fix has no intrinsic along-route distance), and derives `tSec` from the
- * first fix's timestamp.
+ * `FixSubscription` the pure sources return, so the driving hook swaps one for the other and
+ * nothing else changes.
+ *
+ * ⚠ **The `LocationObject → GpsFix` mapping is NOT here any more — it is `createFixMapper` in
+ * gps-util.ts**, which `replaySource` runs identically. That is deliberate and load-bearing: while
+ * this function owned the mapping privately, a simulated drive could not reach the accuracy gate, the
+ * -1 sentinels, the projection cursor or the end predicate, which is exactly where the field-confirmed
+ * failures have been. Do not re-inline it. (docs/designs/desk-drive-harness.md §4.1)
+ *
+ * What genuinely belongs here, and all that is left: acquiring the watch, the re-entry guard, the
+ * pause/resume re-acquisition, and the teardown-leak guard.
  *
  * ASSUMES foreground permission is already granted — call `ensureDrivePermission()` first.
  *
@@ -193,73 +90,21 @@ export async function getDrivePermission(): Promise<{
  * is harmless to the engine + UI — but it still drains battery, so verify GPS actually stops on
  * unmount during the on-device test. (spec §5)
  */
-export function liveSource(polyline: LngLat[]): GpsFixSource {
-  const cumulative = cumulativeMeters(polyline)
-  const routeEndM = cumulative[cumulative.length - 1] ?? 0
+export function liveSource(polyline: LngLat[], onRaw?: (raw: RawFix) => void): GpsFixSource {
   return (onFix, onEnd, onError) => {
     let sub: Location.LocationSubscription | null = null
     let stopped = false
     let paused = false
-    let startMs: number | null = null
-    let ended = false
     let acquiring = false // a watch acquisition is in flight (re-entry guard) (audit #490)
-    // Monotonic projection cursor. A plain nearest-VERTEX scan (geo.nearestOnRoute) snaps return-leg
-    // fixes to nearby OUTBOUND vertices on an out-and-back route — the dot jumps backward AND alongM
-    // never reaches the end, so end-of-route detection below would never fire. Searching FORWARD from
-    // the cursor keeps alongM monotonic and bounds the per-fix work to the window ahead. (review #1/#10/#12)
-    let cursor = 0
-
-    const projectAlongM = (lng: number, lat: number): number => {
-      cursor = projectForwardIndex(polyline, cursor, lng, lat, PROJECT_WINDOW_VERTS) // monotonic
-      return cumulative[cursor] ?? 0
-    }
+    const accept = createFixMapper(polyline, { onFix, onEnd })
 
     const onLocation = (loc: Location.LocationObject) => {
       if (stopped || paused) return // teardown-leak guard (#35925/#35926) + pause guard
-      // Speed-aware accuracy gate: reject the iOS -1 sentinel + unsettled ~1000 m acquisition fixes,
-      // but admit usefully-noisy fixes when the effective trigger radius is large at speed. (audit #9, review #2)
-      if (!accuracyOk(loc.coords.accuracy, saneNonNeg(loc.coords.speed))) return
-      if (startMs === null) startMs = loc.timestamp
-      const alongM = projectAlongM(loc.coords.longitude, loc.coords.latitude)
-      onFix({
-        lat: loc.coords.latitude,
-        lng: loc.coords.longitude,
-        speedMps: saneNonNeg(loc.coords.speed),
-        // ⚠ RAW course, NOT saneNonNeg(): iOS reports -1 for "unknown", and the TriggerEngine
-        // treats a negative heading as unknown and skips the heading gate entirely. Running it
-        // through saneNonNeg() maps -1→0, which reads as a REAL due-north heading and gates out
-        // every stop the car is not driving north toward — a FIELD-CONFIRMED zero-fire bug, found
-        // on a real drive, not reasoned about. This comment used to point at the free-roam source
-        // for the rationale; that function is gone, so the reasoning lives here now.
-        headingDeg: loc.coords.heading ?? -1,
-        tSec: (loc.timestamp - startMs) / 1000, // ms since epoch; wall-clock since the first fix (incl. pause time) — reporting-only, triggering doesn't use it (audit #951)
-        alongM, // projected onto the route so the dot follows the real position
-      })
-      // Live GPS has no fix-stream end like the sim, so signal end-of-route ourselves once the
-      // projected position reaches the final vertex — that's what queues the outro + finishes. (review #1)
-      // Fallback (audit #332): if the windowed cursor lagged (a GPS gap / a run of rejected fixes in
-      // the final stretch left alongM short), also complete when the raw distance to the final vertex
-      // is within epsilon AND we've covered most of the route — the >50% guard avoids a false end at
-      // the start of an out-and-back where the final vertex ≈ the start. (A TOTAL fix dropout in the
-      // final stretch still can't auto-complete — no fix arrives to evaluate; documented limitation.)
-      const rawToEndM = haversineMeters(
-        [loc.coords.longitude, loc.coords.latitude],
-        polyline[polyline.length - 1]!,
-      )
-      if (
-        !ended &&
-        reachedRouteEnd({
-          alongM,
-          routeEndM,
-          cursor,
-          polylineLen: polyline.length,
-          rawToEndM,
-          epsilonM: ROUTE_END_EPSILON_M,
-        })
-      ) {
-        ended = true
-        onEnd?.()
-      }
+      // ⚠ The recorder tap sits BEFORE the mapper, on purpose: a trace is only useful for tuning if it
+      // contains the fixes the accuracy gate THREW AWAY. Recording post-gate would silently produce a
+      // trace that always replays clean, which is the one result that proves nothing.
+      onRaw?.(loc)
+      accept(loc)
     }
 
     const startWatch = () => {
