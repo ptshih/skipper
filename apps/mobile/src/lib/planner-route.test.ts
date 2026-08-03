@@ -3,7 +3,13 @@
 // `bun test`.
 import { describe, expect, test } from 'bun:test'
 import type { DriveProposal, PlannedRoute } from '@skipper/shared'
-import { durationDrift, proposeKey, toCreateRequest, toProposeRequest } from './planner-route'
+import {
+  durationDrift,
+  proposeKey,
+  reflowDrawnCard,
+  toCreateRequest,
+  toProposeRequest,
+} from './planner-route'
 import { spokenDuration } from '../ui/voice'
 
 const START = '11111111-1111-4111-8111-111111111111'
@@ -101,6 +107,55 @@ describe('proposeKey', () => {
     expect(proposeKey(planned({ via: [MID, START] }))).not.toBe(
       proposeKey(planned({ via: [START, MID] })),
     )
+  })
+})
+
+describe('reflowDrawnCard', () => {
+  // Only the two fields the move actually decides on; the screen's card carries far more.
+  const card = (route: PlannedRoute, afterTurn: number, id = 'x') => ({ id, route, afterTurn })
+
+  test('moves the matching card to the END and re-slots it', () => {
+    // ⚠ Both halves asserted together, because either alone is the bug: `afterTurn` places the card
+    // in the transcript, LAST position makes it `newestCardId` (which gates the live map).
+    const cards = [card(planned(), 2, 'a'), card(planned({ end: MID }), 5, 'b')]
+    const out = reflowDrawnCard(cards, planned(), 9)
+
+    expect(out.map((c) => c.id)).toEqual(['b', 'a'])
+    expect(out[1]!.afterTurn).toBe(9)
+  })
+
+  test('COLLIDES on targetMinutes alone — the "make it shorter" case that read as frozen', () => {
+    // The rider asks for the same endpoints in a different duration. /propose never sees
+    // targetMinutes, so it is the same billed call and the same card — and before this moved, the
+    // skipper agreed in words while the screen did nothing at all.
+    const cards = [card(planned({ targetMinutes: 120 }), 2, 'a')]
+    const out = reflowDrawnCard(cards, planned({ targetMinutes: 30 }), 8)
+
+    expect(out).toHaveLength(1)
+    expect(out[0]!.afterTurn).toBe(8)
+  })
+
+  test('carries the card ACROSS unchanged but for its slot — never a fresh card', () => {
+    // The card owns an idempotency key and a live proposal; re-minting either would buy a second
+    // Routes call and let one drive be credit-spent twice.
+    const original = { ...card(planned(), 2, 'a'), idempotencyKey: 'k1', state: 'ready' as const }
+    const out = reflowDrawnCard([original], planned(), 7)
+
+    expect(out[0]).toEqual({ ...original, afterTurn: 7 })
+  })
+
+  test('leaves the array alone when no card matches', () => {
+    const cards = [card(planned(), 2, 'a')]
+    expect(reflowDrawnCard(cards, planned({ start: MID }), 9)).toEqual(cards)
+  })
+
+  test('does not disturb the cards it steps over', () => {
+    const cards = [card(planned(), 1, 'a'), card(planned({ end: MID }), 3, 'b'), card(planned({ start: MID }), 4, 'c')]
+    const out = reflowDrawnCard(cards, planned(), 9)
+
+    expect(out.map((c) => c.id)).toEqual(['b', 'c', 'a'])
+    // The two it moved past keep their own slots — only the re-flowed card is re-slotted.
+    expect(out.map((c) => c.afterTurn)).toEqual([3, 4, 9])
   })
 })
 

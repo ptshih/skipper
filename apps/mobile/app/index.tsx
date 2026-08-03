@@ -50,7 +50,13 @@ import {
   shouldRotatePlaceholder,
   PLACEHOLDER_ROTATE_MS,
 } from '@/lib/placeholder-util'
-import { durationDrift, proposeKey, toCreateRequest, toProposeRequest } from '@/lib/planner-route'
+import {
+  durationDrift,
+  proposeKey,
+  reflowDrawnCard,
+  toCreateRequest,
+  toProposeRequest,
+} from '@/lib/planner-route'
 import {
   appendRider,
   appendSkipper,
@@ -578,10 +584,22 @@ export default function HomeScreen() {
       // spend guard. (The model saying it "drew that up" when it did not is a separate defect, and it
       // belongs to the planner prompt's own review.)
       //
-      // The rider is still taken to the drive — the bump alone, since the card it names is already in
-      // the transcript above.
       const key = proposeKey(route)
       if (drawnRef.current.has(key)) {
+        // ⚠ THE CARD MOVES; IT IS NOT REDRAWN. This branch was `bumpScroll(); return`, on the stated
+        // theory that the rider was "still taken to the drive" — they were not. `bumpScroll` scrolls
+        // to the END of the transcript while the card it means sits where it was first drawn, often
+        // several exchanges up; and `undrawnRoute` below correctly finds a card for this key, so no
+        // "Draw it up" bar appears either. Net effect on device: the rider asks for a change, the
+        // skipper agrees in words, and the screen does nothing at all. Reported by the founder
+        // 2026-08-03 as the chat "refusing to redraw the route after changing it up and chatting more".
+        //
+        // Re-flowing the card it already has keeps every property this guard exists for — one billed
+        // Routes call, one card per distinct drive, one idempotency key, no second credit — while
+        // putting the drive where the rider is looking. The move itself is `reflowDrawnCard`
+        // (src/lib/planner-route.ts), pure and unit-tested; its doc owns WHY both halves of the move
+        // are required, since neither is obvious from the call site.
+        setCards((cs) => reflowDrawnCard(cs, route, afterTurn))
         bumpScroll()
         return
       }

@@ -616,11 +616,23 @@ Routes. Worth a founder eye before real traffic, alongside RISK-4.
 planner answered *"What's your name?"* with *"…drawn up just as you said"* and re-emitted the route it
 had already given, so one transcript held three cards for two distinct drives. Each redraw is another
 billed Routes call for a drive already on screen — and two indistinguishable cards for one drive are two
-chances to spend a non-refundable credit on it. `drawUp` now refuses a route already drawn in this
-conversation, keyed on `proposeKey` (mobile `src/lib/planner-route.ts`) — the stringified `/propose`
-body, so the test is literally "would this bill a call we have already made?" and cannot drift from the
-request. The claim is released if the propose FAILS (a call that bought nothing owes nothing) and
-cleared when the conversation resets; `needsAccount` keeps its claim, the card being alive.
+chances to spend a non-refundable credit on it. `drawUp` dedupes on `proposeKey` (mobile
+`src/lib/planner-route.ts`) — the stringified `/propose` body, so the test is literally "would this bill
+a call we have already made?" and cannot drift from the request. The claim is released if the propose
+FAILS (a call that bought nothing owes nothing) and cleared when the conversation resets;
+`needsAccount` keeps its claim, the card being alive.
+
+⚠ **A DUPLICATE NOW MOVES THE CARD; IT DOES NOT REFUSE SILENTLY (2026-08-03, founder-reported).** The
+first cut answered a duplicate with `bumpScroll()` and a comment claiming the rider was "still taken to
+the drive". They were not: `bumpScroll` scrolls to the END of the transcript while the card it means
+sits where it was first drawn, often several exchanges up — and `undrawnRoute` finds that same card and
+so suppresses the "Draw it up" bar too, leaving no recovery path. The founder hit it as the chat
+*"refusing to redraw the route after changing it up and chatting more"*. It bit three ways: returning to
+an earlier plan, a duration-only change (`proposeKey` drops `targetMinutes` by design, so "make it
+shorter" collides), and any bare repeat. `reflowDrawnCard` now moves the existing card to the END of the
+array AND re-slots its `afterTurn` — **both halves are required**, since `afterTurn` picks the transcript
+slot while array position decides `newestCardId`, which gates the live map. Every property the dedupe
+exists for survives: one billed Routes call, one card per distinct drive, one idempotency key.
 ⚠ Still prompt-held: a model emitting a NOVEL route unprompted. The dedupe bounds repeats, not
 invention.
 

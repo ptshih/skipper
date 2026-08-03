@@ -57,6 +57,40 @@ export const toProposeRequest = (r: PlannedRoute): DriveProposeRequest => ({
 export const proposeKey = (r: PlannedRoute): string => JSON.stringify(toProposeRequest(r))
 
 /**
+ * The planner re-emitted a route the conversation ALREADY has a card for → move that card to the end,
+ * re-slotted at `afterTurn`. Returns the array unchanged when no card matches.
+ *
+ * ⚠ WHY MOVE RATHER THAN REDRAW, and why not simply ignore it (which is what the screen used to do).
+ * The dedupe in `app/index.tsx` `drawUp` exists so one drive costs one billed Google Routes call and
+ * owns one idempotency key — that part is right and this preserves all of it. What was wrong was the
+ * REFUSAL being silent: the rider asks for a change, the skipper agrees in words, and nothing moves on
+ * screen, because the card they are being pointed at is several exchanges up and the "Draw it up" bar
+ * is suppressed by the very card that exists. Founder report, 2026-08-03.
+ *
+ * ⚠ BOTH HALVES ARE LOAD-BEARING. `afterTurn` decides which transcript slot the card renders in;
+ * ARRAY POSITION decides `newestCardId`, which gates the live map on the card. Doing either alone
+ * leaves the rider a card at the bottom of the screen with a dead map, or a live map still buried.
+ *
+ * ⚠ Matched by `proposeKey`, so it collides exactly where the dedupe collides — including on
+ * `targetMinutes`, which `toProposeRequest` drops. Two routes differing only in the duration the rider
+ * asked for are the same billed call and therefore the same card; re-flowing it is the whole reason a
+ * rider saying "make it shorter" now sees anything happen at all.
+ *
+ * Generic over the card so this module stays free of the screen's `PreviewItem` (which carries native
+ * state); the two fields below are all the decision needs.
+ */
+export function reflowDrawnCard<T extends { route: PlannedRoute; afterTurn: number }>(
+  cards: readonly T[],
+  route: PlannedRoute,
+  afterTurn: number,
+): T[] {
+  const key = proposeKey(route)
+  const i = cards.findIndex((c) => proposeKey(c.route) === key)
+  if (i < 0) return cards as T[]
+  return [...cards.slice(0, i), ...cards.slice(i + 1), { ...cards[i]!, afterTurn }]
+}
+
+/**
  * The confirmed proposal → `POST /drives` (this one SPENDS a non-refundable credit).
  *
  * `idempotencyKey` is minted once per proposal by the caller and REUSED across retries of that same
