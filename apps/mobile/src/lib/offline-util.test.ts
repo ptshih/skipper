@@ -479,6 +479,25 @@ describe('storeKeyForClip (INV-16 — subjectId is the identity, poiId is not)',
     expect(storeKeyForClip({ subjectId: '../../x', subjectKind: 'poi' })).toBeNull()
     expect(storeKeyForClip({ subjectId: POI_A, subjectKind: 'wave' })).toBeNull()
   })
+
+  test('an unsafe subjectId never FALLS BACK to poiId — corruption is not a reason to guess', () => {
+    // ⚠ THE CASE ABOVE DOES NOT PIN THIS, which is the whole reason this test is separate. Every
+    // existing unsafe-subjectId assertion passes NO poiId, so deleting the guard
+    // (`if (!isSafeSubjectId(c.subjectId)) return null`) and letting control fall through to the
+    // poiId branch leaves all of them green — they would still return null, just for the wrong
+    // reason. What distinguishes the two implementations is an unsafe subjectId sitting NEXT TO a
+    // perfectly valid poiId, and nothing exercised that.
+    //
+    // ⚠ Note which kinds actually matter here, because the guard's own comment names the wrong one.
+    // A fused clip (`subjectKind: 'cluster'`) is caught on a fall-through anyway by the later
+    // `if (kind === 'cluster') return null`. The genuinely exposed shapes are kind 'poi' and kind
+    // ABSENT: both reach the poiId branch, so a corrupt subjectId would file this clip's bytes under
+    // a subject its own manifest never named.
+    expect(
+      storeKeyForClip({ subjectId: '../../x', subjectKind: 'poi', poiId: POI_A, revisedAt: REV_OLD }),
+    ).toBeNull()
+    expect(storeKeyForClip({ subjectId: '../../x', poiId: POI_A, revisedAt: REV_OLD })).toBeNull()
+  })
 })
 
 describe('planV4Rekey (both v4 shapes)', () => {

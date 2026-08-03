@@ -363,8 +363,13 @@ export function storeKeyForClip(c: {
   const rev = revisionToken(c.revisedAt)
   const kind = c.subjectKind
   if (c.subjectId != null) {
-    // Present-but-unsafe is corruption, not a reason to fall back to poiId — for a fused clip that
-    // would key a cluster telling on a poi, the exact mis-key INV-16 exists to prevent.
+    // Present-but-unsafe is corruption, not a reason to fall back to poiId: the bytes would be filed
+    // under a subject this clip's own manifest never named — the mis-key INV-16 exists to prevent.
+    // ⚠ The EXPOSED shapes are kind 'poi' and kind ABSENT, not the fused one this comment used to
+    // name: a `subjectKind: 'cluster'` clip is caught on a fall-through by the cluster check below
+    // regardless, so citing it made the guard look redundant when it is not. Pinned by
+    // "an unsafe subjectId never FALLS BACK to poiId" — which needs a poiId ALONGSIDE the bad id,
+    // because without one every fall-through still returns null and proves nothing.
     if (!isSafeSubjectId(c.subjectId)) return null
     if (kind == null) return { subjectId: c.subjectId, subjectKind: 'poi', rev }
     if (kind === 'poi' || kind === 'cluster') return { subjectId: c.subjectId, subjectKind: kind, rev }
