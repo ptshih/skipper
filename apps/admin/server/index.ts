@@ -53,6 +53,7 @@ import {
 import { user } from '@skipper/db/auth-schema'
 import { CLAUDE_MODELS, classifyStoryEligibility } from '@skipper/shared'
 import { checkSpeakableAnchor } from '@skipper/engine'
+import { groundingHash } from '@skipper/db/hash'
 import { requireAdmin, type AdminEnv } from './auth'
 import { bboxError, parseBbox, pointInBbox } from './bbox'
 import { draftCuratedPlaces, resolvePlaceInBbox, type PlaceDraft, type ResolvedPlace } from './places'
@@ -1134,6 +1135,7 @@ app.get('/admin/pois', async (c) => {
       speakableLat: pois.speakableLat,
       speakableLng: pois.speakableLng,
       factsHash: pois.factsHash,
+      sheetHash: pois.sheetHash,
       // Full-extract length: just gates empty vs non-empty for story-eligibility now (a scenic pin has
       // facts=null → 0; the 800-char floor was removed 2026-06-16). It's the full swept article, not a lead.
       extractChars: sql<number>`coalesce(length(${pois.facts} ->> 'extract'), 0)::int`,
@@ -1268,9 +1270,14 @@ app.get('/admin/pois', async (c) => {
     })
     // Narration status — does a narration exist, and is it grounded on the poi's CURRENT facts
     // (else a run would regenerate it).
+    // ⚠ Against the poi's GROUNDING hash — `coalesce(sheet_hash, facts_hash)`, single-sourced as
+    // `groundingHash` (@skipper/db/hash) — never `facts_hash` alone. A narration stamps the grounding
+    // value, and for an enriched poi that is the SHEET digest, so comparing raw-facts digests would
+    // paint every enriched clip in the console STALE and invite a paid regen of the whole corpus.
+    const poiGrounding = groundingHash(p)
     const narrationStatus: 'none' | 'fresh' | 'stale' = !clip
       ? 'none'
-      : clip.factsHash != null && clip.factsHash === p.factsHash
+      : clip.factsHash != null && clip.factsHash === poiGrounding
         ? 'fresh'
         : 'stale'
     // Speakable DRIFT: a curated "where to look" anchor sitting implausibly far from the poi's pin
@@ -1287,7 +1294,9 @@ app.get('/admin/pois', async (c) => {
       sourceId: p.sourceId,
       name: p.name,
       kind: p.kind,
-      factsHash: p.factsHash,
+      // The GROUNDING hash — the number the verdict above compared and the one the detail sheet
+      // shows beside the clip's. Reporting `facts_hash` here would print a digest that matches nothing.
+      factsHash: poiGrounding,
       createdAt: p.createdAt,
       narrationCount: clip ? 1 : 0,
       storyEligibility,
@@ -1556,6 +1565,7 @@ app.get('/admin/pois/:id', async (c) => {
       summary: pois.summary,
       facts: pois.facts,
       factsHash: pois.factsHash,
+      sheetHash: pois.sheetHash,
       factsFetchedAt: pois.factsFetchedAt,
       createdAt: pois.createdAt,
       updatedAt: pois.updatedAt,
@@ -1563,7 +1573,13 @@ app.get('/admin/pois/:id', async (c) => {
     .from(pois)
     .where(eq(pois.id, id))
   if (!row) return c.json({ error: 'not_found' }, 404)
-  return c.json({ poi: row })
+  // ⚠ Report the GROUNDING hash under `factsHash`, matching the list endpoint. The Facts tab prints
+  // this next to the clip's own hash on the Narration tab, and a clip stamps the GROUNDING value — so
+  // returning the raw `facts_hash` here would show an enriched poi two digests that never match and
+  // read as a permanent defect. `sheetHash` rides along for the detail view; the raw facts digest is
+  // deliberately not surfaced, since nothing compares against it.
+  const { sheetHash, ...poi } = row
+  return c.json({ poi: { ...poi, factsHash: groundingHash(row), sheetHash } })
 })
 
 // The fact-corrections + speakable anchor for one poi (the operator's curation surface).

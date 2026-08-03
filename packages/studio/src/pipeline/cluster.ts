@@ -20,7 +20,7 @@ import { inArray } from 'drizzle-orm'
 import { clusterTrigger, exceedsPointTrigger } from '@skipper/engine'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
-import { clusterFactsHash, type ClusterHashInput } from '@skipper/db/hash'
+import { clusterFactsHash, groundingHash, type ClusterHashInput } from '@skipper/db/hash'
 import { isNarratableStoryPoi, type DeliveryRegister } from '@skipper/shared'
 import type { PoiFacts, FactSheetEntry } from '@skipper/db/schema'
 
@@ -54,6 +54,9 @@ export interface ClusterMemberRow {
    *  `overrideStaleFor` it answers "does this member's text predate a correction?". */
   factsFetchedAt: Date | null
   factsHash: string | null
+  /** The poi's SHEET digest, or null when un-enriched. Carried so each member contributes its
+   *  GROUNDING hash (coalesce of the two) to the fused fingerprint — see `clusterGroundingHash`. */
+  sheetHash: string | null
 }
 
 /** The `poi_clusters` fields a fused telling is generated FROM — structural, so the admin server can
@@ -100,6 +103,7 @@ export async function loadClusterMembers(
       enrichedAt: pois.enrichedAt,
       factsFetchedAt: pois.factsFetchedAt,
       factsHash: pois.factsHash,
+      sheetHash: pois.sheetHash,
     })
     .from(pois)
     .where(inArray(pois.clusterId, [...clusterIds]))
@@ -165,7 +169,16 @@ export function clusterGroundingHash(
 ): string | null {
   const tellable = tellableMembers(members)
   const input: ClusterHashInput = {
-    members: tellable.map((m) => ({ poiId: m.id, name: m.name, factsHash: m.factsHash })),
+    // ⚠ Each member contributes its GROUNDING hash, not its raw facts digest. A member's own telling
+    // grounds on its sheet, so the fused telling — which is written from the same sheets — must move
+    // when a sheet moves and must NOT move when the free sweep merely refreshes an extract. Feeding
+    // `facts_hash` here would do the opposite on both counts: every sweep would stale all 37 fused
+    // clips, and a re-enrich would leave them reading fresh.
+    members: tellable.map((m) => ({
+      poiId: m.id,
+      name: m.name,
+      factsHash: groundingHash({ factsHash: m.factsHash, sheetHash: m.sheetHash }),
+    })),
     title: cluster.title,
     highlights: cluster.highlights,
     dropped: cluster.dropped,

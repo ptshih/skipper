@@ -18,7 +18,7 @@ import { withRetry } from './http'
 import type { AttributionSnapshot, PoiFacts, FactSheetEntry } from '@skipper/db/schema'
 import type { PoiSource } from '@skipper/shared'
 
-export { hashFacts, storyFactsHash } from '@skipper/db/hash'
+export { groundingHash, hashFacts, hashSheet } from '@skipper/db/hash'
 
 /** The distinct sourced credits in a fact sheet → the frozen `narrations.attribution` array (one entry per
  *  (source, sourceId), CC BY-SA / CC0 / CC BY preserved). `retrievedAt` is the sheet's enrich stamp. */
@@ -145,12 +145,13 @@ export async function upsertPoi(input: UpsertPoiInput): Promise<string> {
             // passes them null → coalesce keeps the existing. A real re-enrich writes them directly.
             factSheet: sql`coalesce(excluded.fact_sheet, ${pois.factSheet})`,
             enrichedAt: sql`coalesce(excluded.enriched_at, ${pois.enrichedAt})`,
-            // When the row is ENRICHED the grounding hash is the SHEET hash — keep it so a re-sweep's
-            // (un-enriched) recomputed hash never overwrites it and stales the grounded narrations.
-            factsHash: sql`case
-              when ${pois.factSheet} is not null then ${pois.factsHash}
-              else coalesce(excluded.facts_hash, ${pois.factsHash})
-            end`,
+            // ⚠ NO `case` HERE ANY MORE, AND ITS ABSENCE IS THE POINT (2026-08-03). This used to be
+            // `case when fact_sheet is not null then <keep> else <take>` — a guard that existed only
+            // because ONE column carried two meanings, so a sweep's raw-facts digest could overwrite an
+            // enriched poi's SHEET digest and stale every clip grounded on it. The sheet now lives in
+            // its own column that this statement never writes, so the sweep CANNOT clobber it: the
+            // hazard is gone structurally rather than guarded around. Plain coalesce, like `facts`.
+            factsHash: sql`coalesce(excluded.facts_hash, ${pois.factsHash})`,
             factsFetchedAt: sql`coalesce(excluded.facts_fetched_at, ${pois.factsFetchedAt})`,
             updatedAt: new Date(),
           },

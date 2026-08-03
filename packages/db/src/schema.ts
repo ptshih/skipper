@@ -346,11 +346,25 @@ export const pois = pgTable(
     // When `fact_sheet` was built (the enrich stamp; the sheet's frozen credit instant). Hoisted out
     // of the bag so a re-enrich TTL can query it without parsing jsonb.
     enrichedAt: timestamp('enriched_at', { withTimezone: true }),
-    // FACTS freshness: facts_fetched_at = the TTL clock; facts_hash = the grounding change detector.
-    //   facts_hash hashes the FACT SHEET when enriched (the narration's real input), else the whole
-    //   `facts` object. A narration is fact-stale iff its facts_hash IS DISTINCT FROM this row's
-    //   facts_hash (joined via narration.poiId), for narrations whose facts_hash is set.
+    // FACTS freshness: facts_fetched_at = the TTL clock; the two hashes below are the grounding
+    // change detector. A narration is fact-stale iff its `facts_hash` IS DISTINCT FROM this row's
+    // GROUNDING hash — `coalesce(sheet_hash, facts_hash)`, single-sourced as `groundingHash`
+    // (@skipper/db/hash). Never compare against either column alone.
+    //
+    // ⚠ TWO COLUMNS, ONE MEANING EACH — split 2026-08-03, and the split IS the invariant. This was one
+    // polymorphic column that held the SHEET digest for an enriched poi and the FACTS digest otherwise:
+    // the same column meaning two things depending on `fact_sheet`, re-derived at every write site. The
+    // type was `string` either way, so writing the wrong meaning was invisible — verified by mutation,
+    // dropping the sheet argument at one call site passed typecheck and all 434 studio tests while
+    // staling every clip grounded on that sheet (a paid re-narrate + re-synthesize of ~421 clips).
+    // Now the branch lives once, on the READ side. The sweep cannot clobber a sheet hash because it
+    // does not write that column — the `case when fact_sheet is not null` guard in `upsertPoi` that
+    // used to stand in for this went with the split.
+    /** Raw `facts` digest, ALWAYS — written by the free sweep / refetch. Null when the poi has no facts. */
     factsHash: text('facts_hash'),
+    /** Curated `fact_sheet` digest — written by the PAID enrich step ONLY. Null ⇒ un-enriched, which is
+     *  what makes the grounding coalesce fall through to `facts_hash`. */
+    sheetHash: text('sheet_hash'),
     factsFetchedAt: timestamp('facts_fetched_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })

@@ -206,7 +206,7 @@ const RUN_KINDS: RunKind[] = [
   },
   {
     kind: 'Re-fetch facts',
-    does: "Re-fetch a POI's upstream facts (Wikipedia extract). Updates facts_hash, which flags any grounded narration as stale.",
+    does: "Re-fetch a POI's upstream facts (Wikipedia extract). Updates facts_hash — the RAW-facts digest. ⚠ For an ENRICHED POI that does NOT stale its telling: narration grounds on the curated sheet, so freshness keys on sheet_hash and only a re-enrich moves it. An un-enriched POI has no sheet, so there the refetch does flag its narration stale. Rebuilding the sheet is Enrich (--force), not a refetch.",
     cost: 'Free — MediaWiki only, no LLM or TTS.',
     safe: 'Free — no confirm needed.',
   },

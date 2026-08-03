@@ -1,0 +1,30 @@
+-- Split the polymorphic `pois.facts_hash` into two columns, each with ONE meaning.
+--
+-- BEFORE: `facts_hash` held the SHEET digest for an enriched poi and the FACTS digest otherwise —
+--         one column meaning two things depending on `fact_sheet`, re-derived at every write site.
+-- AFTER:  `facts_hash` is ALWAYS the raw facts digest; `sheet_hash` is the sheet digest or NULL.
+--         The fingerprint a narration is compared against is coalesce(sheet_hash, facts_hash).
+--
+-- ⚠ THE UPDATE IS NOT OPTIONAL AND MUST SHIP WITH THE ADD COLUMN. With the column added but the move
+-- skipped, nothing breaks IMMEDIATELY — grounding falls through to `facts_hash`, which still holds the
+-- sheet digest, so every clip still reads fresh. It breaks on the next free `discover` sweep: the
+-- `case when fact_sheet is not null` guard in upsertPoi is GONE (deliberately — the sheet now lives in
+-- a column the sweep never writes), so the sweep overwrites `facts_hash` with the true raw digest while
+-- `sheet_hash` is still NULL. Grounding then moves for all 421 enriched pois at once and the next
+-- generate run re-narrates and re-synthesizes ~421 RELEASED clips for real money.
+--
+-- ⚠ WHY THIS MOVES THE VALUE RATHER THAN RECOMPUTING IT: `hashSheet(sheet)` is byte-identical to what
+-- the retired `storyFactsHash(facts, sheet)` returned for an enriched poi (both are `digest(sheet)`),
+-- so the value already stored IS the correct `sheet_hash`. Recomputing would need sha256 over
+-- canonicalized JSON, which is not expressible in SQL — and would risk a digest differing from the one
+-- 421 narrations already carry. Pinned by the "MIGRATION SAFETY" case in
+-- packages/studio/test/story-grounding.test.ts.
+--
+-- ⚠ TRANSIENT, AND DELIBERATELY LEFT: afterwards an enriched poi's `facts_hash` still holds its SHEET
+-- digest — the wrong meaning under the new contract. Nothing reads it alone (every consumer goes
+-- through `groundingHash`, which takes `sheet_hash` for these rows), and the next `discover` sweep
+-- rewrites it with the true raw digest. Left rather than NULLed on purpose: if some reader was missed,
+-- a stale-but-plausible digest yields "fresh" (harmless), while NULL would yield "stale" and invite
+-- exactly the paid regen this migration exists to prevent. Fail toward keeping clips.
+ALTER TABLE "pois" ADD COLUMN "sheet_hash" text;--> statement-breakpoint
+UPDATE "pois" SET "sheet_hash" = "facts_hash" WHERE "fact_sheet" IS NOT NULL AND "facts_hash" IS NOT NULL;

@@ -41,7 +41,7 @@ import { buildCorpusFactSheet } from './pipeline/scout'
 import { geologyFacts } from './pipeline/macrostrat'
 import { wikidataFacts } from './pipeline/wikidata'
 import { toFacts } from './pipeline/select'
-import { buildStoryFacts, storyFactsHash } from './pipeline/persist'
+import { buildStoryFacts, hashFacts, hashSheet } from './pipeline/persist'
 import { wikiUrlForPageId } from './pipeline/wikipedia'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
@@ -281,7 +281,7 @@ async function main(): Promise<void> {
     }
 
     // Write the curated sheet to its OWN columns (fact_sheet + enriched_at) — NOT into facts. Re-stamp
-    // facts_hash off the SHEET (storyFactsHash) so the staleness contract keys on the grounding
+    // sheet_hash off the SHEET (hashSheet) so the staleness contract keys on the grounding
     // fingerprint. Do NOT touch facts_fetched_at — that is the EXTRACT fetch clock (discover/sweep
     // owns it). The extract stays in facts as the enricher's input/audit source.
     const newFacts = buildStoryFacts({
@@ -298,7 +298,12 @@ async function main(): Promise<void> {
             facts: newFacts,
             factSheet: result.sheet,
             enrichedAt: new Date(enrichedAt),
-            factsHash: storyFactsHash(newFacts, result.sheet),
+            // BOTH digests, each from its own input — the enrich step is the only writer that moves
+            // the sheet, and it rewrites `facts` on the way, so both columns are its to set. The
+            // grounding hash (`coalesce(sheet_hash, facts_hash)`) therefore lands on the new sheet,
+            // which is what stales this poi's existing telling and queues it for re-narration.
+            factsHash: hashFacts(newFacts),
+            sheetHash: hashSheet(result.sheet),
             updatedAt: new Date(),
           })
           .where(eq(pois.id, c.poiId)),

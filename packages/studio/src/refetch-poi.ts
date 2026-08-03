@@ -28,7 +28,7 @@ import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
 import { fetchFullExtracts, wikiUrlForPageId } from './pipeline/wikipedia'
 import { sheetDriftSpans, toFacts } from './pipeline/select'
-import { buildStoryFacts, storyFactsHash, summaryFromExtract } from './pipeline/persist'
+import { buildStoryFacts, groundingHash, hashFacts, summaryFromExtract } from './pipeline/persist'
 import { announce, parseFlags } from './pipeline/ops'
 import { beginJob, runJob } from './pipeline/job-progress'
 
@@ -54,6 +54,7 @@ async function main() {
       name: pois.name,
       facts: pois.facts,
       factsHash: pois.factsHash,
+      sheetHash: pois.sheetHash,
       factSheet: pois.factSheet,
     })
     .from(pois)
@@ -88,7 +89,7 @@ async function main() {
   // PRESERVE a paid fact sheet across a refetch (2026-06-16, Option A) — a single-poi re-fetch refreshes
   // the extract but LEAVES the `fact_sheet`/`enriched_at` columns untouched (the .update below never
   // sets them), so it never destroys the PAID sheet. The grounding fingerprint is the SHEET hash
-  // (storyFactsHash) when enriched, so refreshing the extract alone does NOT mark narrations stale. A
+  // (`sheet_hash`) when enriched, so refreshing the extract alone does NOT mark narrations stale. A
   // deliberate sheet rebuild is `enrich-pois --include-ids <id> --force --apply`, not a refetch.
   const existingSheet = Array.isArray(poi.factSheet) ? poi.factSheet : null
   const enriched = existingSheet !== null && existingSheet.length > 0
@@ -98,13 +99,22 @@ async function main() {
     url: f?.url ?? wikiUrlForPageId(poi.sourceId),
     pageId,
   })
-  const newHash = storyFactsHash(newFacts, existingSheet)
+  // Only the FACTS digest moves here — a refetch never touches the sheet (see above), so `sheet_hash`
+  // is carried untouched into both grounding hashes below. That is what keeps an enriched poi's
+  // narrations fresh across an extract refresh, and it is now a property of WHICH COLUMN this writes
+  // rather than of remembering to pass the existing sheet to a two-argument hasher.
+  const newFactsHash = hashFacts(newFacts)
+  const oldGrounding = groundingHash({ factsHash: poi.factsHash, sheetHash: poi.sheetHash })
+  const newGrounding = groundingHash({ factsHash: newFactsHash, sheetHash: poi.sheetHash })
 
   const oldExtract = poi.facts?.extract ?? ''
   const extractChanged = extract !== oldExtract
-  const hashChanged = newHash !== poi.factsHash // the grounding fingerprint → narration staleness
-  console.log(`  Old hash: ${poi.factsHash?.slice(0, 12) ?? '∅'}  (${oldExtract.length} extract chars)`)
-  console.log(`  New hash: ${newHash?.slice(0, 12) ?? '∅'}  (${extract.length} extract chars)`)
+  // Compare the GROUNDING hashes, not the facts ones: that is what a narration stores and what
+  // staleness is judged on. For an enriched poi they are the sheet hash on both sides, so an extract
+  // refresh correctly reports "no change" even though `facts_hash` moved.
+  const hashChanged = newGrounding !== oldGrounding
+  console.log(`  Old grounding: ${oldGrounding?.slice(0, 12) ?? '∅'}  (${oldExtract.length} extract chars)`)
+  console.log(`  New grounding: ${newGrounding?.slice(0, 12) ?? '∅'}  (${extract.length} extract chars)`)
   if (enriched) {
     // Enriched: the grounding hash is the SHEET hash, which the preserved sheet keeps stable — so the
     // extract can refresh without churning the hash. But that means an upstream CORRECTION won't reach
@@ -138,7 +148,7 @@ async function main() {
   const summary = summaryFromExtract(extract)
   await db
     .update(pois)
-    .set({ facts: newFacts, factsHash: newHash, factsFetchedAt: new Date(), summary, updatedAt: new Date() })
+    .set({ facts: newFacts, factsHash: newFactsHash, factsFetchedAt: new Date(), summary, updatedAt: new Date() })
     .where(eq(pois.id, poiId))
 
   console.log(

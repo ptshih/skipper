@@ -56,6 +56,9 @@ const member = (over: Partial<ClusterMemberRow> = {}): ClusterMemberRow => ({
   enrichedAt: null,
   factsFetchedAt: new Date('2026-07-01T00:00:00Z'),
   factsHash: h(1),
+  // Un-enriched by default in this fixture's SHAPE sense: grounding therefore falls through to
+  // factsHash, so the existing member-set assertions below keep asserting exactly what they did.
+  sheetHash: null,
   ...over,
 })
 

@@ -302,6 +302,13 @@
       "when": 1785732175454,
       "tag": "0042_smiling_impossible_man",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1785773239684,
+      "tag": "0043_equal_kitty_pryde",
+      "breakpoints": true
     }
   ]
 }

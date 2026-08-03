@@ -50,7 +50,7 @@ import { SHARED_NGRAM_MIN_CLIPS } from './pipeline/lint'
 import { loadDiversityContext } from './pipeline/diversity-context'
 import { gateNarration } from './pipeline/gate'
 import { narrationClipKey, uploadAudio } from './pipeline/storage'
-import { storyFactsHash } from './pipeline/persist'
+import { groundingHash } from './pipeline/persist'
 import { wikiUrlForPageId } from './pipeline/wikipedia'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
@@ -145,6 +145,7 @@ async function main(): Promise<FinishOutcome | void> {
           lng: pois.lng,
           facts: pois.facts,
           factsHash: pois.factsHash,
+          sheetHash: pois.sheetHash,
           factsFetchedAt: pois.factsFetchedAt,
           factSheet: pois.factSheet,
           enrichedAt: pois.enrichedAt,
@@ -181,15 +182,21 @@ async function main(): Promise<FinishOutcome | void> {
     lat: number
     lng: number
     extract: string
-    /** The poi's full facts object — the source for the well↔extract-head grounding switch + the
-     *  grounding fingerprint (resolveStoryGrounding / storyFactsHash), shared with drives. */
+    /** The poi's full facts object — the source for the well↔extract-head grounding switch,
+     *  shared with drives. (The grounding FINGERPRINT is no longer derived from this; it is read
+     *  off the two hash columns below — see `groundingHash`.) */
     facts: PoiFacts
     title: string
     url: string
     /** Wikidata qid — the canonical identity, read from the first-class `pois.qid` column. */
     qid: string | null
     factsFetchedAt: Date | null
-    /** The poi's curated fact sheet + its enrich stamp (own columns) — grounding source + fingerprint. */
+    /** The poi's two grounding digests, carried VERBATIM off the row. The stamp written onto the
+     *  narration is `groundingHash` of these — read, never recomputed — so the clip's hash and the
+     *  poi's cannot diverge. */
+    factsHash: string | null
+    sheetHash: string | null
+    /** The poi's curated fact sheet + its enrich stamp (own columns) — the grounding SOURCE. */
     factSheet: FactSheetEntry[] | null
     enrichedAt: Date | null
     hasFreshClip: boolean
@@ -245,8 +252,18 @@ async function main(): Promise<FinishOutcome | void> {
       factsFetchedAt: r.factsFetchedAt,
       factSheet: r.factSheet,
       enrichedAt: r.enrichedAt,
-      // Fresh = a narration exists AND grounds on the poi's CURRENT facts → skip unless --force.
-      hasFreshClip: r.narrationId !== null && r.clipFactsHash === r.factsHash && r.factsHash !== null,
+      // The poi's own hashes, carried so the stamp below reads the SAME grounding value this
+      // freshness check compared — see the `factsHash` assignment in the generate loop.
+      factsHash: r.factsHash,
+      sheetHash: r.sheetHash,
+      // Fresh = a narration exists AND grounds on the poi's CURRENT grounding hash → skip unless
+      // --force. ⚠ Against `groundingHash`, never `facts_hash` alone: for an enriched poi the
+      // narration stamped the SHEET digest, so comparing raw-facts digests would call every
+      // enriched clip stale and re-narrate the whole corpus.
+      hasFreshClip:
+        r.narrationId !== null &&
+        groundingHash(r) !== null &&
+        r.clipFactsHash === groundingHash(r),
     })
   }
 
@@ -671,9 +688,12 @@ async function main(): Promise<FinishOutcome | void> {
         fallbackChars: NARRATION_FALLBACK_CHARS,
         retrievedAt: (c.factsFetchedAt ?? new Date()).toISOString(),
       })
-      // The grounding fingerprint = pois.factsHash exactly (storyFactsHash on the SAME facts the
-      // freshness query read), so a freshly-generated clip never reads as stale.
-      const factsHash = storyFactsHash(c.facts, c.factSheet)
+      // ⚠ READ from the poi row, never RECOMPUTED from facts + sheet. This is the same number the
+      // freshness query above compared, and the same one the admin verdict will compare later, so
+      // "a freshly-generated clip cannot read as stale" is true by construction rather than by this
+      // call site agreeing with three other writers about which digest to take. That agreement used
+      // to be conventional, and a call site that got it wrong passed typecheck and every test.
+      const factsHash = groundingHash({ factsHash: c.factsHash, sheetHash: c.sheetHash })
       // A poi's telling = its ONE narration (1:1). Upsert on poi_id so a regen replaces the
       // same row's script/audio/hash in place.
       await withRetry(

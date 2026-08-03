@@ -63,25 +63,48 @@ export function hashFacts(facts: PoiFacts | null): string | null {
 }
 
 /**
- * The GROUNDING fingerprint for a story poi — the hash a narration's `facts_hash` is compared against for
- * staleness. THE SWITCH (corpus-enrichment-spec §3/§8), now reading the typed `pois.fact_sheet` column:
- *   - ENRICHED (a non-empty fact sheet) → hash the SHEET ONLY. Narration grounds on it, so a
- *     re-`discover` that rewrites `extract` but keeps the SAME sheet must NOT stale narrations; the
- *     `enriched_at` stamp can't churn it either (it isn't in the hash). The true "did the narration
- *     input change" detector. Byte-identical to the pre-column well-hash, so existing rows stay valid.
- *   - UN-ENRICHED (no sheet) → hash the whole facts object (`hashFacts`), so existing rows + the
- *     extract-head fallback keep their current hash exactly. Both WRITERS (sweep/enrich) and READERS
- *     (the staleness verdicts) call THIS, canonicalized (`stableStringify`), so a clip's stamped hash can never
- *     diverge from `pois.facts_hash` across the in-memory ↔ jsonb-read-back boundary.
+ * Order-invariant hash of a poi's curated fact SHEET — what `pois.sheet_hash` stores. Null when the
+ * poi is un-enriched, which is what makes `groundingHash`'s coalesce mean "fall back to the facts".
+ *
+ * ⚠ Byte-identical to what the retired `storyFactsHash` produced for an enriched poi (`digest(sheet)`),
+ * which is the property the 2026-08-03 split migration rests on: it MOVES the existing value from
+ * `facts_hash` into `sheet_hash` rather than recomputing it, so not one of the 421 enriched pois — and
+ * therefore not one released clip — reads stale across the change. Do not "clean up" this digest.
  */
-export function storyFactsHash(
-  facts: PoiFacts | null,
-  factSheet: FactSheetEntry[] | null | undefined,
-): string | null {
-  if (factSheet && factSheet.length > 0) return digest(factSheet)
-  // No null guard: hashFacts is already null-in/null-out. Don't re-add one — a second guard here
-  // would have to be kept in step with that one for no gain.
-  return hashFacts(facts)
+export function hashSheet(factSheet: FactSheetEntry[] | null | undefined): string | null {
+  if (!factSheet || factSheet.length === 0) return null
+  return digest(factSheet)
+}
+
+/**
+ * THE GROUNDING FINGERPRINT — the one value a narration's `facts_hash` is compared against.
+ *
+ * A telling grounds on the curated SHEET when one exists and on the raw facts otherwise, so the
+ * fingerprint is `sheet_hash ?? facts_hash`. That is the whole rule, and it now lives HERE, on the
+ * READ side, evaluated once.
+ *
+ * ⚠ WHY THIS REPLACED `storyFactsHash` (2026-08-03). The rule used to be applied on the WRITE side:
+ * one column, `pois.facts_hash`, held the sheet digest for an enriched poi and the facts digest for an
+ * un-enriched one — the same column meaning two different things depending on the value of a DIFFERENT
+ * column. Every writer had to re-derive which meaning applied, and the type was `string` either way, so
+ * getting it wrong was invisible: dropping the sheet argument at one call site passed typecheck and all
+ * 434 studio tests while staling every clip grounded on that sheet, which the next generate run would
+ * then re-narrate and re-synthesize for real money.
+ *
+ * Splitting the column moves the branch from four write sites to this one read site. A sweep now
+ * physically cannot clobber a sheet hash, because it does not write that column at all — the
+ * `case when fact_sheet is not null` guard that used to stand in for this is gone with it.
+ *
+ * Structural, not conventional: `generate-narrations` stamps a narration with the value this returns
+ * for the poi row it just read, rather than recomputing the hash from facts + sheet. Reading the same
+ * number it will later be compared against is what makes "the clip's hash cannot diverge from the
+ * poi's" true by construction instead of by four writers agreeing.
+ */
+export function groundingHash(p: {
+  factsHash: string | null
+  sheetHash: string | null
+}): string | null {
+  return p.sheetHash ?? p.factsHash
 }
 
 /* -------------------------------------------------------------------------- */

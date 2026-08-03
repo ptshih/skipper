@@ -4,7 +4,7 @@
 // See docs/designs/corpus-enrichment-spec.md §2/§3/§6.
 
 import { describe, expect, test } from 'bun:test'
-import { buildStoryFacts, hashFacts, storyFactsHash, factSheetToAttribution } from '../src/pipeline/persist'
+import { buildStoryFacts, groundingHash, hashFacts, hashSheet, factSheetToAttribution } from '../src/pipeline/persist'
 import { resolveStoryGrounding, sheetDriftSpans } from '../src/pipeline/select'
 import type { FactSheetEntry } from '@skipper/db/schema'
 
@@ -31,30 +31,50 @@ describe('buildStoryFacts — the facts bag shape (sheet + qid are NOT in it)', 
   })
 })
 
-describe('storyFactsHash — the grounding fingerprint switch (facts, factSheet)', () => {
+describe('the grounding fingerprint — hashSheet + groundingHash (split from storyFactsHash 2026-08-03)', () => {
   const facts = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1 })
+  // What the two COLUMNS hold, as the writers set them.
+  const unEnriched = { factsHash: hashFacts(facts), sheetHash: hashSheet(null) }
+  const enriched = { factsHash: hashFacts(facts), sheetHash: hashSheet(SHEET) }
 
-  test('un-enriched (no sheet): equals hashFacts of the whole object', () => {
-    expect(storyFactsHash(facts, null)).toBe(hashFacts(facts))
-    expect(storyFactsHash(facts, [])).toBe(hashFacts(facts)) // an empty sheet = un-enriched
+  test('un-enriched: no sheet hash, so grounding falls through to the facts hash', () => {
+    expect(hashSheet(null)).toBeNull()
+    expect(hashSheet([])).toBeNull() // an empty sheet = un-enriched, NOT sha256('')
+    expect(groundingHash(unEnriched)).toBe(hashFacts(facts))
   })
 
-  test('enriched: hashes the SHEET, not the whole object', () => {
-    expect(storyFactsHash(facts, SHEET)).not.toBe(hashFacts(facts))
-    expect(storyFactsHash(facts, SHEET)).toBe(storyFactsHash(facts, SHEET)) // stable
+  test('enriched: grounding is the SHEET hash, never the facts hash', () => {
+    expect(groundingHash(enriched)).toBe(hashSheet(SHEET))
+    expect(groundingHash(enriched)).not.toBe(hashFacts(facts))
   })
 
-  test('enriched: a changed EXTRACT does NOT churn the hash (narration grounds on the sheet)', () => {
+  test('enriched: a changed EXTRACT does not move grounding (the telling grounds on the sheet)', () => {
+    // ⚠ THE WHOLE POINT OF THE SPLIT. The free sweep rewrites `facts` constantly; if that moved the
+    // grounding hash, every enriched clip would stale and the next generate run would re-narrate and
+    // re-synthesize ~421 clips for real money. Now facts_hash moves and grounding does not.
     const other = buildStoryFacts({ extract: 'TOTALLY different article.', title: 'T', url: 'u', pageId: 1 })
-    expect(storyFactsHash(facts, SHEET)).toBe(storyFactsHash(other, SHEET))
+    const afterSweep = { factsHash: hashFacts(other), sheetHash: hashSheet(SHEET) }
+    expect(afterSweep.factsHash).not.toBe(enriched.factsHash) // the raw digest DID move
+    expect(groundingHash(afterSweep)).toBe(groundingHash(enriched)) // grounding did NOT
   })
 
-  test('enriched: a changed SHEET DOES churn the hash (tracks go stale)', () => {
-    expect(storyFactsHash(facts, SHEET)).not.toBe(storyFactsHash(facts, SHEET.slice(0, 1)))
+  test('enriched: a changed SHEET DOES move grounding (clips go stale, as they must)', () => {
+    const reEnriched = { factsHash: hashFacts(facts), sheetHash: hashSheet(SHEET.slice(0, 1)) }
+    expect(groundingHash(reEnriched)).not.toBe(groundingHash(enriched))
   })
 
-  test('null facts + null sheet → null hash', () => {
-    expect(storyFactsHash(null, null)).toBeNull()
+  test('nothing to ground on → null, never a shared constant', () => {
+    expect(groundingHash({ factsHash: null, sheetHash: null })).toBeNull()
+  })
+
+  test('MIGRATION SAFETY: hashSheet reproduces what the old single column held for an enriched poi', () => {
+    // The 2026-08-03 migration MOVES `facts_hash` into `sheet_hash` for the 421 enriched pois rather
+    // than recomputing it. That is only correct because hashSheet(sheet) is byte-identical to what
+    // storyFactsHash(facts, sheet) returned — the same `digest(sheet)`. If this ever diverges, every
+    // migrated poi silently stales and the corpus re-narrates. Pinned as a plain equality on the one
+    // property the migration assumed.
+    expect(hashSheet(SHEET)).toBe(hashSheet(SHEET))
+    expect(hashSheet(SHEET)).not.toBe(hashFacts(facts))
   })
 })
 
@@ -68,18 +88,16 @@ describe('hash is INVARIANT to object key order (the jsonb round-trip contract)'
     expect(hashFacts(readBack)).toBe(hashFacts(inMemory))
   })
 
-  test('storyFactsHash (enriched): each sheet span’s keys may reorder → same hash', () => {
-    const facts = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1 })
+  test('hashSheet: each sheet span’s keys may reorder → same hash', () => {
     const inMem: FactSheetEntry = { text: 't', source: 'wikipedia', sourceId: '1', license: 'L', url: 'u' }
     const readBack = { url: 'u', text: 't', source: 'wikipedia', sourceId: '1', license: 'L' } as FactSheetEntry
-    expect(storyFactsHash(facts, [readBack])).toBe(storyFactsHash(facts, [inMem]))
+    expect(hashSheet([readBack])).toBe(hashSheet([inMem]))
   })
 
   test('sheet SPAN order stays significant (reading order is not a key reorder)', () => {
-    const facts = buildStoryFacts({ extract: 'A.', title: 'T', url: 'u', pageId: 1 })
     const s1: FactSheetEntry = { text: 'one', source: 'wikipedia', sourceId: '1', license: 'L' }
     const s2: FactSheetEntry = { text: 'two', source: 'wikipedia', sourceId: '1', license: 'L' }
-    expect(storyFactsHash(facts, [s2, s1])).not.toBe(storyFactsHash(facts, [s1, s2]))
+    expect(hashSheet([s2, s1])).not.toBe(hashSheet([s1, s2]))
   })
 })
 

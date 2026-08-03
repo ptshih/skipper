@@ -4,7 +4,7 @@
 // it re-narrate + re-synthesize on every run. These assert the properties that distinguish the two.
 // Pure functions over strings — offline, no DB.
 import { describe, expect, it } from 'bun:test'
-import { clusterFactsHash, hashFacts, storyFactsHash, stableStringify } from '../src/hash'
+import { clusterFactsHash, groundingHash, hashFacts, hashSheet, stableStringify } from '../src/hash'
 import { selectionSubject } from '../src/schema'
 
 const HEX64 = /^[0-9a-f]{64}$/
@@ -98,22 +98,31 @@ describe('clusterFactsHash', () => {
   })
 })
 
-describe('storyFactsHash / hashFacts', () => {
-  it('hashes the SHEET when enriched, ignoring article churn', () => {
-    const sheet = [{ text: 'a fact', source: 'wikipedia', sourceId: '1', license: 'CC BY-SA 4.0' }] as never
-    const a = storyFactsHash({ extract: 'one', title: 't', url: 'u', pageId: 1 } as never, sheet)
-    const b = storyFactsHash({ extract: 'REWRITTEN', title: 't', url: 'u', pageId: 1 } as never, sheet)
-    expect(a).toBe(b!)
+describe('groundingHash / hashSheet / hashFacts — the two-column fingerprint', () => {
+  const sheet = [{ text: 'a fact', source: 'wikipedia', sourceId: '1', license: 'CC BY-SA 4.0' }] as never
+
+  it('grounding takes the SHEET hash when enriched, ignoring article churn', () => {
+    // The columns as the writers set them: facts_hash follows the article, sheet_hash the sheet.
+    const a = groundingHash({ factsHash: hashFacts({ extract: 'one', title: 't', url: 'u', pageId: 1 } as never), sheetHash: hashSheet(sheet) })
+    const b = groundingHash({ factsHash: hashFacts({ extract: 'REWRITTEN', title: 't', url: 'u', pageId: 1 } as never), sheetHash: hashSheet(sheet) })
+    expect(a).toBe(b!) // the free sweep moved facts_hash; grounding did not move
     expect(a).toMatch(HEX64)
   })
 
-  it('falls back to the facts bag when un-enriched', () => {
+  it('falls through to the facts hash when un-enriched', () => {
     const facts = { extract: 'one', title: 't', url: 'u', pageId: 1 } as never
-    expect(storyFactsHash(facts, null)).toBe(hashFacts(facts)!)
+    expect(groundingHash({ factsHash: hashFacts(facts), sheetHash: hashSheet(null) })).toBe(hashFacts(facts)!)
+  })
+
+  it('hashSheet is null for an absent OR empty sheet — never sha256 of an empty array', () => {
+    // Null is what makes the coalesce fall through. A constant digest here would make every
+    // un-enriched poi share one grounding hash and read fresh against any clip carrying it.
+    expect(hashSheet(null)).toBeNull()
+    expect(hashSheet([])).toBeNull()
   })
 
   it('is null when there is nothing to ground on', () => {
-    expect(storyFactsHash(null, null)).toBeNull()
+    expect(groundingHash({ factsHash: null, sheetHash: null })).toBeNull()
     expect(hashFacts(null)).toBeNull()
   })
 })
