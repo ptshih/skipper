@@ -853,6 +853,19 @@ the sub-line already promises ("a rough idea is plenty").
 - ✅ **No accessibility churn:** `Composer` already passes an explicit `accessibilityLabel`, so the
   field's accessible name is stable and rotation never re-announces it.
 
+### ✅ "Let me pick" → "Let the skipper pick" (founder) — a POV bug, not a preference
+
+Worth recording as a rule rather than a one-off. The three row titles are **things the RIDER says**:
+*Drive somewhere*, *Take a loop* — imperatives issued by the rider. **"Let me pick" was written from
+the SKIPPER's side**, so a rider reading it understands "let *me*, the rider, pick" — the exact
+opposite of what the row does. The subtitle then contradicted the title.
+
+⚠ **The rule: every suggestion title is in the RIDER's voice, addressed to the skipper.** The
+subtitle may describe what happens; the title never switches speaker.
+
+✅ It also made the subtitle redundant — "skipper's choice" restated the new title — so it shortens
+to just "Somewhere pretty". Same de-duplication discipline as the rest of this pass.
+
 ### ✅ And one simplification fell out
 
 The founder also rejected launch 1's *"Then — where are we headed?"*. Using **the same line in both
