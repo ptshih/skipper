@@ -157,6 +157,7 @@ A corny old guide rides shotgun and tells you what happened where, timed to the 
 cheapest place to announce the conversation. Still leads with the persona, still closes with the
 place, per the rule above:
 
+<!-- asc:promotionalText — scripts/asc-metadata.ts reads the block below. Keep the marker attached to its fence. -->
 ```
 A corny old guide plans your drive from a sentence, then narrates it — timed to the road, hands-free, honest enough to hush when he doesn't know. Starting in Lake Tahoe.
 ```
@@ -179,6 +180,7 @@ A corny old guide plans your drive from a sentence, then narrates it — timed t
 Paste this when 1.1's metadata goes in (§12 has a checkbox for it). It leads with the conversation,
 because that is what changed and it is what the marketing site now leads with too.
 
+<!-- asc:description — scripts/asc-metadata.ts reads the block below. Keep the marker attached to its fence. -->
 ```
 A corny old tour guide rides shotgun and narrates your drive.
 
@@ -621,6 +623,7 @@ all anonymous, and the wall lands at "Make this drive". Lead with that.
 walked through yet (the device verification owed since steps 7-9). A note that walks a reviewer into
 a screen that moved is the exact failure the 2026-07-30 rewrite was cleaning up.
 
+<!-- asc:reviewNotes — scripts/asc-metadata.ts reads the block below. Keep the marker attached to its fence. -->
 ```
 Skipper is a hands-free, GPS-triggered audio tour for drivers. You plan a drive by TYPING to the guide in plain language and he lays out the route, the stops, and a story for each one. Three things will help you review it from a desk.
 

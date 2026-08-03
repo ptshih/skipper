@@ -19,6 +19,7 @@
     "dev:site": "bun --filter @skipper/site dev",
     "sim": "dotenvx run -f .env.development -- bun packages/sim/src/run.ts",
     "tf:feedback": "dotenvx run -f .env.development -- bun scripts/pull-testflight-feedback.ts",
+    "asc:metadata": "dotenvx run -f .env.development -- bun scripts/asc-metadata.ts",
     "typecheck": "bun --filter '*' typecheck",
     "test": "bun --filter '*' test",
     "lint:docs": "bun scripts/lint-docs.ts",
