@@ -82,7 +82,7 @@ export const voice = {
     composerPlaceholder: 'Tell me where to',
     // ⚠ ONCE THE TRANSCRIPT IS LIVE THE FIELD IS A REPLY BOX, so it gets its own line. The rotation
     // is already vetoed at the first rider turn (`shouldRotatePlaceholder`'s `coldOpen`), but
-    // stopping a timer only FREEZES the example that happened to be up — leaving "two hours, no
+    // stopping a timer only FREEZES the example that happened to be up — leaving "2 hours, no
     // highways" sitting under a skipper turn that just asked how long they want to be out, which
     // reads as a stale instruction rather than a prompt. Teaching copy has to leave when its job
     // ends. Static, and no `{a}`/`{b}`: every authored reply ends on a direct question, so this
@@ -95,12 +95,23 @@ export const voice = {
     // changes height every few seconds under a thumb is worse than the rotation is good).
     // ⚠ The name-free ones are load-bearing: they are what still rotates in a region with no curated
     // anchors at all.
+    // ⚠ TYPED, not written — the register they have to pass for is "someone else's message", and the
+    // first cut failed it three ways: spelled-out numbers ("back by five") where a thumb types digits,
+    // an article-first fragment ("a loop out of…") that reads as a menu item rather than a sentence
+    // anyone sends, and an idiom sitting where the ASK goes ("the long way round" requests nothing).
+    // Every line must be something the planner could actually act on, or it is copywriting wearing a
+    // placeholder's clothes.
+    // ⚠ The two-name shape is BARE on purpose. Anything hung off it ("…, the scenic way") pushed it
+    // past the field's char cap for every real pair of curated names — a line authored, reviewed, and
+    // rendered to nobody. The chips above already teach the scenic-way phrasing and carry no cap, so
+    // this one spends its whole budget on the names and stays reachable wherever they are short.
     placeholderShapes: [
-      '{a} to {b}, the scenic way',
-      'a loop out of {a}',
-      'somewhere pretty, back by five',
-      'the long way round',
-      'two hours, no highways',
+      '{a} to {b}',
+      'loop out of {a}',
+      'somewhere pretty, back by 5',
+      'kill an hour before dinner',
+      '2 hours, no highways',
+      'just take the long way',
     ],
     composerA11yLabel: 'Tell the skipper where to',
     sendA11yLabel: 'Send',
