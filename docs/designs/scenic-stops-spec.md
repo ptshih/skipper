@@ -425,9 +425,35 @@ ALL"**, which is the direct antidote: stopping early is itself a shape.
 banned three completions of *"here's the …"* while the lint banned nine, so the model wrote a fourth
 nobody had forbidden. Structure beats prohibition in a form this low-input.
 
-**⏳ NOT YET VERIFIED against the model** — the closing rotation is wired and green (studio typecheck
-0, 454 tests, and a preview confirms six distinct opening/closing pairings) but has not been run. 💸
-That is a paid run and needs its own go.
+### 11.9 ✅ VERIFIED — the collapse is gone (round 4, 6 fresh mountains, $0.06)
+
+Same kind as round 3 so the comparison is clean, fresh `--offset 8` so it never touched the repair
+population, **one variable changed**: closers now assigned too.
+
+| round | mechanism | clips ending on "Some X you just Y" |
+| --- | --- | --- |
+| 1 | rolling buffer, openers only | **4 of 4** |
+| 2 | rolling buffer, openers + closers | 3 of 6 |
+| 3 | index-assigned **openers** | 3 of 6 (openers fixed, closers untouched) |
+| 4 | index-assigned openers **+ closers** | **0 of 5 observed** |
+
+Every closer visibly followed its assigned shape — *Brockway Summit* landed the joke (*"the view
+really is on the summit of things"*), *Bullshead* ended mid-gesture on a literal dash (*"just the
+look of it, and —"*), *Burned Hill* took DO-NOT-CLOSE and stopped at 34 words (the shortest clip of
+the whole smoke), *C Hill* closed on the name (*"And wouldn't you know it, I can see it just fine"*).
+"tip your hat" vanished entirely.
+
+⚠ **0 of FIVE, not six** — the sixth clip scrolled off the captured output. Recorded as observed
+rather than rounded up.
+⚠ Worth keeping: **Bullshead declined the obvious crude joke** and stayed on "a mountain, plain and
+true". That is the ceiling holding under temptation, not luck.
+⚠ A DO-NOT-CLOSE clip lands SHORT (34 words ≈ 14 s against a 20 s aim). That is correct doctrine, not
+a defect — `cut-wave-form.md` recorded the same thing ("lengths ran 4-9s, under the 15s aim… a
+name-only wave lands short and evaluatePacing never flags short"). Do not tune it back up.
+
+**Total smoke: 22 clips, $0.25, nothing persisted.** The content question is closed; what remains
+before a real run is the machinery no smoke has touched — TTS, loudnorm, R2, the fail-closed eval
+gate, and the `narrations` write path for a form that has never had a row.
 
 **Cost discipline, for the next run's estimate:** 16 script-only clips cost **$0.19** total ($0.06 +
 $0.05 + $0.08), heavily prompt-cached. That is scripts only — TTS, loudnorm, R2 and the eval gate are
