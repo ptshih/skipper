@@ -8,7 +8,7 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
 the archive) and Create-a-Drive IS a conversation. The PUSH already happened (record + template for the
 next one: `docs/guides/1-1-cutover-runbook.md`). **What is left is one guide:
 `docs/guides/1-1-submission-sweep.md`** — two builds, the on-device sweep, then the listing. ⚠ TestFlight
-served a dead pre-1.1 client until **build `1.1.0 (19)`** was uploaded 2026-08-03 (processing → attach); and
+served a dead pre-1.1 client until **1.1.0 builds reached TestFlight** 2026-08-03 (newest wins → attach); and
 RISK-1's real drive was taken OFF the critical path (founder, 2026-08-03) in favour of that guide's two
 desk passes — its §0 owns what they can't prove, so don't re-argue it here.
 `docs/designs/drives-first-1-1.md` is the build truth — read it before touching `apps/api` or `apps/mobile`.

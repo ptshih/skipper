@@ -67,7 +67,7 @@ floor × lead curve off it — which is what finally answers
 
 Fire these in this order — the cloud build runs unattended while you do the local one.
 
-- [x] ✅ **Production build → TestFlight — DONE 2026-08-03: build `1.1.0 (19)` is uploaded and in
+- [x] ✅ **Production build → TestFlight — DONE 2026-08-03: build `1.1.0 (20)` is uploaded and in
       Apple's processing queue.** Run as
       `eas build --profile production --platform ios --auto-submit --non-interactive`; the auto-submit
       is worth it, since it hands the artifact straight to ASC with no second command.
@@ -192,8 +192,10 @@ Everything here is owned by [app-store-submission.md](app-store-submission.md) �
       `bun run asc:metadata -- --apply --version=1.1.0`, verified by an independent read-back. The
       record is now `1.1.0` / `PREPARE_FOR_SUBMISSION`. Re-check any time with a no-flag
       `bun run asc:metadata`; it prints "already matches" for all three fields.
-- [ ] **Attach build 19** (uploaded 2026-08-03; wait for Apple's processing to finish before it can be
-      attached). ⚠ The record has NO build right now, on purpose: renaming it to 1.1.0 left
+- [ ] **Attach the NEWEST 1.1.0 build** — `20` as of 2026-08-03, but read the number back from EAS
+      rather than trusting this line; every rebuild supersedes it (19 was superseded within hours).
+      Wait for Apple's processing to finish before it can be attached.
+      ⚠ The record has NO build right now, on purpose: renaming it to 1.1.0 left
       build 15 (short version `1.0.0`, the pre-1.1 roam client) attached, because Apple neither
       detaches nor warns. It was detached; `asc:metadata` now checks this every run. Apple only offers
       builds whose short version MATCHES, so 19 is the only one that will appear (17 failed, 18 was

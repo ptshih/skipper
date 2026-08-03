@@ -6,7 +6,8 @@
 > [docs/guides/1-1-submission-sweep.md](docs/guides/1-1-submission-sweep.md)** — two builds (EAS
 > production for TestFlight, a local dev build for the desk passes), the on-device sweep, then the
 > listing. ⚠ TestFlight served a PRE-1.1 client calling the deleted `/roam/*` until **build
-> `1.1.0 (19)` was uploaded 2026-08-03**; it clears once Apple finishes processing and it is attached.
+> 1.1.0 reached TestFlight 2026-08-03** (newest `20`); it clears once Apple finishes processing that
+> build and it is attached.
 > RISK-1's real drive is OFF the critical path (founder, 2026-08-03).
 > The build truth is
 > [docs/designs/drives-first-1-1.md](docs/designs/drives-first-1-1.md) (43 decisions, 16 invariants)
@@ -736,7 +737,7 @@ unvalidated by construction. dev and prod are ONE Neon database; there is no sta
 - [ ] `sweep-orphans` deletes R2 objects. Its preview LISTING is byte-identical to before (every key
       is logged before any delete now), so a `--apply`-less run is a safe first check.
 
-## The version gate's store link is dead in the CURRENT window (2026-08-03) — closes with build 19
+## The version gate's store link is dead in the CURRENT window (2026-08-03) — closes with the 1.1 release
 
 `apps/api/src/version-policy.ts` justifies its App Store link with "it resolves by construction at
 the only moment it's used": the wall can only fire once a floor is raised, and a floor can only be
@@ -751,10 +752,10 @@ TestFlight tester the App Store was never the right destination anyway; TestFlig
 
 **Founder call 2026-08-03: leave it — the 1.1 build is imminent and closes the window.** Recorded so
 the comment's guarantee is not read as unconditional by whoever reaches for the gate mid-release.
-⚠ That build is **`1.1.0 (19)`, uploaded 2026-08-03** (17 failed, 18 was cancelled — `autoIncrement`
-burns a number at QUEUE time, so never predict one). Delete this entry once the listing is live (the
-argument becomes true again) — or act on it if 19 fails review and testers need a clean wall instead
-of bare 404s.
+⚠ 1.1.0 reached TestFlight 2026-08-03, newest build **20** (17 failed, 18 cancelled, 19 superseded —
+`autoIncrement` burns a number at QUEUE time, so never predict one; read it back). Delete this entry
+once the listing is live (the argument becomes true again) — or act on it if the release slips and
+testers need a clean wall instead of bare 404s.
 
 ## `apps/api` diligence pass (2026-08-02)
 
