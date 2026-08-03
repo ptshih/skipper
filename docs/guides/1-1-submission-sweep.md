@@ -53,6 +53,14 @@ motion, and cellular dead zones. The zero-fire bug that produced that RAW-course
 exactly there — a real drive, not a reasoned-about one. The residual is one review cycle plus a bad
 first drive for whoever drives first. Drive it when you can; just don't let it hold the submission.
 
+✅ **And when you do drive it, it now BANKS.** Any live drive taken while signed in as an admin records
+its raw fix stream to the phone (Settings ▸ Developer ▸ DRIVE TRACES → Share). That trace replays
+forever through the same pipeline, and `packages/sim/src/sweep.ts --trace` reads the whole
+floor × lead curve off it — which is what finally answers
+[trigger-precision-spec.md](../designs/trigger-precision-spec.md) step 2. It is gated on **admin, not
+`__DEV__`**, precisely so a TestFlight drive counts. See
+[desk-drive-harness.md](../designs/desk-drive-harness.md).
+
 ---
 
 ## 1. Two builds, and they are not the same artifact
@@ -164,8 +172,10 @@ Everything here is owned by [app-store-submission.md](app-store-submission.md) �
 - [ ] **Screenshots.** They serialize behind §§2–5 because they cannot be shot until the UI is settled
       and confirmed. §9 there: three of the six live assets show deleted product, the hero is now the
       conversation mid-proposal (needs no GPS — far easier to stage than the old roam shot), and
-      ⚠ **the branded-frame compositor the doc describes is not in the repo** — budget it as real work,
-      not a recapture. Dark mode + `simctl status_bar` override.
+      ✅ the branded-frame compositor now EXISTS (`bun run shot:compose` —
+      `scripts/compose-screenshot.ts`, rebuilt 2026-08-03; it had never been committed), so this is a
+      recapture again rather than a build. Dark mode + `simctl status_bar` override, and capture on an
+      **iPhone 17 Pro Max** simulator — it is natively 1320×2868, so nothing is resampled.
 - [ ] **Paste the 1.1 metadata** — §§3, 4 and 10's replacement blocks. Re-read the LIVE values back
       from ASC first; this file has drifted before.
 - [ ] **Set the ASC version string to `1.1.0`.** The `1.0.0` record is `DEVELOPER_REJECTED` (verified
