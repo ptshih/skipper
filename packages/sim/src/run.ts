@@ -9,6 +9,7 @@
 //   --lead=<sec>     speed-adaptive lead time (default 12)
 //   --gpx=<path>     ALSO write an Xcode-replayable GPX of this drive's route (see below)
 //   --gpx-hz=<n>     GPX waypoint cadence (default 1 Hz — Xcode emits ~1 update/s regardless)
+//   --gaps           report the QUIET WINDOWS (see below) instead of just the trigger schedule
 //
 // V2: a drive is a frozen `selection` of place NARRATIONS (each 1:1 with its poi) along a route.
 // We resolve each narration's poi coords/name + form/duration live, then run the SAME trigger
@@ -46,6 +47,20 @@
 // poor or negative, EVERY fix is rejected and NOTHING fires — that is a simulation artifact, not a bug
 // in the trigger engine. Don't "fix" it.
 
+// ── --gaps: HOW MUCH QUIET IS THERE, ACTUALLY ────────────────────────────────────────────────────────
+// The measurement `downtime-callouts-spec.md` §0.6 asks for, and the reason it is the FIRST step: it can
+// kill half that feature before a line of it is built. The engine reports the windows as raw fact
+// (`SimReport.quietWindows`, on the FIFO PLAY schedule); the ELIGIBILITY policy lives here, because it
+// belongs to the callout spec and not to the trigger core.
+//
+// §7.1's gate is two-sided: a beat fires only when `secSinceLastAudio >= CALLOUT_FLOOR_SEC` AND
+// `etaToNextStopSec >= CALLOUT_ETA_SEC`. Firing at the earliest instant both hold means the window
+// itself must be at least the SUM — which is why the spec's own prose lands on "stop spacing ≳ 4.75
+// min" once a ~115 s clip is added back on.
+//
+// ⚠ Read a zero here as a real answer, not a broken tool. "No window is long enough" is the outcome
+// that retires the long-gap half of the feature, and it is the cheapest possible way to learn it.
+
 import { writeFileSync } from 'node:fs'
 import { eq, inArray } from 'drizzle-orm'
 import { db } from '@skipper/db'
@@ -78,8 +93,16 @@ function parseArgs(argv: string[]) {
     leadSeconds: num('lead', 12),
     gpxPath: str('gpx'),
     gpxHz: num('gpx-hz', 1),
+    gaps: args.includes('--gaps'),
   }
 }
+
+// downtime-callouts-spec.md §7.1, both tagged [E] there — ear-tune starting points, not physics. Named
+// here rather than inlined so a future re-measure at different numbers is one edit and the report says
+// which numbers it used.
+const CALLOUT_FLOOR_SEC = 75
+const CALLOUT_ETA_SEC = 95
+const CALLOUT_MIN_WINDOW_SEC = CALLOUT_FLOOR_SEC + CALLOUT_ETA_SEC
 
 // A fixed epoch, so re-running the same drive produces a byte-identical file — a GPX that churns on
 // every run is one you can't diff, and Xcode only ever reads the DELTAS between stamps anyway.
@@ -112,7 +135,7 @@ function toGpx(fixes: { lat: number; lng: number; speedMps: number; tSec: number
 }
 
 async function main() {
-  const { driveId, mph, tickHz, leadSeconds, gpxPath, gpxHz } = parseArgs(process.argv)
+  const { driveId, mph, tickHz, leadSeconds, gpxPath, gpxHz, gaps } = parseArgs(process.argv)
 
   const drive = (
     await db
@@ -213,6 +236,48 @@ async function main() {
     for (const o of r.overlaps) console.log(`   stop ${o.seq} starts ${o.overlapSec.toFixed(0)}s before stop ${o.prevSeq}'s clip ends`)
   } else {
     console.log('✓ No audio overlaps — every clip finishes before the next stop fires.')
+  }
+
+  if (gaps) {
+    // ⚠ THE VALIDITY GUARD. A skipped CLUSTER subject (see the selection assembly above) removes a real
+    // clip from the timeline, so its silence merges with the windows either side and this report gets
+    // LONGER quiet than the rider hears — biased in exactly the direction that would justify building
+    // callouts. Refuse to print a number that could be wrong that way.
+    const skipped = narrationItems.length - stops.length
+    if (skipped > 0) {
+      console.log('')
+      console.log(`⚠ ${skipped} of ${narrationItems.length} selection items were SKIPPED (cluster subjects the`)
+      console.log('  simulator cannot place yet). Quiet windows would be over-reported — refusing to gate on them.')
+    } else {
+      const q = r.quietWindows
+      const eligible = q.filter((w) => w.sec >= CALLOUT_MIN_WINDOW_SEC)
+      const overFloor = q.filter((w) => w.sec >= CALLOUT_FLOOR_SEC)
+      const quietSec = q.reduce((a, w) => a + w.sec, 0)
+      console.log('')
+      console.log('─'.repeat(78))
+      console.log(`QUIET WINDOWS @ ${mph} mph — silence on the FIFO play schedule (soundtrack only)`)
+      console.log('─'.repeat(78))
+      console.log('      after   before      from        length')
+      for (const w of q) {
+        const mark = w.sec >= CALLOUT_MIN_WINDOW_SEC ? '✓' : w.sec >= CALLOUT_FLOOR_SEC ? '·' : ' '
+        const after = w.afterSeq == null ? 'start' : `stop ${w.afterSeq}`
+        const before = w.beforeSeq == null ? 'end' : `stop ${w.beforeSeq}`
+        console.log(
+          ` ${mark}  ${after.padStart(7)}  ${before.padStart(7)}   ${formatMmss(w.startSec).padStart(6)}   ` +
+            `${formatMmss(w.sec).padStart(8)}`,
+        )
+      }
+      console.log('')
+      console.log(
+        `Quiet ${formatMmss(quietSec)} of ${formatMmss(r.driveSec)} (${((quietSec / r.driveSec) * 100).toFixed(0)}%) across ${q.length} windows · ` +
+          `longest ${formatMmss(Math.max(0, ...q.map((w) => w.sec)))}`,
+      )
+      console.log(
+        `✓ CALLOUT-ELIGIBLE (§7.1: ≥${CALLOUT_FLOOR_SEC}s floor + ≥${CALLOUT_ETA_SEC}s to next stop ⇒ window ≥${CALLOUT_MIN_WINDOW_SEC}s): ` +
+          `${eligible.length} of ${q.length}`,
+      )
+      console.log(`· over the ${CALLOUT_FLOOR_SEC}s floor alone (would need a looser gate): ${overFloor.length}`)
+    }
   }
 
   if (gpxPath) {

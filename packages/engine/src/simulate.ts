@@ -67,6 +67,25 @@ export interface Overlap {
   overlapSec: number
 }
 
+/**
+ * A stretch of the drive with NO narration playing — what the rider actually hears as the soundtrack
+ * alone. The raw fact; what counts as "long enough to put something in" is a policy question and
+ * deliberately lives in the caller (see `packages/sim`'s --gaps gate), not here.
+ *
+ * ⚠ Measured on the PLAY schedule, not the trigger schedule. Clips run through a sequential FIFO
+ * (`useDrive`), so a clip that fires while another is playing starts late and eats the silence that
+ * followed it. Differencing trigger times instead would over-report quiet by exactly the queue lag.
+ */
+export interface QuietWindow {
+  startSec: number
+  endSec: number
+  sec: number
+  /** The clip whose playback ENDED this window's start — null for the stretch before the first clip. */
+  afterSeq: number | null
+  /** The clip that BEGINS at this window's end — null for the stretch after the last clip. */
+  beforeSeq: number | null
+}
+
 export interface SimReport {
   speedMph: number
   tickHz: number
@@ -77,6 +96,9 @@ export interface SimReport {
   events: TriggerEvent[]
   stops: StopOutcome[]
   overlaps: Overlap[]
+  /** Every stretch with no narration playing, in drive order — including before the first clip and
+   *  after the last. Sums to `driveSec - (audio actually played)`. */
+  quietWindows: QuietWindow[]
   /** Valid (on-route) stops that still never fired — a real triggering miss. */
   neverFired: number[]
   /** Stops excluded because the POI is too far off-route to have an honest trigger point. */
@@ -137,6 +159,32 @@ export function runDrive(polyline: LngLat[], stops: DriveStopRef[], opts: DriveO
   const audioSec = stops.reduce((sum, s) => sum + (s.durationMs ?? 0) / 1000, 0)
   const cum = cumulativeMeters(polyline)
 
+  // Walk the FIFO play cursor, then take the gaps between consecutive PLAY spans. `Math.max(fire,
+  // cursor)` is the queue: a clip that fires mid-playback waits, which shortens the quiet after it.
+  const durBySeq = new Map(stops.map((s) => [s.seq, (s.durationMs ?? 0) / 1000]))
+  const quietWindows: QuietWindow[] = []
+  let cursor = 0
+  let prevSeq: number | null = null
+  for (const e of audioFires) {
+    const startSec = Math.max(e.tSec, cursor)
+    if (startSec > cursor) {
+      quietWindows.push({
+        startSec: cursor,
+        endSec: startSec,
+        sec: startSec - cursor,
+        afterSeq: prevSeq,
+        beforeSeq: e.seq,
+      })
+    }
+    cursor = startSec + (durBySeq.get(e.seq) ?? 0)
+    prevSeq = e.seq
+  }
+  // The tail. ⚠ Counted deliberately: 1.1 deleted the outro, so nothing speaks at the end of a drive
+  // and this stretch is real silence, not a sign-off waiting to happen.
+  if (driveSec > cursor) {
+    quietWindows.push({ startSec: cursor, endSec: driveSec, sec: driveSec - cursor, afterSeq: prevSeq, beforeSeq: null })
+  }
+
   return {
     speedMph: opts.mph ?? 60,
     tickHz: opts.tickHz ?? 4,
@@ -147,6 +195,7 @@ export function runDrive(polyline: LngLat[], stops: DriveStopRef[], opts: DriveO
     events,
     stops: stopOutcomes,
     overlaps,
+    quietWindows,
     neverFired: stopOutcomes.filter((s) => !s.fired && !s.excluded).map((s) => s.seq),
     excludedOffRoute,
     coverageRatio: driveSec > 0 ? audioSec / driveSec : 0,

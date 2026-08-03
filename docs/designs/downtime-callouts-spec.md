@@ -4,8 +4,10 @@
 > "fold callouts into scenic stops" sketch, §2). **Re-interrogated 2026-08-03 in a Skipper Hours
 > session: the idea SURVIVED, one locked decision is OVERTURNED (duck-overlay → the music steps
 > back), and the v3 deferral's stated reason does not hold up. Read §0 before anything else — it
-> amends the body, and three of the body's load-bearing numbers are no longer checkable.** Still
-> NOT greenlit; the agreed next move is a $0 desk measurement (§0), not a build.
+> amends the body.** ✅ **Step 0 is DONE (§0.6): the quiet is MEASURED, and it overturns Finding 1 —
+> the planned-gap path is abundant, not marginal (5 of 8 windows eligible at 45 mph; the Skipper is
+> silent ~75% of a drive).** Still NOT greenlit — what is measured is that there is ROOM, not that a
+> beat is welcome; that stays an ear question.
 
 > **Schema-names note (updated 2026-06-19 for the V2 roam-first model):** identifiers below predate
 > the V2 pivot that dropped the entire authored-tour storage (migration 0009) — `tours`,
@@ -149,16 +151,55 @@ deterministic, desk-runnable drive simulator:
 
 So the first move is **not** a mobile change, and does not enter the 1.1 critical path.
 
-### 0.6 The agreed next move — measure the quiet. $0, no founder go needed.
+### 0.6 ✅ MEASURED 2026-08-03 — and it OVERTURNS Finding 1
 
-Teach `packages/sim` to report **gaps**, not just stops — it is arithmetic over data `runDrive`
-already holds (fire time + clip duration → next fire time) — and run it over the real Tahoe drive at
-30 / 45 / 60 mph. Output: every window ≥ the §7.1 gate (~95 s) where a callout could fire.
+Built as `packages/sim/src/run.ts --gaps` (engine reports `SimReport.quietWindows` as raw fact; the
+§7.1 eligibility policy lives in the CLI, where it belongs). $0, no spend, no mobile code. Run over
+all three saved drives at 30 / 45 / 60 mph:
 
-That settles Finding 1 with a number instead of an argument, and it can **kill the LONG-GAP half on
-evidence**: if the real drive has zero qualifying windows at 45 mph, that half is dead and the build
-was never worth starting. If it has several, you know exactly where they are before writing a line
-of scheduler.
+| drive (stops) | mph | quiet | longest | ✓ eligible |
+| --- | --- | --- | --- | --- |
+| Tahoe City → South Lake Tahoe (8) | 30 | 51:02 of 59:19 (**86%**) | 10:02 | **7 of 8** |
+| | 45 | 31:22 of 39:33 (**79%**) | 6:15 | **5 of 8** |
+| | 60 | 21:29 of 29:39 (**72%**) | 4:21 | **4 of 8** |
+| South Lake Tahoe → Incline Village (8) | 30 | 45:49 of 54:13 (84%) | 11:09 | 7 of 8 |
+| | 45 | 27:56 of 36:09 (77%) | 6:53 | 3 of 8 |
+| | 60 | 18:57 of 27:07 (70%) | 4:45 | 2 of 8 |
+| Emerald Bay → Vikingsholm (2) | 30 / 45 / 60 | 39% / 24% / 7% | 1:23 | **0 of 1** |
+
+**⚠ Finding 1 is WRONG, and it was the argument the whole design rested on.** §2 says *"callouts
+barely fire on dense corridors via planned gaps"* and that a ~120 s clip against a 180 s floor
+"leaves ~60 s of quiet", concluding the emergent path would be the primary one. On the real flagship
+drive the planned-gap path is **abundant**: gaps run 3:33–6:15 at 45 mph and five of eight clear the
+two-sided gate outright. The emergent path (crawl, halt) is now a BONUS, not the load-bearing case,
+and §2/§9's "the sim has negative quiet" framing describes a drive that does not exist.
+
+**The headline nobody had measured: the Skipper is silent for roughly three quarters of a drive**
+(narration coverage 21–28%). That is the real finding, and it is a product fact, not a callout fact.
+
+Three things that fall out of the numbers:
+
+- **Speed is the dominant variable, and it runs the helpful way.** Quiet shrinks as speed rises
+  (clips are fixed length, the road isn't), so 30 mph gives 7 of 8 and 60 mph gives 4 of 8. A scenic
+  drive — the product's whole subject — is the slow case.
+- **Drive LENGTH gates the feature, not corridor density.** Emerald Bay → Vikingsholm scores 0 of 1
+  at every speed: a 2-stop, 2–3 minute drive has no room and never will. Callouts are a property of
+  longer drives, so any pool sizing should be per-drive-length, not per-region.
+- ⚠ **The two long drives disagree at 45 mph (5 of 8 vs 3 of 8) while agreeing at 30 and 60.** Do not
+  read a single speed as the answer; the gate sits near a cliff for mid-length gaps.
+
+⚠ **Honest record: this was run to KILL the long-gap half, and it did the opposite.** §0.1 predicted
+that half would die at the "beats silence" question; the founder took it anyway, over that objection.
+The measurement vindicates the founder. What the numbers cannot say is whether a beat in a 6-minute
+gap is *welcome* — that is still an ear question, and §0.2's music-steps-back design is still
+unheard.
+
+⚠ **Validity guard, deliberately built in:** `--gaps` REFUSES to gate when any selection item was
+skipped. The simulator cannot place a CLUSTER subject, and a skipped clip merges its neighbours'
+windows into one longer one — biasing the report toward "yes, build callouts". All three drives are
+100% poi subjects today (checked), so this run is clean; the guard is there so the next one cannot
+quietly lie. The window walk is **MUTATION-CHECKED** on the FIFO play schedule: differencing TRIGGER
+times instead over-reports a queued gap ~2× (129 s vs 64 s on the fixture) and fails the test.
 
 ### 0.7 Alternatives considered (2026-08-03)
 
