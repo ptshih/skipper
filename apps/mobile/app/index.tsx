@@ -1068,18 +1068,61 @@ export default function HomeScreen() {
   const undrawnRoute =
     pendingRoute && !cards.some((c) => proposeKey(c.route) === pendingKey) ? pendingRoute : null
 
-  const settingsButton = (
-    <HeaderIconButton name="settings" accessibilityLabel="Settings" onPress={() => router.push('/settings')} />
+  // ⚠ THESE THREE ARE MEMOIZED FOR A REASON THAT IS INVISIBLE FROM HERE, and it is not tidiness.
+  // expo-router's `Screen` pushes `options` through `navigation.setOptions` from a `useLayoutEffect`
+  // keyed on that object, and react-navigation's updater always spreads a NEW object — so React can
+  // never bail out on an equal value the way it does for `shown` above. A fresh element literal here
+  // therefore forced a navigator-wide re-render plus a native-stack header re-commit, SYNCHRONOUSLY
+  // before paint, on every keystroke, every streamed sentence flush and every 500 ms audio tick.
+  // Nothing about the rendered header changes; only its identity is now stable across renders.
+  const settingsButton = useMemo(
+    () => (
+      <HeaderIconButton name="settings" accessibilityLabel="Settings" onPress={() => router.push('/settings')} />
+    ),
+    [router],
   )
-  const signInButton = (
-    <Button variant="ghost" title="Sign in" fullWidth={false} onPress={() => router.push('/sign-in')} />
+  const signInButton = useMemo(
+    () => (
+      <Button variant="ghost" title="Sign in" fullWidth={false} onPress={() => router.push('/sign-in')} />
+    ),
+    [router],
   )
   // ⚠ THE HEADER-LEFT SLOT WAS ALREADY EMPTY FOR EXACTLY THIS AUDIENCE — `signedIn ? undefined :
   // signInButton` left it doing nothing for signed-in riders, who are the only ones who can own a
   // drive. So moving MY DRIVES off the page costs NO new chrome: the slot swaps by auth state, which
   // is what it already did.
-  const drivesButton = (
-    <HeaderIconButton name="list" accessibilityLabel="My drives" onPress={() => router.push('/drives')} />
+  const drivesButton = useMemo(
+    () => <HeaderIconButton name="list" accessibilityLabel="My drives" onPress={() => router.push('/drives')} />,
+    [router],
+  )
+
+  /** The header-left slot, resolved ONCE — it is read by both `headerLeft` and the iOS-26
+   *  `unstable_headerLeftItems` pair below, and the two must never disagree about which button the
+   *  slot holds. */
+  const headerLeftEl = signedIn ? drivesButton : signInButton
+
+  /** ⚠ The whole options object, memoized — see the note on the buttons above for WHY this one
+   *  literal was re-rendering the navigator before every paint. `as const` on the `'custom'` tags is
+   *  load-bearing: inside a `useMemo` the literal widens to `string` and stops matching the item
+   *  union, which fails several files from the cause. */
+  const screenOptions = useMemo(
+    () => ({
+      headerTitle: () => (
+        <Text variant="wordmark" color="ink">
+          SKIPPER
+        </Text>
+      ),
+      headerTitleAlign: 'center' as const,
+      headerLeft: () => headerLeftEl,
+      headerRight: () => settingsButton,
+      unstable_headerLeftItems: () => [
+        { type: 'custom' as const, hidesSharedBackground: true, element: headerLeftEl },
+      ],
+      unstable_headerRightItems: () => [
+        { type: 'custom' as const, hidesSharedBackground: true, element: settingsButton },
+      ],
+    }),
+    [headerLeftEl, settingsButton],
   )
 
   // ── The masthead ────────────────────────────────────────────────────────────────────────────
@@ -1360,7 +1403,11 @@ export default function HomeScreen() {
   )
 
   // ── MY DRIVES — the rider's saved drives: a list, or a zero-state invite. ────────────────────
-  const myDrives = (
+  // ⚠ A FUNCTION, not a const holding JSX, and the one character is worth the note: this subtree is
+  // consumed ONLY in the offline branch below, which for a rider who is actually planning a drive is
+  // never — yet as a const it allocated `drives.map(...)` plus ~6 elements per saved drive on every
+  // single render of this screen. Building what you will not render is pure waste on the render path.
+  const myDrives = () => (
     <View style={styles.section}>
       <Divider dashed />
       <View style={styles.sectionHead}>
@@ -1514,28 +1561,7 @@ export default function HomeScreen() {
 
   return (
     <ConversationScreen footer={footer} scrollSignal={scrollSignal} contentContainerStyle={styles.body}>
-      <Stack.Screen
-        options={{
-          headerTitle: () => (
-            <Text variant="wordmark" color="ink">
-              SKIPPER
-            </Text>
-          ),
-          headerTitleAlign: 'center',
-          headerLeft: () => (signedIn ? drivesButton : signInButton),
-          headerRight: () => settingsButton,
-          unstable_headerLeftItems: () => [
-            {
-              type: 'custom',
-              hidesSharedBackground: true,
-              element: signedIn ? drivesButton : signInButton,
-            },
-          ],
-          unstable_headerRightItems: () => [
-            { type: 'custom', hidesSharedBackground: true, element: settingsButton },
-          ],
-        }}
-      />
+      <Stack.Screen options={screenOptions} />
 
       {/* ⚠ The dormant `regions.length > 1` FilterChip row that used to sit here is DELETED, not
           disabled. It was invisible (one region auto-selects), so leaving it alongside the new chip
@@ -1555,7 +1581,7 @@ export default function HomeScreen() {
           downloads — which is why that state is the outage card alone rather than an empty list. */}
       {isOffline ? (
         <>
-          {myDrives}
+          {myDrives()}
           <Divider dashed />
           <PlannerUnavailableCard reason="offline" anchorNames={anchorNames} />
         </>

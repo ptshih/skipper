@@ -13,7 +13,7 @@
 // are gate-enforced ≥4.5:1 (src/theme/theme.test.ts). DESIGN.md §4 records the measured
 // light-mode misses — inkFaint 4.30, water 4.12, danger 4.39, accentWarm 4.35. Never put a hint,
 // a timestamp or a retry line inside this bubble in any role but those three.
-import { useEffect, useRef } from 'react'
+import { memo, useEffect, useRef } from 'react'
 import { AccessibilityInfo, Platform, StyleSheet, View } from 'react-native'
 import { radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
@@ -37,7 +37,7 @@ export interface TurnBubbleProps {
   announceOnSettle?: boolean
 }
 
-export function TurnBubble({ role, text, streaming, announceOnSettle }: TurnBubbleProps) {
+function TurnBubbleBase({ role, text, streaming, announceOnSettle }: TurnBubbleProps) {
   const { colors } = useTheme()
 
   // The settle transition: a turn that was asked to announce and is no longer streaming. A turn
@@ -126,3 +126,21 @@ const styles = StyleSheet.create({
     padding: space.md,
   },
 })
+
+/**
+ * ⚠ MEMOIZED, WITH THE DEFAULT COMPARATOR ON PURPOSE. The transcript is an UNVIRTUALIZED ScrollView,
+ * so every bubble ever spoken stays mounted — and without this, each one re-rendered and re-measured
+ * its text layout on every screen render: every keystroke, every streamed sentence flush, every audio
+ * status tick. That is the cost that grows with conversation length and reads as the chat "bogging
+ * down" (founder, 2026-08-03).
+ *
+ * ⚠ NO custom `arePropsEqual` here, and the contrast with the prior art is the reason to say so. The
+ * manoa chat needed one because the AI SDK mutates `message.parts[i].text` IN PLACE, so equality
+ * could not see a token land. Skipper's streaming text is a fresh immutable string on the screen's
+ * `shown` state each flush, and all four props are primitives — the shallow default is both correct
+ * and cheaper. Add a comparator only if a prop ever becomes an object.
+ *
+ * ⚠ It does NOT block the `useTheme()` context update the bubble reads, and it does not strand the
+ * one-shot announce: `announceOnSettle` is a prop, so flipping it still re-renders.
+ */
+export const TurnBubble = memo(TurnBubbleBase)
