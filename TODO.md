@@ -142,10 +142,17 @@ findings fixed (`576e031`). See `apps/mobile/CLAUDE.md` for the ESLint-9 pin and
       against bun's isolated linker (see `apps/mobile/CLAUDE.md`) — never "fix" it by forcing hoisted.
 - [ ] **There is no CI.** No `.github/workflows` anywhere, and `cloudbuild.yaml` is build → push →
       deploy with NO test step — so the entire quality bar is "an agent remembered to run
-      `bun run check`", in a repo where several agents share one working tree. Want: one workflow on
-      push/PR running root `bun run check` + `bun --filter @skipper/mobile check`. ~30 lines. It can
-      land before the first push and starts paying the moment one happens. **This was finding #1 of the
-      diligence pass** — ESLint went first only because it catches bugs the same afternoon.
+      `bun run check`", in a repo where several agents share one working tree. **This was finding #1 of
+      the diligence pass** — ESLint went first only because it catches bugs the same afternoon.
+      ⚠ **DO NOT ACT ON THIS ENTRY — it is SUPERSEDED, and its prescription was overruled.** This item
+      originally asked for a GitHub Action on push/PR. The founder call of 2026-08-03 (see *Production
+      ops hardening*, the ⏸ DEFERRED test-gate item) rules that out explicitly and for a reason the
+      "~30 lines" framing missed: **an Action cannot stop an independent Cloud Build trigger**, so it
+      would report a red check beside a deploy that had already gone out — the appearance of a gate
+      without the function of one. The agreed fix is `bun run check` as **step 0 in `cloudbuild.yaml`**,
+      and it is **DEFERRED until after the on-device verification pass** because the fix edits the
+      release path. Kept rather than deleted only so the finding's provenance survives; the deferred
+      item is the live one.
 - [x] ~~The four hooks that own the risky behaviour have zero coverage~~ — **PREVIEW HALF DONE
       2026-08-02.** `src/lib/preview-util.ts` (`0531085`) now owns the decisions both preview players
       share, with 14 tests; extracting them proved the two siblings had already drifted, and `ffac245`
