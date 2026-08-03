@@ -194,7 +194,13 @@ export function PreviewCard({
   // ⚠ STRICT `=== 0`. `estStopCount` is nullish-able and `null` means UNKNOWN, not zero — a null must
   // never disable the CTA or claim the road is quiet.
   const noStops = proposal.estStopCount === 0
-  const isLoop = !!(proposal.via && proposal.via.length)
+  // ⚠ THE SAME TEST THE PINS USE (see the note on `endpoints` above) — and it has to be, because these
+  // two render the SAME route. Keyed on `via.length`, this branch told a one-way route with a midpoint
+  // it was a "Round trip from X" and never named the destination at all, while the map directly above
+  // it drew A→B with an end pin. A card disagreeing with its own map is worse than either being wrong
+  // alone. Caught by two independent reviewers on 2026-08-03 after the marker fix stopped one region
+  // short of this one.
+  const isLoop = proposal.startId === proposal.endId
   const viaShown = proposal.viaResolved ?? []
   const spent = state === 'made'
 
