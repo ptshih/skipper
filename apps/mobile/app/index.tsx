@@ -946,9 +946,16 @@ export default function HomeScreen() {
   const [fieldFocused, setFieldFocused] = useState(false)
   const [tick, setTick] = useState(0)
   const reduceMotion = useReducedMotion()
+  // ⚠ EMPTY IN AN UNCURATED REGION, and that is the ROTATION's veto as well as the copy's: the
+  // name-free shapes ("the long way round") survive a region with no anchors by design, so without
+  // this the cycle would happily run — re-rendering home every few seconds to update a placeholder
+  // belonging to a composer that is no longer mounted there. Routed through `exampleCount` rather
+  // than a new flag on `shouldRotatePlaceholder`: zero examples already means "no rotation", and
+  // "this region has nothing to teach an ask WITH" is honestly a fact about the examples.
   const placeholderExamples = useMemo(
-    () => buildPlaceholderExamples(anchorNames, voice.plan.placeholderShapes),
-    [anchorNames],
+    () =>
+      uncuratedRegion ? [] : buildPlaceholderExamples(anchorNames, voice.plan.placeholderShapes),
+    [anchorNames, uncuratedRegion],
   )
   const rotating = shouldRotatePlaceholder({
     exampleCount: placeholderExamples.length,
@@ -1366,14 +1373,32 @@ export default function HomeScreen() {
   )
 
   // ── The footer ──────────────────────────────────────────────────────────────────────────────
-  // ⚠ The composer is REPLACED, never greyed out — a disabled field reads as broken, and neither of
-  // the two states below is a malfunction. Offline and a failed regions load are dead ends (the card
-  // above carries the honest line); `done` is the skipper bowing out in character (D12).
+  // ⚠ The composer is REPLACED, never greyed out — a disabled field reads as broken, and none of the
+  // three states below is a malfunction. Offline, a failed regions load and an UNCURATED region are
+  // dead ends (the honest line is already on screen above); `done` is the skipper bowing out in
+  // character (D12).
+  //
+  // ⚠ THE UNCURATED CASE IS ALSO A SPEND GUARD, not only a tidiness one (founder, 2026-08-03). With
+  // no curated endpoints there is nothing the planner can legally propose — the allowlist is asserted
+  // at the wire and an off-list ask is refused by construction — so EVERY turn a rider sends here is
+  // a billed Opus call whose only possible outcome is the skipper saying no. Leaving the field live
+  // under a paragraph that just said "I don't run any roads around here yet" invited exactly that,
+  // once per attempt, anonymously and uncapped by anything but the rate limiter.
+  //
+  // ⚠ It reuses `uncuratedRegion` rather than re-deriving the test, so the sentence on screen and the
+  // presence of the field can never disagree — the same one-expression rule that put the opening line
+  // and the example rows on it. Its `!!region` guard is what keeps a still-loading `/regions` out of
+  // this branch; without that the composer would blink away on every cold start.
+  //
+  // ⚠ The way OUT stays reachable: `masthead` (the region chip) sits outside `conversation` and is
+  // gated on `hasRegions`, never on the selection — so a rider parked in an uncurated region can
+  // still open the sheet and pick a different one. Remove the chip's escape hatch and this becomes a
+  // dead screen.
   //
   // ⚠ INV-3/INV-12: nothing on this screen knows a cap NUMBER. There is no `maxLength`, no message
   // count and no character budget anywhere under apps/mobile — the client keys on the server's
   // `done: true` and on nothing else. The caps have ONE home, apps/api/src/limits.ts.
-  const composer = isOffline || regionsFailed ? null : done ? (
+  const composer = isOffline || regionsFailed || uncuratedRegion ? null : done ? (
     <View style={styles.wrapUp}>
       {/* A CTA that cannot do anything is worse than a greyed field — with no route ever offered
           (the region-miss bow-out, or a rider who chatted the cap away) only "Start fresh" shows. */}

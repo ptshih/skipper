@@ -556,6 +556,17 @@ when idle.
 Also landed, and each was a decision rather than an inheritance:
 - **`region.exampleAnchors`** (review §1.11) — names only, `.catch([])` so a cosmetic field can never
   brick home through mobile's ContractError wall. See the commit for the sort/collation reasoning.
+  ⚠ **IT STOPPED BEING COSMETIC ON 2026-08-03.** An empty array is now the client's whole test for
+  "this region has no curated endpoints", and that test HIDES THE COMPOSER (founder — every turn in
+  such a region is a billed Opus call the planner can only refuse). The two causes of `[]` are no
+  longer equivalent: a genuinely uncurated region, and `.catch([])` swallowing a malformed payload.
+  The second now reads as the first, so one sloppy `?? null` in the handler would tell a rider in a
+  fully curated region that the skipper runs no roads there and leave them nothing to type into —
+  the exact brick the `.catch` was chosen to prevent, arriving by another door. The escape hatch is
+  the region chip (gated on `hasRegions`, never on the selection), and the durable fix is to stop
+  inferring: have `GET /regions` state curatedness outright rather than leaving the client to read it
+  out of a field whose contract is "degrade silently". Not built — it is an API change and a founder
+  call.
 - **`GET /drives/anchors` deleted end to end.** Not deferred: step 8a moves `requireAccount` off the
   `/drives*` mount and `/anchors` is not one of the five owner routes, so it would have become an
   unauthenticated dump of the curated allowlist **with exact lat/lng** the day 8a deployed.
@@ -645,8 +656,19 @@ calls "a product judgement with no right answer". The honest floor now on the wi
 
 ⚠ **Unverified without a device:** that `doNotMix` actually pauses Spotify and that the session release
 resumes it; the mint round-trip and its SecureStore write; whether `status.error` is populated for a 403
-on a stale presign (if not, `clipUnavailable` is dead copy — ten seconds on a device settles it); the
-ClipBar's position above the keyboard, which inherits step 7's still-ASSUMED `keyboardVerticalOffset`.
+on a stale presign (if not, `clipUnavailable` is dead copy — ten seconds on a device settles it). Step
+7's still-ASSUMED `keyboardVerticalOffset` is still owed a look, but now against the COMPOSER — the
+footer holds nothing else.
+
+⚠ **THE PINNED MINI-TRANSPORT (review §1.12(b)) WAS REMOVED 2026-08-03** (founder), so the card's own
+disc is the ONE transport for the preview clip. It duplicated that disc rather than backing it up:
+`activeCardId` stays set for the rest of the conversation, so a rider looking straight at the card got
+two pause buttons and the same clip titled twice. What it was guarding — audio still playing when the
+composer goes null (offline, failed regions load) — is covered by the blur stop in `useFocusEffect`,
+by `startFresh`, and by the unconditional session hand-back on `didJustFinish`. Knowingly given up: the
+progress readout, and the explicit ✕ that released the audio session mid-clip (a rider who PAUSES now
+holds it under `doNotMix` until they leave the screen). `src/ui/ClipBar.tsx` has no callers left and is
+a prune candidate for the simplification sweep.
 
 **9 — Offline subject-keyed store.** ✅ **DONE 2026-08-01.** Bytes are now shared and subject-keyed in
 `Paths.document/clips/`; every drive keeps its own seq→bytes `manifest.json` (INV-6). The v4→v5 re-key
