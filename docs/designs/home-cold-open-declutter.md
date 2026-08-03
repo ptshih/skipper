@@ -533,6 +533,117 @@ everything up to "Make this drive". **So §7 and §8 stand unchanged**, includin
 weight on the anonymous cold open" and O2's *empty by construction*. Recorded because the question
 will recur.
 
+## 10. Note 8 — region affordance, for when it is not only Tahoe
+
+Founder, 2026-08-03: *"i wonder if we need to give affordance to 'regions' on the home screen. because
+it won't be only tahoe forever"*.
+
+### ✅ It already exists, and is dormant
+
+`app/index.tsx` renders a `FilterChip` row when `regions.length > 1`, placed deliberately **above the
+hero**, with the reasoning recorded in place: *"a region row appears ONLY if a second region ever
+ships. Above the hero, not in the conversation — the skipper is per-region and the choice precedes
+talking to him."* With one region the client auto-selects it, so the row has never rendered. **No work
+is owed before launch.** The question is whether a chip row is still the right shape once V2 lands.
+
+### ⚠ The hard constraint underneath: region is a PREREQUISITE, not a filter
+
+`POST /drives/plan` **requires a `regionId`** — the regions load is "the conversation's PREREQUISITE,
+not a nicety", and the send disc stays disabled until one is chosen. So with N regions the rider
+**must choose before they can speak at all**. That makes "let the conversation work out the region"
+an API change, not a UI tweak — and it collides with INV-1, since the planner's curated allowlist is
+scoped to a region. Location-inference is also closed off: the pre-drive flow is deliberately
+location-free.
+
+### ⚠ What V2 breaks about the current placement
+
+The chip row sits **above the hero**, and in V2 the hero is the listen card. So on a first launch with
+two regions the screen reads: *pick a region → hear a sample → answer a question*. **That is a picker
+before the worked example**, which is exactly what V2 exists to avoid. The placement was correct for
+the old layout and is not correct for this one.
+
+### Options
+
+- **R1 · Move the chip row below the hero.** Smallest change: listen first, then the region chips as
+  the first thing the question is answered with. ⚠ Chips do not scale — 4+ regions wrap into the
+  multi-line slab problem this whole document exists to remove.
+- **R2 · Fold region into the suggestion rows.** The three asks become region-flavoured ("Lake Tahoe —
+  Emerald Bay → Incline Village"), so one tap picks the region AND seeds the ask, through the
+  `pickExample` mechanism that already exists. ⚠ Does not serve the rider who wants to TYPE — they
+  still need a region set first.
+- **R3 · The kicker becomes the region** *(recommended)*. Today the kicker is decorative
+  ("NOW DEPARTING"). Make it **"NOW DEPARTING · LAKE TAHOE ⌄"** — tappable when `regions.length > 1`,
+  opening a sheet. It costs **zero new blocks**, scales to any N, reads as the departures board the
+  metaphor already claims, and leaves the hero to the listen card. ⚠ Needs a caret or equivalent cue:
+  a `label`-type kicker in `accentWarm` does not currently look tappable, and DESIGN forbids inventing
+  a style for it — this wants a real affordance, not bolded text.
+- **R2 + R3 together** is the likely answer: the kicker carries the switch for typers, the rows carry
+  it implicitly for tappers.
+
+### Two things that must change with region N+1, whichever option wins
+
+- ⚠ **The limit line is region-hardcoded.** "I only know the roads around Lake Tahoe so far" must
+  become composed — `voice.ts` phrasing + `region.displayName` from the SERVER — because voice is
+  delivery, never facts. Worth writing that way NOW, while the line is being authored, rather than
+  retrofitting.
+- ⚠ **`GET /sample` is ONE curated Tahoe clip.** With several regions, which one plays on the
+  launch-1 hero card? ✅ **The generic copy the founder already asked for makes the region-agnostic
+  answer work**: "A minute of the real thing" sells the VOICE, not the place, so one canonical sample
+  can stay canonical. Only revisit if a region's character differs enough that one clip misrepresents
+  the others.
+
+## 11. Note 9 — which region is selected by default
+
+Founder, 2026-08-03: *"the ai agent conversations should be pinned to 1 region at a time… maybe we can
+pre-select the closest region to the user as the default state (and if no location access, fallback to
+tahoe)"*.
+
+### ✅ "Pinned to one region at a time" is already true, and deliberate
+
+The planner is handed a single `regionId` and is **given no cross-region context**; `POST /drives/plan`
+requires that id, and the curated allowlist it emits anchor ids from is scoped to that region (INV-1).
+Nothing to build — this is the existing design, confirmed.
+
+### ⚠ Pre-selecting by LOCATION collides with a documented decision, and the cost is the permission
+
+**The whole pre-drive flow is deliberately location-free** (CLAUDE.md; narrowed in 1.1 to the single
+"Let's roll" caller). Asking for location on the HOME screen to guess a region would move the iOS
+prompt from the moment its value is obvious — *we need GPS to fire stops as you drive* — to app-open,
+where the justification is only *we will guess a region for you*.
+
+⚠ **iOS's prompt is one-shot.** A rider who denies it at app-open has already denied the ask that
+actually matters, and the only route back is Settings. Trading the live drive's triggering permission
+for a region guess is a bad exchange — and `location-permission-priming.md` plus App Store 5.1.1(iv)
+(no "Not Now" on a pre-prompt) make the ask itself non-trivial to stage.
+
+### ✅ The same benefit without the permission cost
+
+Selection order, cheapest signal first:
+
+1. **Location, but ONLY if permission is ALREADY granted.** Read the permission state rather than
+   requesting it (`getForegroundPermissionsAsync`, which does not prompt) — a rider who granted it for
+   a previous drive gets the nearest region for free, and nobody is ever prompted on home.
+2. **Else the LAST-USED region**, persisted client-side. One value, same file pattern as the
+   first-launch flag. Strictly better than a hardcoded default for anyone past their first drive, and
+   it is an *explicit* signal from the rider rather than an inference.
+3. **Else the first released region** (Tahoe today). ⚠ Prefer "first released", not a hardcoded
+   `'lake-tahoe'` — a literal region id in the client is exactly the volatile fact CLAUDE.md says must
+   have one home.
+
+⚠ **Which of 1 and 2 should win is genuinely ambiguous and I am not settling it here.** Physical
+presence is the stronger signal for a driving app; planning a trip in advance from home is also a real
+use. Recorded rather than decided — and note that with §10's R3 kicker a wrong guess costs one tap, so
+this matters less than it looks.
+
+### ⚠ One wire consequence if "nearest" ships
+
+Regions are BBOXes (geometry-first), so "closest" is point-in-bbox, else nearest bbox. **The client
+does not currently have region geometry** — `CachedRegion` holds id, display name and public anchor
+names only, deliberately ("names ONLY — never anchor ids, never coordinates"). Computing nearest on
+the client therefore needs region bboxes added to the `/regions` DTO. That is a small addition, but it
+is a wire change and a deliberate loosening of that file's "no coordinates" stance, so it wants to be
+a decision rather than a drive-by.
+
 ## Sources
 
 - [Airbnb design-system breakdown](https://github.com/VoltAgent/awesome-design-md/blob/main/design-md/airbnb/DESIGN.md)
