@@ -67,9 +67,21 @@ floor × lead curve off it — which is what finally answers
 
 Fire these in this order — the cloud build runs unattended while you do the local one.
 
-- [ ] **Production build → TestFlight.** `eas build --profile production --platform ios`.
-      `app.json` `version` is **`1.1.0`** (bumped 2026-08-03; was `1.0.1`). `appVersionSource` is
-      `remote` with `autoIncrement`, so the build number takes care of itself → build 17.
+- [x] ✅ **Production build → TestFlight — DONE 2026-08-03: build `1.1.0 (19)` is uploaded and in
+      Apple's processing queue.** Run as
+      `eas build --profile production --platform ios --auto-submit --non-interactive`; the auto-submit
+      is worth it, since it hands the artifact straight to ASC with no second command.
+      ⚠ **It is 19, not the 17 this line used to predict**, and the reason is a trap worth knowing:
+      `autoIncrement` assigns the number when the build is QUEUED, not when it succeeds, so a failed
+      or cancelled attempt consumes one forever. 17 failed (see below) and 18 was cancelled once that
+      failure was diagnosed as deterministic. **Never assume the number — read it back from the build.**
+      ⚠ **17 failed on something that was not the app**: the PostHog dSYM upload phase hit
+      `content_hash_mismatch` (a symbol UUID already in PostHog with different bytes), posthog-cli
+      exited non-zero, and that took the whole archive down under the useless banner
+      `EAS_BUILD_UNKNOWN_FASTLANE_ERROR`. Fixed in `e529dd3` with the plugin's `skipOnConflict: true`.
+      If a build ever dies at "Run fastlane" with no error, read the **Xcode logs**, not the EAS
+      summary — and note they are brotli-encoded, so `curl --compressed` fails and you need
+      `brotli -dc`.
       ⚠ `ios/` is gitignored prebuild output, so EAS prebuilds fresh in the cloud — **the "native
       rebuild owed" item from the SDK-57 patch bumps (`44642c6`) is discharged automatically here**, not
       by anything you run locally.
@@ -180,10 +192,12 @@ Everything here is owned by [app-store-submission.md](app-store-submission.md) �
       `bun run asc:metadata -- --apply --version=1.1.0`, verified by an independent read-back. The
       record is now `1.1.0` / `PREPARE_FOR_SUBMISSION`. Re-check any time with a no-flag
       `bun run asc:metadata`; it prints "already matches" for all three fields.
-- [ ] **Attach build 17.** ⚠ The record has NO build right now, on purpose: renaming it to 1.1.0 left
+- [ ] **Attach build 19** (uploaded 2026-08-03; wait for Apple's processing to finish before it can be
+      attached). ⚠ The record has NO build right now, on purpose: renaming it to 1.1.0 left
       build 15 (short version `1.0.0`, the pre-1.1 roam client) attached, because Apple neither
       detaches nor warns. It was detached; `asc:metadata` now checks this every run. Apple only offers
-      builds whose short version MATCHES, so 17 is the only one that will appear.
+      builds whose short version MATCHES, so 19 is the only one that will appear (17 failed, 18 was
+      cancelled — see the build step above).
 - [ ] **Decide the App Privacy free-text question** (§8's 1.1 note). The rider types prose to
       `POST /drives/plan`, which reaches our server and Anthropic; nothing persists it. Transmitted vs
       *collected* is a judgement on Apple's definition and it is **founder's, not a docs edit** —

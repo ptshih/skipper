@@ -5,8 +5,9 @@
 > left is one executable guide,
 > [docs/guides/1-1-submission-sweep.md](docs/guides/1-1-submission-sweep.md)** — two builds (EAS
 > production for TestFlight, a local dev build for the desk passes), the on-device sweep, then the
-> listing. ⚠ TestFlight currently serves a PRE-1.1 client that calls the deleted `/roam/*` — broken
-> until build 17 lands. RISK-1's real drive is OFF the critical path (founder, 2026-08-03).
+> listing. ⚠ TestFlight served a PRE-1.1 client calling the deleted `/roam/*` until **build
+> `1.1.0 (19)` was uploaded 2026-08-03**; it clears once Apple finishes processing and it is attached.
+> RISK-1's real drive is OFF the critical path (founder, 2026-08-03).
 > The build truth is
 > [docs/designs/drives-first-1-1.md](docs/designs/drives-first-1-1.md) (43 decisions, 16 invariants)
 > with verified file:line coordinates in
@@ -735,7 +736,7 @@ unvalidated by construction. dev and prod are ONE Neon database; there is no sta
 - [ ] `sweep-orphans` deletes R2 objects. Its preview LISTING is byte-identical to before (every key
       is logged before any delete now), so a `--apply`-less run is a safe first check.
 
-## The version gate's store link is dead in the CURRENT window (2026-08-03) — closes with build 17
+## The version gate's store link is dead in the CURRENT window (2026-08-03) — closes with build 19
 
 `apps/api/src/version-policy.ts` justifies its App Store link with "it resolves by construction at
 the only moment it's used": the wall can only fire once a floor is raised, and a floor can only be
@@ -748,10 +749,12 @@ The case that breaks the argument is the one live today: a DEAD TESTFLIGHT CLIEN
 the gate BEFORE publication, which is the one window where its only button goes nowhere. And for a
 TestFlight tester the App Store was never the right destination anyway; TestFlight updates its own.
 
-**Founder call 2026-08-03: leave it — build 17 is imminent and closes the window.** Recorded so the
-comment's guarantee is not read as unconditional by whoever reaches for the gate mid-release. Delete
-this entry once the listing is live (the argument becomes true again) — or act on it if build 17
-slips and testers need a clean wall instead of bare 404s.
+**Founder call 2026-08-03: leave it — the 1.1 build is imminent and closes the window.** Recorded so
+the comment's guarantee is not read as unconditional by whoever reaches for the gate mid-release.
+⚠ That build is **`1.1.0 (19)`, uploaded 2026-08-03** (17 failed, 18 was cancelled — `autoIncrement`
+burns a number at QUEUE time, so never predict one). Delete this entry once the listing is live (the
+argument becomes true again) — or act on it if 19 fails review and testers need a clean wall instead
+of bare 404s.
 
 ## `apps/api` diligence pass (2026-08-02)
 

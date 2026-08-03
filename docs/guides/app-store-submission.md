@@ -21,11 +21,15 @@
 > ⚠ **NO BUILD IS ATTACHED, deliberately.** Renaming the record to 1.1.0 left build 15 — short version
 > `1.0.0`, the pre-1.1 roam client that 404s against the deployed API — still sitting on it, because
 > Apple does not detach a build when the record is renamed underneath it and warns about it nowhere.
-> It was detached on 2026-08-03; `asc:metadata` now checks for this every run. Attach **build 17** when
-> it exists. Submitting a mismatched build ships the wrong app under the right number.
+> It was detached on 2026-08-03; `asc:metadata` now checks for this every run. Attach **build 19**
+> once Apple finishes processing it. Submitting a mismatched build ships the wrong app under the
+> right number.
 >
-> ⚠ **TestFlight still ships a DEAD CLIENT** until 17 lands: the newest build is 16 (`1.0.1`,
-> 2026-07-30), pre-1.1 code calling the deleted `/roam/*`. `app.json` is at `1.1.0`.
+> ⚠ **Build `1.1.0 (19)` was uploaded 2026-08-03** and is the first 1.1 client to reach TestFlight.
+> It is 19 rather than the 17 this file used to name because `autoIncrement` burns a number at QUEUE
+> time: 17 failed on a PostHog dSYM `content_hash_mismatch` (fixed in `e529dd3`) and 18 was cancelled.
+> Until it clears processing and is attached, TestFlight still serves build 16 (`1.0.1`, 2026-07-30),
+> pre-1.1 code calling the deleted `/roam/*`.
 >
 > **Prior submission state (as of 2026-07-30), kept for the diff.** `1.0.0` was `WAITING_FOR_REVIEW`
 > (submitted 2026-07-28T21:42:22Z) with **build 15** attached; **build 16 (`1.0.1`)** is `VALID` in
