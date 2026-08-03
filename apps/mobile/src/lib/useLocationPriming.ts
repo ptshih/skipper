@@ -25,6 +25,7 @@
 // permission shell. Call its `start` from the live branch of the consumer's `start`.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ensureDrivePermission, getDrivePermission } from './gps'
+import { decideStart, routePermission } from './location-util'
 
 /** The non-proceed permission result, carrying everything either consumer needs to render its
  *  gate. `granted` lets useDrive keep its `!granted`-first split (denied vs granted-but-reduced);
@@ -89,14 +90,11 @@ export function useLocationPriming(opts: UseLocationPrimingOptions): UseLocation
     try {
       const perm = await ensureDrivePermission()
       if (!mountedRef.current) return // navigated away during the dialog — don't setState/subscribe
-      // Not granted, or granted-but-approximate → hand the caller the denial so it routes its gate.
-      // (useDrive splits on `granted`; the removed roam caller folded both into one gate object.)
-      if (!perm.granted || perm.reduced) {
-        cbRef.current.onDenied({
-          granted: perm.granted,
-          canAskAgain: perm.canAskAgain,
-          reduced: perm.reduced,
-        })
+      // Not granted, OR granted-but-approximate → hand the caller the denial so it routes its gate.
+      // The rule (and why reduced counts as a denial) lives in ./location-util, where it is tested.
+      const route = routePermission(perm)
+      if (route.kind === 'denied') {
+        cbRef.current.onDenied(route.denial)
         return
       }
       await cbRef.current.onGranted()
@@ -118,7 +116,7 @@ export function useLocationPriming(opts: UseLocationPrimingOptions): UseLocation
         // (no OS UI) so granted rolls and denied/reduced lands on the existing Settings gate.
         const cur = await getDrivePermission()
         if (!mountedRef.current) return
-        if (cur.undetermined) {
+        if (decideStart(cur) === 'prime') {
           setPriming(true)
           return
         }
