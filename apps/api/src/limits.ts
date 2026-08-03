@@ -214,6 +214,21 @@ export const PLAN_RATE_HOUR = { limit: 120, windowSec: 3600, label: 'plan-hour' 
  *  that gives a cap a home must never also be the commit that changes its number. */
 export const SAMPLE_RATE = { limit: 30, windowSec: 60, label: 'sample' } as const
 
+/** How long `GET /regions` may serve its memoized ANONYMOUS payload before re-reading.
+ *
+ *  Not a spend cap — a LOAD cap, and it belongs beside the others because it governs the same shared
+ *  resource they do. `/regions` is hit on every app launch and its answer changes only when an
+ *  operator releases a region or re-runs `curate-places`, so without a memo every cold start pays two
+ *  queries to learn something that has not changed in days. DB capacity is shared with the paid
+ *  endpoints, which is the real reason this matters: hammering the free route degrades
+ *  `/drives/plan` and `/drives/propose`.
+ *
+ *  ⚠ THE COST OF THE NUMBER IS OPERATOR-VISIBLE, not rider-visible: after releasing a region an
+ *  operator waits up to this long, PER LIVE INSTANCE, to see it in the app. 60s keeps that inside the
+ *  time it takes to switch windows. Raising it trades a slower release feedback loop for load nobody
+ *  is currently short of. */
+export const REGIONS_MEMO_TTL_MS = 60_000
+
 /* -------------------------------------------------------------------------- */
 /* The bounded read.                                                            */
 /* -------------------------------------------------------------------------- */
