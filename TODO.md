@@ -636,6 +636,9 @@ Phases, in dependency order (1 and 2 are worth doing whatever happens to the res
             line — arguably the ideal district shape, and the reason the guard should treat a sliver as
             honest rather than widening it.
       - [x] **THREE districts (not two — I under-counted) shipped point-triggered, 2026-07-30, $2.39.**
+            ⚠ Superseded by a read-only DB count on 2026-08-02: the corpus now holds **37 fused
+            tellings, all released** (32 cluster + **5** district, 75.0 min). Trust the DB, not this
+            line — the fused-generation spec's Status carries the same corrected figure.
             Virginia City (265 m), Historic Downtown Carson City (411 m) AND Historic Carson City
             (552 m) are all under `CLUSTER_MAX_TRIGGER_RADIUS_M`, so they needed no engine work and no
             release. Generated, all gates clean, RELEASED. Corpus is now **34 fused tellings**.

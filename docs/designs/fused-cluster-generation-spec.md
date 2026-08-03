@@ -5,10 +5,16 @@
 > `packages/engine/src/area.ts`, `roamPin.area`, the `X-Skipper-Client` capability channel and the
 > mobile polygon were all deleted with the mode.** The FUSED TELLING itself survives untouched (it is
 > a `narrations` row about a `poi_clusters` subject, served to drives), and so does everything in §§1–8.
-> §9 steps 1–6 are done: 31 fused clips exist (59.6 min,
-> all STAGED), the founder listen passed ("clips sound fine"), and member retirement is built and inert.
-> **The only thing left is the release**, which is now a real-riders change — 1.0 is submitted, and
-> releasing is what activates both the fused clips and the retirement of 104 member clips.
+> §9 is **DONE, INCLUDING THE RELEASE.** Counted read-only against the live DB 2026-08-02:
+> **37 fused tellings, ALL 37 RELEASED, 75.0 min** (32 cluster + 5 district), over 219 released member
+> clips whose places the fused tellings now speak for. The founder listen passed ("clips sound fine").
+> ⚠ Three earlier numbers in this file and in TODO.md disagreed with each other and with the DB —
+> "31 clips, all STAGED", "no audio exists yet", and TODO's "34 tellings / three districts". All three
+> were stale; the DB is the arbiter and the count above is it. They mattered because they read as
+> "the paid `--apply` has not run yet", which would invite paying for it twice.
+> Member RETIREMENT is a read-path behaviour (a member is suppressed at drive-build once its cluster
+> has a released telling), not a `released_at` flip — which is why those 219 rows are still released
+> and that is correct, not a leftover.
 > Steps 1–3 (staleness hash + member-set resolver, trigger position, read paths) spend nothing and are
 > green. Step 4's tool is complete and its output has been read twice on one cluster ($0.83, nothing
 > persisted); running `--apply` is the commitment point and needs a founder go. §8b's two corpus
@@ -18,7 +24,9 @@
 > over 295 members, all 64 carrying `highlights` / `dropped`, 33 with a real `subject_poi_id`. The four
 > districts are Downtown Reno (46), Historic Carson City (33), Virginia City (15), Stateline's Casino
 > Row (9). ⚠ §7.5 is now CLEARED — Carson City fused from two districts into one.
-> **No audio exists yet.** Step 4 is the first step that SPENDS and the first a rider hears. Read
+> ⚠ **"No audio exists yet" was true when this was written and is NOT true now** — see the Status
+> above: step 4 ran, and all 37 fused clips are released. Step 4 is still the step that SPENDS; it has
+> simply already spent. Read
 > `poi-legibility-layer.md` §4–§5 first — it records why the shape is what it is, including two designs
 > that were tried and replaced.
 
