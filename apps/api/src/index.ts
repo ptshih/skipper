@@ -32,12 +32,14 @@ import {
   PLAN_RATE_HOUR,
   PLAN_RATE_MINUTE,
   PROPOSE_RATE,
+  REGIONS_MEMO_TTL_MS,
   SAMPLE_RATE,
   SERVER_IDLE_TIMEOUT_SEC,
   SERVER_MAX_BODY_BYTES,
 } from './limits'
 import { planRoutes } from './plan-route'
-import { isAdmin, withSession, type ApiEnv } from './entitlements'
+import { isAdmin, type ApiEnv } from './entitlements'
+import { resolveSessionSafely } from './session'
 import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
 import { audioUnavailable, contentTypeForKey, presignGet } from './storage'
@@ -94,43 +96,81 @@ app.get('/version', (c) => c.json({ policies: VERSION_POLICIES }))
 // RELEASE-GATED, same as the drive build: a region exists in the table from the moment
 // discovery starts, long before it has a released corpus or a single endpoint anchor. Listing an
 // unreleased one hands the rider a name they can pick and then a picker with nothing in it — a
-// dead end that reads as a broken app, not as "coming soon". `withSession` (fail-open) so an admin
-// still sees staged regions in-app and can check one before releasing. (region-release-gate)
-app.use('/regions', withSession)
-app.get('/regions', async (c) => {
-  const canPreview = isAdmin(c.get('session'))
-  const rows = await withRetry(
-    () =>
-      db
-        .select({ id: regions.id, slug: regions.slug, displayName: regions.displayName, bbox: regions.bbox })
-        .from(regions)
-        .where(canPreview ? undefined : isNotNull(regions.releasedAt))
-        .orderBy(asc(regions.displayName)),
-    { label: 'regions.list' },
-  )
+// dead end that reads as a broken app, not as "coming soon". An admin can still see staged regions
+// in-app and check one before releasing — now via `?includeStaged=1` rather than a session read on
+// every request; see the opt-in note below. (region-release-gate)
+/** The memoized ANONYMOUS payload. Per-instance and in-memory — the same first-cut shape as
+ *  ./rate-limit and better-auth's own store, and acceptable for the same reason: the worst case of a
+ *  cold instance is one extra pair of queries, not a wrong answer.
+ *
+ *  ⚠ IT HOLDS THE ANONYMOUS VARIANT ONLY, and that is the load-bearing part of this whole design. The
+ *  staged (admin) response is a DIFFERENT answer to the same URL, and a cache that conflated them
+ *  would serve unreleased regions to strangers — a direct violation of "public read paths serve
+ *  released_at IS NOT NULL only". Making staged preview OPT-IN below is what removes the ambiguity:
+ *  the default path no longer depends on who is asking, so there is nothing to key the memo on. */
+let regionsMemo: { at: number; payload: Region[] } | null = null
 
+// ⚠ STAGED PREVIEW IS OPT-IN (`?includeStaged=1`), AND THAT IS A COST DECISION, NOT A UX ONE.
+// This route used to carry `app.use('/regions', withSession)`, which resolves the session on EVERY
+// request — an auth-DB read, on the separate neon-serverless Pool, that post-D16 never short-circuits
+// because the anonymous mint means every rider carries a cookie. It bought exactly one thing: an admin
+// seeing staged regions IN THE APP (the console's RegionsView shows release state, but not the rider's
+// picker as a rider meets it). That is a real need billed to the wrong people — every rider, on every
+// launch, forever.
+//
+// Opt-in moves the cost to whoever benefits. Riders never send the param and never pay the read; an
+// admin sends it from a dev build and pays it. ⚠ The param ALONE grants nothing — `isAdmin` still
+// decides, so this is not a bypass, it is a hint about whether the question is even worth asking.
+app.get('/regions', async (c) => {
+  const wantsStaged = c.req.query('includeStaged') === '1'
+
+  if (!wantsStaged && regionsMemo && Date.now() - regionsMemo.at < REGIONS_MEMO_TTL_MS) {
+    return c.json({ regions: regionsMemo.payload })
+  }
+
+  // Resolved INSIDE the handler and only when asked. Fail-open to anonymous, exactly as `withSession`
+  // did: a transient auth-DB blip must not 500 an endpoint that needs no session.
+  const canPreview =
+    wantsStaged &&
+    isAdmin(await resolveSessionSafely(() => auth.api.getSession({ headers: c.req.raw.headers })))
+
+  // ⚠ RUN IN PARALLEL. The anchors scan references nothing from the regions rows — the two only meet
+  // in `pickExampleAnchors` — so awaiting them in sequence spent an extra Neon round-trip on the app's
+  // cold-start path for nothing. The trade: the old `rows.length ? … : []` guard is gone, so a
+  // deployment with ZERO released regions now runs one indexed scan it would have skipped. That case
+  // exists once, before the first release, and is memoized away after the first request.
+  //
   // A few curated endpoint NAMES per region (./example-anchors). ONE scan for ALL regions, bucketed by
   // point-in-bbox in JS — `places` carries no region_id (geometry-first), and a per-region query would
   // be N+1 on an anonymous route every app launch hits. `featured DESC` first is what makes the scan
   // limit safe: a truncation can only ever trim a tail we were not going to publish.
-  const anchorRows = rows.length
-    ? await withRetry(
-        () =>
-          db
-            .select({
-              id: places.id,
-              name: places.name,
-              lat: places.lat,
-              lng: places.lng,
-              featured: places.featured,
-            })
-            .from(places)
-            .where(eq(places.endpointEligible, true))
-            .orderBy(desc(places.featured), asc(places.name), asc(places.id))
-            .limit(EXAMPLE_ANCHOR_SCAN_LIMIT),
-        { label: 'regions.exampleAnchors' },
-      )
-    : []
+  const [rows, anchorRows] = await Promise.all([
+    withRetry(
+      () =>
+        db
+          .select({ id: regions.id, slug: regions.slug, displayName: regions.displayName, bbox: regions.bbox })
+          .from(regions)
+          .where(canPreview ? undefined : isNotNull(regions.releasedAt))
+          .orderBy(asc(regions.displayName)),
+      { label: 'regions.list' },
+    ),
+    withRetry(
+      () =>
+        db
+          .select({
+            id: places.id,
+            name: places.name,
+            lat: places.lat,
+            lng: places.lng,
+            featured: places.featured,
+          })
+          .from(places)
+          .where(eq(places.endpointEligible, true))
+          .orderBy(desc(places.featured), asc(places.name), asc(places.id))
+          .limit(EXAMPLE_ANCHOR_SCAN_LIMIT),
+      { label: 'regions.exampleAnchors' },
+    ),
+  ])
   const byRegion = pickExampleAnchors(rows, anchorRows)
 
   // Typed against the WIRE DTO, not just returned raw: the select happens to match `Region` today, and
@@ -145,6 +185,9 @@ app.get('/regions', async (c) => {
     displayName: r.displayName,
     exampleAnchors: byRegion.get(r.id) ?? [],
   }))
+  // ⚠ Only the anonymous variant is stored. Memoizing a staged response here is the one edit that
+  // would turn this cache into a release-gate leak.
+  if (!canPreview) regionsMemo = { at: Date.now(), payload }
   return c.json({ regions: payload })
 })
 
