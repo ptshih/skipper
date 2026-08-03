@@ -1,24 +1,54 @@
-// A stop in the route list — clean rows that sit UNDER the player card and echo it.
-// Three states read at a glance, no fussy bullets or double-indicators:
-//   upcoming — stop-type glyph + name (calm)
-//   active   — a sunken "you-are-here" well (surfaceSunken) + accent glyph + bold name. Sunken
-//              (not raised) so it reads BOTH on the bare screen AND inside the raised route
-//              card. PINE accent, never amber — the player card owns the one amber glow.
-//   passed   — dimmed, with a quiet check
+// A stop in the route list — ONE line, three states, and exactly two marks: a LEADING glyph
+// that carries state-or-type and a TRAILING meta that carries length.
+//   upcoming — stop-type glyph + name + its clip length (calm)
+//   active   — a sunken "you-are-here" well (surfaceSunken) + accent glyph + bold name, and the
+//              trailing slot says NOW. Sunken (not raised) so it reads BOTH on the bare screen
+//              AND inside the raised route card. PINE accent, never amber — the player card owns
+//              the one amber glow.
+//   passed   — dimmed, its glyph replaced by the quiet check
+//
+// ⚠ WHY ONE LINE (2026-08-03). The row used to carry a `sublabel` under the name, and the player
+// fed it the stop TYPE — which on a mostly-story drive printed "Tale from the trail" eight times
+// down the card while the identical book glyph said it again on every row. Two lines of wallpaper
+// per row also cost the list its job: at 56pt only five and a half of eight stops fit, and the
+// sixth was sliced mid-glyph. The type now appears only when it ISN'T a story (`stopMeta`), and
+// the second line's height went back to showing stops. The drive-detail screen never passed a
+// sublabel at all — this is the two screens agreeing rather than a new opinion.
+//
+// The marks are split across the two ends on purpose: the check moved LEADING (a played row has
+// no use for its type) so the trailing slot can stay one column of meta all the way down.
 import { memo, useEffect } from 'react'
 import { Animated, Pressable, StyleSheet, useAnimatedValue, View } from 'react-native'
-import { radius, space } from '../theme/tokens'
+import { hit, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Icon, type IconName } from './Icon'
 import { Text } from './Text'
+import { voice } from './voice'
 
-export const STOP_ROW_HEIGHT = 56
+// One line of `body` inside the row's padding measures under the 48pt in-car tap floor, so the
+// floor IS the row height — and the player's auto-scroll math reads this same number.
+export const STOP_ROW_HEIGHT = hit.min
+
+// The row's own horizontal geometry, exported because StopList's header aligns to it: the header
+// label must start on the same line as the glyphs and end on the same line as the meta, and the
+// only way that survives a change to either is for both to read ONE expression.
+const ROW_EDGE = space.md // margin from the card edge — also where the divider rules start
+const ROW_PAD_LEFT = space.sm // clears the active tick, which sits at the row's edge
+/** Card edge → a row's CONTENT (glyph, and the header label above it). */
+export const STOP_ROW_INSET = ROW_EDGE + ROW_PAD_LEFT
+/** Card edge → a row's trailing meta (and the header's right-hand tag). */
+export const STOP_ROW_EDGE = ROW_EDGE
 
 export type StopState = 'upcoming' | 'active' | 'passed'
 
 export interface StopRowProps {
   name: string
-  sublabel?: string
+  /** Trailing meta — the clip's length, prefixed by the stop type when it isn't a story
+   *  ("2:10", "View · 1:12"). Suppressed on the active row, which says NOW instead. */
+  meta?: string
+  /** `meta` as a screen reader should hear it ("Enjoy the view, 1 minute 12 seconds"). The visible
+   *  string is a glance format — mm:ss and a clipped type word both read badly aloud. */
+  metaLabel?: string
   state?: StopState
   icon?: IconName // stop-type icon
   onPress?: () => void
@@ -31,7 +61,8 @@ export interface StopRowProps {
 
 function StopRowBase({
   name,
-  sublabel,
+  meta,
+  metaLabel,
   state = 'upcoming',
   icon,
   onPress,
@@ -66,40 +97,27 @@ function StopRowBase({
       // Selection state only on the INTERACTIVE (button) row — a 'text' row announcing "selected" is
       // semantically odd; the label suffix (", now playing") carries it for read-only rows. (audit #716)
       accessibilityState={onPress ? { selected: active } : undefined}
-      accessibilityLabel={`${name}${sublabel ? `, ${sublabel}` : ''}${active ? ', now playing' : passed ? ', played' : ''}`}
-      style={({ pressed }) => [
-        styles.row,
-        // active = a sunken "you-are-here" well — reads on the bare screen AND inside the raised
-        // route card (where a surfaceRaised chip would vanish). No border/halo, so it stays
-        // subordinate and never competes for the single amber glow.
-        active && { backgroundColor: colors.surfaceSunken },
-        pressed && onPress && styles.pressed,
-      ]}
+      accessibilityLabel={`${name}${metaLabel ? `, ${metaLabel}` : ''}${active ? ', now playing' : passed ? ', played' : ''}`}
+      style={({ pressed }) => [styles.row, pressed && onPress && styles.pressed]}
     >
-      {/* The single leading marker — the stop-type glyph. Accent when active, faded when passed. */}
-      {icon ? (
-        <Icon name={icon} size={18} color={active ? 'accent' : passed ? 'inkFaint' : 'inkDim'} />
+      {/* "YOU ARE HERE" is a TICK IN THE MARGIN, not a filled row.
+          ⚠ The active row used to paint a rounded `surfaceSunken` well. Inside the raised route card
+          that put a rounded rectangle inside a rounded rectangle — and since the active stop is the
+          FIRST row for most of a drive, its corners sat directly inside the card's own, reading as
+          two overlapping selections rather than one highlight (founder, 2026-08-03: "the double
+          selection is still there, the highlight just looks weird"). Insetting the well shrank the
+          collision without curing it, because the collision was the BOX. The row already carries
+          three unambiguous cues — accent glyph, bold name, NOW — so the box was the fourth and the
+          only one that had to negotiate with a container. A pine tick aligned to the divider rules'
+          own inset marks the row from the margin and can never nest inside anything.
+          Pine, never amber: the player card keeps the screen's one amber glow (§8). */}
+      {active ? (
+        <View style={[styles.activeTick, { backgroundColor: colors.accent }]} pointerEvents="none" />
       ) : null}
 
-      <View style={styles.body}>
-        <Text
-          variant={active ? 'bodyStrong' : 'body'}
-          color={active ? 'ink' : passed ? 'inkDim' : 'ink'}
-          numberOfLines={1}
-        >
-          {name}
-        </Text>
-        {sublabel ? (
-          // Active row paints surfaceSunken, where inkFaint is only 4.30:1 (below AA) — use inkDim
-          // (6.05:1) there; inkFaint is fine on the normal surface of upcoming/passed rows. (audit #644)
-          <Text variant="dim" color={active ? 'inkDim' : 'inkFaint'} numberOfLines={1}>
-            {sublabel}
-          </Text>
-        ) : null}
-      </View>
-
-      {/* Only the PASSED state earns a trailing mark (a quiet check) — upcoming/active stay
-          clean (the raised chip is the active cue; an upcoming row needs no affordance noise). */}
+      {/* LEADING mark — the stop-type glyph, accent when active. A PASSED row trades it for the
+          quiet check (the §9 passport-stamp): the type has stopped being useful once the stop is
+          behind you, and putting the check here keeps the trailing column pure meta. */}
       {passed ? (
         <Animated.View
           style={{
@@ -112,8 +130,32 @@ function StopRowBase({
             ],
           }}
         >
-          <Icon name="passed" size={16} color="inkFaint" />
+          <Icon name="passed" size={18} color="inkFaint" />
         </Animated.View>
+      ) : icon ? (
+        <Icon name={icon} size={18} color={active ? 'accent' : 'inkDim'} />
+      ) : null}
+
+      <Text
+        variant={active ? 'bodyStrong' : 'body'}
+        color={passed ? 'inkDim' : 'ink'}
+        numberOfLines={1}
+        style={styles.name}
+      >
+        {name}
+      </Text>
+
+      {/* TRAILING meta. The active row says NOW instead of a length — the scrubber directly below
+          is already counting this clip out loud, and a frozen "2:10" beside a running timer reads
+          as a contradiction. */}
+      {active ? (
+        <Text variant="label" color="accent">
+          {voice.player.now}
+        </Text>
+      ) : meta ? (
+        <Text variant="mono" color="inkFaint" style={styles.meta}>
+          {meta}
+        </Text>
       ) : null}
     </Pressable>
   )
@@ -130,9 +172,17 @@ const styles = StyleSheet.create({
     gap: space.md,
     minHeight: STOP_ROW_HEIGHT, // minHeight, not height — survives Dynamic Type
     paddingVertical: space.sm,
-    paddingHorizontal: space.md,
-    borderRadius: radius.md,
+    // MARGIN, not padding, matching the divider rules' own inset exactly — so the rules, the rows
+    // and the active tick all start on one line, and the text lands where the old padding put it.
+    marginHorizontal: ROW_EDGE,
+    // Clears the active tick, which sits at the row's left edge on the rule line. Applied to EVERY
+    // row, not just the active one, so a stop becoming active never nudges its own name sideways.
+    paddingLeft: ROW_PAD_LEFT,
   },
-  body: { flex: 1, gap: 1 }, // deliberate 1pt name↔sublabel gap (off-grid; a grid step is too loose)
+  // The active tick: a pine rule in the row's left margin. Absolute so it costs the row no layout
+  // and the other rows keep their glyph alignment (a reserved column would indent all eight).
+  activeTick: { position: 'absolute', left: 0, top: space.sm, bottom: space.sm, width: 3, borderRadius: 2 },
+  name: { flex: 1, minWidth: 0 }, // the meta is fixed-width; the NAME is what truncates
+  meta: { flexShrink: 0 },
   pressed: { opacity: 0.7 },
 })

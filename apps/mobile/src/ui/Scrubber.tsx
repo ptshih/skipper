@@ -19,6 +19,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { PanResponder, StyleSheet, View } from 'react-native'
 import { formatMmssMs } from '@skipper/engine'
+// The spoken twin of the mm:ss face, shared with the itinerary's row meta (see lib/labels).
+import { spokenLength } from '../lib/labels'
 import { IN_CAR_MAX_FONT_SCALE, border, hit, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Text } from './Text'
@@ -40,13 +42,6 @@ const JOG_MS = 15_000 // a11y increment/decrement = the same 15s the skip button
 const CAUGHT_UP = 0.02 // drop the optimistic committed frac once the clock is within 2%
 
 const clamp01 = (n: number) => (n < 0 ? 0 : n > 1 ? 1 : n)
-
-const spokenTime = (ms: number) => {
-  const t = Math.max(0, Math.round(ms / 1000))
-  const m = Math.floor(t / 60)
-  const s = t % 60
-  return `${m} minute${m === 1 ? '' : 's'} ${s} second${s === 1 ? '' : 's'}`
-}
 
 export function Scrubber({
   positionMs,
@@ -138,7 +133,7 @@ export function Scrubber({
           min: 0,
           max: Math.round(durationMs / 1000),
           now: Math.round((frac * durationMs) / 1000),
-          text: spokenTime(frac * durationMs),
+          text: spokenLength(frac * durationMs),
         }}
         accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
         onAccessibilityAction={(ev) => {

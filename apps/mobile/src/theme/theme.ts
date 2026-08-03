@@ -18,6 +18,10 @@ export interface ThemeColors {
   surfaceRaised: string // cards / placards
   surfaceSunken: string // inset wells (timer chips, route track bed)
   surfaceFade: string // `surface` at 0 alpha — the transparent end of scroll-edge fades
+  // `surfaceRaised` at 0 alpha. A scroll-edge fade must dissolve into whatever it sits ON, and a
+  // list that scrolls INSIDE a card (the itinerary) sits on the placard, not the app background —
+  // fading to `surfaceFade` there would smear paper over the card and read as a rendering fault.
+  surfaceRaisedFade: string
   keyline: string // bright inner rule that fakes a carved-sign edge
   // text
   ink: string // primary text
@@ -116,6 +120,7 @@ export const lightTheme: Theme = {
     surfaceRaised: palette.paperRaised,
     surfaceSunken: palette.paperSunken,
     surfaceFade: fade(palette.paper),
+    surfaceRaisedFade: fade(palette.paperRaised),
     keyline: palette.paperKeyline,
     ink: palette.inkBrown,
     inkDim: palette.inkFaded,
@@ -155,6 +160,7 @@ export const darkTheme: Theme = {
     surfaceRaised: palette.nightRaised,
     surfaceSunken: palette.nightSunken,
     surfaceFade: fade(palette.night),
+    surfaceRaisedFade: fade(palette.nightRaised),
     keyline: palette.nightKeyline,
     ink: palette.parchment,
     inkDim: palette.parchFaded,

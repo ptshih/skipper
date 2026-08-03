@@ -93,8 +93,10 @@ copy already exists (`voice.ts:111-118` + `useRoam.ts:763`), but it is inline in
 so **extract rather than invent**.
 
 **2.4 — Pay off the deflection.** Have the planner emit `deflected: string[]` alongside the route; the
-client substring-matches against stop names and adds a sublabel — *"you asked about this one."*
-`StopRow` already takes `sublabel` (`:21`, `:92-96`). Right now the deflection is a promise nothing
+client substring-matches against stop names and marks the row — *"you asked about this one."*
+⚠ The `sublabel` prop this originally leaned on is GONE (2026-08-03): the row is one line now, and its
+one text slot is `meta`, which carries the clip length. So this needs a real decision rather than a free
+prop — either a third slot or a mark that isn't text. Right now the deflection is a promise nothing
 redeems. Keep the match strict and let it fail invisibly; do **not** add a fuzzy matcher.
 
 **2.5 — Curtain-up: one baked line at "Let's roll."** ~8 place-free departure lines, synthesized once,

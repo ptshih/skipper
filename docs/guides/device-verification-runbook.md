@@ -174,15 +174,16 @@ verified — they share the build, so do them together.
   Watch-for: the rig showing an amber halo (only the Start CTA owns this screen's one glow) or the
   rig animating (it's static); the headline falling back to plain bold (Alfa Slab not loaded); the
   dashed trail rendering solid on iOS. (`apps/mobile/app/drives/[id]/index.tsx:213-245`)
-- [ ] **Headline + summary wrap, never truncate.** Do: open a drive with a long name (or bump
-  Dynamic Type larger). Expect: the slab headline grows onto 2–3 lines fully visible; the static
-  explainer string `voice.drive.blurb` ("The skipper talks as you reach each stop on the real roads.")
-  sits under the Start CTA and wraps in full — no `…` anywhere, nothing cut at the gutter. Note: there
-  is **no** per-drive summary paragraph (no `summary` field on the drive DTO); the only body text is
-  that fixed blurb. Watch-for: an ellipsis (a stray `numberOfLines`); the blurb truncating; text
-  colliding with the screw-dots at large type.
-  (`apps/mobile/app/drives/[id]/index.tsx:355`, `src/ui/voice.ts:46`)
-- [ ] **Place names are cleaned.** Do: read the `THE ROUTE · N STOPS` itinerary and the home teaser.
+- [ ] **Headline wraps, never truncates.** Do: open a drive with a long name (or bump Dynamic Type
+  larger). Expect: the slab headline grows onto 2–3 lines fully visible — no `…` anywhere, nothing cut
+  at the gutter. Note: there is **no** per-drive summary paragraph (no `summary` field on the drive
+  DTO), and as of 2026-08-03 no explainer under the Start CTA either — `voice.drive.blurb` was deleted
+  because the player's own ready card (`voice.drive.readyBody`) says the same thing one tap later, in
+  the persona's voice, where the rider can act on it. The only body text left on this screen is the
+  save hint, which is ONE line by design. Watch-for: an ellipsis (a stray `numberOfLines`); the save
+  hint wrapping to two lines; text colliding with the screw-dots at large type.
+  (`apps/mobile/app/drives/[id]/index.tsx`, `src/ui/voice.ts` `offline.saveHint`)
+- [ ] **Place names are cleaned.** Do: read the drive-detail itinerary and the home teaser.
   Expect: no name ends in `, California` / `, Nevada` — names read as spoken ("Emerald Bay", "Tahoe
   Keys"). Watch-for: a state suffix slipping through. Note: `cleanPlaceName` strips **only** the
   `, <US State>` suffix — *not* `(disambiguation)` (those are filtered at generation, never a stop);
@@ -241,11 +242,14 @@ Preview is the open funnel; the wall is the **live drive + offline download** fo
 
 Same component (`apps/mobile/src/ui/StopList.tsx`) in two modes.
 
-- [ ] **Detail = one card, page scrolls.** Do: on tour detail, scroll to `THE ROUTE · N STOPS`.
-  Expect: a single raised card of hairline-ruled rows (glyph + name + faded type sublabel); rules are
-  **inset**, not full-bleed; the card has no internal scrollbar — the *page* scrolls and the card
-  grows to fit; no row highlighted (all "upcoming"). Watch-for: rows as separate floating cards; the
-  card scrolling internally; a row looking active/checked on the static screen.
+- [ ] **Detail = one card, page scrolls.** Do: on drive detail, scroll to the itinerary (under the
+  hint + List/Map row). Expect: a single raised card of hairline-ruled ONE-LINE rows (glyph + name +
+  a mono clip length on the right; a type word — `View` / `Pit stop` — appears before the length only
+  on a non-story stop); rules are **inset**, not full-bleed, and the rows share that inset; the card
+  has no internal scrollbar — the *page* scrolls and the card grows to fit; no row highlighted (all
+  "upcoming"). Watch-for: rows as separate floating cards; the card scrolling internally; a row
+  looking active/checked on the static screen; the same type label repeating down every row (the
+  wallpaper this replaced).
   (`apps/mobile/app/drives/[id]/index.tsx:283`, `src/ui/StopList.tsx:105`)
 - [ ] **Player = fixed shell, rows scroll inside.** Do: open the player (Preview, or dev `⋯` → "Sim
   drive"); drag up/down inside the route card between the trail (top) and the player dock (bottom).
@@ -256,17 +260,32 @@ Same component (`apps/mobile/src/ui/StopList.tsx`) in two modes.
 - [ ] **Rows clip to the rounded corners.** Do: slowly drag so a row is half-in/half-out at the top
   and bottom edges. Expect: the partial row is cut along the card's corner radius — the cream edge
   stays a clean rounded rect, nothing spills past the corners. Watch-for: content leaking over square
-  corners (`overflow:hidden` not honoured on iOS for the rounded card); a sunken-well background
-  painting past the edge. (`apps/mobile/src/ui/StopList.tsx:117`, `src/ui/Card.tsx:23`)
-- [ ] **Active "now" row reads as a sunken well.** Do: play a preview/sim drive; find the current
-  stop's row. Expect: a subtly **darker, inset** well (sits *below* the card surface), pine/accent
-  glyph (never amber), bold name; passed rows dimmed with a quiet check; only one active at a time.
-  Watch-for (the real risk): surfaceSunken-vs-raised contrast too low on the bright cream theme
-  outdoors; the row looking *raised* (a chip) instead of sunken; a black-hole well in dark/night
-  mode; the highlight lagging the audio by seconds. (`apps/mobile/src/ui/StopRow.tsx:73-79`)
-- [ ] **No white scroll indicator.** Do: flick the player itinerary. Expect: no vertical scrollbar on
-  the cream card; the only "more below" cue is rows clipping at the rounded edge. Watch-for: a stark
-  white bar flashing on the right. (`apps/mobile/src/ui/StopList.tsx:96-98`)
+  corners (`overflow:hidden` not honoured on iOS for the rounded card).
+  (`apps/mobile/src/ui/StopList.tsx`, `src/ui/Card.tsx`)
+- [ ] **Active "now" row is a TICK, not a filled row.** Do: play a preview/sim drive; find the current
+  stop's row. Expect: a short **pine rule in the row's left margin** (aligned with the divider rules'
+  own inset), pine/accent glyph (never amber), bold name, and `NOW` where other rows show their
+  length; passed rows dimmed with the check in place of the glyph; only one active at a time.
+  ⚠ There is deliberately **no background fill** (2026-08-03): the sunken well this replaced drew a
+  rounded rect inside the card's own rounded rect and read as two overlapping selections, worst on the
+  first row — which is the active one for most of a drive. Watch-for: any highlight box returning; the
+  tick colliding with the glyph; the highlight lagging the audio by seconds.
+  (`apps/mobile/src/ui/StopRow.tsx`)
+- [ ] **★ Checks mean HEARD, not "the car got there".** Do: run a sim drive at **8×** and watch the
+  list while the first clip narrates. Expect: exactly one `NOW` row; every stop the car has already
+  rolled past but whose clip is still QUEUED stays plain "upcoming" — no check — and the header
+  counter matches the number of checks at all times. ⚠ 8× is the deliberate stress case: the road
+  runs 8× faster while audio still plays at 1×, so the fire-queue backs up several stops deep, which
+  is what surfaced the original bug (checks on stops nobody had heard). Watch-for: a check appearing
+  before its clip has played; the counter running ahead of the checks (they are ONE set —
+  `playedSeqs` — so disagreement means someone re-wired one of them to `firedSeqs`).
+  (`apps/mobile/src/lib/useDrive.ts` `playedSeqs`, `app/drives/[id]/play.tsx` `stopViews`)
+- [ ] **No white scroll indicator; edges dissolve.** Do: flick the player itinerary. Expect: no
+  vertical scrollbar on the cream card; a clipped row at the top/bottom **fades** into the card
+  instead of being sliced at a hard edge, and the fade appears ONLY when there is genuinely more to
+  scroll. Watch-for: a stark white bar flashing on the right; a fade over a short, non-overflowing
+  list (dissolving real content at rest); a fade in the wrong paper — it must dissolve into the CARD
+  (`surfaceRaised`), not the app background. (`apps/mobile/src/ui/StopList.tsx`, `src/ui/EdgeFade.tsx`)
 - [ ] **★ P1 — itinerary stays browsable WHILE a clip plays.** Do: start a sim drive (8× so stops
   fire fast); while a clip is narrating, drag down to later stops and **hold** your view for 5+
   seconds, including across a stop transition. Expect: smooth drag; the list stays where you put it,

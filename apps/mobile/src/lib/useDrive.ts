@@ -227,6 +227,9 @@ export interface DriveStopView {
   /** Raw POI coordinates — for the map's stop markers. */
   lat: number
   lng: number
+  /** How long the skipper talks at this stop — the itinerary's trailing meta. Nullable because a
+   *  manifest clip can ship without a measured duration; the row then shows nothing there. */
+  durationMs?: number | null
   /** The clip's frozen source credit, for the player's SourceCredit line. */
   attribution?: Attribution[]
 }
@@ -241,7 +244,10 @@ export interface UseDrive {
   hostName: string
   stops: DriveStopView[]
   totalStops: number
-  firedCount: number
+  /** How many stops the rider has HEARD — `playedSeqs.size`. Named for what it counts: it was
+   *  `firedCount` (triggers fired) while the list's checks came from the same set, so the two
+   *  agreed by accident; they now agree on purpose. */
+  playedCount: number
   /** The route as [lng, lat] pairs — for the map overlay's route line. */
   polyline: [number, number][]
 
@@ -249,8 +255,23 @@ export interface UseDrive {
   progress: Animated.Value
   /** The stop whose clip is currently loaded/playing, or null between stops (ducked-quiet). */
   activeSeq: number | null
-  /** Seqs whose trigger has fired (for the stop list's passed/active states). */
-  firedSeqs: Set<number>
+  /**
+   * Seqs the rider has actually HEARD — a clip that ran to its end, or one that was skipped for
+   * having no audio. This is what the itinerary's "passed" check means.
+   *
+   * ⚠ The fired set is deliberately NOT exposed beside this one. It stays internal (it feeds
+   * `nextSeq` and the engine's bookkeeping) precisely so no screen can reach for "the road got
+   * there" when it means "the rider heard it" — which is the bug this pair was split to kill.
+   *
+   * ⚠ NOT the same set as `firedSeqs`, and conflating them was a real bug (founder, 2026-08-03:
+   * "a bunch of stops are getting checked off even though they haven't played"). A trigger fires when
+   * the CAR reaches a stop; the clip then joins a FIFO queue and plays only once the current one
+   * finishes. Any gap between those two clocks shows up as checkmarks for stops nobody has heard.
+   * The simulator's 8× makes it unmissable — the road runs at 8× while audio still runs at 1×, so the
+   * queue backs up several stops deep — but it is NOT a sim-only artifact: `handleFix` already warns
+   * when several stops fire on ONE fix, which is the same thing at real speed on a tight cluster.
+   */
+  playedSeqs: Set<number>
   /** First not-yet-fired stop, for the "ROLLING · next stop: X" strip. */
   nextSeq: number | null
 
@@ -351,7 +372,10 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   const [paused, setPaused] = useState(false)
   const [done, setDone] = useState(false)
   const [activeSeq, setActiveSeq] = useState<number | null>(null)
+  // "The road reached this stop" — INTERNAL (feeds `nextSeq` + trigger bookkeeping); never the
+  // itinerary's checkmarks. See `playedSeqs` on the returned interface for why the two are split.
   const [firedSeqs, setFiredSeqs] = useState<Set<number>>(new Set())
+  const [playedSeqs, setPlayedSeqs] = useState<Set<number>>(new Set())
   // The last clip that ACTUALLY PLAYED — the "replay that" target. State (not a ref) so `canReplay`
   // re-renders the Replay button as it appears/disappears between stops. (replay-last-stop)
   const [lastCompletedSeq, setLastCompletedSeq] = useState<number | null>(null)
@@ -571,6 +595,11 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       // skipped/stalled-before-start stop (sawFresh false) never becomes replayable — you can't
       // re-hear silence (replay-last-stop §4/§7).
       if (sawFresh.current) setLastCompletedSeq(_seq)
+      // HEARD — the itinerary's checkmark. This is the one place a clip ends, for both outcomes that
+      // count as "the rider is done with this stop": it played out, or it was skipped for having no
+      // audio (a silent stop the road still went past). A REPLAY lands here too and re-adds a seq
+      // already in the set, which is a no-op by construction.
+      setPlayedSeqs((prev) => (prev.has(_seq) ? prev : new Set(prev).add(_seq)))
       setActiveSeq(null)
       pump()
     },
@@ -667,6 +696,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     setActiveSeq(null)
     setLastCompletedSeq(null)
     setFiredSeqs(new Set())
+    setPlayedSeqs(new Set())
     setStallNote(null)
     setPaused(false)
     setDone(false)
@@ -1233,6 +1263,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
         stopType: s.stopType,
         lat: s.lat,
         lng: s.lng,
+        durationMs: s.audioDurationMs,
         attribution: s.attribution,
       })) ?? [],
     [data],
@@ -1253,11 +1284,13 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     hostName: data?.hostName ?? '',
     stops,
     totalStops: stops.length,
-    firedCount: firedSeqs.size,
+    // The header counter counts what the rider has HEARD, so it can never disagree with the checks
+    // in the list right below it — one claim, one set.
+    playedCount: playedSeqs.size,
     polyline: data?.polyline ?? [],
     progress: dot,
     activeSeq,
-    firedSeqs,
+    playedSeqs,
     nextSeq,
     nowPlaying,
     buffering,

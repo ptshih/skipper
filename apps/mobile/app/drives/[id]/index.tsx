@@ -19,7 +19,7 @@ import {
   type DownloadDirState,
   type DownloadProgress,
 } from '@/lib/offline'
-import { cleanPlaceName } from '@/lib/labels'
+import { cleanPlaceName, clipLength, spokenLength, stopLabel, stopMeta } from '@/lib/labels'
 import { useTheme } from '@/theme'
 import { border, space } from '@/theme/tokens'
 import {
@@ -486,6 +486,13 @@ export default function DriveDetailScreen() {
       stops.map((s) => ({
         seq: s.seq,
         name: cleanPlaceName(s.name ?? ''),
+        // Same trailing meta as the in-drive itinerary — the two screens share StopRow and now
+        // share what it says. Here the length also answers the question the hint invites ("tap a
+        // stop to hear it" → for how long?).
+        meta: [stopMeta(s.form), clipLength(s.durationMs)].filter(Boolean).join(' · '),
+        metaLabel: [stopLabel(s.form), s.durationMs ? spokenLength(s.durationMs) : '']
+          .filter(Boolean)
+          .join(', '),
         icon: stopIcon(s.form),
         state: preview.activeSeq === s.seq ? 'active' : 'upcoming',
       })),
@@ -556,11 +563,17 @@ export default function DriveDetailScreen() {
       }}
     />
   )
-  // The route label + the List/Map toggle — the slim header shared by both views.
+  // The route's ONE chrome row — what to do with the list (left) + the List/Map toggle (right).
+  //
+  // ⚠ The "THE ROUTE · N STOPS" label that used to lead this row is gone, and the hint moved up onto
+  // it: that was three stacked lines of chrome standing between the rider and the first stop, and the
+  // label was the one carrying no information — the placard above already stamps the stop count, and
+  // "the route" is what a column of place names visibly is. The hint stayed because it's the only one
+  // that says something the screen doesn't.
   const routeHead = (
     <View style={styles.previewHead}>
-      <Text variant="label" color="inkFaint">
-        {`THE ROUTE · ${stops.length} STOPS`}
+      <Text variant="dim" color="inkFaint" style={styles.previewHint}>
+        {voice.preview.hint}
       </Text>
       <Segmented
         accessibilityLabel={voice.preview.viewLabel}
@@ -574,11 +587,15 @@ export default function DriveDetailScreen() {
       />
     </View>
   )
-  const hintLine = (
-    <Text variant="dim" color={preview.unplayableSeq != null ? 'danger' : 'inkFaint'}>
-      {preview.unplayableSeq != null ? voice.preview.unplayable : voice.preview.hint}
-    </Text>
-  )
+  // The unplayable-clip report keeps its OWN full-width line rather than riding the row above: it is
+  // three times the hint's length, and squeezed into the column beside the toggle it would wrap to a
+  // ragged stack. It costs a line only in the state that earns one.
+  const unplayableLine =
+    preview.unplayableSeq != null ? (
+      <Text variant="dim" color="danger">
+        {voice.preview.unplayable}
+      </Text>
+    ) : null
 
   return (
     <View style={styles.root}>
@@ -591,7 +608,7 @@ export default function DriveDetailScreen() {
           {stackScreen}
           <View style={styles.mapHeader}>
             {routeHead}
-            {hintLine}
+            {unplayableLine}
           </View>
           <View
             style={[
@@ -705,12 +722,12 @@ export default function DriveDetailScreen() {
           native mini-preview below (tap a stop to hear it). The dev simulator lives in the header ⋯ menu
           so this stays glanceable; offline download does NOT — it earned a main-path button below,
           because hiding it made streaming the silent default on roads that can't stream. */}
-          <View style={styles.ctaGroup}>
-            <Button icon="car" title={voice.cta.drive} onPress={startDrive} />
-            <Text variant="dim" color="inkFaint" align="center">
-              {voice.drive.blurb}
-            </Text>
-          </View>
+          {/* ⚠ The caption under this button ("The skipper talks as you reach each stop on the real
+          roads.") is GONE, not moved: the player's own ready card says the same thing one tap later
+          — "Mount up and start when you're on the road. I'll pipe up when we reach the good stuff."
+          — at the moment the rider can act on it, and in the persona's voice rather than as a
+          product description. Two captions plus two buttons were pushing the route below the fold. */}
+          <Button icon="car" title={voice.cta.drive} onPress={startDrive} />
 
           {/* Save for offline — a REAL button on the main path. It lived only in the header ⋯ menu,
           which meant the default first drive STREAMED and every dead-zone stop was dropped in
@@ -738,7 +755,7 @@ export default function DriveDetailScreen() {
 
           {/* THE ROUTE — browse the stops as a List or a Map; tap any stop / pin to hear that one clip. */}
           {routeHead}
-          {hintLine}
+          {unplayableLine}
           <StopList items={listItems} onPressItem={playStop} />
 
           {/* Spacer: reserve the fixed dock's measured height at the tail of the scroll so the last stop
@@ -844,14 +861,19 @@ const styles = StyleSheet.create({
   savedChip: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
   ctaGroup: { gap: space.xs }, // the bold Start CTA + its tucked caption read as one unit
   // The route label + the List/Map toggle share a row; the toggle sizes to its content on the right.
+  // ⚠ NO flexWrap here. Segmented's segments are flex:1, so with nothing bounding its width the
+  // toggle claims the whole row, wraps the hint onto a line of its own and then stretches to full
+  // width on the next one — which is exactly what the old `THE ROUTE` label was accidentally
+  // preventing by taking up space. The toggle gets an explicit width instead; the hint takes the
+  // slack. (Seen in the simulator, 2026-08-03.)
   previewHead: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    flexWrap: 'wrap',
     gap: space.sm,
   },
-  viewToggle: { minWidth: 168 }, // the two segments read comfortably without stretching full-width
+  previewHint: { flex: 1, minWidth: 0 }, // takes the slack; never pushes the toggle off-gutter
+  viewToggle: { width: 176, flexShrink: 0 }, // the two segments read comfortably at this width
   // MAP MODE (full-bleed, non-scrolling): a slim padded header over an edge-to-edge map that owns the
   // pan/zoom gesture (a MapView can't share the vertical drag with a ScrollView).
   mapHeader: {

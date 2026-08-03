@@ -17,14 +17,20 @@ export interface EdgeFadeProps {
   bottom?: boolean
   /** Band height — taller = a softer, longer dissolve. */
   height?: number
+  /** Which surface the clipped content sits on — a screen (`surface`, the default) or a card
+   *  the list scrolls INSIDE (`raised`, the itinerary). The gradient must start in the color
+   *  actually behind the edge or the strip paints a band of the wrong paper. */
+  on?: 'surface' | 'raised'
 }
 
-export function EdgeFade({ top = true, bottom = true, height = space.xxl }: EdgeFadeProps) {
+export function EdgeFade({ top = true, bottom = true, height = space.xxl, on = 'surface' }: EdgeFadeProps) {
   const { colors } = useTheme()
-  // `surface` opaque AT the screen edge → `surfaceFade` toward the content. 180deg fades
+  const base = on === 'raised' ? colors.surfaceRaised : colors.surface
+  const out = on === 'raised' ? colors.surfaceRaisedFade : colors.surfaceFade
+  // The surface, opaque AT the edge → its own 0-alpha twin toward the content. 180deg fades
   // downward (top edge), 0deg fades upward (bottom edge).
-  const fadeDown = `linear-gradient(180deg, ${colors.surface}, ${colors.surfaceFade})`
-  const fadeUp = `linear-gradient(0deg, ${colors.surface}, ${colors.surfaceFade})`
+  const fadeDown = `linear-gradient(180deg, ${base}, ${out})`
+  const fadeUp = `linear-gradient(0deg, ${base}, ${out})`
   return (
     <>
       {top ? (

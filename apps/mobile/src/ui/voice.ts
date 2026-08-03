@@ -253,8 +253,11 @@ export const voice = {
     readyBodyPartial: (missing: number): string =>
       `${missing} ${missing === 1 ? 'stop' : 'stops'} didn’t finish saving, so I’ll be quiet when we pass ` +
       `${missing === 1 ? 'it' : 'them'}. The rest of the drive is all here.`,
-    blurb: 'The skipper talks as you reach each stop on the real roads.', // drive-detail explainer under the Start CTA
     sim: 'SIMULATED DRIVE', // the on-device sim setup — no real GPS yet
+    // The same fact as a TAG, for the player header where it shares a line with the stop counter.
+    // The header used to spell out "live drive" / "simulated drive" on its own line; only the
+    // simulator half was ever news, so only that half survived.
+    simTag: 'SIM',
     nextStop: 'next stop', // "ROLLING · next stop: <name>"
     // Location-permission gate (live drive only): three states — can re-ask, must visit Settings
     // (denied), or location’s on but only APPROXIMATE (iOS Precise Location off → fixes too coarse
@@ -282,6 +285,9 @@ export const voice = {
     buffering: 'Warming up the skipper…',
     stall: 'Couldn’t load that stop. Skipping ahead.',
     nowPlaying: 'NOW PLAYING', // emoji kept OUT of label strings (custom font = tofu)
+    // The itinerary ROW's version of the same idea. Short because it shares a line with a stop
+    // name: the card can afford "NOW PLAYING", a 48pt row next to "Round Hill Village" cannot.
+    now: 'NOW',
     paused: 'PAUSED', // a held clip — the NOW card must not keep saying "NOW PLAYING"
     // The one beat the pause control was missing: he's still in the car while you're stopped. Pairs with
     // the CTAs, which already speak as him ('Hold here' / 'Roll on again'). Deliberately says NOTHING
@@ -415,7 +421,11 @@ export const voice = {
     // (which keeps its "Lake Tahoe" deliberately) there was nothing here to template FROM. Naming a
     // region would simply have been wrong for every drive outside it. §7 holds either way: this says
     // something true about the ROAD, which is route information, not a fact about a place on it.
-    saveHint: 'These roads have dead zones, so best done before you lose signal.',
+    // ⚠ ONE LINE, deliberately (founder, 2026-08-03) — it is a caption tucked under a button, and the
+    // two-line version it replaced wrapped mid-thought and cost the itinerary a row of screen. The
+    // full argument still gets made where it can act on it: the unsaved-drive alert in front of Start.
+    // "Signal's thin" is the same phrasing `error.download` uses — one road, one voice.
+    saveHint: 'Signal’s thin out there — best saved now.',
     // The one warning in front of a live drive that hasn't been saved. NEVER a block: the rider may
     // be on a road with good signal, or just auditioning from the couch. `useDrive`'s stall watchdog
     // skips any clip that won't load, so an unsaved drive through a dead zone loses those stops

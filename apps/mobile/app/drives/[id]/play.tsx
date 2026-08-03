@@ -14,14 +14,13 @@ import { track } from '@/lib/analytics'
 import { isSignedIn, useSession } from '@/lib/auth'
 import { isOfflineNow } from '@/lib/connectivity'
 import { useSimMode } from '@/lib/sim-mode'
-import { stopLabel } from '@/lib/labels'
+import { clipLength, spokenLength, stopLabel, stopMeta } from '@/lib/labels'
 import { useReducedMotion, useTheme } from '@/theme'
 import { border, duration, radius, space } from '@/theme/tokens'
 import {
   AccountGate,
   Badge,
   Button,
-  Divider,
   Icon,
   LocationGate,
   LocationPrime,
@@ -173,15 +172,30 @@ export default function DriveScreen() {
   const stopViews = useMemo(
     () =>
       d.stops.map((s) => {
+        // ⚠ PLAYED, not FIRED. A trigger fires when the car reaches a stop; the clip then queues
+        // behind whatever is talking. Keying the check on `firedSeqs` therefore stamped stops the
+        // rider hadn't heard yet — several deep under the sim's 8×, where the road runs 8× faster
+        // than audio can ever play, and occasionally on a tight cluster at real speed too. A queued
+        // stop is still UPCOMING: it hasn't happened yet as far as the rider's ears are concerned.
+        // ('done' keeps stamping the whole list — the drive is over, and the completion cascade
+        // depends on every row being passed.)
         const state: 'passed' | 'active' | 'upcoming' =
-          d.phase === 'done' || (d.firedSeqs.has(s.seq) && s.seq !== d.activeSeq)
+          d.phase === 'done' || (d.playedSeqs.has(s.seq) && s.seq !== d.activeSeq)
             ? 'passed'
             : s.seq === d.activeSeq
               ? 'active'
               : 'upcoming'
-        return { seq: s.seq, name: s.name, stopType: s.stopType, lat: s.lat, lng: s.lng, state }
+        return {
+          seq: s.seq,
+          name: s.name,
+          stopType: s.stopType,
+          lat: s.lat,
+          lng: s.lng,
+          durationMs: s.durationMs,
+          state,
+        }
       }),
-    [d.stops, d.phase, d.firedSeqs, d.activeSeq],
+    [d.stops, d.phase, d.playedSeqs, d.activeSeq],
   )
   // Don't yank the list back while the rider is browsing the itinerary: mark a drag live on
   // begin, and keep it "browsing" for a grace window after they let go so a stop transition
@@ -600,12 +614,15 @@ export default function DriveScreen() {
         }}
       />
 
+      {/* ONE header band, and the drive's name gets ALL of it. The mode line ("live drive" — chrome
+          stating the normal case on every real drive) is gone entirely, and the counter moved DOWN
+          into the itinerary card's own title row: it counts that card's checks, so it belongs with
+          them, and a two-name A→B label needs the full width to stay on one line. (founder,
+          2026-08-03: the counter beside the title was "valuable space that pushes the title to 2
+          lines".) The SIM tag rides with the counter — it's a dev flag, not a headline. */}
       <View style={styles.header}>
         <Text variant="title" color="ink">
           {d.driveName}
-        </Text>
-        <Text variant="dim" color="inkDim">
-          {driveMode === 'live' ? 'live drive' : 'simulated drive'} · {d.firedCount}/{d.totalStops} stops
         </Text>
       </View>
 
@@ -624,6 +641,10 @@ export default function DriveScreen() {
           layout above.) */}
       <StopList
         scroll
+        // Phrased "N OF M" rather than "N/M" so a screen reader says it correctly (a slash reads as
+        // punctuation) — the same string does both jobs, which beats a second spoken-only prop.
+        title={`${d.playedCount} of ${d.totalStops} stops`}
+        titleRight={driveMode === 'sim' ? voice.drive.simTag : undefined}
         scrollRef={listRef}
         onScrollBeginDrag={onScrollBeginDrag}
         onScrollEndDrag={onScrollSettled}
@@ -633,16 +654,25 @@ export default function DriveScreen() {
         items={stopViews.map((s) => ({
           seq: s.seq,
           name: s.name,
-          sublabel: stopLabel(s.stopType),
+          // The trailing meta: how long he talks here, and the stop TYPE only when it isn't a
+          // story (`stopMeta` returns '' for those — the row's glyph already says it).
+          meta: [stopMeta(s.stopType), clipLength(s.durationMs)].filter(Boolean).join(' · '),
+          // Spoken, the type is never redundant: a screen reader gets no glyph, so the FULL label
+          // is what carries it — and mm:ss reads badly aloud.
+          metaLabel: [stopLabel(s.stopType), s.durationMs ? spokenLength(s.durationMs) : '']
+            .filter(Boolean)
+            .join(', '),
           icon: stopIcon(s.stopType),
           state: s.state,
         }))}
       />
 
-      {/* ── PLAYER CARD ── now-playing + scrubber + transport, contained in ONE elevated
-          card anchored to the bottom edge. A dashed rule fences it off from the itinerary
-          above; the card sizes to its content (no fixed reserve) so it hugs the bottom. */}
-      <Divider dashed style={styles.divider} />
+      {/* ── PLAYER CARD ── now-playing + scrubber + transport, contained in ONE elevated card
+          anchored to the bottom edge; it sizes to its content (no fixed reserve) so it hugs the
+          bottom. The dashed rule that used to fence it off from the itinerary is GONE: both are
+          raised cards on paper with a gutter between them, so the fence was a third edge drawn
+          between two that already read — and one more horizontal band on a screen whose problem
+          was horizontal bands. */}
 
       {/* Offline flag (M7): a quiet "playing from download" chip when the drive is running off the
           saved copy. Centered, just above the card — mirrors the map mode's top chip. */}
@@ -694,12 +724,14 @@ export default function DriveScreen() {
 const styles = StyleSheet.create({
   // The card header's trailing cluster: the stop-type badge + the ⓘ source affordance, side by side.
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  header: { paddingHorizontal: space.gutter, paddingTop: space.md, gap: space.xs },
+  header: { paddingHorizontal: space.gutter, paddingTop: space.md },
+  // Equal air above and below so the trail reads as its own band between the drive's name and the
+  // itinerary, rather than crowding the title it sits under (matches `listCard`'s marginTop).
   track: { marginHorizontal: space.gutter, marginTop: space.md },
   // paddingBottom stacks with the safe-area inset where one exists, and supplies a minimum of
   // air on zero-bottom-inset devices (button-nav Android, SE-class) so the card + its "Pull
   // over" ghost never land flush on the bezel.
-  cardWrap: { paddingHorizontal: space.gutter, marginTop: space.sm, paddingBottom: space.sm },
+  cardWrap: { paddingHorizontal: space.gutter, marginTop: space.md, paddingBottom: space.sm },
   buffering: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   gpsSearch: {
     flexDirection: 'row',
@@ -722,10 +754,9 @@ const styles = StyleSheet.create({
   listChip: { alignItems: 'center', marginTop: space.md }, // centers the offline chip in list mode
   simRow: { paddingHorizontal: space.gutter, marginTop: space.lg, gap: space.sm },
   simBtns: { flexDirection: 'row', gap: space.sm },
-  divider: { marginTop: space.sm, marginBottom: space.sm }, // fence between the list and the player dock
   // The fixed itinerary shell: fills the slack between the trail and the player dock, with the
   // gutter margins the rest of the screen uses. Only its rows scroll (StopList `scroll`).
-  listCard: { flex: 1, marginHorizontal: space.gutter, marginTop: space.sm },
+  listCard: { flex: 1, marginHorizontal: space.gutter, marginTop: space.md },
   // ── Map mode: a full-bleed map with the player floating as a peek/expand sheet ──
   mapFill: { flex: 1 },
   // Top-of-map status stack (offline flag + GPS-searching cue) — absolutely positioned, centered.

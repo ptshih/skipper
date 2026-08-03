@@ -231,9 +231,11 @@ All token-driven and theme-aware. Compose these; don't restyle from scratch.
 - **`RouteTrack`** — the signature motif: a dashed trail with the **car token**
   gliding along it. Driven by an `Animated.Value` in `[0,1]` (JS-driven — keep it
   the only thing animating per frame).
-- **`StopRow`** — a stop with three glance-states: `upcoming` (calm glyph + name),
-  `active` (a sunken "you-are-here" well + **pine** accent glyph + bold name — never amber;
-  the player card owns the one glow), `passed` (dimmed + a quiet check). Composed by `StopList`.
+- **`StopRow`** — ONE line, three glance-states, two marks: a LEADING glyph + a TRAILING `meta`
+  (the clip's length, prefixed by the stop type only when it isn't a story). `upcoming` (calm
+  glyph + name + length), `active` (a **pine** tick in the left margin + accent glyph + bold name +
+  `NOW` — never amber, and never a filled row: a highlight BOX inside the raised route card read as
+  two nested selections), `passed` (the check replaces the glyph; name dimmed). Composed by `StopList`.
 - **`StopList`** — the route itinerary: one card of `StopRow`s, hairline-ruled, shared by
   drive detail (`app/drives/[id]`) and the player. A `scroll` mode makes it a fixed shell
   (rows scroll inside, the player) vs content-sized (the host page scrolls, drive detail).
