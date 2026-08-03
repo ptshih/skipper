@@ -1,6 +1,7 @@
 # The home cold open — four CTAs and no primary
 
-> **Status:** DESIGN PASS, 2026-08-03. **Not greenlit; nothing here is built by this doc.** Captured
+> **Status:** ✅ **GREENLIT 2026-08-03 — BUILD IN PROGRESS.** The build plan is §15 and the
+> enforcement plan for its hazards is §16; read both before touching `apps/mobile`. Captured
 > from three founder notes taken live against the shipped 1.1 home screen, measured on device
 > (iPhone 17 Pro Max, dusk) at `5148063`. ⚠ **A second agent was mid-edit in
 > `ExampleAsks.tsx`/`FilterChip.tsx`/`index.tsx` while this was written**, working note 2 by a
