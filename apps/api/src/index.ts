@@ -116,13 +116,23 @@ let regionsMemo: { at: number; payload: Region[] } | null = null
 // and it silently broke the feature it claimed to preserve, because the mobile client never learned to
 // send the param. An admin simply stopped seeing staged regions in the app.
 //
-// The session read IS a real cost — an auth-DB round-trip on the separate neon-serverless Pool, which
-// post-D16 never short-circuits because the anonymous mint means every rider carries a cookie. But it
-// is paid on every `withSession` route, not just this one, so the fix belongs at the auth layer
-// (better-auth's `session.cookieCache`), not in a query param here. That is a founder call: cookie
-// caching delays REVOCATION by its maxAge, and the sharp edge for us is account deletion — a cached
-// cookie validating against a user `purgeUserData` just erased would write an orphan of exactly the
-// kind INV-4 exists to prevent. See TODO.
+// ⚠ THE PARAGRAPH THAT USED TO SIT HERE WAS OBSOLETE WITHIN FIVE MINUTES OF BEING WRITTEN, and it
+// misled a later reader into repeating it — so it is corrected rather than left. It said the session
+// read is "an auth-DB round-trip that never short-circuits", and proposed `session.cookieCache` as a
+// FUTURE founder call. That call was made: cookie caching landed in the very NEXT commit (`7bd7614`,
+// 2026-08-02 22:03, five minutes after `ecc30f7` wrote the paragraph) and ./auth now runs
+// `cookieCache: { enabled: true, maxAge: 60 }`.
+//
+// What the session read ACTUALLY costs, read off the installed better-auth 1.6.23
+// (`dist/api/routes/session.mjs`) rather than inferred:
+//   • NO session-token cookie, or a bad signature → `return null` immediately. No DB read at all.
+//   • valid token AND a valid `sessionData` cookie (HMAC-verified, unexpired, matching version) →
+//     answered FROM THE COOKIE. No DB read.
+//   • valid token but `sessionData` missing, expired or version-stale → falls through to the auth DB.
+// So the common rider path is not paying a round-trip per request, and cookieless traffic is free.
+// The revocation tradeoff the old paragraph flagged is real and was accepted deliberately — it is
+// documented at the `cookieCache` block in ./auth, with `test/auth-cookie-cache.test.ts` pinning
+// `maxAge` so it cannot drift.
 /** ⚠ EXPORTED FOR THE MOUNT TEST ONLY, and declared HERE rather than with the other named limiters
  *  further down: those are grouped after the Better Auth mount because that is where they are used,
  *  and a `const` referenced above its declaration is a TDZ throw at boot, not a lint error. */
@@ -130,9 +140,10 @@ export const regionsLimiter = rateLimit(REGIONS_RATE)
 
 // ⚠ REGISTERED ABOVE `withSession`, AND THAT IS THE WHOLE POINT — the same shape of ordering bug as
 // the /drives/plan mount. Hono runs middleware in REGISTRATION order, so below the `withSession` line
-// this limiter would still return 429s while capping nothing worth capping: the auth-DB round-trip it
-// exists to bound would already have been paid before it ever ran. The memo below covers the two
-// corpus queries; it does NOT cover the session read, which happens on every request. See ./limits.
+// this limiter would still return 429s while capping nothing worth capping: the session resolve it
+// exists to bound would already have run. The memo below covers the two corpus queries and nothing
+// else; the session resolve is a separate cost on a separate pool. What is actually unbounded there
+// is narrower than "every request" — see the REGIONS_RATE block in ./limits for the exact path.
 app.use('/regions', regionsLimiter)
 app.use('/regions', withSession)
 app.get('/regions', async (c) => {

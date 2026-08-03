@@ -242,13 +242,25 @@ export const SAMPLE_RATE = {
 /** GET /regions — the last anonymous, uncapped, DB-touching route.
  *
  *  ⚠ WHAT IT CAPS IS NOT THE QUERIES THE MEMO ALREADY COVERS. `REGIONS_MEMO_TTL_MS` bounds the two
- *  corpus reads to one pair per instance per minute, so those were never the exposure. The uncapped
- *  cost is `withSession`, which runs on EVERY request BEFORE the memo is consulted and pays an
- *  auth-DB round-trip on the separate neon-serverless Pool — and post-D16 it never short-circuits,
- *  because the anonymous mint means every rider arrives holding a cookie. That round-trip is the
- *  thing this bounds, and it is why the mount order in ./index.ts is load-bearing rather than
- *  cosmetic: registered BELOW `app.use('/regions', withSession)` this limiter would cap nothing that
- *  matters, since the round-trip it exists to bound would already have been paid.
+ *  corpus reads to one pair per instance per minute, so those were never the exposure. The other cost
+ *  is `withSession`, which runs on every request BEFORE the memo is consulted, on the separate
+ *  neon-serverless auth Pool.
+ *
+ *  ⚠ AND BE PRECISE ABOUT THAT COST, because the first version of this comment was NOT — it claimed
+ *  every request pays an auth-DB round-trip, inherited from a ./index.ts paragraph that `7bd7614`
+ *  obsoleted five minutes after it was written. Read off the installed better-auth 1.6.23
+ *  (`dist/api/routes/session.mjs`), with `cookieCache: { enabled: true, maxAge: 60 }` in ./auth:
+ *  no session-token cookie or a bad signature returns null with NO DB read; a valid token plus a
+ *  valid `sessionData` cookie is answered FROM THE COOKIE with no DB read. The DB is reached only
+ *  when a validly-signed token arrives WITHOUT usable `sessionData`.
+ *
+ *  That is still worth capping, and it is the sharper reason rather than the weaker one: the missing
+ *  half is ATTACKER-CONTROLLED. Anyone may mint an anonymous session (D16) and then send only the
+ *  session-token cookie, omitting `sessionData`, forcing a fresh auth-DB lookup on every request for
+ *  as long as they like. Honest riders mostly ride the cookie; a deliberate caller does not have to.
+ *  It is also why the mount order in ./index.ts is load-bearing rather than cosmetic: registered
+ *  BELOW `app.use('/regions', withSession)` this limiter would cap nothing that matters, because the
+ *  resolve it exists to bound would already have run.
  *
  *  ⚠ THE LOOSEST BUCKET IN THIS FILE, DELIBERATELY — 4x SAMPLE_RATE, and the reason is the failure
  *  mode, not the cost. Limits key on CLIENT IP, and CGNAT / corporate NAT put many unrelated riders

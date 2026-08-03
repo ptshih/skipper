@@ -852,12 +852,38 @@ schema-introspected and mutation-checked.
       ⚠ **The premise above was WRONG in a way worth keeping, because it argued the item down.** "The
       memo absorbs a burst, so an attacker gets cached bytes rather than DB load" is true of the two
       CORPUS queries and false of the request as a whole: `app.use('/regions', withSession)` runs on
-      EVERY request, BEFORE the memo is consulted, and pays an auth-DB round-trip on the separate
-      neon-serverless Pool — which post-D16 never short-circuits, because the anonymous mint means
-      every rider arrives holding a cookie. The uncapped cost was never the cached bytes. The limiter
-      is therefore mounted ABOVE `withSession`, and that order is the whole value: below it, the cap
-      would still return 429s while bounding nothing. Pinned + MUTATION-CHECKED in
+      EVERY request, BEFORE the memo is consulted, on the separate neon-serverless auth Pool. The
+      limiter is therefore mounted ABOVE `withSession`, and that order is the whole value: below it,
+      the cap would still return 429s while bounding nothing. Pinned + MUTATION-CHECKED in
       `test/limiter-mounts.test.ts` (swapping the two mounts fails exactly one test).
+      ⚠ **AND THE FIRST FIX GOT THE COST WRONG TOO — corrected 2026-08-03, same day.** It claimed every
+      request pays an auth-DB round-trip, taken on trust from an `index.ts` paragraph that `7bd7614`
+      obsoleted FIVE MINUTES after `ecc30f7` wrote it (cookie caching landed in the very next commit;
+      ./auth runs `cookieCache: { enabled: true, maxAge: 60 }`). Verified against the installed
+      better-auth 1.6.23 instead: no cookie or a bad signature → null, no DB; valid token + valid
+      `sessionData` → served from the cookie, no DB; DB only when a validly-signed token arrives
+      WITHOUT usable `sessionData`. The cap still earns its place, on the sharper ground that the
+      remaining path is **attacker-controlled** — mint an anonymous session, then send the token and
+      omit `sessionData`, and every request reaches the auth DB. ⚠ The lesson, since it bit twice in
+      one session: a comment asserting a runtime cost is a CLAIM, not a source. Check the code it
+      describes.
+- [ ] **The SAME auth-DB path is uncapped on the `/drives` owner routes — found by the 2026-08-03
+      guard-ordering audit, NOT fixed (a new rider-facing cap is a founder call, CLAIM/STOP).**
+      `driveRoutes.use('*', withSession)` runs for every `/drives/*` route, but only `POST /` carries
+      a limiter (`createDriveLimiter`). `GET /`, `GET /:id`, `POST /:id/assets/sign` and
+      `DELETE /:id` have none — so the attacker-controlled resolve described above (a minted anonymous
+      token sent without `sessionData`) reaches the auth DB on those routes too, uncapped, and only
+      THEN gets its 401 from `requireAccount`. ⚠ `withSession` cannot simply be moved below
+      `requireAccount` to dodge this — `requireAccount` READS the session that `withSession` sets, so
+      that order is required, not incidental. The options are a limiter on the `/drives` mount or
+      accepting it; both are decisions, not refactors. Cheapest framing: it is the same class as the
+      `/regions` item above, on routes that are already behind a wall.
+      ⚠ Everything ELSE the audit checked came back correct and deliberate: the CORS preflight sits
+      ahead of the Better Auth handler; the plan and propose limiters sit above the `/drives` sub-app
+      mount (pinned); `requireAccount` precedes `createDriveLimiter` on `POST /drives` by design;
+      `withFreshSession` runs after the limiter, so a throttled request never pays the fresh resolve;
+      and in `apps/admin`, `csrf()` precedes `requireAdmin` deliberately with both ahead of every
+      route. No second instance of the `/regions` bug exists.
       Generous on purpose — caps key on client IP and CGNAT puts many riders behind one address, on
       the launch path. The graceful-degrade note above still holds (`region-cache.ts`).
 

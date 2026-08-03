@@ -79,9 +79,11 @@ describe('the paid anonymous paths carry their rate limiter', () => {
 
   test('GET /regions is capped too', () => {
     // Same family as /sample: no vendor charge, a LOAD cap. What it bounds is not the two corpus
-    // queries — REGIONS_MEMO_TTL_MS already caps those to one pair per instance per minute — but the
-    // `withSession` auth-DB round-trip, which runs on every request and, post-D16, never
-    // short-circuits because every rider arrives holding an anonymous cookie.
+    // queries — REGIONS_MEMO_TTL_MS already caps those — but the `withSession` resolve that runs
+    // ahead of the memo. ⚠ Not "an auth-DB round-trip on every request": with cookieCache on, the
+    // common rider path is answered from the cookie. The uncapped path is the attacker-controlled
+    // one — a minted anonymous token sent WITHOUT `sessionData` reaches the DB every time. The exact
+    // mechanism, read off the installed better-auth source, is in ../src/limits.
     expect(handlersOn('/regions')).toContain(regionsLimiter)
   })
 })
@@ -90,9 +92,9 @@ describe('⚠ /regions — the limiter must run BEFORE the session read', () => 
   test('regionsLimiter is registered above withSession', () => {
     // THE ORDER IS THE WHOLE VALUE HERE. Both are mounted on the exact same path, so a refactor that
     // reorders these two lines leaves every test green, every type sound, and the cap still returning
-    // 429s — while capping nothing that matters, because the auth-DB round-trip this exists to bound
-    // would already have been paid before the limiter ran. The only visible symptom would be DB load
-    // that nothing explains. Mutation-checked: swapping the two mounts in ../src/index fails this.
+    // 429s — while capping nothing that matters, because the session resolve this exists to bound
+    // would already have run. The only visible symptom would be auth-DB load that nothing explains.
+    // Mutation-checked: swapping the two mounts in ../src/index fails this.
     const chain = handlersOn('/regions')
     expect(chain).toContain(regionsLimiter)
     expect(chain).toContain(withSession)
