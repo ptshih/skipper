@@ -250,6 +250,19 @@ desk passes — its §0 owns what they can't prove, so don't re-argue it here.
   question and decide from what they SAY; cite what you found so the next agent can re-check (a real miss:
   forcing the bun `linker = "hoisted"` papered over an undeclared `expo-font` import the default isolated
   linker had correctly flagged).
+- **Count, authorise, and ACT from ONE expression.** The most-repeated bug class here is two copies of
+  "the same" set drifting: `prune-corpus --restore` counted on one predicate and UPDATEd on another
+  (restored nothing, printed `✓ N`); the admin confirm counted VISIBLE rows while the body posted
+  hand-picked ids. Both fixes deleted the second copy — if a dialog names what a job does, one value.
+- **A run that did nothing must not settle GREEN; a paid one reports what it BILLED, not what it
+  planned.** `main()` returned void so `runJob` settled `{ok:true}`: a run that gated, billed and
+  synthesized NOTHING showed green — as did a judge that never ran, and a truncated verdict scoring
+  1.0. The `--max-cost` tally counted one synth per clip while synthesis RE-ROLLS retakes, under-counting
+  exactly the spend it bounded. Absence of failure is not success; assert the work happened.
+- **A new gate is blind to some SUBJECT KIND — name which before shipping.** The diversity lint could
+  never see a second clip; the diversity context could not see FUSED tellings; the fused generator was
+  blind to the REGION; renaming a member left its fused clip FRESH. Solo-vs-cluster and per-region are
+  the axes that keep getting missed — green on one kind proves nothing about the other.
 - **Comments explain WHY, not WHAT.** The dense decision-journal style (rationale, dated founder calls,
   source citations, `⚠` gotchas) is deliberate and earns its keep — KEEP it; "self-documenting code instead"
   would delete the project's memory. But never restate what a line already says, and never bake a VOLATILE
