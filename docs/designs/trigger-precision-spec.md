@@ -14,9 +14,19 @@
 > `headingConeDeg:120`, `leadSeconds:15`, the 4 h per-POI cooldown, `recedeMarginM:60`) with it. Read
 > all of those as a dated record of what the numbers were compared against. **The remaining work is
 > the DRIVE half and it is unchanged**: step 2's `ANCHORED_TRIGGER_RADIUS_M` is still a conservative
-> 250 m awaiting the on-device re-drive, and steps 4 (stored approach heading) and 5 (background-GPS
-> pause) are still open. ⚠ The re-drive this spec waits on has also gotten harder
-> to schedule: roam was the road-tested mode, so the validation loop is now a created drive.
+> 250 m, and steps 4 (stored approach heading) and 5 (background-GPS pause) are still open.
+>
+> ⚠ **Amended 2026-08-03: what step 2 is WAITING FOR changed.** It no longer needs a re-drive plus an
+> analyst — it needs **one recorded trace**. `packages/sim/src/sweep.ts --trace` replays a real drive
+> through the same pipeline the phone runs and reads the whole floor × lead curve, which a car cannot
+> do (a trip samples one parameter value). The recorder that produces the trace is built and dev-gated
+> (`@skipper/engine` trace.ts); nothing has been recorded yet, so the tool currently runs on synthetic
+> input and says so in its own output. See [desk-drive-harness.md](desk-drive-harness.md).
+>
+> ⚠ **And the question itself was mis-stated here.** `effectiveRadiusM = max(floor, speed·lead)`, so
+> at the baseline lead this constant is **dead weight above ~47 mph** — it only ever governed the
+> low-speed case, which is exactly where Edgewood, Harrah's, Van Sickle and Zephyr Cove sit. The open
+> question is "what should the floor be at town/approach speed", not "what should the floor be".
 
 ## Origin
 
