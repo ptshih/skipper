@@ -41,7 +41,10 @@ import { loadPlayback, resignPlayback } from './offline'
 // hook nothing and keeps "which stops SHOULD have audio" a single definition shared with the
 // downloader — a second local predicate is how the count and the download disagree.
 import { expectedAudioSeqs } from './offline-util'
-import { getDrivePermission, liveSource, simulatedSource, type FixSubscription } from './gps'
+import Constants from 'expo-constants'
+import { getDrivePermission, liveSource, simulatedSource, type FixSubscription, type RawFix } from './gps'
+import { TraceRecorder, type TraceMeta } from './trace-recorder'
+import { saveTrace } from './trace-export'
 import { useLocationPriming } from './useLocationPriming'
 import { useDriveMusic } from './driveMusic'
 import { voice } from '@/ui'
@@ -397,9 +400,25 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   // This run's analytics trace (see DriveTrace). Idle until beginDrive replaces it — `startedAt: 0`.
   const trace = useRef<DriveTrace>(newTrace('sim', false, 0))
 
+  // The black box for THIS run (dev-only, live drives only). Its metadata is captured at beginDrive
+  // and carried here rather than read at flush time, which is what keeps `teardownSource`'s dep array
+  // EMPTY — this callback is upstream of finishDrive → pump → handleFix, the one the GPS source
+  // captures once, so a dep added here silently rebuilds the whole chain mid-drive.
+  const recorderRef = useRef<{ rec: TraceRecorder; meta: TraceMeta } | null>(null)
+
   const teardownSource = useCallback(() => {
     subRef.current?.stop()
     subRef.current = null
+    // Flush the trace HERE, at the single choke point every ending passes through — an abandoned
+    // drive ("Pull over", a back-out) is worth recording at least as much as a completed one, since
+    // "why did I give up on it" is exactly the question a trace answers. Best-effort by construction:
+    // a failed write must never take the drive down with it.
+    const held = recorderRef.current
+    recorderRef.current = null
+    if (held && held.rec.count > 0) {
+      held.rec.stop()
+      saveTrace(held.rec.envelope(held.meta))
+    }
   }, [])
 
   // ---- load: drive geometry + presigned audio + the audio session ----
@@ -694,9 +713,31 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     // partial opts object that READS as if it were configured. (audit #933)
     engineRef.current = new TriggerEngine(triggerable)
     setDriving(true)
+    // ── the black box. Live drives only (a synthetic drive's fixes are already reproducible from the
+    // polyline, so recording them banks nothing), and __DEV__ only — a raw GPS trace is precise
+    // location data about a real person, and shipping the recorder to riders is a consent question,
+    // not a flag flip. See trace-recorder.ts. Attached BEFORE the accuracy gate so the trace keeps the
+    // fixes the gate threw away; a post-gate trace always replays clean and therefore proves nothing.
+    let onRaw: ((raw: RawFix) => void) | undefined
+    // `driveId` is narrowed here rather than asserted: `data` only ever loads for a real id, but the
+    // type does not know that, and a trace stamped with an empty id cannot be matched to a route.
+    if (mode === 'live' && __DEV__ && driveId) {
+      const rec = new TraceRecorder()
+      recorderRef.current = {
+        rec,
+        meta: {
+          driveId,
+          label: data.driveName,
+          recordedAt: new Date().toISOString(),
+          appVersion: Constants.expoConfig?.version,
+          polyline: data.polyline,
+        },
+      }
+      onRaw = rec.record
+    }
     const source =
       mode === 'live'
-        ? liveSource(data.polyline)
+        ? liveSource(data.polyline, onRaw)
         : simulatedSource(data.polyline, { mph: SIM_MPH, timeScale: fast ? SIM_FAST_SCALE : 1 })
     subRef.current = source(handleFix, handleEnd, handleSourceError)
     // ── drive_started. The engine is armed and the fix source is subscribed: this is the one line in

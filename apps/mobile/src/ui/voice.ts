@@ -408,8 +408,25 @@ export const voice = {
     developerLoading: 'Checking your credentials…',
     developerLocked: 'These tools are for admins only.',
     simModeLabel: 'SIMULATED GPS',
+    // ⚠ This used to claim it "replays a RECORDED Tahoe drive through the REAL engine". Both halves
+    // oversold it and the second was the dangerous one: `simulatedSource` walks the polyline
+    // SYNTHETICALLY and emits finished fixes, so it never touches the live mapping pipeline (the
+    // accuracy gate, the iOS -1 sentinels, the projection cursor). Copy that invites you to trust a
+    // desk pass more than it deserves is worse than no copy. docs/designs/desk-drive-harness.md.
     developerHint:
-      'Simulated GPS replays a recorded Tahoe drive through the real engine — test the live drive from the couch, no car required. Takes effect next time you start one.',
+      'Simulated GPS walks this drive’s route at a steady speed and fires the stops — no car required. It tests the triggering and the audio, not the GPS itself. Takes effect next time you start a drive.',
+    tracesLabel: 'DRIVE TRACES',
+    // Says what it is FOR, because the value is not obvious from the file list: a trace is the only
+    // way a drive that already happened can be driven again.
+    tracesHint:
+      'Every live drive records its raw GPS to this phone. Share one to your Mac and it can be replayed and re-analysed forever — that’s how one real drive keeps paying off.',
+    tracesEmpty: 'No traces yet. Take a live drive and one lands here.',
+    tracesShare: 'Share',
+    tracesDelete: 'Delete',
+    tracesDeleteConfirmTitle: 'Delete this trace?',
+    tracesDeleteConfirmBody: 'It’s the only copy, and the drive it came from can’t be re-recorded.',
+    tracesDeleteConfirmCancel: 'Keep it',
+    tracesDeleteConfirmOk: 'Delete',
     simModeReal: 'Real GPS',
     simModeSimulated: 'Simulated',
     simModeA11y: 'GPS source',
