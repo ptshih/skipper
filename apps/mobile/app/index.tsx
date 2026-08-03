@@ -56,6 +56,7 @@ import {
   appendSkipper,
   lastRouteOf,
   resetTranscript,
+  seedAdjust,
   seedExample,
   toWire,
   type Turn,
@@ -72,7 +73,6 @@ import {
   Badge,
   Button,
   Card,
-  ClipBar,
   Composer,
   ConversationScreen,
   Divider,
@@ -84,7 +84,7 @@ import {
   SkeletonGroup,
   RegionChip,
   Ridgeline,
-  RegionPicker,
+  useRegionPicker,
   type IconName,
   SuggestionRow,
   ListenRow,
@@ -147,8 +147,8 @@ export default function HomeScreen() {
   // Never inline `!!session` anywhere below.
   const signedIn = isSignedIn(session)
   // ONE expo-audio player for the whole conversation, keyed by CARD id (see useRoutePreview). The
-  // screen owns the audio; PreviewCard and ClipBar stay pure presentation, same rule as everything
-  // else here that spends or holds state.
+  // screen owns the audio; PreviewCard stays pure presentation, same rule as everything else here
+  // that spends or holds state.
   const preview = useRoutePreview()
   // Drives the offline INVERSION below (MY DRIVES first, no composer) and the reconnect self-heal.
   // Fails OPEN — an unknown verdict means online — so the degraded layout only ever appears on a
@@ -395,23 +395,12 @@ export default function HomeScreen() {
   // Blur, not unmount — home stays mounted under a push (that is what keeps the transcript alive).
   useFocusEffect(useCallback(() => () => preview.stop(), [preview.stop]))
 
-  // The first clip of the conversation starting SHRINKS the scroll viewport: `clipBar` appears in
-  // the footer and takes ~80pt off the bottom of the ScrollView. That is a LAYOUT change and not a
-  // content change, so ConversationScreen's `onContentSizeChange` never fires — nothing scrolls, and
-  // the card's "Make this drive" CTA plus the disclosure line under it slide under the fold at the
-  // exact moment the rider is being sold (confirmed on device). `scrollSignal` is the sanctioned way
-  // to ask for the re-pin: it overrides where the rider had scrolled to, which is only ever allowed
-  // for an action the RIDER took, and tapping the play disc is one.
-  //
-  // ⚠ EDGE-TRIGGERED (null → non-null), never "a clip is loaded". The bar mounts once and stays for
-  // the rest of the conversation, so a later tap costs no height and must not yank back a rider who
-  // deliberately scrolled up mid-clip — the one thing ConversationScreen's pin rule exists to stop.
-  const clipBarShownRef = useRef(false)
-  useEffect(() => {
-    const shown = preview.activeCardId != null
-    if (shown && !clipBarShownRef.current) bumpScroll()
-    clipBarShownRef.current = shown
-  }, [bumpScroll, preview.activeCardId])
+  // ⚠ THE FIRST-CLIP SCROLL BUMP IS GONE WITH THE BAR IT COMPENSATED FOR (founder, 2026-08-03). It
+  // existed because mounting the pinned ClipBar took ~80pt off the bottom of the ScrollView — a
+  // LAYOUT change, which `onContentSizeChange` never sees — sliding the card's CTA under the fold at
+  // the exact moment the rider was being sold. With the card's own disc the only transport, playing
+  // a clip changes no heights at all, so re-pinning the scroll on first play would now be an
+  // unprompted yank rather than a fix. If a pinned transport ever returns, this comes back with it.
 
   // Self-heal on the offline→online edge: the loads that failed out here re-run the moment the bars
   // come back, so a rider who drives back into signal never has to know to tap the retry. Guarded on
@@ -746,6 +735,20 @@ export default function HomeScreen() {
     composerRef.current?.focus()
   }, [bumpScroll])
 
+  /** "Change it up" — hand the rider back to the conversation with the skipper actually ASKING for
+   *  the revision, then put the cursor where the answer goes.
+   *
+   *  ⚠ FOCUS ALONE WAS NOT ENOUGH, and the reason is worth keeping: it works — the field really does
+   *  take focus — but on the simulator a connected hardware keyboard suppresses the software one, so
+   *  the entire response was a caret in an unchanged-looking field and the button was reported as
+   *  dead (founder, 2026-08-03). A seeded turn answers on any device, costs nothing (no model call,
+   *  like the example replies), and tells the rider WHICH things are changeable. The repeat-tap guard
+   *  lives in `seedAdjust`, not here — the button is on every card and stays live after a tap. */
+  const adjustDrive = useCallback(() => {
+    setTurns((ts) => seedAdjust(ts, voice.proposal.adjustSay))
+    focusComposer()
+  }, [focusComposer])
+
   /** The outage retry: re-send the SAME transcript, unchanged. Its last entry is still the rider's
    *  line, so nothing needs re-typing and the wire shape is still legal. */
   const retryTurn = useCallback(() => {
@@ -765,10 +768,18 @@ export default function HomeScreen() {
     void runTurn(turns, true)
   }, [focusComposer, runTurn, turns])
 
-  /** "Start fresh" — back to the cold open. It must not touch MY DRIVES and must not fetch anything
-   *  paid. Autofocus IS correct here (the rider explicitly asked for an empty field) but it cannot
-   *  happen from in here — see `resetSeq` and the effect below. */
-  const startFresh = useCallback(() => {
+  /** Wipe the conversation back to the cold open. It must not touch MY DRIVES and must not fetch
+   *  anything paid.
+   *
+   *  ⚠ ONE reset with TWO entrances — "Start fresh" and a region SWITCH. What a stale conversation
+   *  holds is a long list (an in-flight turn and its two seq guards, a playing preview clip,
+   *  materialized cards, the say buffer, the outage flag), and a second copy would drift the first
+   *  time one more is added to it.
+   *
+   *  The only difference is the KEYBOARD, hence `focusComposer`: "Start fresh" is a rider explicitly
+   *  asking for an empty field, so it earns the focus; picking a region is not, and raising the
+   *  keyboard there would cover the region's own example asks — the very thing that just changed. */
+  const resetConversation = useCallback(({ focusComposer }: { focusComposer: boolean }) => {
     turnAbortRef.current?.abort()
     // ⚠ Bump BEFORE clearing state, and take over the in-flight turn's guards. The bump makes any
     // turn still in flight discard its own continuation (convSeq) — which also means its `finally`
@@ -796,8 +807,14 @@ export default function HomeScreen() {
     // and in that branch the composer is not rendered at all — so `composerRef.current` is null for
     // the whole of this handler and the focus() that used to sit here has never once fired. Publish
     // the intent; the effect below claims it after the composer is back on screen.
-    setResetSeq((n) => n + 1)
+    if (focusComposer) setResetSeq((n) => n + 1)
   }, [applyBuf, preview.stop])
+
+  /** "Start fresh" — the `done` wrap-up bar's control. */
+  const startFresh = useCallback(
+    () => resetConversation({ focusComposer: true }),
+    [resetConversation],
+  )
 
   // The deferred autofocus. Runs after the commit that put the composer back, which is the earliest
   // moment `composerRef.current` exists.
@@ -860,7 +877,15 @@ export default function HomeScreen() {
   // stated here rather than inherited from the offline branch below, because it is the one condition
   // that must gate the SAMPLE too — a presigned clip cannot stream in a dead zone.
   const coldOpen = riderTurnCount === 0 && !isOffline
-  const showExamples = coldOpen && !plannerDown && !sending
+  // A region we KNOW has no curated endpoints. ONE expression, because it decides two things that
+  // must never disagree: the opening line ("I don't run any roads around here yet") and whether the
+  // example asks appear at all. They did disagree — the open-ended "Let the skipper pick" row names
+  // no anchor, so it survived a region with zero of them and sat directly under the sentence saying
+  // he can't help here, offering a drive he'd have to refuse (founder, 2026-08-03).
+  // ⚠ `region &&` is load-bearing: before `/regions` lands `region` is undefined, and that is NOT an
+  // uncurated region — it reads as the normal open, which is what it becomes for every curated one.
+  const uncuratedRegion = !!region && region.exampleAnchors.length === 0
+  const showExamples = coldOpen && !plannerDown && !sending && !uncuratedRegion
 
   // ⚠ LAZY INITIALISER, NOT A LIVE CALL — the contract `shouldShowListenRow` states, and §16's guard
   // for it: read once at mount so the answer cannot change underneath a rider. Home stays MOUNTED
@@ -876,7 +901,44 @@ export default function HomeScreen() {
   // One region is a short answer to that question, not the absence of one.
   // Single-sourced so the chip's affordance and the sheet's existence can never disagree.
   const hasRegions = (regions?.length ?? 0) > 0
-  const [regionPickerOpen, setRegionPickerOpen] = useState(false)
+
+  // The region picker is the PLATFORM's sheet now (see ui/RegionPicker), so there is no `visible`
+  // state to hold and nothing to mount: the chip calls this and the sheet dismisses itself.
+  const pickRegion = useRegionPicker()
+  const openRegionPicker = useCallback(() => {
+    pickRegion({
+      regions: regions ?? [],
+      selectedId: regionId,
+      onSelect: (id) => {
+        // ⚠ SWITCHING REGION CLEARS THE CONVERSATION (founder, 2026-08-03). This REVERSES the earlier
+        // "keep it — the planner is handed one regionId per turn, so the next turn simply goes to the
+        // new curated set", and the reason is correctness rather than tidiness: a proposal card
+        // already in the transcript holds ANCHOR IDS from the region the rider just left. Left on
+        // screen, its "Make this drive" would build a drive in the old region while the chip above
+        // names the new one — and the server cannot catch that, because the ids it receives are
+        // perfectly valid, just for somewhere else. The old note's worry (punishing a rider who
+        // answers "which country" after describing a drive) is real but smaller: it costs them a
+        // re-type, where the other costs them the wrong drive and a non-refundable credit.
+        //
+        // Only on a REAL change: re-picking the region you are already on must wipe nothing. And the
+        // FIRST pick has no conversation to invalidate — the composer is disabled until a region
+        // exists (`sending || !regionId`), so there is nothing behind it but the cold open.
+        if (regionId !== null && id !== regionId) resetConversation({ focusComposer: false })
+        setRegionId(id)
+        // Persist the choice, or `pickRegionId` drags them back to the first region on the next
+        // cold start — the cache is the ONLY record that this rider prefers a different one.
+        // Same payload the load writes, so the offline card names the region they actually chose.
+        const chosen = regions?.find((r) => r.id === id)
+        if (chosen) {
+          writeCachedRegion({
+            regionId: chosen.id,
+            displayName: chosen.displayName,
+            exampleAnchors: chosen.exampleAnchors,
+          })
+        }
+      },
+    })
+  }, [pickRegion, regions, regionId, resetConversation])
 
   // ── The rotating placeholder ────────────────────────────────────────────────────────────────
   // The rows teach WHAT kinds of thing to ask for; this teaches HOW CASUALLY you may say it. Every
@@ -905,7 +967,13 @@ export default function HomeScreen() {
     const id = setInterval(() => setTick((n) => n + 1), PLACEHOLDER_ROTATE_MS)
     return () => clearInterval(id)
   }, [rotating])
-  const placeholder = placeholderAt(placeholderExamples, tick, voice.plan.composerPlaceholder)
+  // ⚠ THE SAME `coldOpen` THAT VETOES THE ROTATION SWAPS THE COPY — one expression, deliberately, so
+  // the two cannot drift into "the cycle stopped but the teaching line stayed". Tearing the interval
+  // down freezes the example that was up; without this the reply box would keep showing an ask shape
+  // ("two hours, no highways") under a skipper turn that just asked the rider a question.
+  const placeholder = coldOpen
+    ? placeholderAt(placeholderExamples, tick, voice.plan.composerPlaceholder)
+    : voice.plan.composerReplyPlaceholder
 
   // Burn the one launch the rider is owed only when the row was ACTUALLY on screen. Keyed on the same
   // two conditions that render it, so the offline home — which carries no listen row — can never spend
@@ -976,7 +1044,7 @@ export default function HomeScreen() {
       // ⚠ And this is NOT the hypothetical "until region 2 ships" it was written as: an admin is
       // served STAGED regions (apps/api GET /regions, `canPreview`), so a merely SEEDED second region
       // puts the signed-in founder straight into the multi-region path on the live app.
-      onPress={hasRegions ? () => setRegionPickerOpen(true) : undefined}
+      onPress={hasRegions ? openRegionPicker : undefined}
     />
   )
 
@@ -1076,7 +1144,7 @@ export default function HomeScreen() {
       errorMessage={c.errorMessage}
       ctaLabel={voice.proposal.cta}
       onMake={() => c.proposal && void doCreate(c.id, c.proposal, c.idempotencyKey)}
-      onAdjust={focusComposer}
+      onAdjust={adjustDrive}
       onOpenDrive={() =>
         c.driveId &&
         navigateOnce(() => router.push({ pathname: '/drives/[id]', params: { id: c.driveId! } }))
@@ -1136,7 +1204,7 @@ export default function HomeScreen() {
           invitation the skipper cannot honour, and it stays a single paragraph — there is no question
           to ask, so it gets no question typography. While regions are still loading this reads as the
           normal open, which is what it will be for every region that has ever been curated. */}
-      {region && region.exampleAnchors.length === 0 ? (
+      {uncuratedRegion ? (
         <Text variant="body" color="ink" style={styles.opening}>
           {voice.plan.openingUncurated}
         </Text>
@@ -1334,35 +1402,20 @@ export default function HomeScreen() {
     />
   )
 
-  // ⚠ THE PINNED CLIP BAR SITS OUTSIDE THE null BRANCH ABOVE, ON PURPOSE. `composer` goes null both
-  // offline and on a failed regions load — and roam already paid for what happens next: a clip
-  // playing when the bars drop would leave audio running with its only transport off-screen and no
-  // way to stop it short of killing the app. Whenever a clip is loaded, the bar is on screen.
+  // ⚠ THERE IS NO PINNED CLIP BAR ANY MORE (founder, 2026-08-03) — the card's own disc is the ONE
+  // transport. The bar duplicated it: `preview.activeCardId` stays set for the rest of the
+  // conversation, so a rider looking straight at the card saw two pause buttons and the same clip
+  // titled twice, ~200pt apart.
   //
-  // ⚠ Keyed on the PLAYER's active card, not on finding one: if a card ever vanishes mid-clip the
-  // transport must survive it. (Today the only path that removes a card is "Start fresh", which
-  // stops the clip first — the `?? ''` is the belt to that brace, not a live case.)
-  const activeClip =
-    cards.find((c) => c.id === preview.activeCardId)?.proposal?.previewClip ?? null
-  const clipBar = preview.activeCardId ? (
-    <ClipBar
-      playing={preview.playing}
-      name={activeClip?.name ?? ''}
-      progress={preview.durationMs > 0 ? preview.positionMs / preview.durationMs : 0}
-      onToggle={preview.toggle}
-      onDismiss={preview.stop}
-    />
-  ) : null
-
-  // One wrapper so the two stack with a gap; ConversationScreen's footer slot supplies the gutter
-  // padding and the safe-area inset, and renders nothing at all when this is null.
-  const footer =
-    clipBar || composer ? (
-      <View style={styles.footerStack}>
-        {clipBar}
-        {composer}
-      </View>
-    ) : null
+  // ⚠ WHAT THE BAR WAS GUARDING, so nobody restores it by halves: it sat OUTSIDE the null branch
+  // above because `composer` goes null offline and on a failed regions load, and a clip playing when
+  // the bars drop would leave audio with its only transport off-screen. That case is now covered by
+  // the two paths that already stop the clip — the blur in `useFocusEffect`, and `startFresh` — plus
+  // the unconditional session hand-back on `didJustFinish` (useRoutePreview), which is the ordinary
+  // ending for a clip this short. What genuinely goes is the progress readout and the explicit ✕
+  // stop: a rider who PAUSES mid-clip now holds the audio session (doNotMix) until they leave the
+  // screen. Accepted knowingly — one transport beats two.
+  const footer = composer
 
   return (
     <ConversationScreen footer={footer} scrollSignal={scrollSignal} contentContainerStyle={styles.body}>
@@ -1396,36 +1449,6 @@ export default function HomeScreen() {
       {watermark}
 
       {masthead}
-
-      {/* Mounted only once regions exist — `visible` alone would keep a Modal in the tree through
-          every cold start before /regions lands. */}
-      {hasRegions ? (
-        <RegionPicker
-          visible={regionPickerOpen}
-          regions={regions ?? []}
-          selectedId={regionId}
-          onSelect={(id) => {
-            // ⚠ Switching region does NOT clear the transcript, and that is deliberate: the planner is
-            // handed one regionId per turn, so the next turn simply goes to the new region's curated
-            // set. Wiping the conversation would punish a rider for answering "which country" after
-            // they had already started describing a drive.
-            setRegionId(id)
-            // Persist the choice, or `pickRegionId` drags them back to the first region on the next
-            // cold start — the cache is the ONLY record that this rider prefers a different one.
-            // Same payload the load writes, so the offline card names the region they actually chose.
-            const chosen = regions?.find((r) => r.id === id)
-            if (chosen) {
-              writeCachedRegion({
-                regionId: chosen.id,
-                displayName: chosen.displayName,
-                exampleAnchors: chosen.exampleAnchors,
-              })
-            }
-            setRegionPickerOpen(false)
-          }}
-          onClose={() => setRegionPickerOpen(false)}
-        />
-      ) : null}
 
       {/* ⚠ OFFLINE IS THE ONLY PLACE MY DRIVES STILL APPEARS ON HOME, and the asymmetry is the whole
           design. Online it has its own screen (`/drives`, behind the header-left control) because on
@@ -1490,7 +1513,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   clipPressed: { opacity: 0.85 },
-  footerStack: { gap: space.sm },
   wrapUp: { gap: space.sm },
   section: { marginTop: space.lg },
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.md, marginBottom: space.sm },

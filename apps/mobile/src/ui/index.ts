@@ -16,9 +16,10 @@ export { Input } from './Input'
 export { Card, type CardProps } from './Card'
 export { Badge, type BadgeProps, type BadgeTone } from './Badge'
 export { FilterChip, type FilterChipProps } from './FilterChip'
+export { useThemedActionSheet, type ShowActionSheet } from './actionSheet'
 export { RegionChip, type RegionChipProps } from './RegionChip'
 export { Ridgeline, type RidgelineProps } from './Ridgeline'
-export { RegionPicker, type RegionPickerProps, type PickableRegion } from './RegionPicker'
+export { useRegionPicker, type RegionPickerArgs, type PickableRegion } from './RegionPicker'
 export {
   SuggestionRow,
   ListenRow,

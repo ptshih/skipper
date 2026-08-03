@@ -3,6 +3,7 @@ import { Stack, useRouter, type ErrorBoundaryProps } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { ActionSheetProvider } from '@expo/react-native-action-sheet'
 import { AnalyticsProvider, captureError, track } from '@/lib/analytics'
 import { useAnonymousMint } from '@/lib/anon-session'
 import { sweepOrphanClips } from '@/lib/offline'
@@ -107,9 +108,17 @@ export default function RootLayout() {
     <AnalyticsProvider>
       <SafeAreaProvider>
         <ThemeProvider initialMode={initialMode ?? 'system'}>
-          <SimModeProvider initialSimMode={initialSimMode ?? false}>
-            <ThemedStack />
-          </SimModeProvider>
+          {/* Action sheets (the region picker; the drive ⋯ menu when it moves here). INSIDE
+              ThemeProvider because the sheet is themed per call — `useTheme().isDark` picks iOS's
+              `userInterfaceStyle` and supplies the Android sheet's own colors. It delegates to the
+              real `ActionSheetIOS` on iOS and renders a scrollable sheet on Android, which is why
+              it is here at all: `Alert` caps at THREE buttons on Android (RN docs), so a region
+              list of any length silently lost rows on that path. */}
+          <ActionSheetProvider>
+            <SimModeProvider initialSimMode={initialSimMode ?? false}>
+              <ThemedStack />
+            </SimModeProvider>
+          </ActionSheetProvider>
           {/* Launch-time update gate — floats above the whole navigator. Renders nothing
               unless the server /version floor says this build must nudge or force-update. */}
           <VersionGate />

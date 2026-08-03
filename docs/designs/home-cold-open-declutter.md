@@ -58,9 +58,22 @@ surfaced it months early, by luck.
    deadlock.
 3. **Persist the choice.** The picker writes `region-cache.json` on select, or `pickRegionId` drags
    the rider back to the first region on every cold start.
+4. **Switching region CLEARS the conversation** (founder, 2026-08-03). This REVERSES the original
+   "keep it — the planner is handed one `regionId` per turn, so the next turn just goes to the new
+   curated set", and it is a correctness rule, not tidiness: a proposal card already in the transcript
+   holds **anchor ids from the region the rider left**, so its "Make this drive" would build a drive
+   there while the chip above names the new one. The server cannot catch that — the ids it receives
+   are perfectly valid, just for somewhere else — and the cost lands on a non-refundable credit.
+   ⚠ Only on a REAL change: re-picking the region you are already on wipes nothing, and the first pick
+   has nothing behind it (the composer is disabled until a region exists). It is ONE reset with two
+   entrances (`resetConversation`), shared with "Start fresh", because what a stale conversation holds
+   is a long list — an in-flight turn and its seq guards, a playing preview clip, materialized cards,
+   the say buffer. The only difference: a region switch does **not** autofocus the composer, since the
+   keyboard would cover the example asks that just changed.
 
 ⚠ Part 1 is what makes server-side region releases safe. Parts 2 and 3 are the safety net and the
-manners; **1 is the one that must not be undone.**
+manners, and 4 is what keeps a switch from building the wrong drive; **1 is the one that must not be
+undone.**
 
 ## The three notes
 

@@ -9,6 +9,7 @@ import {
   appendSkipper,
   lastRouteOf,
   resetTranscript,
+  seedAdjust,
   seedExample,
   toWire,
   type Turn,
@@ -150,6 +151,42 @@ describe('append helpers', () => {
     expect(ask).toEqual({ role: 'rider', text: 'Somewhere pretty.', wire: true })
     expect(reply?.role).toBe('skipper')
     expect(reply?.wire).toBe(true)
+  })
+})
+
+describe('seedAdjust', () => {
+  const ASK = 'What would you change — longer, shorter, somewhere else?'
+
+  test('appends the invitation as a skipper turn ON the wire', () => {
+    // On the wire because the rider's next line is an ANSWER to it — dropped, the model's reply
+    // reads as a non-sequitur.
+    const turns = seedAdjust(appendRider([], 'Tahoe City to Emerald Bay.'), ASK)
+    expect(turns).toHaveLength(2)
+    expect(turns[1]).toEqual({ role: 'skipper', text: ASK, wire: true, route: null })
+  })
+
+  test('a second tap does NOT stack a duplicate — the standing invitation is left alone', () => {
+    // The button is on every card and stays live after a tap, so both "twice on one card" and
+    // "card A then card B" are one gesture away. Identity is asserted, not just contents: the
+    // no-op must not re-render a screen whose rider is already typing an answer.
+    const once = seedAdjust(appendRider([], 'a loop out of Tahoe City'), ASK)
+    const twice = seedAdjust(once, ASK)
+    expect(twice).toBe(once)
+  })
+
+  test('but it DOES re-ask once the conversation has moved on', () => {
+    // Same text, no longer the last word: the model has answered since, so the invitation is stale
+    // and the rider tapping again is asking for it afresh.
+    const once = seedAdjust(appendRider([], 'a loop'), ASK)
+    const moved = appendSkipper(appendRider(once, 'shorter'), 'Trimmed it down.', { wire: true })
+    expect(seedAdjust(moved, ASK)).toHaveLength(moved.length + 1)
+  })
+
+  test('a rider turn with the same text never counts as the standing invitation', () => {
+    // The tail test is role-AND-text, not text alone — a rider who types the line back gets a real
+    // answer rather than silence.
+    const echoed = appendRider([], ASK)
+    expect(seedAdjust(echoed, ASK)).toHaveLength(2)
   })
 })
 

@@ -106,8 +106,13 @@ export function buildExampleAsks(
       reply: fill(t.loopReply, a, b),
     })
   // Region-named when we have a region, bare when we do not. ⚠ The bare form is not a fallback for
-  // tidiness — it is the one ask that must survive a region with no curated anchors at all, so it can
-  // never be allowed to depend on a name of any kind.
+  // tidiness — it is the one ask that survives a region that has not LOADED (a cold start before
+  // `/regions` lands), so it can never be allowed to depend on a name of any kind.
+  // ⚠ NOT the same case as a region we know is UNCURATED. This function still returns the open ask
+  // for zero names, because from here "no names" and "no region yet" are indistinguishable — the
+  // SCREEN knows the difference and suppresses the whole row (`uncuratedRegion` in app/index.tsx).
+  // That split was a real bug: this row read "somewhere pretty around Yosemite National Park"
+  // directly beneath the skipper saying he runs no roads there (founder, 2026-08-03).
   const regionLabel = regionName?.trim()
   out.push({
     shape: 'open',

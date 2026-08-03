@@ -80,6 +80,14 @@ export const voice = {
     openingUncurated:
       'I don’t run any roads around here yet, friend. Check back; I’m always picking up new ones.',
     composerPlaceholder: 'Tell me where to',
+    // ⚠ ONCE THE TRANSCRIPT IS LIVE THE FIELD IS A REPLY BOX, so it gets its own line. The rotation
+    // is already vetoed at the first rider turn (`shouldRotatePlaceholder`'s `coldOpen`), but
+    // stopping a timer only FREEZES the example that happened to be up — leaving "two hours, no
+    // highways" sitting under a skipper turn that just asked how long they want to be out, which
+    // reads as a stale instruction rather than a prompt. Teaching copy has to leave when its job
+    // ends. Static, and no `{a}`/`{b}`: every authored reply ends on a direct question, so this
+    // only has to hand the ball back.
+    composerReplyPlaceholder: 'Go on, I’m listening',
     // ⚠ SHAPES, not sentences — `{a}`/`{b}` are filled from the region's own curated names, so the
     // placeholder can never name a road the skipper does not run. The rows teach WHAT kinds of thing
     // to ask for; these teach HOW CASUALLY you may say it, which is why they are lowercase and
@@ -172,6 +180,15 @@ export const voice = {
     costNote: 'Uses one of your free drives.',
     ownershipNote: 'You’ll need a free account to keep this drive.',
     adjust: 'Change it up',
+    // ⚠ THE TAP'S ONLY VISIBLE ANSWER, so it is not decoration. Until 2026-08-03 "Change it up" did
+    // nothing but focus the composer — correct, and effectively invisible: on the simulator (where
+    // every desk pass happens) a connected hardware keyboard suppresses the software one, so the
+    // whole response was a caret appearing in a field that already looked identical, and it was
+    // filed as a dead button. Seeded like the example replies — no model call, no dollars — and it
+    // rides the WIRE, because the rider's next line ("shorter") is an answer to this question and
+    // reads as a non-sequitur without it. Ends on a question, per the prompt's ask-ONE-thing rule;
+    // names the three axes the planner can actually act on rather than asking an open "what?".
+    adjustSay: 'What would you change — longer, shorter, somewhere else?',
     // A route the corpus has nothing to say about. The server returns 200 with zero stops here, so
     // this is the only thing standing between a rider and a credit spent on a silent drive.
     noStops: 'Nothing along that road I can talk about yet.',
@@ -340,8 +357,10 @@ export const voice = {
     // "Roads I know" rather than "Choose a region": the rider is not configuring a setting, they are
     // asking which country this skipper actually runs. Same reason the limit was never spelled out —
     // the answer is a list of places, and the list says it.
+    // ⚠ Used as a native action sheet's TITLE now, not our own sheet's heading — it renders in the
+    // system font, so keep it plain text. (The old sheet's 'Done' died with the custom Modal: a
+    // native sheet dismisses itself, and its trailing button is 'Cancel'.)
     heading: 'Roads I know',
-    close: 'Done',
     // The CHIP's label when no region is selected yet. Plain, not in-persona, and deliberately so:
     // unlike the sheet heading above, this one is the only thing standing between the rider and a
     // dead composer, so it has to read as an instruction rather than as flavour.

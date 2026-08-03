@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActionSheetIOS, Alert, Linking, Platform, StyleSheet, useAnimatedValue, View } from 'react-native'
+import { Alert, Linking, StyleSheet, useAnimatedValue, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { ApiError, deleteDrive, errorMessage, getDrive, type DriveManifest } from '@/lib/api'
@@ -42,6 +42,7 @@ import {
   Text,
   TransportBar,
   stopIcon,
+  useThemedActionSheet,
   voice,
 } from '@/ui'
 
@@ -80,6 +81,8 @@ export default function DriveDetailScreen() {
   const mapProgress = useAnimatedValue(0)
   const insets = useSafeAreaInsets()
   const { colors } = useTheme()
+  // The ⋯ menu's sheet — themed once for the whole app (see ui/actionSheet).
+  const showActionSheet = useThemedActionSheet()
   // Measured height of the FIXED now-playing dock, reserved at the bottom so the dock never covers
   // content: as tail scroll-padding in List mode (the last stop clears the bar) and as the map's
   // bottom inset in Map mode (the map ends at the dock's top instead of being clipped behind it).
@@ -337,30 +340,31 @@ export default function DriveDetailScreen() {
     // The one truly irreversible action — always last, above Cancel.
     actions.push({ label: 'Delete drive', onPress: deleteDriveAction, destructive: true })
     if (actions.length === 0) return
-    // Highlight "Delete drive" as iOS's single red button (it's the only irreversible one); the
-    // reversible "Remove download" stays plain on iOS but keeps its destructive style on Android.
+    // Only "Delete drive" reads as destructive — it is the only IRREVERSIBLE action here, and
+    // "Remove download" merely costs a re-pull.
+    //
+    // ⚠ ONE SHEET, NO `Platform` BRANCH (2026-08-03). This used to be `ActionSheetIOS` on iOS with an
+    // `Alert` FALLBACK, and the fallback was a real bug: `Alert` accepts AT MOST THREE buttons on
+    // Android (RN docs — neutral/negative/positive), while this menu pushes up to five. Android
+    // riders would silently have lost actions, with the drop landing wherever the list happened to
+    // end. The shared sheet delegates to the real `ActionSheetIOS` on iOS and draws a scrollable one
+    // on Android, so the list can be any length. It also collapses a second divergence the two paths
+    // had grown: "Remove download" used to read destructive on Android only, for no reason beyond
+    // Alert having a per-button style available.
     const deleteIdx = actions.findIndex((a) => a.label === 'Delete drive')
     const destructive = deleteIdx >= 0 ? deleteIdx : actions.findIndex((a) => a.destructive)
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          options: [...actions.map((a) => a.label), 'Cancel'],
-          cancelButtonIndex: actions.length,
-          destructiveButtonIndex: destructive >= 0 ? destructive : undefined,
-        },
-        (i) => actions[i]?.onPress(),
-      )
-    } else {
-      Alert.alert('Drive options', undefined, [
-        ...actions.map((a) => ({
-          text: a.label,
-          onPress: a.onPress,
-          style: a.destructive ? ('destructive' as const) : undefined,
-        })),
-        { text: 'Cancel', style: 'cancel' as const },
-      ])
-    }
+    showActionSheet(
+      {
+        options: [...actions.map((a) => a.label), 'Cancel'],
+        cancelButtonIndex: actions.length,
+        destructiveButtonIndex: destructive >= 0 ? destructive : undefined,
+      },
+      (i) => {
+        if (i != null) actions[i]?.onPress()
+      },
+    )
   }, [
+    showActionSheet,
     downloaded,
     downloading,
     dirState,

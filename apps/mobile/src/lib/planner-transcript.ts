@@ -104,6 +104,25 @@ export const seedExample = (turns: readonly Turn[], ask: string, reply: string):
   appendSkipper(appendRider(turns, ask), reply, { wire: true })
 
 /**
+ * "Change it up" — the skipper inviting a revision, seeded with no model call and no dollars, the
+ * same way a tapped example is. Rides the wire: the rider's next line is an ANSWER to this question,
+ * and without it the model's reply reads as a non-sequitur.
+ *
+ * IDEMPOTENT ON THE TAIL, and that is the whole reason this is a function rather than a bare
+ * `appendSkipper` at the call site. The button sits on EVERY card in the transcript and stays live
+ * after it is tapped, so "tap it twice" and "tap it on card A then card B" are both one gesture away
+ * — and each would otherwise stack a second identical line under the first, which reads as the
+ * skipper repeating himself rather than waiting. When the invitation is already the last thing said,
+ * the standing one is left alone and the SAME ARRAY comes back, so React re-renders nothing and the
+ * scroll does not twitch under a rider who is already typing.
+ */
+export const seedAdjust = (turns: Turn[], prompt: string): Turn[] => {
+  const last = turns[turns.length - 1]
+  if (last && last.role === 'skipper' && last.text === prompt) return turns
+  return appendSkipper(turns, prompt, { wire: true })
+}
+
+/**
  * "Start fresh" (design §7) — back to an empty conversation. Pass the cold-open line to re-seed it in
  * the same call; it is stamped `wire: false` here so no caller can forget the flag that matters.
  */

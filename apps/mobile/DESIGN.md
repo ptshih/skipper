@@ -217,10 +217,18 @@ All token-driven and theme-aware. Compose these; don't restyle from scratch.
   coming, replacing a spinner on a blank screen. ⚠ The **group** breathes, never the blocks: one shared
   opacity pulse so the screen is never a field of animating rectangles (§8). Neutral, never amber, and
   Reduce Motion holds it static.
-- **`EdgeFade`** + **`useScrollEdgeFades`** — content dissolves into `surface` at a clipped scroll
-  edge instead of hard-cutting under the header (the iOS-26 scroll-edge read). ⚠ Always the pair: the
-  hook decides whether an edge is *genuinely* overflowing, and a fade shown over a short screen
-  dissolves real content at rest, which reads as a rendering bug.
+- **`EdgeFade`** + **`useScrollEdgeFades`** — content dissolves into the surface behind it at a
+  clipped scroll edge instead of hard-cutting under the header (the iOS-26 scroll-edge read). ⚠ Always
+  the pair: the hook decides whether an edge is *genuinely* overflowing, and a fade shown over a short
+  screen dissolves real content at rest, which reads as a rendering bug. `on="raised"` for a list that
+  scrolls INSIDE a card (the itinerary) — a fade must dissolve into the paper actually behind it.
+- **`useThemedActionSheet`** — the app's ONE native action sheet: the region picker ("Roads I know")
+  and the drive ⋯ menu. Callers pass only what differs (title, options, which index is destructive);
+  the theme is applied once here. ⚠ Do NOT hand-build a Modal sheet for a short list of choices, and
+  do NOT use `Alert` for one — it caps at **three buttons on Android** (RN docs), which silently
+  dropped actions from a 5-item ⋯ menu, and it announces rather than offers. The library delegates to
+  the real `ActionSheetIOS` on iOS (UIKit draws it, so only `userInterfaceStyle` applies) and draws a
+  scrollable sheet on Android, so an option list may be any length.
 - **`Sunburst`** — the WPA travel-poster watermark behind the home and `/sample` mastheads. Tapered
   rays built from border-triangle Views (no SVG dep), decorative, pointer-events off. Ornament —
   §2.1 keeps it off driving surfaces.
