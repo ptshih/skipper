@@ -82,11 +82,11 @@ import {
   Skeleton,
   SkeletonGroup,
   RegionChip,
+  Ridgeline,
   RegionPicker,
   type IconName,
   SuggestionRow,
   ListenRow,
-  Sunburst,
   Text,
   TurnBubble,
   TypingDots,
@@ -944,7 +944,7 @@ export default function HomeScreen() {
   // the burst was cropped to that box. That — not the opacity — is why it read as invisible.
   const watermark = (
     <View style={styles.watermark} pointerEvents="none">
-      <Sunburst size={128} opacity={0.09} />
+      <Ridgeline width={472} height={56} />
     </View>
   )
 
@@ -1435,7 +1435,10 @@ const styles = StyleSheet.create({
   // ⚠ THE OFFSETS ARE SMALL ON PURPOSE. At 168 with -54/-38 the burst's outer rays were cut by BOTH
   // screen edges hard enough to read as a rendering fault rather than a poster bleed. Smaller, and
   // barely overhanging, it reads as one whole sunburst that happens to sit in the corner.
-  watermark: { position: 'absolute', top: -8, right: -8 },
+  // ⚠ Higher and shorter than the first cut, and NEGATIVE horizontal insets on purpose: the ridge
+  // must run OFF both screen edges. A horizon that stops short of the sides reads as a picture of a
+  // mountain rather than the land the screen is sitting on.
+  watermark: { position: 'absolute', top: 4, left: -16, right: -16 },
   // The cold open is prose on the paper, like every other skipper turn — but it carries no speaker
   // rule: nothing has been said yet for it to be answering.
   opening: { marginTop: space.sm },
