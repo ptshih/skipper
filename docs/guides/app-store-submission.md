@@ -4,14 +4,24 @@
 > live listing sells roam ("TWO WAYS TO RIDE / Ride Along: free, no account"), which 1.1 deletes, and
 > its "No account, no ads" claim is now factually wrong. §§3, 4 and 10 each carry a **1.1 replacement
 > block** alongside the live text; §9's screenshots are stale and need a real recapture (its own
-> step); §12 has the paste-it checkbox. Nothing here has been pushed to ASC — that is deliberate, and
-> it is **blocked on a founder decision that is not a metadata question**: `1.0.0` is still sitting in
-> review selling the old product, and the choice to take the approval, hold the release, or pull it
-> before 1.1 lands (`docs/designs/1-1-adversarial-review.md` §3.1) expires silently the day a reviewer
-> picks it up.
+> step); §12 has the paste-it checkbox.
 >
-> **Submission state (as of 2026-07-30).** `1.0.0` is `WAITING_FOR_REVIEW` (submitted
-> 2026-07-28T21:42:22Z) with **build 15** attached; **build 16 (`1.0.1`)** is `VALID` in TestFlight,
+> ✅ **The blocking founder decision is RESOLVED — `1.0.0` was WITHDRAWN.** Read back from the ASC API
+> 2026-08-03: `1.0.0` is **`DEVELOPER_REJECTED`**, release type MANUAL, build 15 attached. Nothing is
+> in review, the submission slot is free, **and the version record is editable — so 1.1 reuses it
+> rather than creating a second one** (change `versionString` to `1.1.0`). The earlier "expires
+> silently the day a reviewer picks it up" warning is spent; do not re-derive it.
+>
+> ⚠ **What is now the sharp edge instead: TestFlight ships a DEAD CLIENT.** The newest build is
+> **16 (`1.0.1`), uploaded 2026-07-30 — pre-1.1 code** that calls `/roam/*`, which 404s on the
+> deployed 1.1 API. Anyone opening TestFlight today gets a broken app. There is no 1.1 build anywhere;
+> `app.json` is at `1.1.0` (bumped 2026-08-03) and the next production build is 17.
+> **The order of operations from here is [1-1-submission-sweep.md](1-1-submission-sweep.md)** — this
+> file owns the FIELDS, that one owns the sequence and the on-device proof.
+>
+> **Prior submission state (as of 2026-07-30), kept for the diff.** `1.0.0` was `WAITING_FOR_REVIEW`
+> (submitted 2026-07-28T21:42:22Z) with **build 15** attached; **build 16 (`1.0.1`)** is `VALID` in
+> TestFlight,
 > deliberately NOT attached — swapping the build under a submission in review restarts the queue, so
 > 16 ships as the first post-approval update. Everything through §11b is a RECORD of what is on the
 > live listing, not a to-do — read it as "what a reviewer sees today", which is no longer what the

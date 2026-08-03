@@ -6,8 +6,11 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
 
 ⚠ **1.1 is DEPLOYED to prod (2026-08-02) but NOT released to riders** — roam is REMOVED entirely (git is
 the archive) and Create-a-Drive IS a conversation. The PUSH already happened (record + template for the
-next one: `docs/guides/1-1-cutover-runbook.md`); what is left is the native rebuild + TestFlight, RISK-1
-(drive one for real), the on-device sweep, and App Store Connect metadata + screenshots.
+next one: `docs/guides/1-1-cutover-runbook.md`). **What is left is one guide:
+`docs/guides/1-1-submission-sweep.md`** — two builds, the on-device sweep, then the listing. ⚠ TestFlight
+still serves a PRE-1.1 client that calls the deleted `/roam/*`, so it is broken until build 17 lands; and
+RISK-1's real drive was taken OFF the critical path (founder, 2026-08-03) in favour of that guide's two
+desk passes — its §0 owns what they can't prove, so don't re-argue it here.
 `docs/designs/drives-first-1-1.md` is the build truth — read it before touching `apps/api` or `apps/mobile`.
 
 ## STOP — the expensive or irreversible mistakes

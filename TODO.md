@@ -1,8 +1,12 @@
 # TODO — engineering backlog
 
 > ⚠ **1.1 IS DEPLOYED TO PROD (2026-08-02) BUT NOT RELEASED TO RIDERS, AND IT DELETED ROAM.** The push
-> already happened ([docs/guides/1-1-cutover-runbook.md](docs/guides/1-1-cutover-runbook.md)); what is
-> left is the native rebuild + TestFlight, RISK-1, the on-device sweep, and the ASC store listing.
+> already happened ([docs/guides/1-1-cutover-runbook.md](docs/guides/1-1-cutover-runbook.md)); **what is
+> left is one executable guide,
+> [docs/guides/1-1-submission-sweep.md](docs/guides/1-1-submission-sweep.md)** — two builds (EAS
+> production for TestFlight, a local dev build for the desk passes), the on-device sweep, then the
+> listing. ⚠ TestFlight currently serves a PRE-1.1 client that calls the deleted `/roam/*` — broken
+> until build 17 lands. RISK-1's real drive is OFF the critical path (founder, 2026-08-03).
 > The build truth is
 > [docs/designs/drives-first-1-1.md](docs/designs/drives-first-1-1.md) (43 decisions, 16 invariants)
 > with verified file:line coordinates in

@@ -7,7 +7,12 @@
 > always read-only). The dev `⋯ → "Simulate the drive"` sim path is unchanged. See
 > [`../decisions/detail-page-mini-preview.md`](../decisions/detail-page-mini-preview.md).
 
-> **Status:** guide (written 2026-06-10) — the one-sitting EAS dev-build pass that clears the last
+> **Status:** guide (written 2026-06-10) — ⚠ **written against the M1 player, BEFORE the conversation
+> was the home screen. For a 1.1 submission pass, execute
+> [1-1-submission-sweep.md](1-1-submission-sweep.md) instead**, which supersedes this file's ordering and
+> adds the two desk passes that stand in for RISK-1's real drive. This one stays useful for the
+> player/audio/GPS checks it pioneered, several of which the sweep cites rather than restates.
+> Originally: the one-sitting EAS dev-build pass that clears the last
 > M1 gate: the phone-player *feel* + real GPS, neither of which `bun run check` can judge. Step
 > list is code-anchored to `apps/mobile` as of 2026-06-10 — re-verify anchors against the current
 > tree before trusting a line number. Pairs with `docs/guides/eas-setup.md` (how to build/install

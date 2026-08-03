@@ -336,10 +336,19 @@ The rest are post-MVP features, gated behind the proven phone player:
   label that must match the binary's manifest, and the App Review notes — which carry the whole
   submission, since the corpus is Tahoe-only and a reviewer in Cupertino is 200 miles outside it.
   ⚠ LISTING vs BUILD have DIVERGED: the live listing still sells roam.
+- [1-1-submission-sweep.md](guides/1-1-submission-sweep.md) — **the executable pass from today's `main`
+  to "Submit for Review"**, and the one to run: two builds (EAS production for TestFlight, a local dev
+  build for the desk passes — the in-app simulator is `__DEV__`-gated), Pass A (in-app simulator, real
+  speeds → trigger timing) + Pass B (Xcode GPX on a phone, real CoreLocation), the App Review path
+  walked verbatim, then the listing. Written 2026-08-03. ⚠ Its §0 states what the desk passes CANNOT
+  prove — iOS may not simulate speed, which collapses the trigger radius to its floor and can reject
+  every fix outright.
 - [eas-setup.md](guides/eas-setup.md) — building + running the Expo app on EAS (dev build).
 - [device-verification-runbook.md](guides/device-verification-runbook.md) — the one-sitting
   on-device pass that clears the last M1 gate (phone-player feel + real GPS); checklist of what only
-  a physical iPhone can verify, with the duck-flip + open native risks called out.
+  a physical iPhone can verify, with the duck-flip + open native risks called out. ⚠ **Written against
+  the M1 player, before the conversation was the home screen — for 1.1 use
+  [1-1-submission-sweep.md](guides/1-1-submission-sweep.md).**
 - [sdk57-posthog-rebuild.md](guides/sdk57-posthog-rebuild.md) — turnkey checklist for the one native
   rebuild that validates SDK 57 (RN 0.86) on-device + PostHog Stage 2 native crashes + the
   Create-a-Drive empty-corpus fix; pre-build state already verified, the PostHog symbol-upload secret
@@ -358,7 +367,9 @@ The rest are post-MVP features, gated behind the proven phone player:
 - [1-1-cutover-runbook.md](guides/1-1-cutover-runbook.md) — the ordering for 1.1's FIRST push: the four
   triggers one push fires (the API's is unfiltered), why the cutover is code-only and therefore cheaply
   reversible, the `/roam/sample`→`/sample` flip against an in-review build, and the rollback capture
-  that has to happen beforehand. Written 2026-08-02, never executed.
+  that has to happen beforehand. Written AND **executed** 2026-08-02 — kept as the record of the first
+  push and the template for the next. ⚠ One claim in it was already false when it was used (a migration
+  had landed ahead of the deploy, making rollback one-way); re-measure, don't inherit.
 - [ops-scripts-sop.md](guides/ops-scripts-sop.md) — the safe-by-default contract for the studio's
   one-off operational CLIs (preview unless `--apply`); reference impl `sweep-orphans.ts`; adopted
   2026-06-10.
@@ -366,4 +377,5 @@ The rest are post-MVP features, gated behind the proven phone player:
   one-sitting on-device pass over the live Create→propose→confirm→generate→preview→drive runtime
   (needs a dev build + real Maps spend); written 2026-06-18. ⚠ **SUPERSEDED by 1.1** — its pickers are
   deleted and its "roam is the only anonymous surface" precondition is now inverted. Use
-  [drives-first-1-1.md](designs/drives-first-1-1.md)'s Acceptance list.
+  [1-1-submission-sweep.md](guides/1-1-submission-sweep.md), which carries its Acceptance list forward
+  into executable steps.

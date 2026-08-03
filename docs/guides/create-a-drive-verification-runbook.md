@@ -12,9 +12,12 @@
 > can do damage — **"roam is the only anonymous surface" is now the OPPOSITE of the rule.** Anonymous
 > riders get plan, propose, and one preview clip from their own route; the wall is `POST /drives`
 > alone, enforced **per-ROUTE**. Anyone who "restores" the 401 by mounting `requireAccount` on the
-> `/drives` sub-app silently re-walls the whole preview (CLAUDE.md says so twice). The 1.1 replacement
-> is the Acceptance list in [../designs/drives-first-1-1.md](../designs/drives-first-1-1.md) plus its
-> RISK-1 ("drive one for real"). Kept because the runtime questions in *Why this exists* are still the
+> `/drives` sub-app silently re-walls the whole preview (CLAUDE.md says so twice). **The 1.1 replacement
+> is [1-1-submission-sweep.md](1-1-submission-sweep.md)** — it carries this file's runtime questions and
+> [../designs/drives-first-1-1.md](../designs/drives-first-1-1.md)'s Acceptance list forward into steps
+> you can execute. ⚠ RISK-1's "drive one for real" was taken OFF the critical path by the founder on
+> 2026-08-03 and replaced by that guide's two desk passes; read its §0 for what that trades away.
+> Kept because the runtime questions in *Why this exists* are still the
 > right questions, and no on-device pass has ever been recorded. Originally:
 > guide (written 2026-06-18) — the one-sitting pass that clears the last V2 gate: the
 > live **Create→propose→confirm→generate→preview→drive** runtime, which `bun run check` cannot judge
