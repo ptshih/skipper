@@ -187,6 +187,12 @@ const RUN_KINDS: RunKind[] = [
     safe: '⚠ Preview SPENDS here — unlike Generate narration, it narrates and scores before deciding what to keep, so a preview costs an apply minus the TTS. Confirm fires on both. A fused clip lands STAGED and goes public with the region release.',
   },
   {
+    kind: 'Scenic call-outs',
+    does: "Write a SHORT call-out (~20s) for a place that has NO facts — the beaches, points, bays and peaks a driver looks at during the quiet. These are the places a story can never cover: a story REQUIRES a fact sheet, and roughly 925 named POIs in the corpus have none, so before this they were simply silent. The clip says the place's NAME and its KIND and nothing else — it is a glance, not a story, and the narrator is explicitly forbidden from asserting anything the name IMPLIES (no history, no size or depth, no “famous”, no character). Eligibility is strict and each clause is a refusal: no existing telling, no facts, not excluded, not in a cluster, HAS a kind, and HAS a road-snapped anchor. The kind requirement is not fussiness — without it the narrator infers the kind from the name (“Cathedral Peak” becomes “a peak out there”, asserting something it was never given), and the grounding gate CANNOT catch that class because the claim traces to the name. The anchor requirement is so the call-out fires where you can actually see the thing. ⚠ Take ONE KIND at a time with a small limit at first: six of the same kind is the worst case for the clips all sounding alike, and it is the only run that tests it.",
+    cost: <span>LLM per call-out (~$0.05, cheaper than a story — the sheet is two fields); <span className="text-foreground">TTS</span> on apply.</span>,
+    safe: 'Preview — lists the queue + estimate, makes NO model calls and costs nothing (unlike Fuse clusters, whose preview spends). A scenic clip lands STAGED and goes public with the region release. ⚠ A drive will not PLAY these until the glance-fill selection ships — they are selected in a separate pass from stops, because a 20s call-out loses every pacing window to a 90s telling.',
+  },
+  {
     kind: 'Regenerate narration',
     does: "Re-narrate ONE POI from its CURRENT facts + corrections (a fresh script), then re-score + re-synthesize — the single-POI form of Generate Narration. Run from the POI's Narration tab after a fact-edit. (Re-synth, below, only re-voices the existing script.)",
     cost: <span>LLM + <span className="text-foreground">TTS</span> for one narration (when applied).</span>,

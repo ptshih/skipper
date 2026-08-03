@@ -74,6 +74,7 @@ export const SCRIPTS: Partial<Record<JobKind, string>> = {
   enrich_pois: 'packages/studio/src/enrich-pois.ts',
   generate_narrations: 'packages/studio/src/generate-narrations.ts',
   generate_cluster_narrations: 'packages/studio/src/generate-cluster-narrations.ts',
+  generate_scenic_narrations: 'packages/studio/src/generate-scenic-narrations.ts',
   curate_places: 'packages/studio/src/curate-places.ts',
   refetch_facts: 'packages/studio/src/refetch-poi.ts',
   offline_audit: 'packages/studio/src/audit-corpus.ts',
@@ -311,6 +312,35 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
       spends: true,
       targetSlug: clusterRegion,
       targetId: clusterRegion ?? selectionLock(clusterIds, body.excludeIds),
+    }
+  }
+
+  if (kind === 'generate_scenic_narrations') {
+    const apply = body.apply === true
+    const args: string[] = [script]
+    // Region-scoped only — a scenic call-out's subject is a poi with no facts, and there is no id-list
+    // use case yet: you pick a REGION and a KIND, not individual pins. `--offset` is offered because a
+    // re-run after a prompt change must be able to land off the population the change was built from
+    // (ops-scripts-sop's repair-population trap).
+    if (body.region) args.push(`--region=${str(body.region)}`)
+    if (body.kind) args.push(`--kind=${str(body.kind)}`)
+    if (body.spread) args.push('--spread')
+    pushPosNum(args, '--limit', body.limit, 'limit')
+    pushPosNum(args, '--offset', body.offset, 'offset')
+    pushPosNum(args, '--max-cost', body.maxCostUsd, 'maxCostUsd')
+    if (apply) args.push('--apply')
+    // ⚠ spends: `apply`, NOT `true` — and that is a real difference from generate_cluster_narrations
+    // directly above, so read the two together before "harmonising" them. A fused PREVIEW narrates and
+    // scores, so it spends whatever the operator does; this CLI's bare dry run only prints the queue
+    // and costs nothing. Its paid preview is `--scripts-only`, which the console deliberately does not
+    // offer — that is a CLI diagnostic, and a console button whose Preview silently billed would be the
+    // exact trap the cluster comment above exists to warn about.
+    return {
+      args,
+      dryRun: !apply,
+      spends: apply,
+      targetSlug: str(body.region) || DEFAULT_REGION_SLUG,
+      targetId: str(body.region) || DEFAULT_REGION_SLUG,
     }
   }
 

@@ -91,6 +91,7 @@ export const jobKind = z.enum([
   'enrich_pois',
   'generate_narrations',
   'generate_cluster_narrations',
+  'generate_scenic_narrations',
   'curate_places',
   'refetch_facts',
   'offline_audit',
