@@ -586,9 +586,20 @@ Spec, with the system's own answers where they exist:
 
 - **The kicker becomes `NOW DEPARTING · {region.displayName}`.** "NOW DEPARTING" stays in `voice.ts`;
   the region name is a FACT and is interpolated from the server, never authored into the voice file.
-- ✅ **The affordance cue already exists and needs no new style:** `Icon name="expand"`
-  (`chevron-down`), whose comment in `Icon.tsx` is literally *"a filter chip that opens a picker"* —
-  the exact semantic. No hand-rolled caret, no new token.
+- ⚠ **A caret on a `label` is NOT enough affordance** (founder, 2026-08-03: *"the kicker dropdown CTA
+  definitely needs more 'i am tappable' affordance"*). The region becomes a real **chip beside the
+  kicker** — pill radius, trailing caret — not styled text. The row reads
+  `NOW DEPARTING  [ Lake Tahoe ⌄ ]`.
+- ✅ **The primitive is `FilterChip`, and this is literally what it was built for** — its own header
+  names **region** as its use case. It deliberately carries no chevron today *because* "a tap SELECTS
+  directly (no picker opens), so that caret read as a dropdown affordance it doesn't have". A
+  picker-opening variant **inverts exactly that condition**, and `Icon.tsx` already names the glyph:
+  `expand`, commented *"a filter chip that opens a picker"*. **The system has been waiting for this
+  variant** — add it rather than hand-rolling a control.
+- **Two weights to choose between** (mocked): **K-a** pine outline + pine label (the existing idle
+  `FilterChip` look, loudest), or **K-b** `surfaceRaised` fill + `rule` hairline + `ink` label +
+  `accent` caret (quieter). ⚠ Judge them on **launch 1**, where the sample disc already owns the one
+  amber — K-a puts the screen's most saturated non-amber element at the very top.
 - ⚠ **At `regions.length === 1` it must NOT be pressable and must NOT show the caret.** Still show the
   region NAME (it is informative), but a dead affordance at 1.1 launch — when Tahoe is the only
   region — would be worse than no affordance.
