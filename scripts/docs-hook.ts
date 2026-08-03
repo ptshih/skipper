@@ -16,10 +16,13 @@ try {
     process.exit(0)
   }
 
+  // Skills are linted by their own stricter rules (see lint-skills.ts), so the
+  // hook routes rather than running both.
+  const isSkillFile = /\/\.claude\/skills\/.+\.md$/.test(filePath)
   const isDocsSystemFile = /\/docs\/.+\.md$/.test(filePath) || /\/(CLAUDE|TODO)\.md$/.test(filePath)
-  if (!isDocsSystemFile) process.exit(0)
+  if (!isSkillFile && !isDocsSystemFile) process.exit(0)
 
-  const lint = Bun.spawnSync(['bun', join(import.meta.dir, 'lint-docs.ts')])
+  const lint = Bun.spawnSync(['bun', join(import.meta.dir, isSkillFile ? 'lint-skills.ts' : 'lint-docs.ts')])
   if (lint.exitCode !== 0) {
     console.error(lint.stdout.toString() + lint.stderr.toString())
     process.exit(2)
