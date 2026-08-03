@@ -572,6 +572,23 @@ app.post('/admin/places', async (c) => {
   return c.json({ place: row }, 201)
 })
 
+/** What an operator may ASK the draft model for, and what the resolve step will ACCEPT.
+ *
+ * ⚠ THEY ARE DELIBERATELY DIFFERENT NUMBERS — collapsing them into one re-breaks this immediately.
+ * `target` is GUIDANCE, not a limit: the prompt says "Draft roughly ${targetN} places", and the model
+ * overshoots (a target of 100 came back with 103 on the first real run). So a resolve cap set EQUAL to
+ * the draft cap rejects the very draft its own flow just produced. That is not hypothetical — when the
+ * draft cap moved 60 -> 120 and this one stayed at 60, a 103-place draft could not be resolved at all,
+ * and the comment here still asserted the two were in lockstep. The resolve cap is the draft cap plus
+ * room for the overshoot; if you move one, move both.
+ *
+ * ⚠ The resolve cap is a SPEND bound, not tidiness: every accepted draft costs TWO billed Google Places
+ * calls, so it is what stops one click from spending whatever the client happened to post. It is ALSO
+ * bounded by the clock: the resolve loop is serial at ~0.8s/draft, so 160 is ~130s against the 240s
+ * idleTimeout at the foot of this file — read that comment before raising it. */
+const MAX_DRAFT_TARGET = 120
+const MAX_CURATE_DRAFTS = 160
+
 // POST /admin/places/draft { region, target? } — LLM-draft this region's curated hubs + pitstops with
 // Opus (forced tool). The REVIEWABLE preview: spends a few cents on ONE Opus call, makes NO Places calls
 // and writes NOTHING. The operator prunes the returned list, then POST /admin/places/curate resolves +
@@ -605,7 +622,7 @@ app.post('/admin/places/draft', async (c) => {
   // was deleted end to end in 1.1 and the set's only consumer is now the PLANNER's roster, which Opus
   // reads whole from a cached prefix. Thumb-scrolling stopped binding; MAX_PLAN_ANCHORS (200) and model
   // attention are what bind, and every name added is one fewer in-persona "do not know that one".
-  const targetN = Math.max(8, Math.min(120, Number(body.target) || 100))
+  const targetN = Math.max(8, Math.min(MAX_DRAFT_TARGET, Number(body.target) || 100))
   try {
     const drafts = await draftCuratedPlaces(region.displayName, bbox, {
       targetN,
@@ -627,11 +644,9 @@ app.post('/admin/places/curate', async (c) => {
   const drafts = Array.isArray(body.drafts) ? body.drafts : []
   if (!slug) return c.json({ error: 'region is required' }, 400)
   if (!drafts.length) return c.json({ error: 'no drafts to curate' }, 400)
-  // ⚠ Bounded. Every draft costs TWO billed Google Places calls, so an unbounded array makes the spend
-  // per click whatever the client posts. 60 is the ceiling the draft route already imposes on itself
-  // (targetN is clamped to 8..60), so this refuses only bodies that did not come from that flow.
-  if (drafts.length > 60) {
-    return c.json({ error: 'bad_request', message: `at most 60 drafts per curate (got ${drafts.length})` }, 400)
+  // ⚠ Bounded — see MAX_CURATE_DRAFTS for why this sits ABOVE the draft cap rather than equal to it.
+  if (drafts.length > MAX_CURATE_DRAFTS) {
+    return c.json({ error: 'bad_request', message: `at most ${MAX_CURATE_DRAFTS} drafts per curate (got ${drafts.length})` }, 400)
   }
   const region = (await db.select({ bbox: regions.bbox }).from(regions).where(eq(regions.slug, slug)).limit(1))[0]
   if (!region) return c.json({ error: 'not_found' }, 404)
@@ -2058,13 +2073,18 @@ const port = Number(process.env.PORT ?? 8788)
 // ⚠⚠ idleTimeout IS LOAD-BEARING HERE TOO, and this console needs it MORE than apps/api does.
 // Bun's default is 10 SECONDS and it fires WHILE A HANDLER IS STILL RUNNING (measured in apps/api on
 // 2026-08-01: a 16s handler had its socket closed at ~12s). Two admin routes structurally exceed that:
-//   • POST /admin/places/draft — one Opus call, max_tokens 4_000, up to 60 places. The dialog's own
-//     copy says "this takes ~30s". It could therefore NEVER have completed: the socket died at ~12s,
-//     the operator saw a network error, and the Anthropic call billed to completion regardless.
+//   • POST /admin/places/draft — one Opus call, max_tokens 16_000, up to MAX_DRAFT_TARGET places. The
+//     dialog's own copy says "this takes ~30s". It could therefore NEVER have completed: the socket
+//     died at ~12s, the operator saw a network error, and the Anthropic call billed to completion
+//     regardless.
 //   • POST /admin/places/curate — 2 Google Places round-trips per draft, serially, then a second loop
 //     of upserts. ~30 drafts is 15-25s. Worse than a failed read: the handler is never aborted, so the
 //     writes still land. The operator is shown a FAILURE while curated `places` rows — the planner's
 //     wire-level endpoint allowlist (INV-1/INV-2) — are committed to production.
+//     ⚠ THIS IS WHAT BOUNDS MAX_CURATE_DRAFTS. At the measured ~0.8s/draft, the 160 cap is ~130s —
+//     inside the 240 below, but the headroom is no longer generous. Raising that cap without either
+//     raising this or parallelising the resolve loop walks straight into the writes-land-anyway case
+//     above, on the paid path that seeds the allowlist.
 // This is the paid path that seeds that allowlist, and it has never been run (memory: the Tahoe
 // curation is still founder-gated), so the whole two-step flow was latently unable to complete.
 // 240s: Bun hard-caps idleTimeout at 255 (verified — 256 throws), and Cloud Run's own request timeout
