@@ -128,7 +128,52 @@ realistic prompts that demonstrate the RANGE** of the feature. Our three already
 — keep three, keep them obviously tappable, demote the TIER and the type, not the affordance.
 Recorded because it corrects this doc's own earlier recommendation.
 
-## 6. Seven options
+### The two reference apps the founder pointed at (2026-08-03)
+
+**Navan Edge** (business-travel assistant) and **Mindtrip** (consumer trip planner). Both are
+assistant-first travel apps solving the identical cold-open problem, and they disagree in one
+instructive way.
+
+- ⚠ **THE INSIGHT NEITHER MY OPTIONS NOR THE FIRST RESEARCH PASS NAMED: Skipper's app home is built
+  like a LANDING PAGE, and Skipper already has one.** Poster hero + kicker + display headline +
+  a tagline explaining what the product is — that is `apps/site`'s job, done at skipper.fm where it
+  converts strangers. In the app it re-sells someone who already installed. Navan's and Mindtrip's
+  app homes carry no poster because their marketing lives on their marketing site. This is the
+  strongest argument for D/H/I and it did not come from taste — it came from looking at two apps.
+- **Navan: suggestions are ROWS, not chips** — thumbnail · short bold title · dim subtitle · chevron,
+  uniform height. **The title is short ("Plan & book a trip") and the SUBTITLE carries the
+  specificity.** That is the fix for note 2 that neither pills nor text links gave: nothing wraps,
+  nothing shouts, the range stays legible. ⚠ And it is a PRESENTATION change only — those rows look
+  like navigation but behave like starter prompts, which is exactly what `pickExample` already does
+  (seeds both halves, no model call). Unlike option F it does **not** reopen the picker decision.
+- **Navan: one saturated colour, on the send button.** Second independent confirmation of Airbnb's
+  orb finding.
+- **Mindtrip: the QUESTION is the hero, and the composer stays a hairline field.** "Where to today,
+  Elsa?" is the biggest text on screen. ⚠ **So there are TWO valid answers to "what is the one loud
+  thing" — the input (Airbnb, Navan) or the question (Mindtrip)** — and both work because in each
+  case exactly one thing is loud. Skipper does not have to grow the composer; it has to stop three
+  other things shouting over it. Note that `voice.plan.opening` is already the perfect hero line and
+  currently renders at `body` 16pt *beneath* a `display` 30pt headline saying something else.
+- **All three leave a third of the screen empty.** Skipper fills it with a divider, a kicker and an
+  empty-state card. "Cluttered" is often just the absence of rest.
+- ⚠ **What must NOT be copied from Mindtrip: browsable place cards.** Its empty state is real content
+  ("Your Location", restaurant photos, heart/+ actions). Three reasons that is wrong here: it spoils
+  the ANTICIPATE beat the planner manufactures by deflecting place questions; our place imagery is
+  Wikipedia-sourced **CC BY-SA with an attribution obligation**; and a browsable grid of curated
+  places **re-creates the endpoint picker 1.1 deleted** — that curated set is the planner's
+  server-side allowlist, not a catalogue. Navan's warmth likewise comes from photography we cannot
+  cheaply or safely reproduce; the enamel badge (DESIGN §9's deferred SVG set) is the on-brand
+  substitute.
+- ✅ **Navan resolves the sample-link constraint by accident:** it puts its footnote ("Built for
+  business travelers") *under* the pinned composer — tiny, centred, dim. Because the composer is
+  pinned, that slot is always visible without scrolling, so the sample link can sit there and be
+  **both demoted and above the fold**, which is exactly what App Review needs.
+
+⚠ Sourcing note: `mindtrip.ai` serves their MARKETING site at that URL — the in-app screen is not
+publicly fetchable and was read from a founder-supplied screenshot. Navan likewise from a screenshot.
+Treat both as observed, not documented.
+
+## 6. Nine options
 
 Founder asked for a wider set (2026-08-03). They separate on **two axes**, and everything else is a
 flavour of one of these:
@@ -141,6 +186,8 @@ flavour of one of these:
 
 | Option | Entry | Poster | Answers | Cost / risk |
 | --- | --- | --- | --- | --- |
+| **H · Assistant home** *(Navan)* | field, bottom | watermark only | **all three**, and note 2 by a route neither pills nor links gave | Medium. Needs one row component (or a restyled `StopList`) + three short titles authored. ⚠ Moves the amber. ⚠ The asks must be re-authored as title + subtitle. |
+| **I · Question is hero** *(Mindtrip)* | field, bottom (quiet) | none | **all three**, and cheapest of the leaders | Low-med. Largely a swap of which line gets the `display` slot. ⚠ Sidesteps the amber problem entirely (no glow on the cold open). ⚠ Deletes the poster from the front door. |
 | **A · Re-tier** | field, bottom | all four | notes 2+3 fully, 1 partly | Lowest — a `variant` swap + copy edit. ⚠ Collides with the in-flight agent's narrower version. |
 | **G · One object** | field, bottom | compressed to one `Card framed` | note 1 cheaply; needs A for 2+3 | Low; reuses an existing primitive on a surface the system already permits it. ⚠ Ornament at small size fights DESIGN §2 — needs an eye. |
 | **B · Input as hero** | **field, HERO** | headline only, shrunk | all three, structurally | Medium. Two layouts (composer falls back to a pinned footer once a transcript exists). ⚠ Moves the amber — founder call. |
@@ -149,9 +196,14 @@ flavour of one of these:
 | **D · Straight in** | field, bottom | **none** | all three; biggest reduction that keeps the conversation immediate | Medium. ⚠ Deletes the WPA poster from the front door — DESIGN.md's entire identity claim. The persona absorbs the explainer ("Narrated road trips, folks — you pick the road, I do the talking"), which is either the charming answer or the loss of the one poster-shaped screen. |
 | **E · Poster once** | field, bottom | **first launch only** | note 1 for everyone past launch 1 | Low-med; one persisted flag, re-keying `collapsed` off `riderTurnCount`. ⚠ Makes the screen the founder reviews rarely the screen most riders see. |
 
-**Recommended: B + E.** B's hierarchy every launch, E's full poster on the very first one — the
-newcomer (and App Review) gets the travel poster and the explainer, the regular gets a screen with one
-obvious thing to do, and neither audience pays for the other.
+**Recommended: I + H's suggestion rows + §7's MY DRIVES rule** (recommendation moved from B+E once the
+reference apps landed). Concretely: promote `voice.plan.opening` into the `display` slot and delete
+the headline/trail/tagline blocks (I); render the three asks as short-title + subtitle rows rather
+than wrapped all-caps pills (H); drop MY DRIVES entirely when anonymous-and-empty and hoist it above
+the planner when the rider has drives (§7). That combination answers all five notes, needs no new
+colour decision (I keeps the cold open glow-free, so the amber invariant is never touched), and the
+poster survives as a sunburst watermark. **E remains available as a cheap add-on** if the founder
+wants the full poster on the very first launch for App Review's benefit.
 
 ### ⚠ Option B moves the one amber, and that is an invariant, not a style
 
@@ -168,6 +220,35 @@ keyed to `riderTurnCount > 0` — so the layout is loudest during the one moment
 look at, and tidies itself only *after* they act. Option B effectively makes the cold open look like
 the collapsed state from the start. ⚠ Re-keying it to first SCROLL instead does **not** obviously
 preserve the amber ordering above, since a rider can send a turn without scrolling.
+
+## 7. Notes 4 & 5 — where MY DRIVES belongs
+
+Founder, 2026-08-03: *"i wonder if the 'my drives' section should be moved somewhere else"* and
+*"it also is only relevant for signed in users"*. Checked against the code; it is sharper than a
+layout problem.
+
+- ⚠ **On the anonymous cold open MY DRIVES is GUARANTEED dead weight.** The section renders
+  **unconditionally** — there is no `signedIn` gate on it — and an anonymous session owns nothing
+  (`drives.user_id` requires an account; the wall is `POST /drives`). So a first-time rider gets a
+  divider, a kicker and an empty card that **can never populate**. It is the largest single block of
+  pure clutter on the screen, aimed at exactly the audience seeing the app for the first time.
+- ⚠ **But "hide it when signed out" would break a real state.** `load()` short-circuits for anonymous
+  riders to `listDownloadedDrives()` — from disk. A rider who signed in, downloaded drives and later
+  signed out still has content there, deliberately, as the offline-first fallback. The rule must key
+  on **`drives.length === 0 && !signedIn`**, never on `!signedIn` alone.
+- ✅ **The code already contains the answer.** `index.tsx` implements a documented OFFLINE INVERSION —
+  when the network is dead MY DRIVES goes FIRST, because out there it "is not the archive, it is the
+  product — the only thing on the phone that still works". Generalise that from connectivity to
+  STATE:
+  - **anonymous or empty** → the section is absent entirely;
+  - **has drives** → MY DRIVES **first**, the planner below (a returning rider's likelier intent is
+    *resume*);
+  - **offline** → exactly today's behaviour, which is already correct.
+- ⚠ **Why NOT a tab or a header icon, despite both reference apps doing that.** Navan hides its second
+  section behind "Home | Loyalty", Mindtrip behind a 5-tab bar — but **their second section is loyalty
+  and search; ours is the thing the rider is about to do in a car.** Resuming a saved drive is the
+  in-car action, and an extra hop costs most at the exact moment the rider is holding a phone in a
+  mount (DESIGN §8). Reordering by state buys the decluttering without paying that.
 
 ## Sources
 
