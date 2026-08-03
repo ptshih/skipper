@@ -20,20 +20,20 @@
 //   bun packages/studio/src/generate-scenic-narrations.ts                  # preview, $0
 //   bun packages/studio/src/generate-scenic-narrations.ts --apply          # 💸 founder go required
 //   ... --limit 6 --spread                                                 # sample ACROSS kinds
+//   ... --limit 6 --kind mountain                                          # the WORST case: one kind
+//   ... --offset 2                                                         # keep a re-test off the
+//                                                                          #   repair population
 //
 // ⚠ TWO TRAPS INHERITED FROM THE CUT WAVE BUILD (cut-wave-form.md), both handled here:
 //  1. MONOTONY IS STRUCTURAL in a low-input form — with two input fields (name + kind) the model
-//     converges hard; 2 of the first 3 wave smoke clips were the same sentence template. Handled
-//     here by running SEQUENTIALLY and feeding each call BOTH the openers and the closers already
-//     used. ⚠ MEASURED: feeding openers alone is not enough — the first smoke (2026-08-03, $0.06)
-//     came back with 4 of 4 clips ending on the same wry generalisation while their openings varied
-//     fine. The opening rides on the name, which differs; the CLOSE is where the model reaches for a
-//     stock move, so the closer is the one that collapses.
-//     ⚠ This buffer is still the WEAKER of the two known fixes, deliberately, at this size: the real
-//     fix is assigning a shape round-robin by QUEUE INDEX, because a rolling buffer leaves the first
-//     `NARRATION_CONCURRENCY` clips generating against an empty history and colliding with each
-//     other. At n<=6 sequential there is no concurrency, so the buffer is honest — but do NOT carry
-//     this approach into a full run.
+//     converges hard. Handled by an OPENING SHAPE ASSIGNED ROUND-ROBIN BY QUEUE INDEX
+//     (`openingAngleFor`), which holds at any concurrency and needs no shared mutable state.
+//     ⚠ THE ALTERNATIVE WAS TRIED HERE AND FAILED, so do not "simplify" back to it: a rolling
+//     recent-openers/closers buffer left 4 of 4 clips closing alike on the first smoke, then 3 of 6
+//     once closers were added — and the three that collapsed were clips 1, 2 and 3, the ones
+//     generated against an empty history. It also cannot persist across RUNS: both smoke rounds' PARK
+//     opened "that green patch". `81f6ca5` verified the rotation on six mountains — same kind on
+//     purpose, the worst case — and got six distinct openers.
 //  2. THE GROUNDING GATE CANNOT CATCH A CLAIM DERIVED FROM THE PLACE'S NAME ("Cathedral Peak" →
 //     "there's a peak out there", asserting a kind the card never gave). So this REQUIRES a non-null
 //     `kind` up front rather than trusting the gate to notice it is missing. It also requires a
@@ -46,7 +46,7 @@ import { and, eq, isNull, isNotNull } from 'drizzle-orm'
 // `recordModelUsage` is NOT imported — `runNarration` already records every call, so tallying here
 // too would double-count the exact spend this run exists to report.
 import { llmSpendLines } from '@skipper/shared'
-import { narrateStop, buildFactSheet, type NarrationRequest } from './pipeline/narrate'
+import { narrateStop, buildFactSheet, openingAngleFor, type NarrationRequest } from './pipeline/narrate'
 import { regionLabel } from './pipeline/geo'
 import { SKIPPER_SYSTEM_PROMPT } from './persona/skipper'
 
@@ -67,6 +67,12 @@ const flag = (name: string): string | undefined => {
 }
 const limit = Number(flag('--limit') ?? 3)
 const poiFilter = flag('--poi')?.toLowerCase()
+// ⚠ `--kind` EXISTS TO RUN THE WORST CASE. `--spread` samples ACROSS kinds, which is the EASY case for
+// monotony — a lake and a peak have different words available, so they diverge for free. The failure
+// mode this tier actually has is six of the SAME kind converging on one sentence, which is exactly
+// what `81f6ca5` verified its rotation against ("six MOUNTAINS — same kind on purpose"). A green
+// spread run proves nothing about it.
+const kindFilter = flag('--kind')?.toLowerCase()
 
 // The eligible population: named, KIND-bearing, road-snapped, fact-less, un-narrated, un-excluded,
 // and not a member of a cluster that already speaks for it.
@@ -94,7 +100,9 @@ const rows = await db
   )
   .orderBy(pois.name)
 
-const filtered = poiFilter ? rows.filter((r) => r.name.toLowerCase().includes(poiFilter)) : rows
+const filtered = rows
+  .filter((r) => (poiFilter ? r.name.toLowerCase().includes(poiFilter) : true))
+  .filter((r) => (kindFilter ? (r.kind ?? '').toLowerCase() === kindFilter : true))
 
 // ⚠ SAMPLE ACROSS KINDS, not down one. The b-side CLI's `--spread` exists because "green on rich
 // proves nothing about thin"; the same argument applies to KIND here, and harder — a lake and a peak
@@ -120,16 +128,16 @@ const picked = spread
       .map(([, list]) => list[Math.min(offset, list.length - 1)]!)
   : filtered.slice(offset, offset + limit)
 
-// ⚠ CLOSERS MATTER MORE THAN OPENERS HERE — measured on the first smoke (2026-08-03, $0.06). Feeding
-// only `recentOpeners` still produced FOUR OF FOUR clips ending on the same wry generalisation ("Some
-// views don't need a word from me" / "Some of these you just let your eyes rest on" / "Some of them
-// you just tip your hat to"). That makes sense in hindsight: with two input fields the OPENING varies
-// with the name, while the CLOSE is where the model reaches for a stock move. cut-wave-form's "2 of 3
-// clips were the same sentence template" was measuring the same collapse from the other end.
+// ⚠ THE OPENING SHAPE IS ASSIGNED BY INDEX, not learned from a buffer — and both alternatives are
+// measured. The rolling-buffer approach this CLI shipped with FAILED on 2026-08-03: feeding
+// `recentOpeners` alone left 4 of 4 clips closing alike; adding `recentClosers` took it to 3 of 6, and
+// the three that collapsed were clips 1, 2 and 3 — the ones generated against an empty history, which
+// is exactly the weakness cut-wave-form.md predicted in writing. A buffer also cannot persist ACROSS
+// runs: both smoke rounds' PARK opened "that green patch". `81f6ca5` verified the index rotation on
+// six mountains — same kind on purpose, the worst case — and got six distinct openers.
 const requestFor = (
   r: (typeof filtered)[number],
-  recentOpeners: string[],
-  recentClosers: string[],
+  index: number,
 ): NarrationRequest => ({
   region: regionLabel(r.speakableLat ?? r.lat, r.speakableLng ?? r.lng),
   stopType: 'scenic',
@@ -138,8 +146,7 @@ const requestFor = (
   targetSeconds: SCENIC_TARGET_SECONDS,
   maxSeconds: SCENIC_MAX_SECONDS,
   selfContained: true,
-  ...(recentOpeners.length > 0 ? { recentOpeners } : {}),
-  ...(recentClosers.length > 0 ? { recentClosers } : {}),
+  openingAngle: openingAngleFor(index),
 })
 
 console.log(
@@ -149,11 +156,11 @@ console.log(
 )
 
 if (!apply) {
-  for (const r of picked) {
+  for (const [i, r] of picked.entries()) {
     console.log('═'.repeat(100))
     console.log(`${r.name}  —  kind: ${r.kind}`)
     console.log('═'.repeat(100))
-    console.log(buildFactSheet(requestFor(r, [], [])))
+    console.log(buildFactSheet(requestFor(r, i)))
     console.log('')
   }
   console.log('─'.repeat(100))
@@ -167,23 +174,16 @@ if (!apply) {
 
 let generated = 0
 let failed = 0
-const recentOpeners: string[] = []
-const recentClosers: string[] = []
-for (const r of picked) {
+for (const [i, r] of picked.entries()) {
   console.log('═'.repeat(100))
   console.log(`${r.name}  —  kind: ${r.kind}`)
   console.log('═'.repeat(100))
   try {
-    const result = await narrateStop(requestFor(r, recentOpeners, recentClosers), SKIPPER_SYSTEM_PROMPT)
+    const result = await narrateStop(requestFor(r, i), SKIPPER_SYSTEM_PROMPT)
     generated++
     const words = result.script.split(/\s+/).filter(Boolean).length
     console.log(`\n${result.script}\n`)
     console.log(`(${words} words ≈ ${Math.round(words / 2.5)}s)\n`)
-    // Feed the NEXT call what this one opened AND closed with — trap #1, at a size where sequential
-    // is honest. Both halves: the first smoke proved the closer is the one that collapses.
-    const w = result.script.split(/\s+/).filter(Boolean)
-    recentOpeners.push(w.slice(0, 6).join(' '))
-    recentClosers.push(w.slice(-8).join(' '))
   } catch (err) {
     failed++
     console.log(`\n(FAILED: ${err instanceof Error ? err.message : String(err)})\n`)

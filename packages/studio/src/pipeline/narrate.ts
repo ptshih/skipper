@@ -72,6 +72,12 @@ export interface NarrationRequest {
    * That is why the geology monotony it was written to prevent happened anyway. Kept because an
    * authored-tour path may want the separate channel; do not trust it as live coverage.
    */
+  /** SCENIC-NAMED only: the assigned OPENING SHAPE for this clip (see `SCENIC_ANGLES`). A story varies
+   *  its opener naturally because its facts differ; a named scenic call-out has only a name and a kind,
+   *  so left alone the model converges on one template across the whole corpus. Assigning the shape
+   *  makes the spread STRUCTURAL and deterministic instead of hoping for emergent variety. Ignored on
+   *  every other stop type. */
+  openingAngle?: string
   geology?: string[]
   /** STORY only: co-located landmarks merged into this stop — each {name, facts}. Grounded;
    *  the narrator may name them and weave them into ONE telling of the place.
@@ -240,6 +246,41 @@ function mergedFeatureLines(features: MergedFeature[] | undefined): string[] {
   return out
 }
 
+/**
+ * The SCENIC opening rotation — the anti-monotony mechanism for any telling whose sheet is a name and
+ * a kind and nothing else.
+ *
+ * A story's facts differ per place, so its openers differ for free. A named SCENIC call-out has two
+ * fields, and independent calls against the same two-field sheet converge hard on one sentence shape.
+ * Every angle below stays strictly inside the scenic ceiling (name + kind + the plainly-visible day) —
+ * **none licenses a new fact**; they only change WHERE the sentence starts.
+ *
+ * ⚠ RECOVERED from `81f6ca5`'s `WAVE_ANGLES`, which was deleted with the wave form (cut-wave-form.md)
+ * and is renamed here because the problem was never wave-specific — that record says so outright:
+ * both wave traps are "properties of any narration form whose sheet is only a name + a kind, so they
+ * will recur for break, b-sides, and scenic".
+ *
+ * ⚠ ASSIGNED ROUND-ROBIN BY QUEUE INDEX, never a rolling recent-openers buffer, and this is measured
+ * twice over. `81f6ca5` verified the rotation on **six mountains — same kind on purpose, the worst
+ * case** — and got six distinct openers. The buffer alternative was then re-tested on 2026-08-03 and
+ * FAILED in exactly the predicted way: feeding openers alone left 4 of 4 clips closing alike, adding
+ * closers took it to 3 of 6, and the three that collapsed were clips 1, 2 and 3 — the ones generated
+ * against an empty history. An index rotation holds at any concurrency and needs no shared state.
+ */
+export const SCENIC_ANGLES: readonly string[] = [
+  "OPEN ON THE NAME, flat and immediate — the place's name in your very first words, the way you would read it off a sign, then one plain honest reaction to the look of the day. Do not warm up to it.",
+  'OPEN ON THE THING, unnamed — start with the plain shape of it out the window (water, an opening in the trees, a rise of ground) in ordinary words, and let the NAME land a beat later, once you have pointed.',
+  'OPEN BY TURNING THE NAME OVER — start with the name itself as a curiosity, the kind of name someone chose. ⚠ You do NOT know who named it or why and you must never guess, hedge, or imply an answer; the wondering IS the line, and it stays unanswered.',
+  'OPEN ON YOUR OWN REACTION — start with your honest feeling about this stretch of day (the light, the air, the quiet), then name the place as the thing that prompted it. The feeling is yours; keep it a feeling, never a claim about the place.',
+  'OPEN ON THE KIND, PLAINLY — start by calling out what KIND of thing it is in ordinary words ("another lake", "bit of meadow"), then give its name. If no kind was given on the card, open on the name instead — never infer a kind from the name.',
+  'OPEN ON A GROANER, if one comes FREE off the name or the kind — a pun needing no fact you were not handed. Lead with it and stop almost immediately after. If no free groaner is there, do NOT manufacture one: open on the name plainly and skip the joke entirely.',
+]
+
+/** The assigned opening shape for clip number `index` (round-robin over `SCENIC_ANGLES`). */
+export function openingAngleFor(index: number): string {
+  return SCENIC_ANGLES[((index % SCENIC_ANGLES.length) + SCENIC_ANGLES.length) % SCENIC_ANGLES.length]!
+}
+
 /** Build the per-stop USER fact sheet, matching the system prompt's "Reading the fact sheet" contract. */
 export function buildFactSheet(req: NarrationRequest): string {
   const lines: string[] = []
@@ -341,6 +382,10 @@ export function buildFactSheet(req: NarrationRequest): string {
         "everyone's to see; this named feature's particulars are not. Name it, gesture at it, react to the",
       )
       lines.push('plain look of the water and sky in your own voice, and stop — a glance, not a story.')
+      if (req.openingAngle) {
+        lines.push('')
+        lines.push(`HOW TO OPEN THIS ONE (assigned, so the corpus does not all start alike): ${req.openingAngle}`)
+      }
     } else {
       lines.push(
         'SCENIC stop — delivery only, NO place-facts. Point only at what is plainly, visibly there',
