@@ -704,6 +704,24 @@ unvalidated by construction. dev and prod are ONE Neon database; there is no sta
 - [ ] `sweep-orphans` deletes R2 objects. Its preview LISTING is byte-identical to before (every key
       is logged before any delete now), so a `--apply`-less run is a safe first check.
 
+## The version gate's store link is dead in the CURRENT window (2026-08-03) — closes with build 17
+
+`apps/api/src/version-policy.ts` justifies its App Store link with "it resolves by construction at
+the only moment it's used": the wall can only fire once a floor is raised, and a floor can only be
+raised once there IS a published version. **That condition is not met right now.** Verified
+2026-08-03: `apps.apple.com/app/id6778946770` → **404**, iTunes lookup `resultCount: 0` — nothing is
+published (1.0.0 is `DEVELOPER_REJECTED`).
+
+The case that breaks the argument is the one live today: a DEAD TESTFLIGHT CLIENT. Build 16 calls
+`/roam/*`, which the 1.1 API 404s (confirmed against prod) — a real reason someone would reach for
+the gate BEFORE publication, which is the one window where its only button goes nowhere. And for a
+TestFlight tester the App Store was never the right destination anyway; TestFlight updates its own.
+
+**Founder call 2026-08-03: leave it — build 17 is imminent and closes the window.** Recorded so the
+comment's guarantee is not read as unconditional by whoever reaches for the gate mid-release. Delete
+this entry once the listing is live (the argument becomes true again) — or act on it if build 17
+slips and testers need a clean wall instead of bare 404s.
+
 ## `apps/api` diligence pass (2026-08-02)
 
 Read the whole surface — mount order, limits, credits, erasure, planner config, logging. **It is in
