@@ -889,23 +889,36 @@ None of this is a build; all of it is config. The premise changed on 2026-07-28:
       ⚠ **Admin is deliberately NOT checked**: `skipper-admin` sits behind IAP, so an unauthenticated
       probe gets a redirect, not a health signal. It needs `--service-agent-auth`, which is its own
       piece of work.
-- [ ] **GCP billing budget + alert.** The Budget API is not even enabled on the project
-      (`gcloud beta billing budgets list` → `SERVICE_DISABLED`). Billing — not code — is the documented
-      root cause of the only real outage this project has had. ~5 min.
-      ⚠ Got heavier after 1.1 step 8: it is now the ONLY control anywhere that bounds AGGREGATE spend.
-      Every cap in `limits.ts` keys on client IP, so each bounds one caller and none bounds the total —
-      see [rider-spend-exposure.md](docs/research/rider-spend-exposure.md).
-- [ ] **Set `--max-instances` on the API deploy** (`cloudbuild.yaml`, one line). The deploy passes no
-      scaling flags at all, so the multiplier in RISK-4's "limit × live instances" is Cloud Run's
-      **default cap of 100** — a number nobody chose and that appears nowhere in the repo. Both paid
-      rider endpoints lost their account wall in 1.1 step 8, so the limiter is now their only guard.
-      A small value bounds the worst case while sitting far above any pre-launch demand, and it is
-      trivially raised at launch. ~2 min. Findings + the arithmetic:
-      [rider-spend-exposure.md](docs/research/rider-spend-exposure.md).
-      ⚠ Related but NOT the same bug, and not fixed by this: `PLAN_RATE_HOUR`'s 3,600 s window lives in
-      an in-memory map that dies with the instance, and with no `--min-instances` Cloud Run recycles
-      idle instances in minutes — so the long cap is largely unenforced even at ONE instance. A shared
-      store is the real fix and `rate-limit.ts` already puts it at M4.
+- [x] ~~**GCP billing budget + alert.**~~ **BUILT 2026-08-03.** The Budget API was not enabled at all;
+      it is now, and there is a budget where there were zero. Billing — not code — is the documented
+      root cause of the only real outage this project has had, and after 1.1 step 8 this is the ONLY
+      control anywhere that bounds AGGREGATE spend (every cap in `limits.ts` keys on client IP, so each
+      bounds one caller and none bounds the total — [rider-spend-exposure.md](docs/research/rider-spend-exposure.md)).
+      `Skipper — monthly spend tripwire`, **$100/mo**, scoped to this project, on billing account
+      `019BCA-9D6FC9-B3E1DC`. Thresholds **50 / 90 / 100 % actual + 100 % FORECASTED** — the forecast
+      rule is the one that matters, because it fires partway through a runaway month instead of after it.
+      ⚠ **A BUDGET IS AN ALERT, NOT A CAP. It does not stop a single request or a single dollar.** GCP
+      has no hard spend limit; the things that actually bound spend are `maxScale`, the rate limiters
+      and `max_tokens`. Do not let this entry read as "spend is now handled".
+      ✅ Its delivery does NOT depend on the unproven `hello@skipper.fm` inbox: it notifies that channel
+      AND, because `disableDefaultIamRecipients` is false, every billing-account admin by default.
+      **$100 was chosen, not measured** — recorded costs in `docs/` run $0.04–$10 per operation, so it
+      sits far above steady state and well under a runaway. Re-price it when real traffic exists:
+      `gcloud billing budgets update b0c32259-f947-4a8a-a612-53f1ee8c4897 --billing-account=019BCA-9D6FC9-B3E1DC --budget-amount=<n>USD`
+- [x] ~~**Set `--max-instances` on the API deploy**~~ — **DONE 2026-08-03** (`cloudbuild.yaml:73`,
+      `--max-instances=3`, plus the service-level `maxScale: 3` applied out of band). RISK-4's
+      "limit × live instances" multiplier was Cloud Run's **default of 100** — a number nobody chose,
+      appearing nowhere in the repo — and is now 3. Arithmetic:
+      [rider-spend-exposure.md](docs/research/rider-spend-exposure.md); the min-vs-max asymmetry is in
+      the deploy guide's *Scaling* section.
+- [ ] **`PLAN_RATE_HOUR`'s window is still not durable** — related to the above but NOT fixed by it,
+      and ⚠ **partly changed on 2026-08-03, so re-read before quoting the old version.** The window
+      lives in an in-memory map that dies with the instance. `minScale: 1` now holds one instance warm,
+      so the hour cap survives idle periods it previously did not — but this is mitigation, not a fix:
+      the instance still recycles on deploy and on any Cloud Run-initiated replacement, and at
+      `maxScale: 3` there are up to THREE independent maps, so the effective hourly ceiling is still
+      the limit times the live instance count. A shared store is the real fix; `rate-limit.ts` puts it
+      at M4.
 - [ ] **Re-accept RISK-4 deliberately, or re-price it** (founder, STOP rule — not a refactor).
       `PROPOSE_RATE` was set when `/propose` sat behind an account wall: the wall was the first-order
       guard, the limiter was defence-in-depth. After D14/D15 the limiter is the only guard on a billed

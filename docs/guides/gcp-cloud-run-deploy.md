@@ -227,10 +227,34 @@ gcloud beta monitoring policies create --policy-from-file=<file>
 - ⚠ **`skipper-admin` is deliberately NOT checked.** It is behind IAP, so an unauthenticated probe
   gets a redirect rather than a health signal — a check on it would either always fail or, worse, pass
   on the IAP login page. Doing it properly needs `--service-agent-auth`.
-- ⚠ **Still missing: a BILLING budget alert.** Uptime catches the 14-day outage *after* it starts;
-  a budget alert is what would have prevented it, and after 1.1 it is also the only control anywhere
-  that bounds AGGREGATE spend (every cap in `limits.ts` keys on client IP, so each bounds one caller
-  and none bounds the total). The Budget API is not enabled on the project. See `TODO.md`.
+### The billing budget (built the same day)
+
+Uptime catches the 14-day outage *after* it starts; the budget is the half that would have caught it
+coming. After 1.1 it is also the only control anywhere that bounds **aggregate** spend — every cap in
+`limits.ts` keys on client IP, so each bounds one caller and none bounds the total.
+
+```sh
+gcloud services enable billingbudgets.googleapis.com          # was not enabled at all
+gcloud billing budgets create --billing-account=019BCA-9D6FC9-B3E1DC \
+  --display-name="Skipper — monthly spend tripwire" --budget-amount=100USD \
+  --filter-projects=projects/lithe-window-491818-k8 \
+  --threshold-rule=percent=0.5 --threshold-rule=percent=0.9 --threshold-rule=percent=1.0 \
+  --threshold-rule=percent=1.0,basis=forecasted-spend \
+  --notifications-rule-monitoring-notification-channels=<channel>
+```
+
+- ⚠ **A BUDGET IS AN ALERT, NOT A CAP.** GCP has no hard spend limit — this stops nothing. What
+  actually bounds spend is `maxScale`, the rate limiters, and an explicit `max_tokens`. Read this
+  section as "you will be told", never as "you are protected".
+- **The FORECASTED threshold is the one that earns its keep** — it fires partway through a runaway
+  month rather than confirming one after the fact.
+- ✅ **Its delivery does not depend on the unproven `hello@skipper.fm` inbox.** It notifies that
+  channel *and*, since `disableDefaultIamRecipients` is false, every billing-account admin.
+- **$100 was chosen, not measured** — recorded per-operation costs run $0.04–$10, so it sits far above
+  steady state and well below a runaway. Re-price when real traffic exists (`budgets update`).
+- ⚠ There is a SECOND, CLOSED billing account on this login (`0190CB-DE5D23-69436F`). The budget is on
+  the open one that the project actually bills to; check `gcloud billing projects describe` before
+  assuming which is which.
 
 ## Gotchas we hit (so the next deploy doesn't re-discover them)
 
