@@ -30,6 +30,7 @@ export type IconName =
   | 'settings'
   | 'expand'
   | 'trailSign'
+  | 'loop'
   | 'spark'
   | 'chevronRight'
   | 'downloaded'
@@ -78,6 +79,11 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   // design system says it wants, rather than a stand-in for it. Replaces a map PIN, which read as a
   // generic location marker and said nothing about going anywhere.
   trailSign: 'trail-sign-outline',
+  // A round trip — out and back by another way. ⚠ NOT `restart`/`reload`: that glyph means "play this
+  // again" in the player, and a circular refresh arrow reads as "reload" everywhere else in software.
+  // `repeat` draws a circuit with arrowheads, which is the shape of the drive itself. Outline weight
+  // to match its two neighbours in the suggestion list — `reload` is solid and broke that rhythm too.
+  loop: 'repeat-outline',
   // The skipper's own mark, next to the line he says under the question. Four-point sparkle: it is
   // the one place the screen signals "this is him talking" now that the enamel kicker is gone.
   spark: 'sparkles-outline',

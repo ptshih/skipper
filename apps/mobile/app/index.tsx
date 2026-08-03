@@ -103,7 +103,7 @@ import {
 // degrades in regions with fewer than two curated names and position stops identifying a shape there.
 const EXAMPLE_ICONS: Record<ExampleAsk['shape'], IconName> = {
   aToB: 'trailSign', // a routed signpost: somewhere to somewhere
-  loop: 'restart', // a closed circuit — out and back around
+  loop: 'loop', // a circuit with arrowheads — out, and back another way
   open: 'scenic', // the skipper's own eye picks it
 }
 
