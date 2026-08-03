@@ -110,7 +110,18 @@ export const voice = {
     exampleLoop: 'A loop out of {a}, couple of hours.',
     exampleLoopReply:
       'Out of {a} and back around — good shape for an afternoon. Where do you want to turn around?',
-    exampleOpen: 'Somewhere pretty. You pick.',
+    // ⚠ NOT "Somewhere pretty. You pick." — that read fine as a standalone chip and stopped making
+    // sense the moment it sat under the title "Let the skipper pick": the row said the same thing
+    // twice, and the second time in the rider's mouth ("you pick") pointing at the skipper while the
+    // title pointed at him too. The ask still has to be the RIDER's line, so it asks for the same
+    // thing a different way.
+    // ⚠ TWO VARIANTS, and `{r}` is the REGION NAME — a different source from `{a}`/`{b}`, which are
+    // curated ANCHOR names. That distinction is what lets this row be region-specific like the other
+    // two without losing the property it exists for: it is the shape that survives a region with ZERO
+    // curated anchors, so it must still have a form that names nothing. `openRegion` when a region is
+    // known, `open` when one is not.
+    exampleOpenRegion: 'Surprise me — somewhere pretty around {r}.',
+    exampleOpen: 'Surprise me — somewhere pretty.',
     exampleOpenReply: 'Happy to pick. Where are you starting from?',
     // The turn cap (D12). ⚠ The composer is REPLACED by these, never greyed out — a disabled field
     // reads as broken, and the skipper bowing out in character is the whole point of the cap being

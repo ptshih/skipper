@@ -44,6 +44,12 @@ export interface ExampleAskTemplates {
   loopReply: string
   openTitle: string
   open: string
+  /** The same open-ended ask, but naming the REGION (`{r}`). Used when a region name is known.
+   *
+   *  ⚠ `{r}` is the region's display name — NOT one of the curated anchor names `{a}`/`{b}` come
+   *  from. Keeping them separate is what lets this row be region-specific like the other two while
+   *  still having a form that survives a region with zero curated anchors. */
+  openRegion: string
   openReply: string
 }
 
@@ -71,6 +77,7 @@ const fill = (template: string, a: string | undefined, b: string | undefined): s
 export function buildExampleAsks(
   names: readonly string[],
   t: ExampleAskTemplates,
+  regionName?: string,
 ): ExampleAsk[] {
   // `places.name` carries Wikipedia/Google ", California" suffixes; a chip is spoken-voice copy, so it
   // gets the same view-boundary cleaning every displayed name gets. Blanks and duplicates are dropped
@@ -98,15 +105,23 @@ export function buildExampleAsks(
       ask: fill(t.loop, a, b),
       reply: fill(t.loopReply, a, b),
     })
+  // Region-named when we have a region, bare when we do not. ⚠ The bare form is not a fallback for
+  // tidiness — it is the one ask that must survive a region with no curated anchors at all, so it can
+  // never be allowed to depend on a name of any kind.
+  const regionLabel = regionName?.trim()
   out.push({
     shape: 'open',
     title: t.openTitle,
-    ask: fill(t.open, a, b),
+    ask: regionLabel ? t.openRegion.replaceAll('{r}', regionLabel) : t.open,
     reply: fill(t.openReply, a, b),
   })
 
   // A structural wall, not a belt: voice.ts changes under a different review than this file, so a
   // `{b}` added to the loop template one day must degrade to "one fewer chip", never render braces at
   // a rider. Cheaper than a lint rule and it fails at the only place that can see both halves.
-  return out.filter((e) => !/\{[ab]\}/.test(e.ask) && !/\{[ab]\}/.test(e.reply))
+  // ⚠ ANY `{…}` token, not just `{a}`/`{b}`: `{r}` joined the vocabulary and the next one will not
+  // announce itself either. A guard that only knows the tokens it was written against is a guard that
+  // silently stops covering the newest one.
+  const UNFILLED = /\{[^}]*\}/
+  return out.filter((e) => !UNFILLED.test(e.ask) && !UNFILLED.test(e.reply))
 }

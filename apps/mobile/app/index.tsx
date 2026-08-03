@@ -430,6 +430,9 @@ export default function HomeScreen() {
   // The degraded cards' roster: this region's names when we have them, else the last good ones on
   // disk. Offline, the cache is the only source there is.
   const anchorNames = region?.exampleAnchors ?? cachedRegion?.exampleAnchors ?? []
+  // The region's own display name, on the same live-then-cached ladder as the anchors above. Feeds the
+  // open-ended suggestion so all three rows name this region, and the chip so both read from one place.
+  const regionLabel = region?.displayName ?? cachedRegion?.displayName ?? null
 
   const patchCard = useCallback((id: string, patch: Partial<PreviewItem>) => {
     setCards((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)))
@@ -802,9 +805,13 @@ export default function HomeScreen() {
         loopReply: voice.plan.exampleLoopReply,
         openTitle: voice.plan.exampleOpenTitle,
         open: voice.plan.exampleOpen,
+        openRegion: voice.plan.exampleOpenRegion,
         openReply: voice.plan.exampleOpenReply,
-      }),
-    [anchorNames],
+      },
+      // ⚠ The REGION name, not an anchor — it makes the open-ended row region-specific like the other
+      // two while staying the one ask that still has a form when a region has no curated anchors.
+      regionLabel ?? undefined),
+    [anchorNames, regionLabel],
   )
 
   /** A tapped example chip seeds BOTH halves of an authored exchange and makes NO model call — the
@@ -867,6 +874,13 @@ export default function HomeScreen() {
   const signInButton = (
     <Button variant="ghost" title="Sign in" fullWidth={false} onPress={() => router.push('/sign-in')} />
   )
+  // ⚠ THE HEADER-LEFT SLOT WAS ALREADY EMPTY FOR EXACTLY THIS AUDIENCE — `signedIn ? undefined :
+  // signInButton` left it doing nothing for signed-in riders, who are the only ones who can own a
+  // drive. So moving MY DRIVES off the page costs NO new chrome: the slot swaps by auth state, which
+  // is what it already did.
+  const drivesButton = (
+    <HeaderIconButton name="list" accessibilityLabel="My drives" onPress={() => router.push('/drives')} />
+  )
 
   // ── The masthead ────────────────────────────────────────────────────────────────────────────
   // What stood here — enamel kicker → Alfa-Slab headline → the parked rig on its trail → tagline —
@@ -900,7 +914,7 @@ export default function HomeScreen() {
     <RegionChip
       // The cached name covers the offline and outage reads; null only when no /regions call has ever
       // succeeded on this device, which RegionChip renders as nothing rather than an empty pill (§12).
-      regionName={region?.displayName ?? cachedRegion?.displayName ?? null}
+      regionName={regionLabel}
       // ⚠ Pressable ONLY when there is genuinely something to pick. With one released region this is
       // a plain label — RegionChip renders that state itself — because a caret onto a list of one is
       // a control that does nothing. The sheet is built and wired; it simply has no work to do until
@@ -1288,10 +1302,15 @@ export default function HomeScreen() {
             </Text>
           ),
           headerTitleAlign: 'center',
-          headerLeft: () => (signedIn ? undefined : signInButton),
+          headerLeft: () => (signedIn ? drivesButton : signInButton),
           headerRight: () => settingsButton,
-          unstable_headerLeftItems: () =>
-            signedIn ? [] : [{ type: 'custom', hidesSharedBackground: true, element: signInButton }],
+          unstable_headerLeftItems: () => [
+            {
+              type: 'custom',
+              hidesSharedBackground: true,
+              element: signedIn ? drivesButton : signInButton,
+            },
+          ],
           unstable_headerRightItems: () => [
             { type: 'custom', hidesSharedBackground: true, element: settingsButton },
           ],
@@ -1325,9 +1344,14 @@ export default function HomeScreen() {
         />
       ) : null}
 
-      {/* ⚠ OFFLINE INVERTS THE SCREEN. Out here MY DRIVES is not the archive, it is the product — the
-          only thing on the phone that still works — so it goes FIRST and the honest "can't plan out
-          here" card goes below it. The composer is absent entirely (see `footer`). */}
+      {/* ⚠ OFFLINE IS THE ONLY PLACE MY DRIVES STILL APPEARS ON HOME, and the asymmetry is the whole
+          design. Online it has its own screen (`/drives`, behind the header-left control) because on
+          the anonymous cold open it was a divider, a kicker and an empty card that could NEVER
+          populate — an anonymous session owns no drives. Out in a dead zone it is not the archive, it
+          is the product: the only thing on the phone that still works. So it goes FIRST here, the
+          honest "can't plan out here" card goes below it, and the composer is absent (see `footer`).
+          ⚠ Signed OUT and offline there is nothing to show at all — the sign-out purge clears the
+          downloads — which is why that state is the outage card alone rather than an empty list. */}
       {isOffline ? (
         <>
           {myDrives}
@@ -1335,10 +1359,7 @@ export default function HomeScreen() {
           <PlannerUnavailableCard reason="offline" anchorNames={anchorNames} />
         </>
       ) : (
-        <>
-          {conversation}
-          {myDrives}
-        </>
+        conversation
       )}
     </ConversationScreen>
   )

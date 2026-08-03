@@ -12,7 +12,8 @@ const T: ExampleAskTemplates = {
   loop: 'A loop out of {a}, couple of hours.',
   loopReply: 'Out of {a} and back around. Where do you want to turn around?',
   openTitle: 'Let the skipper pick',
-  open: 'Somewhere pretty. You pick.',
+  open: 'Surprise me — somewhere pretty.',
+  openRegion: 'Surprise me — somewhere pretty around {r}.',
   openReply: 'Happy to pick. Where are you starting from?',
 }
 
@@ -22,7 +23,7 @@ describe('shape degradation', () => {
     expect(asks).toHaveLength(3)
     expect(asks[0]?.ask).toBe('Tahoe City to Emerald Bay, the scenic way.')
     expect(asks[1]?.ask).toBe('A loop out of Tahoe City, couple of hours.')
-    expect(asks[2]?.ask).toBe('Somewhere pretty. You pick.')
+    expect(asks[2]?.ask).toBe('Surprise me — somewhere pretty.')
     // ⚠ Titles ride through UNFILLED and stay paired with their own shape. The pairing is the thing
     // worth pinning: the list is built by three separate pushes under three different conditions, so
     // a mis-paired title is a one-character edit away and would label the loop "Drive somewhere".
@@ -41,8 +42,18 @@ describe('shape degradation', () => {
     const asks = buildExampleAsks(['Tahoe City'], T)
     expect(asks.map((a) => a.ask)).toEqual([
       'A loop out of Tahoe City, couple of hours.',
-      'Somewhere pretty. You pick.',
+      'Surprise me — somewhere pretty.',
     ])
+  })
+
+  test('a region name makes the open-ended ask region-specific too', () => {
+    const asks = buildExampleAsks(['Tahoe City'], T, 'Lake Tahoe')
+    expect(asks.at(-1)?.ask).toBe('Surprise me — somewhere pretty around Lake Tahoe.')
+    // ⚠ And WITHOUT one it must still produce an ask — this is the shape that has to survive a region
+    // with no curated anchors, so it can never be allowed to depend on a name of any kind.
+    expect(buildExampleAsks([], T).at(-1)?.ask).toBe('Surprise me — somewhere pretty.')
+    // A blank/whitespace region name is the same as none, not an empty gap on screen.
+    expect(buildExampleAsks([], T, '   ').at(-1)?.ask).toBe('Surprise me — somewhere pretty.')
   })
 
   test('no names → only the ask that needs no facts', () => {
@@ -66,7 +77,7 @@ describe('the names themselves', () => {
     const asks = buildExampleAsks(['  ', 'Tahoe City', 'Tahoe City, California'], T)
     expect(asks.map((a) => a.ask)).toEqual([
       'A loop out of Tahoe City, couple of hours.',
-      'Somewhere pretty. You pick.',
+      'Surprise me — somewhere pretty.',
     ])
   })
 
@@ -90,6 +101,6 @@ describe('no placeholder ever reaches a rider', () => {
     // voice.ts changes under a different review than this file — this is that seam's guard.
     const grown = { ...T, loop: 'A loop out of {a} by way of {b}.' }
     const asks = buildExampleAsks(['Tahoe City'], grown)
-    expect(asks.map((a) => a.ask)).toEqual(['Somewhere pretty. You pick.'])
+    expect(asks.map((a) => a.ask)).toEqual(['Surprise me — somewhere pretty.'])
   })
 })

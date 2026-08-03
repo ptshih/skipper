@@ -38,7 +38,11 @@ desk passes — its §0 owns what they can't prove, so don't re-argue it here.
   (`scripts/guard-hook.ts`) hard-denies the NEVER list and prompts on spend. `/guard` is the
   cheat-sheet — read it before working around a block, and every rule must trace back to a line here.
 - **🖥 Don't boot or restart dev servers** — the human keeps them running continuously; just use them
-  (find ports with `lsof -nP -iTCP:<port> -sTCP:LISTEN`).
+  (find ports with `lsof -nP -iTCP:<port> -sTCP:LISTEN`). ⚠ **METRO (:8081) IS THE EXCEPTION (founder,
+  2026-08-03): stopping and starting it for a simulator visual pass is ALWAYS fine, no need to ask.**
+  It is the app's own bundler, not a shared service, and a mobile change cannot be verified without
+  it — `cd apps/mobile && bun run start` in the background, then relaunch the app. The rule protects
+  the API/admin/site servers, whose state the human is often mid-way through.
 - **✅ Verify before committing:** root `bun run check` — the doc/type/enum lints, then every typecheck
   and test suite, `scripts/` included (`package.json` holds the list; don't re-enumerate it here, it
   drifts). If you touched `apps/mobile`, ALSO run `bun run check` there (the real delta is
@@ -216,7 +220,8 @@ desk passes — its §0 owns what they can't prove, so don't re-argue it here.
 - **Shell is zsh and `~/.zshrc` rides every Bash command** — an unmatched glob ABORTS the command and
   interactive aliases apply. A `CLAUDECODE`-gated guard in the founder's `~/.zshrc` neutralizes both, but
   it is MACHINE-LOCAL: prefer Read/Grep/Glob over shell, guard globs (`2>/dev/null`, `find`), absolute
-  paths. ⚠ Redirect to a file and read it when output matters — some commands' stdout arrives empty here.
+  paths — ⚠ the Bash **cwd PERSISTS between calls**, so one `cd` silently re-roots every later relative
+  path and a grep/`git diff -- path` then matches NOTHING and reads as "clean". Cost two false results.
 - **There are TWO skipper prompts and they are NOT interchangeable.** (1) The **narration** prompt
   (`packages/studio/src/persona/skipper.ts`) governs baked audio, is written around the fact sheet and stop
   kinds, and is enforced by the fail-closed eval gate — still the highest-leverage prose in the repo, iterate

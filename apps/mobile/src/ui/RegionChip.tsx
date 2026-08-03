@@ -87,7 +87,19 @@ export function RegionChip({ regionName, onPress }: RegionChipProps) {
           <RegionMark regionName={regionName} />
         </View>
       )}
-      <Divider dashed style={styles.trail} />
+      {/* ⚠ SOLID, NOT `dashed`, AND THAT IS A WORKAROUND FOR A REAL BUG — not a design preference.
+          `Divider dashed` paints via `borderTopWidth`, and a border-only View laid out in a ROW
+          renders NOTHING here: proven by giving this box a temporary background, which showed the
+          trail at the right width and position with no rule in it, and by four failed attempts to
+          give the border a box to paint on (explicit height on the Divider, on this wrapper, and a
+          nested column context). The non-dashed variant paints via `backgroundColor` and works.
+          ⚠ The design (§13 S1) asks for a DASHED atlas rule, so this is a knowing downgrade: the rule
+          exists and reads, but it is a hairline rather than a trail. Restoring dashes needs a real
+          dashed primitive (a repeated View run or react-native-svg), not another style tweak — and
+          the same trap is waiting for anyone who puts `Divider dashed` in a row. */}
+      <View style={styles.trail}>
+        <Divider />
+      </View>
     </View>
   )
 }
@@ -132,6 +144,7 @@ const styles = StyleSheet.create({
     // the same physical rule `Divider` draws so the chip and the trail read as one system.
     borderWidth: StyleSheet.hairlineWidth,
   },
+  // Width only; the Divider brings its own height.
   trail: { flex: 1 },
   pressed: { opacity: 0.7 },
 })
