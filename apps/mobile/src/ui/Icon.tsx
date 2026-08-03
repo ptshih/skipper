@@ -29,6 +29,8 @@ export type IconName =
   | 'auto'
   | 'settings'
   | 'expand'
+  | 'region'
+  | 'chevronRight'
   | 'downloaded'
   | 'notDownloaded'
   | 'update'
@@ -70,6 +72,14 @@ const IONICON: Record<IconName, ComponentProps<typeof Ionicons>['name']> = {
   auto: 'contrast-outline', // half-lit disc = "follow the phone" (system appearance)
   settings: 'settings-outline',
   expand: 'chevron-down', // a filter chip that opens a picker
+  // The REGION the conversation is pinned to, on the home chip. A pin, not `map` (which is already
+  // spoken for by the live-drive Map VIEW) and not a mountain: the chip names a stretch of country,
+  // and the glyph has to stay true when the region is a city.
+  region: 'pin-outline',
+  // The affordance on a row that opens something. `upcoming` is a caret and means "a stop you have
+  // not reached yet" — a different sentence, and reusing it here would make a suggestion row look
+  // like an itinerary entry.
+  chevronRight: 'chevron-forward',
   downloaded: 'cloud-done-outline', // a drive that's saved to disk + plays with no signal
   // Still in the cloud = will STREAM. The counterpart to `downloaded`, and deliberately a plain cloud
   // (not `cloud-offline`, which reads as "you are offline" rather than "this isn't on your phone").
