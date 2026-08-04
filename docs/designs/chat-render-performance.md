@@ -47,9 +47,12 @@ Each step is independently shippable and independently observable.
    the default comparator is correct — skipper needs no equivalent of manoa's `arePropsEqual` escape
    hatch, because its streaming text is a fresh immutable string rather than an in-place mutation.
 3. **Make `myDrives` lazy.** ✅ LANDED. It allocated `drives.map(...)` on every render but is consumed
-   only in the offline branch. (`Ridgeline` memoization is the unbuilt remainder of this step — it
-   recomputes seven `Math.hypot`/`Math.atan2` segments per render for a decoration that never changes,
-   and wants a both-themes visual pass.)
+   only in the offline branch. **`Ridgeline` — the remainder of this step — is now LANDED too**:
+   `memo()` plus a `useMemo` over the geometry, so it renders once per mount instead of re-solving
+   seven `hypot`/`atan2` pairs on every screen render (twice a second while a clip plays). Every prop
+   at its one call site is a literal, so the comparator is exact. ⚠ It does NOT freeze against a theme
+   change — `useTheme` is a context read, and React re-renders a memoized component when a consumed
+   context changes. **Both-themes visual pass done** (day and dusk, identical ridge, correct repaint).
 4. **Let the Composer own its own draft text.** ✅ LANDED, and **measured: 1 full `HomeScreen` render
    per keystroke → 0.** Manoa match: `ChatInput` owns its own `text`. `ComposerProps.onSend` now takes
    the text as an argument and the field clears itself; the screen never sees the draft until send.

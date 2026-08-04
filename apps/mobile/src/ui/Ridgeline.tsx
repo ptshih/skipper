@@ -14,6 +14,7 @@
 // wherever it sits it reads as a decal ON the screen and its rays get cropped by the edges. A ridge
 // is an EDGE — it belongs against the top the way a horizon belongs at the top of a poster, and it
 // runs off both sides instead of being cut off by them.
+import { memo, useMemo } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { useTheme } from '../theme/ThemeProvider'
 import type { ThemeColors } from '../theme/theme'
@@ -46,7 +47,7 @@ const POINTS: readonly { x: number; y: number }[] = [
   { x: 1.02, y: 0.62 },
 ]
 
-export function Ridgeline({
+function RidgelineBase({
   width,
   height = 56,
   opacity = 0.16,
@@ -54,6 +55,37 @@ export function Ridgeline({
   stroke = 2,
 }: RidgelineProps) {
   const { colors } = useTheme()
+
+  // ⚠ GEOMETRY MEMOIZED APART FROM PAINT. Seven `hypot`/`atan2` pairs is nothing on its own — the
+  // point is that it is nothing SEVEN TIMES per render, for a decoration whose shape has never once
+  // changed after mount. Keyed on the band's dimensions only: the colour is applied below, so a theme
+  // change repaints without re-solving the ridge.
+  const segments = useMemo(
+    () =>
+      POINTS.slice(1).flatMap((p, i) => {
+        const a = POINTS[i]
+        if (!a) return []
+        const x1 = a.x * width
+        const y1 = height - a.y * height
+        const x2 = p.x * width
+        const y2 = height - p.y * height
+        const len = Math.hypot(x2 - x1, y2 - y1)
+        return [
+          {
+            // Positioned by its CENTRE then rotated, because a View rotates about its own centre —
+            // anchoring by the left end would swing each segment away from its neighbour and open
+            // gaps at every vertex.
+            left: (x1 + x2) / 2 - len / 2,
+            top: (y1 + y2) / 2 - stroke / 2,
+            width: len,
+            height: stroke,
+            rotate: `${(Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI}deg`,
+          },
+        ]
+      }),
+    [width, height, stroke],
+  )
+
   return (
     <View
       style={{ width, height, opacity }}
@@ -61,40 +93,34 @@ export function Ridgeline({
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
-      {POINTS.slice(1).map((p, i) => {
-        const a = POINTS[i]
-        if (!a) return null
-        const x1 = a.x * width
-        const y1 = height - a.y * height
-        const x2 = p.x * width
-        const y2 = height - p.y * height
-        const dx = x2 - x1
-        const dy = y2 - y1
-        const len = Math.hypot(dx, dy)
-        const deg = (Math.atan2(dy, dx) * 180) / Math.PI
-        return (
-          <View
-            key={i}
-            style={[
-              styles.seg,
-              {
-                // Positioned by its CENTRE then rotated, because a View rotates about its own centre
-                // — anchoring by the left end would swing each segment away from its neighbour and
-                // open gaps at every vertex.
-                left: (x1 + x2) / 2 - len / 2,
-                top: (y1 + y2) / 2 - stroke / 2,
-                width: len,
-                height: stroke,
-                backgroundColor: colors[color],
-                transform: [{ rotate: `${deg}deg` }],
-              },
-            ]}
-          />
-        )
-      })}
+      {segments.map((s, i) => (
+        <View
+          key={i}
+          style={[
+            styles.seg,
+            {
+              left: s.left,
+              top: s.top,
+              width: s.width,
+              height: s.height,
+              backgroundColor: colors[color],
+              transform: [{ rotate: s.rotate }],
+            },
+          ]}
+        />
+      ))}
     </View>
   )
 }
+
+/** ⚠ MEMOIZED, and at the only call site every prop is a literal — so this now renders ONCE per
+ *  mount instead of riding along with every screen render (which, while a preview clip plays, means
+ *  twice a second for a line that cannot move).
+ *
+ *  ⚠ This does NOT freeze it against a theme change: `useTheme` is a context read, and React
+ *  re-renders a memoized component when a context it consumes changes, regardless of props. Day/dusk
+ *  still repaints — verified in both themes. */
+export const Ridgeline = memo(RidgelineBase)
 
 const styles = StyleSheet.create({
   seg: { position: 'absolute', borderRadius: 1 },
