@@ -157,6 +157,25 @@ export const MAX_PLAN_MESSAGE_CHARS = 2_000
  *  a reservation. Tighten only after logging real p99 output. */
 export const PLANNER_MAX_TOKENS = 2_048
 
+/** How long `POST /drives/plan` may reuse a region's cached name + anchor roster (./roster-cache).
+ *
+ *  ⚠ A LOAD CAP, NOT A SPEND CAP — but it sits beside the spend ones deliberately, because the
+ *  resource it protects is the one they share. Without it the planner paid TWO SEQUENTIAL Neon
+ *  round-trips on every rider MESSAGE (the anchor query needs the bbox the region query returns) to
+ *  re-read something that changes only when an operator releases a region or runs `curate-places`.
+ *  `/regions` is hit once per app launch and already has REGIONS_MEMO_TTL_MS; this path is hit once
+ *  per message and had nothing.
+ *
+ *  ⚠ A SEPARATE CONSTANT FROM REGIONS_MEMO_TTL_MS, same value today by agreement rather than by
+ *  derivation — and they must stay separate because they answer to different pressures. That one
+ *  trades against how fast an operator sees a release in the PICKER; this one also governs how long a
+ *  roster stays byte-stable inside the CACHED system-prompt prefix, so lowering it toward zero starts
+ *  re-billing prefixes mid-conversation. Raising either only ever delays an operator.
+ *
+ *  ⚠ ITS COST IS OPERATOR-VISIBLE, NEVER RIDER-VISIBLE: after curating places, an operator waits up
+ *  to this long PER LIVE INSTANCE before the skipper can send anyone to the new one. */
+export const PLAN_ROSTER_MEMO_TTL_MS = 60_000
+
 /** Ceiling on the curated anchors handed to the planner in its system prompt.
  *  ⚠ A CEILING, NOT A PAGE SIZE — deliberately far above today's 26 endpoint-eligible places, so it
  *  can never silently truncate a real region's allowlist and make a legitimate endpoint unaskable.

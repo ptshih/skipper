@@ -32,21 +32,18 @@
 
 import { Hono } from 'hono'
 import { streamSSE, type SSEMessage } from 'hono/streaming'
-import { eq } from 'drizzle-orm'
-import { db } from '@skipper/db'
-import { regions } from '@skipper/db/schema'
 import {
   drivePlanRequest,
   MAX_ROUTE_VIA,
   type DrivePlanResponse,
   type PlannedRoute,
 } from '@skipper/shared'
-import { loadRegionAnchors, readJsonBody } from './drives'
+import { readJsonBody } from './drives'
 import type { ApiEnv } from './entitlements'
 import { checkTranscript, MAX_PLAN_BODY_BYTES, PLAN_WRAP_UP_AFTER_MESSAGES } from './limits'
 import { PlannerTurnError, runPlannerTurn, type PlannerModelArgs, type PlannerTurn } from './planner'
 import { PLANNER_WRAP_UP_NOTICE } from './planner-prompt'
-import { withRetry } from './retry'
+import { loadRegionRoster } from './roster-cache'
 
 export const planRoutes = new Hono<ApiEnv>()
 
@@ -271,18 +268,19 @@ planRoutes.post('/', async (c) => {
     return c.json({ say: "We have been at this a while. Let's start fresh and I'll get you rolling.", done: true }, 200)
   }
 
-  const [region] = await withRetry(
-    () => db.select({ bbox: regions.bbox, name: regions.displayName }).from(regions).where(eq(regions.id, read.data.regionId)).limit(1),
-    { label: 'plan.region' },
-  )
-  if (!region) return c.json({ say: VOICE.noRegion, done: true } satisfies DrivePlanResponse, 200)
-
-  const anchors = await loadRegionAnchors(region.bbox)
+  // ⚠ MEMOIZED (./roster-cache), and it replaces TWO SEQUENTIAL DB round-trips that used to run in
+  // front of every rider message — the region read, then the anchor read that needs its bbox. What
+  // they fetch is identical for every rider in a region and changes only when an operator releases one
+  // or runs `curate-places`. It also keeps the roster stable across the turns of one conversation,
+  // which matters because the roster rides inside the CACHED prompt prefix: a mid-conversation change
+  // would re-bill the whole prefix at full price with nothing failing.
+  const roster = await loadRegionRoster(read.data.regionId)
+  if (!roster) return c.json({ say: VOICE.noRegion, done: true } satisfies DrivePlanResponse, 200)
 
   const args: PlannerModelArgs = {
     turns: read.data.turns,
-    regionName: region.name,
-    anchors,
+    regionName: roster.name,
+    anchors: roster.anchors,
     // D12 — the in-persona wrap-up, and THIS IS THE PRODUCER. It has three halves and they only work
     // together: the THRESHOLD in ./limits, this line, the volatile system block in ./planner, and the
     // `== Wrapping up ==` section of ./planner-prompt that the notice's opening phrase is the trigger

@@ -42,6 +42,8 @@ import {
 // ⚠ Safe to import statically alongside ../src/limits: ../src/planner-prompt imports NOTHING by design,
 // so it reaches neither ./auth's module-load throw nor the SDK. If this ever needs a seed, that is the bug.
 import { PLANNER_WRAP_UP_NOTICE } from '../src/planner-prompt'
+// ⚠ Imported AFTER the mocks above resolve — ./roster-cache reaches ./drives, which is mocked here.
+import { resetRosterMemo } from '../src/roster-cache'
 
 /* -------------------------------------------------------------------------- */
 /* Harness. Mocks FIRST — plan-route.ts's static imports resolve through them.  */
@@ -53,10 +55,16 @@ import { PLANNER_WRAP_UP_NOTICE } from '../src/planner-prompt'
 // cors.test.ts's app import needs, whichever order bun happens to run these in).
 process.env.BETTER_AUTH_SECRET ??= 'test-only-secret-that-signs-nothing-real'
 
+/** How many times the anchor read actually ran. ⚠ The ONLY way to observe the roster memo from out
+ *  here — a cache that is working looks exactly like one that is not, from the response body. */
+let anchorLoads = 0
 const realDrives = { ...(await import('../src/drives')) }
 mock.module('../src/drives', () => ({
   ...realDrives,
-  loadRegionAnchors: async () => [{ id: '3582ed8a-a55e-4fb2-b8af-59dcd9eef16c', name: 'Tahoe City' }],
+  loadRegionAnchors: async () => {
+    anchorLoads++
+    return [{ id: '3582ed8a-a55e-4fb2-b8af-59dcd9eef16c', name: 'Tahoe City' }]
+  },
 }))
 
 /** The region read, stubbed. Mutable so a test can make the region vanish. */
@@ -138,6 +146,16 @@ const post = (body: unknown, accept?: string, init?: RequestInit) =>
   )
 
 const OK = { turns: [{ role: 'rider', text: 'plan me something scenic' }], regionId: crypto.randomUUID() }
+
+// ⚠ THE ROSTER MEMO IS PROCESS-WIDE, AND SO IS THIS FILE'S STUBBED WORLD — so it has to be cleared
+// between tests or they silently couple. `OK` carries ONE regionId for the whole file (the
+// `crypto.randomUUID()` above runs once at module load), and `regionRows` is deliberately mutated to
+// make the region vanish for the unknown-region test. Without this, the first test to resolve that id
+// caches it and the unknown-region test reads a stale HIT — passing a region back for a world where
+// none exists, and failing for a reason nothing in that test mentions.
+beforeEach(() => {
+  resetRosterMemo()
+})
 
 /** Reset the mutable world. Each test owns its own turn; nothing is shared but the harness. */
 function say(text: string, deltas: string[] = []): void {
@@ -232,6 +250,50 @@ describe('POST /drives/plan — rejections are identical on both Accepts', () =>
     const body = drivePlanResponse.parse(await res.json())
     expect(body.done).toBe(true)
     expect(body.say.length).toBeGreaterThan(0)
+  })
+
+  test('the roster is read ONCE per region and reused across turns', async () => {
+    // The whole point: this ran on every rider MESSAGE before ./roster-cache, as two sequential
+    // round-trips in front of every turn of every conversation.
+    anchorLoads = 0
+    say('One.')
+    await post(OK)
+    say('Two.')
+    await post(OK)
+    say('Three.')
+    await post(OK)
+    expect(anchorLoads).toBe(1)
+  })
+
+  test('the reset seam actually clears it', async () => {
+    // ⚠ Guards the seam itself, not just the cache. Every other test in this file depends on the
+    // beforeEach reset working, so a silently broken reset would couple them all with no direct
+    // failure — it would surface as an unrelated test reading a region that should not exist.
+    anchorLoads = 0
+    say('One.')
+    await post(OK)
+    resetRosterMemo()
+    say('Two.')
+    await post(OK)
+    expect(anchorLoads).toBe(2)
+  })
+
+  test('a MISS is never memoized — an unknown region re-reads every time', async () => {
+    // ⚠ BOUNDEDNESS, not tidiness. `regionId` is attacker-controlled on an open anonymous route, so
+    // caching misses would let a stranger grow the map without limit by sending fresh UUIDs. Caching
+    // only hits bounds it by the number of REAL regions. This asserts the map cannot be grown that
+    // way, by proving the second unknown lookup was not served from cache.
+    regionRows = []
+    try {
+      const first = await post({ turns: OK.turns, regionId: crypto.randomUUID() })
+      expect(drivePlanResponse.parse(await first.json()).done).toBe(true)
+      // Same id twice: still no cache, still the honest bow-out rather than a stale hit.
+      const id = crypto.randomUUID()
+      expect(drivePlanResponse.parse(await (await post({ turns: OK.turns, regionId: id })).json()).done).toBe(true)
+      expect(drivePlanResponse.parse(await (await post({ turns: OK.turns, regionId: id })).json()).done).toBe(true)
+    } finally {
+      regionRows = [{ bbox: '-120.2,38.9,-119.9,39.3', name: 'Lake Tahoe' }]
+    }
   })
 
   test.each(both)('an unknown region bows out in persona (accept=%s)', async (accept) => {
