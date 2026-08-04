@@ -765,3 +765,30 @@ Owed, in dependency order — **nothing below is started**:
       Fix is a judgement call between: prune one QID (`prune-corpus`), or detect the class first — a sweep
       for same-NAME pois within a few hundred metres would find siblings this one implies exist. Start with
       the count.
+
+- [ ] **Three famous Tahoe passes sit OUTSIDE the region, and that is a boundary question, not a bug.**
+      `Carson Pass`, `Hope Valley` and `Luther Pass` were drafted by `curate-places` and correctly dropped:
+      the model knows they are Tahoe-adjacent, but they fall SOUTH of the `lake-tahoe` bbox
+      (`-120.40,38.80,-119.55,39.65`), so bbox-restricted Autocomplete could not find them and returned the
+      nearest in-bbox STREET instead — "Carson Court" for Carson Pass, "Hope Court" for Hope Valley. The
+      address guard then refused the substitute. **Every link in that chain behaved correctly**; do not
+      "fix" it by loosening the guard, which re-opens the gated-forest-road bug (143-minute drive,
+      `docs/decisions/undrivable-endpoint-anchors.md`).
+      Distances south of the edge: Carson Pass ~0.106°, Hope Valley ~0.039°, Luther Pass ~0.015°.
+      ⚠ Those were measured against RECALLED coordinates — fine for Carson Pass and Hope Valley, but
+      Luther Pass is ~1.7 km out and Strawberry ~200 m IN, so both could flip on real coordinates. Re-check
+      before acting on either.
+      The fix is to move the southern edge to ~38.68, which pulls in the whole CA-88/89 corridor and needs
+      a fresh `discover` → `enrich` → `curate` for that strip — **a paid, corpus-wide change**. Deliberately
+      NOT done on the eve of the 1.1 submission sweep for a handful of endpoints.
+
+- [ ] **`Secret Cove` and `Strawberry` cannot enter `places` AT ALL — the first hard evidence for
+      decoupling the planner from Google Places.** Neither has a Google entity inside the region. Secret
+      Cove returns exactly ONE in-bbox candidate region-wide: "Secret Harbor Drive", a street ~30 km from
+      the actual cove. Strawberry returns its road, then two hits for "Strawberry Point" at −120.339 — some
+      17 km west of the US-50 hamlet at −120.139, a DIFFERENT Strawberry.
+      `places.place_id` is `notNull`, so there is no row to write: these are not Places-shaped destinations.
+      ⚠ This is the concrete case the decoupling argument was missing — see
+      [corpus-as-the-planners-world](docs/designs/corpus-as-the-planners-world.md) and
+      [what-is-a-drive-endpoint](docs/designs/what-is-a-drive-endpoint.md). Wikidata knows what is NOTABLE,
+      Google knows where people GO, and neither set contains the other. Resolve the class, not these two.
