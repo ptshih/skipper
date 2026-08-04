@@ -161,7 +161,14 @@ Sign in on the dev build with the demo account, open **MY DRIVES → "Tahoe City
 A note that sends a reviewer to a screen that moved is the precise failure the 2026-07-30 rewrite was
 cleaning up. Do this on the **production/TestFlight** build, signed out, on cellular.
 
-- [ ] Cold launch. Expect "Well now — where are we headed?" and a composer reading **"Tell me where to"**.
+- [ ] Cold launch. Expect **"Where are we headed?"** ⚠ *not* "Well now — where are we headed?": that
+      kicker was CUT with the tic (founder, 2026-08-03 — see the note at `voice.ts`'s `openingQuestion`),
+      and this line went stale the same day. The composer reads a ROTATING example
+      ("somewhere pretty, back by 5", "{a} to {b}", …); the bare **"Tell me where to"** is the fallback
+      shown only when the region has no curated names, so do not treat a rotating placeholder as wrong.
+      ⚠ There are exactly **two** example rows — "Drive somewhere" and "Let the skipper pick". The third
+      ("Take a loop") was removed 2026-08-03 with the loop default
+      ([../decisions/no-same-road-loops.md](../decisions/no-same-road-loops.md) §8).
 - [ ] Type exactly `Tahoe City down to South Lake Tahoe`. Expect a route under **YOUR DRIVE** and a
       player under **A TASTE OF THIS ONE** that plays a real clip. **No sign-in, no location prompt
       anywhere on this path** — that claim is the strongest thing in the notes and it must be literally true.
