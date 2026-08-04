@@ -215,6 +215,13 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   the 1:1 `pois`↔`narrations` atom, no `roam_clips` table, and 1.1 then removed the mode outright.)
 
 ### designs/
+- [planner-lookup-tools.md](designs/planner-lookup-tools.md) — 💡 IDEA: let the planner CALL for what it
+  does not know instead of carrying it — `find_place` turns "don't know that one" into a redirect to the
+  nearest routable anchor, for ~2¢/turn against $0.11 a conversation for the fat-prefix alternative.
+  ⚠ Records a MEASURED KILL: a corridor pre-check ranked the 143-min/2-story drive HIGHEST at every
+  buffer width, because stop count is a function of the route and the route needs the billed call — and
+  `/drives/propose` already knows the real answer for free. ⚠ A tool loop breaks the one-turn-one-call
+  assumption every planner cap rests on. Not greenlit (2026-08-04).
 - [what-is-a-drive-endpoint.md](designs/what-is-a-drive-endpoint.md) — 💡 IDEA: `places` exists for
   start/end/via and much of it could not play that part — an island, a castle a mile up a trail, a
   tavern, a shopping mall. Proposes the missing criterion (*would a rider NAME it, and could they
