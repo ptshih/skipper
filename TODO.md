@@ -1726,3 +1726,91 @@ quiet on the return trip."*
       today they should pile up below it. A test that asserts "a stop exists" passes on the broken
       version. ⚠ And `drives.selection` is FROZEN at create against a non-refundable credit, so this
       only ever improves NEW drives; existing round trips keep their quiet return.
+
+## "Tell me more" (the b-side) — generation BUILT + ear-checked, storage DECIDED, NOTHING persists
+
+**State in one line: the two questions that could have killed this are both answered, and the feature
+is still unbuilt on purpose.** Content risk retired by ear (§8.0.1); storage decided against the spec's
+own recommendation ([bside-gets-its-own-table](docs/decisions/bside-gets-its-own-table.md)). What is
+left is a schema, a player, and a founder-gated paid run — in that dependency order.
+
+Spec: [docs/designs/tell-me-more-spec.md](docs/designs/tell-me-more-spec.md). Read §8.0 before §8 —
+the numbered build order was deliberately INVERTED and the numbered phases are the old order.
+
+**What exists today.** `narrateDeeperCut` (`packages/studio/src/pipeline/narrate.ts:646`) takes the
+same `NarrationRequest` that produced the main telling plus a B-SIDE block naming the main script as
+material already spent, and `generate-bside-narrations.ts` ranks live story stops by unspoken sheet
+material and prints the result. **It persists nothing** — no schema, no TTS, no DTO, no player.
+- ⚠ **`--apply` means something DIFFERENT in this CLI than in every other studio CLI**, and the
+  difference is the whole safety story: on a script-only run the model CALL is the spend, so `--apply`
+  means "make the calls", *not* "write to the DB". It still writes nothing anywhere.
+- ⚠ Exhaustion resolves through an **in-band sentinel** (`DEEPER_CUT_NONE`, `narrate.ts:598`) rather
+  than an empty return, because `runNarration` THROWS on empty output — a quality invariant for the
+  main telling that a b-side must not weaken, since both share the call.
+
+**The measurements that bound the feature** (read-only, no spend, 421 live story tellings):
+~52% of curated `fact_sheet` facts are never spoken by the shipped clip, median 4/poi. Eligibility by
+unspoken material: **92%** hold ≥1 fact, **64%** ≥300 chars, **47%** ≥500, **32%** ≥900.
+⚠ **The threshold IS the budget dial** — 269 / 198 / 135 eligible stops respectively — so "how deep a
+b-side has to be to earn its place" and "what the corpus run costs" are the same decision, not two.
+
+**The ear check ($0.13, 4 calls, founder go 2026-08-03)** sampled ACROSS the range via `--spread`, not
+the top of it: a 2,978-char stop and the **corpus-median 446-char stop** both produced genuine b-sides
+(212 and 149 words); the 82-char and 0-char stops **declined**. So the gate fires rather than pads,
+and the median case — the one most likely to sink the feature — works.
+
+⚠ **A b-side is NOT a gap-filler and must not be promoted to one.** Separately measured on a real
+drive (`Tahoe City → South Lake Tahoe`): only **1 of 8** stops carries usable leftover, ~90 s added to
+39 minutes, coverage 23% → 26%. It is a PULL rung you tap, as specced. Anyone reaching for it to fix
+dead air is about to spend a founder-gated run on the wrong problem.
+
+Owed, in dependency order — **nothing below is started**:
+
+- [ ] **The prompt tweak, and it blocks any corpus run.** The Riverside cut opened *"Since you're
+      curious about the man who drew all this"* — an acknowledgment open the B-SIDE block explicitly
+      asks it to avoid. Harmless once, grating at 200 clips: this is the repo's structural-monotony
+      trap (a low-input form converges on one shape), and it is the same failure as the `"here's the
+      …"` family — a construction the prompt half-banned and the model then found another door into.
+      **Either tighten "do not open by acknowledging the request" or delete it and let §2's "since you
+      asked" charm freebie be deliberate — but pick one.** Cheap, and it must land BEFORE spend, not
+      after 200 clips carry it.
+- [ ] **Widen the source to sheet AND extract (§2 correction).** §2 says curated sheet *or* the
+      extract fallback; it should be both — **~277 median chars in `facts.extract` beyond the sheet on
+      373 of 421 pois**, and a b-side has no two-minute budget forcing it to choose. Free, and it
+      raises the eligible pool. Same argument as [ask-the-skipper-spec](docs/designs/ask-the-skipper-spec.md) §0.1.
+- [ ] **The table — create it in the SAME change that first writes to it.** Anchored to a poi XOR a
+      cluster (mirroring `narrations`), NOT to a `narrations.id`, and `narrations_poi_uq` is NOT
+      loosened. It must carry `attribution` (CC BY-SA is a legal floor, not a nicety), `facts_hash`
+      (it grounds on the same sheet, so it goes stale with the main clip), `released_at` (the region
+      release gate applies; release is monotonic) and the subject XOR as a CHECK.
+      ⚠ **Ship the XOR test WITH the table, not after.** The exactly-one-subject rule will then exist
+      in two tables, and "two copies of the same set drifting" is this repo's most-repeated bug class —
+      the mitigation is one test pinning BOTH tables' XOR, so a change to one that skips the other
+      fails. ⚠ An empty table with no writer is the "constant with no production reader" trap; that is
+      why this is deliberately not built yet.
+- [ ] **The `'bside'` value in `narrationFormEnum` is HOMELESS** (`packages/db/src/schema.ts:181`,
+      `packages/shared/src/enums.ts:17`). It was reserved for the rejected same-table design and can no
+      longer legally be held by any row. Either retire it as reserved vocabulary (the `'wave'`
+      precedent, [cut-wave-form](docs/decisions/cut-wave-form.md)) or make it the new table's own form
+      marker. **Pick one** — a live enum value nothing can hold is exactly how the next agent
+      re-derives the rejected design. ⚠ Also stale once decided: `schema.ts:674`'s attribution-CHECK
+      comment offers an "exemption if a fact-grounded scenic/bside ever ships", which assumes a b-side
+      is a `narrations` row.
+- [ ] **Do fused clusters get b-sides at all?** The XOR makes it possible; nobody has decided. Decide
+      DELIBERATELY — "a new gate is blind to some subject kind" is a documented failure pattern here,
+      and solo-vs-cluster is the axis that keeps getting missed.
+- [ ] **Player: design for a button that COMES AND GOES.** At a "real telling" threshold the affordance
+      is present on roughly HALF the corpus, so §10's "thin stop → button absent" is the common case,
+      not the edge case. A design that assumes it is usually there will be wrong. Rides the shared
+      soft-clip path with [replay-last-stop-spec](docs/designs/replay-last-stop-spec.md).
+- [ ] **💸 The corpus run — an OPERATOR PAID RUN, explicit founder go, and the commitment point.**
+      Order-of-magnitude only, and the basis is stated so it can be re-derived rather than trusted:
+      the 31-clip fused run cost $16.70 end-to-end (narration + retakes + TTS) for ~2-minute clips
+      ≈ $0.54/clip; measured b-sides run 60–85 s, so roughly half that. **~198 clips at the ≥500-char
+      threshold lands near $50–100.** ⚠ That is an ESTIMATE, not a quote — retake counts drive it, and
+      the `--max-cost` tally has historically under-counted because synthesis re-rolls retakes.
+      ⚠ Do the prompt tweak and the source widening FIRST; regenerating into a known defect buys the
+      same defect at full price.
+
+⚠ **Where a b-side is NOT the answer:** the quiet return leg (section above). Its fix 1 — snapping to
+every LOCAL minimum — is free and does not need any of this.

@@ -262,13 +262,17 @@ content question any more.
 
 Resume the numbered phases below now that the ear check has passed.
 
-1. **Generation.** `narrate.ts`: a `narrateDeeperCut` (conditioned on the main script, exhaustion-
-   gated). Wire into `generate-narrations.ts` as a post-narration pass; persist a `form='bside'`
-   narration (or the bside columns — §3); place-scoped R2 write; **not** gating readiness. Add a
-   regen path to `resynth-narration.ts`.
-2. **Schema + migration** (CHECKPOINT — live DB): per §3 — either relax `narrations_poi_uq` to
-   `UNIQUE(poi_id, form)` (a `bside` row), or the nullable `bside_*` columns on `narrations`.
-   Clean/destructive (no users).
+1. **Generation.** ✅ `narrateDeeperCut` is BUILT (§8.0). What remains is wiring it into
+   `generate-narrations.ts` as a post-narration pass; persist a row in the **b-side's own table** (see
+   phase 2); place-scoped R2 write; **not** gating readiness. Add a regen path to
+   `resynth-narration.ts`.
+2. **Schema + migration** (CHECKPOINT — live DB). ⚠ **SUPERSEDED — do NOT follow the two options this
+   phase used to list.** Relaxing `narrations_poi_uq` to `UNIQUE(poi_id, form)` and hanging nullable
+   `bside_*` columns off `narrations` were BOTH rejected (founder, 2026-08-03):
+   [bside-gets-its-own-table](../decisions/bside-gets-its-own-table.md). The b-side gets its **own
+   table**, anchored to a poi XOR a cluster, carrying `attribution` / `facts_hash` / `released_at` /
+   the XOR CHECK — and it is created in the same change that first WRITES to it, with the test pinning
+   both tables' XOR shipping alongside. ADDITIVE, so it does not trip the destructive-change gate.
 3. **API/DTO + offline.** `deeperCut` on the stop DTO; `/sign` for the clip; manifest entry in
    `offline.ts`.
 4. **Player.** `useDrive` + drive screen: the "Tell me more" affordance + `canTellMore`, riding the
