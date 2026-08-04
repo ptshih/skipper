@@ -262,10 +262,49 @@ export function repeatedPhrases(says: readonly string[]): { phrase: string; coun
 
     for (const p of here) seen.set(p, (seen.get(p) ?? 0) + 1)
   }
-  return [...seen.entries()]
+  const repeated = [...seen.entries()]
     .filter(([, count]) => count >= 2)
     .map(([phrase, count]) => ({ phrase, count }))
-    .sort((a, b) => b.count - a.count)
+    // Longest first, so the maximal span is always the one kept below.
+    .sort((a, b) => b.phrase.length - a.phrase.length)
+
+  // ⚠ COLLAPSE OVERLAPPING WINDOWS, or one repeat is counted many times and every figure this
+  // produces is inflated by a factor nobody can see. A repeated 9-word sentence yields four
+  // overlapping 6-word windows plus the sentence itself — measured on a real run, the three entries
+  // "emerald bay state park out to" / "bay state park out to incline" / "state park out to incline
+  // village" were ONE phrase reported three times, and the headline number was ~3x the truth.
+  // A phrase is dropped when a LONGER repeated phrase contains it and was seen at least as often.
+  const maximal: { phrase: string; count: number }[] = []
+  for (const r of repeated) {
+    if (maximal.some((m) => m.count >= r.count && m.phrase.includes(r.phrase))) continue
+    maximal.push(r)
+  }
+  return maximal.sort((a, b) => b.count - a.count)
+}
+
+/**
+ * How many of these turns repeat something an EARLIER turn already said.
+ *
+ * ⚠ THE INTERPRETABLE COMPANION to `repeatedPhrases`, and the one to quote. A phrase count has no
+ * natural ceiling and moves with sentence length, so "42" means nothing without the corpus in front of
+ * you. This is bounded by the turn count and reads directly: "9 of 50 turns echoed an earlier one."
+ */
+export function turnsWithEcho(says: readonly string[]): number {
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean)
+  const seen = new Set<string>()
+  let echoed = 0
+  for (const say of says) {
+    const words = norm(say)
+    const here = new Set<string>()
+    for (let i = 0; i + PHRASE_WORDS <= words.length; i++) here.add(words.slice(i, i + PHRASE_WORDS).join(' '))
+    for (const raw of say.split(/(?<=[.!?])\s+/)) {
+      const s = norm(raw).join(' ')
+      if (s.split(' ').filter(Boolean).length >= 2) here.add(s)
+    }
+    if ([...here].some((p) => seen.has(p))) echoed++
+    for (const p of here) seen.add(p)
+  }
+  return echoed
 }
 
 /* -------------------------------------------------------------------------- */

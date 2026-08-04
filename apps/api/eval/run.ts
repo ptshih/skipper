@@ -18,7 +18,7 @@ import { CLAUDE_MODELS, usageUsd } from '@skipper/shared'
 import { runPlannerTurn, type PlannerTurnInput } from '../src/planner'
 import { PLANNER_WRAP_UP_NOTICE } from '../src/planner-prompt'
 import { PLAN_WRAP_UP_AFTER_MESSAGES } from '../src/limits'
-import { assertedDurations, checkScenario, repeatedPhrases, routeKey } from './checks'
+import { assertedDurations, checkScenario, repeatedPhrases, routeKey, turnsWithEcho } from './checks'
 import { judgePersona, judgeSpendUsd, personaToEvals, rollUp, type PersonaVerdict } from './judge'
 import { FIXTURE_ANCHORS, FIXTURE_REGION, FIXTURE_SPATIAL_BLOCK, SCENARIOS } from './scenarios'
 import type { Scenario, TurnEval, TurnOutcome } from './types'
@@ -37,6 +37,9 @@ const EFFORT = args.includes('--effort')
  *  and without and compare THREE numbers: the routing gate (does it plan better?), `durations`
  *  (does it leak?), and `repeats` (does it get more templated?). */
 const SPATIAL = args.includes('--spatial')
+/** ⚠ A/B for the drawn-memory fix (`drivePlanRequest.drawn`). Production ALWAYS sends it; this exists
+ *  so the arm without it can be measured, because a fix committed on n=2 is a hypothesis. */
+const NO_MEMORY = args.includes('--no-memory')
 
 /** Rough per-turn cost, for the preview only. ⚠ Never used in the report — that reads real usage. */
 const EST_USD_PER_TURN = 0.02
@@ -75,7 +78,7 @@ async function replay(scenario: Scenario): Promise<TurnOutcome[]> {
       regionName: FIXTURE_REGION,
       anchors: FIXTURE_ANCHORS,
       ...wrapUp,
-      ...(drawn.size ? { drawn: [...drawn.values()] } : {}),
+      ...(drawn.size && !NO_MEMORY ? { drawn: [...drawn.values()] } : {}),
       ...(EFFORT ? { effort: EFFORT } : {}),
       ...(SPATIAL ? { extraSystem: FIXTURE_SPATIAL_BLOCK } : {}),
     })
@@ -203,16 +206,35 @@ async function main(): Promise<void> {
   const pooled = repeatedPhrases(says)
   const durations = outcomes.flatMap((o) => assertedDurations(o.say))
 
+  const echoTurns = suite.reduce(
+    (n, s) => n + turnsWithEcho(outcomes.filter((o) => o.scenarioId === s.id).map((o) => o.say)),
+    0,
+  )
+
   console.log(`\n${line(78)}\nMEASURED (no judge — compare these across arms)\n${line(78)}`)
-  console.log(`  repeated WITHIN one conversation (a rider can see this): ${within.length}`)
+  // ⚠ QUOTE THIS ONE. A phrase count has no natural ceiling and moves with sentence length, so it
+  // cannot be compared across runs by eye; this is bounded by the turn count and reads directly.
+  console.log(`  turns echoing an earlier turn of the SAME chat:  ${echoTurns}/${outcomes.length}`)
+  console.log(`  distinct repeated phrases within one chat:      ${within.length}`)
   for (const r of within.slice(0, 6)) console.log(`    x${r.count}  ${JSON.stringify(r.phrase)}`)
-  console.log(`  repeated across the whole run  (no rider sees this):    ${pooled.length}`)
+  console.log(`  repeated across the whole run (no rider sees):  ${pooled.length}`)
   console.log(`  durations asserted as road fact:                 ${durations.length}`)
   for (const d of durations.slice(0, 6)) console.log(`    ${JSON.stringify(d.slice(0, 72))}`)
   if (SPATIAL) console.log(`  ⚠ --spatial ARM: a hand-written drive-time table was in context this run.`)
 
+  // ⚠ PERSIST THE RAW TURNS. Every arm before 2026-08-04 cost $0.35-0.70 to produce numbers that were
+  // printed and thrown away — and when three separate defects were later found in the metrics, none of
+  // those runs could be re-scored and the money was simply gone. With the transcripts on disk any NEW
+  // metric can be back-applied to runs already paid for, at zero further spend. Gitignored: these are
+  // model outputs, not source, and they grow without bound.
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const tag = `${NO_MEMORY ? 'nomem' : 'mem'}${SPATIAL ? '-spatial' : ''}${EFFORT ? `-${EFFORT}` : ''}`
+  const path = `${import.meta.dir}/.runs/${stamp}-${tag}.json`
+  await Bun.write(path, JSON.stringify({ tag, billed, outcomes, evals, verdict }, null, 1))
+  console.log(`\n  raw turns saved: ${path.replace(import.meta.dir, 'apps/api/eval')}`)
+
   // ⚠ BILLED, from real usage on every call this process made. Not an estimate, and not the preview's.
-  console.log(`\n  BILLED THIS RUN: $${billed.toFixed(4)}  (${outcomes.length} planner turns + judge)`)
+  console.log(`  BILLED THIS RUN: $${billed.toFixed(4)}  (${outcomes.length} planner turns + judge)`)
   console.log(`  GATE: ${card.pass ? 'PASS' : 'FAIL'}\n`)
 
   // Non-zero exit on a gate failure, so this is usable from a script without parsing stdout.

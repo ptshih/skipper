@@ -66,3 +66,7 @@ testflight-feedback/
 !.vscode/extensions.json
 
 # NOTE: bun.lock (text lockfile) IS committed — do not ignore it.
+
+# Planner eval transcripts — model output, paid for but not source. Kept so a NEW metric can be
+# back-applied to runs already billed (apps/api/eval/run.ts persists these).
+apps/api/eval/.runs/

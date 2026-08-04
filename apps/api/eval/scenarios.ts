@@ -233,7 +233,13 @@ export const SCENARIOS: Scenario[] = [
       { rider: 'maybe an hour', expect: 'hold' },
       { rider: 'actually two', expect: 'hold' },
       { rider: 'end at Kings Beach', expect: 'hold' },
-      { rider: 'yes draw it', expect: 'draw' },
+      // ⚠ `hold` is CORRECT here and this used to assert `draw`, which made the panel report a
+      // failure that was the instrument's fault. By this turn the skipper has usually asked something
+      // ("straight through, or back around?"), and "yes draw it" does not answer it — the prompt is
+      // explicit that an answer skipping the question is NOT a yes. He was right to ask again; the
+      // scenario was wrong to demand a route. (The real defect upstream is that he offers an
+      // either/or at all, which the prompt also forbids — but that is a different turn's problem.)
+      { rider: 'yes draw it', expect: 'hold_no_repeat', note: 'ambiguous yes — asking again is correct' },
       { rider: 'thanks, this is great', expect: 'hold_no_repeat', note: 'wrap-up is riding now — must not re-offer or redraw' },
       { rider: 'one more thing, do you work weekends?', expect: 'hold_no_repeat', note: 'and must not say goodbye twice' },
     ],
