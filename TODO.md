@@ -23,6 +23,38 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
+## Virtualize the chat transcript (step 8) — NEEDS A FOUNDER GO, and not yet justified
+
+The last un-taken step of [docs/designs/chat-render-performance.md](docs/designs/chat-render-performance.md),
+which is otherwise BUILT (steps 1-7 landed and measured 2026-08-03).
+
+**What it is.** `ConversationScreen` is a plain `ScrollView`, so every bubble and every route card the
+conversation has ever held stays mounted forever — nothing is unmounted or recycled. Steps 1-6 made
+each RENDER cheap; none of them bounds how many ROWS EXIST. That is the structural ceiling under all
+of it.
+
+**Why it is not scheduled.** It is three decisions wearing one number, and only the first is about
+speed:
+1. **A new native-adjacent dependency.** Manoa's answer was `@shopify/flash-list@2.x`; we do not carry
+   it, and per `apps/mobile/CLAUDE.md` it would have to come in via `expo install`, never `bun add`.
+   RN's built-in `FlatList` needs no new dep — but FlatList/VirtualizedList window tuning is listed as
+   a DEAD END in the prior art for this exact surface, so the free option is the one already rejected.
+2. **Blast radius outside the chat screen.** `ConversationScreen`'s contract changes, and its
+   `useScrollEdgeFades` is SHARED with `Screen.tsx` — forking it costs thirteen other screens.
+3. **A data-shape change.** The transcript is a heterogeneous interleave; virtualizing means first
+   flattening it to a tagged `{kind:'turn'|'card'}[]`. That is precisely the shape step 5 avoided,
+   because splitting bubbles from cards BY WHAT THEY DEPEND ON was the cheaper win.
+
+**The trigger to revisit — do not take it on vibes.** A REAL DEVICE, on a LONG conversation, showing
+scroll jank or memory growth that steps 1-6 did not remove. Everything measured so far is simulator
+only (no thermal or memory pressure) and nothing went past ~8 turns, so the long-conversation case is
+genuinely unmeasured rather than known-fine. Measure that first; it may close this item outright.
+
+**What is already true, so nobody re-derives it:** a keystroke costs 0 screen renders, and the 2 Hz
+audio tick reaches nothing — 0 bubble rebuilds, 0 card renders, 0 composer renders, 0 ridgeline work.
+Step 7 (moving the audio subscription off the screen root) was measured and DECLINED on that basis.
+
+
 ## Spatial context for the planner — MEASURED 2026-08-03, and the answer is NO
 
 **Do not build a drive-time matrix, a routing-engine dependency, or any per-place spatial context for
