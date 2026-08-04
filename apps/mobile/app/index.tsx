@@ -251,18 +251,24 @@ export default function HomeScreen() {
    *  a number that only goes up. */
   const [resetSeq, setResetSeq] = useState(0)
 
-  /** Bumped by BOTH reset entrances, and its only job is to KEY the composer — remounting it is how
-   *  a reset clears the draft now that the draft is the composer's own state.
+  /** `convSeq`'s RENDER-SAFE TWIN — bumped by both reset entrances, in the same expression.
    *
-   *  ⚠ STATE, not `convSeq`, even though `convSeq` already counts exactly these events. A key is read
-   *  during RENDER, and reading a ref there is the Rules-of-React violation `react-hooks/refs` exists
-   *  to catch — `eslint-suppressions.json` baselines the ONE this file already has (the transcript's
-   *  bubble keys) and a second would have to be added to that backlog rather than burned down.
+   *  Everything read during RENDER uses this; everything captured across an `await` uses the ref
+   *  below. That is the whole rule, and it is why two counters of the same events is not duplication:
+   *  a ref read during render is `react-hooks/refs` ("Cannot access refs during render"), and a state
+   *  read inside a closure captured before an await is the render-time value, which is precisely the
+   *  bug `convSeq`'s guards exist to prevent. Neither can do the other's job.
    *
-   *  ⚠ And NOT `resetSeq`, though the shape is identical: that ordinal also schedules the autofocus,
-   *  and the region-switch entrance must clear the field WITHOUT raising a keyboard over the example
-   *  asks that just changed. Two ordinals because the two effects differ, not by oversight. */
-  const [composerSeq, setComposerSeq] = useState(0)
+   *  Two readers, both render-time: the COMPOSER's key (remounting is how a reset clears the draft,
+   *  now that the draft is the composer's own state) and the transcript's BUBBLE keys (so a reused
+   *  row cannot inherit the previous conversation's one-shot "announced" ref). The bubble keys used
+   *  `convSeq.current` and were the file's one baselined `react-hooks/refs` suppression; moving them
+   *  here burned it down rather than adding a second.
+   *
+   *  ⚠ NOT `resetSeq`, though the shape is identical: that ordinal also schedules the autofocus, and
+   *  the region-switch entrance must clear the field WITHOUT raising a keyboard over the example asks
+   *  that just changed. Different effects, different ordinals. */
+  const [conversationSeq, setConversationSeq] = useState(0)
 
   // Monotonic conversation id, bumped by "Start fresh". ⚠ A SPEND CONTROL, not bookkeeping, and
   // `turnAbortRef.current?.abort()` is not enough on its own: abort() on an already-settled fetch is a
@@ -892,11 +898,11 @@ export default function HomeScreen() {
     setDone(false)
     setPlannerOutage(false)
     // ⚠ NO `setInput('')` HERE ANY MORE — the draft is the Composer's own state now, so this path
-    // clears it by REMOUNTING: the composer is keyed on `composerSeq`. The other entrance ("Start
+    // clears it by REMOUNTING: the composer is keyed on `conversationSeq`. The other entrance ("Start
     // fresh") never needed a clear — it renders the wrap-up bar instead of the composer, so the field
     // unmounts on its own — but it bumps through here too, which is why one line covers both.
     // Deleting it would silently strand a half-typed ask from the OLD region in the new field.
-    setComposerSeq((n) => n + 1)
+    setConversationSeq((n) => n + 1)
     // The autofocus is DEFERRED, not dropped. "Start fresh" only exists in the `done` wrap-up bar,
     // and in that branch the composer is not rendered at all — so `composerRef.current` is null for
     // the whole of this handler and the focus() that used to sit here has never once fired. Publish
@@ -1327,33 +1333,82 @@ export default function HomeScreen() {
   // this screen does not, because WHICH greeting is right depends on a region that loads after mount.)
   const newestCardId = cards[cards.length - 1]?.id
   const lastSkipperIdx = turns.reduce((idx, t, i) => (t.role === 'skipper' ? i : idx), -1)
+
+  /** The bubbles, MEMOIZED APART FROM THE CARDS — and that split is the point of this block, not a
+   *  tidy-up. Everything a bubble reads belongs to the CONVERSATION (the turns, which one announces,
+   *  the reset ordinal); a card additionally reads live audio state, which ticks at 2 Hz for as long
+   *  as a clip plays. Built in one pass, every one of those ticks re-created a `TurnBubble` element
+   *  for every turn on screen — `memo()` then bailed each one out, so nothing re-RENDERED, but the
+   *  elements were still allocated and the array still rebuilt, and that cost grows with the
+   *  conversation. Held apart, a tick cannot reach them.
+   *
+   *  ⚠ It also holds for a whole STREAM. The in-progress reply is its own bubble further down
+   *  (`shown`), not an entry in `turns`, so a sentence flush leaves this array untouched.
+   *
+   *  ⚠ `turns` BY IDENTITY is the right dep, not a fingerprint of its contents. Every write goes
+   *  through `setTurns` with a fresh array (`appendRider`/`appendSkipper` never mutate), so identity
+   *  already changes exactly when a bubble's text does — a fingerprint would be a second, weaker copy
+   *  of a guarantee the transcript helpers already give. */
+  const bubbles = useMemo(
+    () =>
+      turns.map((t, i) => (
+        <TurnBubble
+          // ⚠ Keyed by CONVERSATION as well as position. Keyed on the index alone, "Start fresh"
+          // empties the array and the next exchange re-occupies t0/t1 — React reconciles by key and
+          // type, so it REUSES the same component instances, and TurnBubble's one-shot "already
+          // announced" ref is still set. The skipper's first reply after a reset would then never be
+          // spoken on iOS (VoiceOver has no live region there; the announce is the whole mechanism).
+          key={`c${conversationSeq}t${i}`}
+          role={t.role}
+          text={t.text}
+          // Only the NEWEST skipper turn speaks itself, and only once — a live region on every
+          // historical bubble would re-read the whole conversation on any re-render.
+          // ⚠ `focused` is the third term and it HOLDS rather than drops: an in-flight turn keeps
+          // running while the rider is on another screen (see `focused` above), so this goes false at
+          // the moment the reply settles and true again when they return — TurnBubble's one-shot ref
+          // then speaks it exactly once, on the screen it belongs to. Announcing nothing at all was
+          // the other option and it is worse for the rider it exists for: on iOS this push IS the
+          // whole mechanism (there is no live region), so a dropped announce means a VoiceOver rider
+          // is simply never told the skipper answered.
+          announceOnSettle={i === lastSkipperIdx && !sending && focused}
+        />
+      )),
+    [turns, conversationSeq, lastSkipperIdx, sending, focused],
+  )
+
+  /** Cards bucketed by the slot they occupy, in ONE pass. The interleave below used to run a full
+   *  scan of `cards` INSIDE `turns.forEach` — O(turns × cards) to place at most a few cards. Nobody
+   *  would have felt that at today's sizes; it is fixed here because this is the pass that reads it,
+   *  and a nested scan is the kind of thing that stops being free quietly.
+   *
+   *  ⚠ Slot 0 means "before the first turn", and it is a REAL case rather than a guard: a route can
+   *  be drawn against a transcript that is still empty, which is why the original condition was
+   *  `afterTurn <= 0` rather than `=== 0`. `Math.max` preserves exactly that. */
+  const cardsBySlot = useMemo(() => {
+    const bySlot = new Map<number, PreviewItem[]>()
+    for (const c of cards) {
+      const slot = Math.max(0, c.afterTurn)
+      const inSlot = bySlot.get(slot)
+      if (inSlot) inSlot.push(c)
+      else bySlot.set(slot, [c])
+    }
+    return bySlot
+  }, [cards])
+
+  // ⚠ The interleave itself is deliberately NOT memoized: it only pushes already-built bubble
+  // elements, and the cards it does build still depend on live clip state — memoizing those is step 6
+  // of the plan, and doing it here would mean a fingerprint covering everything a card reads. Copying
+  // existing references into an array is cheap; allocating the elements is not, and that half is
+  // above.
   const transcript: ReactNode[] = []
-  for (const c of cards) if (c.afterTurn <= 0) transcript.push(renderCard(c, c.id === newestCardId))
-  turns.forEach((t, i) => {
-    transcript.push(
-      <TurnBubble
-        // ⚠ Keyed by CONVERSATION as well as position. Keyed on the index alone, "Start fresh" empties
-        // the array and the next exchange re-occupies t0/t1 — React reconciles by key and type, so it
-        // REUSES the same component instances, and TurnBubble's one-shot "already announced" ref is
-        // still set. The skipper's first reply after a reset would then never be spoken on iOS
-        // (VoiceOver has no live region there; the announce is the whole mechanism).
-        key={`c${convSeq.current}t${i}`}
-        role={t.role}
-        text={t.text}
-        // Only the NEWEST skipper turn speaks itself, and only once — a live region on every
-        // historical bubble would re-read the whole conversation on any re-render.
-        // ⚠ `focused` is the third term and it HOLDS rather than drops: an in-flight turn keeps
-        // running while the rider is on another screen (see `focused` above), so this goes false at
-        // the moment the reply settles and true again when they return — TurnBubble's one-shot ref
-        // then speaks it exactly once, on the screen it belongs to. Announcing nothing at all was
-        // the other option and it is worse for the rider it exists for: on iOS this push IS the
-        // whole mechanism (there is no live region), so a dropped announce means a VoiceOver rider
-        // is simply never told the skipper answered.
-        announceOnSettle={i === lastSkipperIdx && !sending && focused}
-      />,
-    )
-    for (const c of cards)
-      if (c.afterTurn === i + 1) transcript.push(renderCard(c, c.id === newestCardId))
+  const pushCardsAt = (slot: number) => {
+    for (const c of cardsBySlot.get(slot) ?? [])
+      transcript.push(renderCard(c, c.id === newestCardId))
+  }
+  pushCardsAt(0)
+  bubbles.forEach((bubble, i) => {
+    transcript.push(bubble)
+    pushCardsAt(i + 1)
   })
 
   const conversation = (
@@ -1570,7 +1625,7 @@ export default function HomeScreen() {
     <Composer
       // ⚠ THE REGION-SWITCH CLEAR. `resetConversation` no longer empties the draft itself (it cannot
       // — the draft is the Composer's), so this remount IS the clear.
-      key={`c${composerSeq}`}
+      key={`c${conversationSeq}`}
       onSend={send}
       // `!regionId` rides the same flag: a turn cannot be posted without a region, and until the
       // regions call lands there genuinely IS something in flight. Disabled, not hidden — the field

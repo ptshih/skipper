@@ -1,11 +1,11 @@
 # The chat screen bogs down as the conversation grows
 
-> **Status:** ⚠ **PARTLY BUILT (2026-08-03).** Steps 1–**4** are LANDED; steps 5–7 are specified and
+> **Status:** ⚠ **PARTLY BUILT (2026-08-03).** Steps 1–**5** are LANDED; steps 6–7 are specified and
 > unbuilt; step 8 (virtualization) is a founder decision that is deliberately UNMADE. Founder report:
 > *"the chat ux is lagging/bogging down after multiple messages are sent, this is a performance
 > issue"*, with a pointer to their own prior solution in `/Users/ptshih/code/manoa/archive/mobile`.
-> **Step 4 is MEASURED on the simulator** (the first step here that is — see "What is measured");
-> steps 5–7 remain static reads of the code.
+> **Steps 4 and 5 are MEASURED on the simulator** (see "What is measured"); steps 6–7 remain static
+> reads of the code.
 
 ## The shape of it
 
@@ -59,10 +59,23 @@ Each step is independently shippable and independently observable.
    baselines exactly ONE of those in `eslint-suppressions.json`, and that file is a backlog to burn
    down, not somewhere to add a second. It is also not `resetSeq`, which additionally schedules the
    autofocus a region switch must *not* fire. Three ordinals, three different effects.
-5. **Memoize the transcript behind a structural fingerprint; bucket cards by `afterTurn`.** UNBUILT.
-   The interleave is O(turns × cards) because a `for (const c of cards)` runs inside `turns.forEach`.
-   ⚠ `proposeKey`/`undrawnRoute` is genuinely NOT the bottleneck (`cards` is 1–3) — fix it while you
-   are there, do not present it as the cause.
+5. **Memoize the transcript; bucket cards by `afterTurn`.** ✅ LANDED, and **measured: every bubble
+   rebuild now corresponds to a real transcript mutation, none to an incidental render.**
+   ⚠ **NOT the "structural fingerprint" this plan originally called for, and that turned out to be the
+   wrong shape.** The transcript is a heterogeneous interleave of bubbles (which read only the
+   conversation) and cards (which additionally read live audio state at 2 Hz). A single memo over the
+   whole thing would need a fingerprint covering everything a CARD reads, so it would bust on every
+   audio tick anyway — the fingerprint would buy nothing. What works is splitting by *what each row
+   depends on*: `bubbles` is a `useMemo` on `[turns, conversationSeq, lastSkipperIdx, sending,
+   focused]`, and the interleave that places cards around it stays unmemoized (it only copies existing
+   element references into an array — cheap; allocating the elements was the cost).
+   ⚠ `turns` BY IDENTITY is the correct dep, not a content fingerprint: every write goes through
+   `setTurns` with a fresh array, so identity already changes exactly when a bubble's text does.
+   ⚠ The bubble keys moved from `convSeq.current` to the `conversationSeq` STATE ordinal, which
+   **burned down this file's one `react-hooks/refs` suppression** (pruned from
+   `eslint-suppressions.json`) rather than adding a second.
+   ⚠ `proposeKey`/`undrawnRoute` is genuinely NOT the bottleneck (`cards` is 1–3) — the O(turns×cards)
+   nested scan was fixed in passing because this is the pass that reads it, not because it was slow.
 6. **Extract a memoized `TranscriptCard`.** UNBUILT. `React.memo` on `PreviewCard` alone will NOT bite:
    `renderCard` hands it a freshly-built `previewClip` tree plus five fresh closures every render, so a
    shallow comparator can never match.
@@ -115,8 +128,26 @@ Two things that settles:
   What the screen render was actually paying for is the transcript rebuild (step 5) and the card
   (step 6). Rank those on that basis, not on bubble count.
 
-⚠ Still unmeasured: stream cadence during a turn, and the 2 Hz audio-status tick (step 7) while a clip
-plays. Those need a turn in flight and a playing clip respectively.
+### Step 5, same method (counter inside the `bubbles` memo, plus a dep-diff logger)
+
+| observation | result |
+|---|---|
+| HomeScreen renders after launch, before any turn | **10 renders → 0 bubble rebuilds** |
+| one full turn (send → stream → settle) | **3 renders → 2 rebuilds**, both necessary |
+| what busted the memo, every time | `turns` (+`lastSkipperIdx`/`sending`) — i.e. a real mutation |
+
+The dep-diff logger is the part worth repeating: printing WHICH dep changed, rather than just that the
+memo re-ran, is what showed every rebuild was earned. The two rebuilds in a turn are the rider's line
+appending and the reply landing; there is no third.
+
+⚠ **The card interleave was verified visually, not just by counter** — a drawn route card lands in its
+correct slot immediately after the skipper turn that offered it. Worth re-doing on any change to the
+bucketing, because a mis-slotted card is silent: the transcript still renders, just wrong.
+
+⚠ Still unmeasured: the 2 Hz audio-status tick (step 7) while a clip plays — that needs a playing clip,
+and it is the measurement that would justify or kill steps 6 and 7. Note the stream case is now covered
+by the step 5 numbers above: the in-progress reply is its own bubble outside `turns`, so a sentence
+flush cannot bust the memo.
 
 ⚠ Metro is the one dev server that may be freely stopped and started for this (root `CLAUDE.md`,
 founder 2026-08-03), and kill the expo-dev-client floating FAB first or it will sit over the very

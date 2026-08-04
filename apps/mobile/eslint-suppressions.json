@@ -1,8 +1,5 @@
 {
   "app/index.tsx": {
-    "react-hooks/refs": {
-      "count": 1
-    },
     "react-hooks/set-state-in-effect": {
       "count": 2
     }
