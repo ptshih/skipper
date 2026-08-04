@@ -29,6 +29,7 @@ import type { DriveSelection, DriveSelectionItem, Polyline, RouteProvenance } fr
 import { polylineBbox } from './drive-geometry'
 import { materializeRoute, type Waypoint } from '@skipper/routing'
 import {
+  buildCandidatePlacer,
   buildDrive,
   candidateTriggerRadiusM,
   DRIVE_MIN_GAP_SEC,
@@ -260,6 +261,27 @@ function routeWaypoints(start: ResolvedEndpoint, end: ResolvedEndpoint, via?: Re
  *  and yield nothing, so the two must never disagree about which drives were loops. */
 const sameSpot = (a: ResolvedEndpoint, b: ResolvedEndpoint): boolean =>
   Math.abs(a.lat - b.lat) < 1e-4 && Math.abs(a.lng - b.lng) < 1e-4
+
+/**
+ * A drive's title: every waypoint it was routed through, in order — `Stateline → Emerald Bay State
+ * Park → Stateline` for a round trip.
+ *
+ * ⚠ IT TAKES THE WAYPOINTS, NOT THE ENDPOINTS, AND THAT IS THE WHOLE POINT. A round trip is
+ * `end === start` with the turnaround as the LAST `via` (see routeWaypoints), so a title built from
+ * start+end alone collapses to "Stateline → Stateline" — it drops the one name the rider would
+ * recognise their drive by, the one they actually asked for ("down to Emerald Bay and back"), while
+ * the map beside it draws the whole loop. Naming the chain also cannot disagree with the route about
+ * which places are on it or in what order, because it IS the array materializeRoute froze into
+ * `drives.routeProvenance` — which is also what makes an existing row's title recomputable from what
+ * is already stored.
+ *
+ * A degenerate loop (start == end, nothing to turn around at) honestly reads "Stateline → Stateline";
+ * that route carries no stops and is rejected before it can be persisted, so no such title is saved.
+ * Length is bounded by the wire's `via` cap, so at most a handful of names — long for a drive that
+ * really does pass through that many places, and the drives list wraps rather than truncating.
+ */
+export const driveLabel = (waypoints: readonly Waypoint[]): string =>
+  waypoints.map((w) => w.label).join(' → ')
 
 /**
  * ONE structured cost line per BILLED Google Routes call — the Routes half of INV-11's spend visibility
@@ -496,6 +518,7 @@ function clusterRowsToCorpus(rows: ClusterTelling[], into: Map<string, Narration
 
 async function loadCorpusForRoute(
   polyline: Polyline,
+  durationSeconds: number,
   includeStaged = false,
 ): Promise<BuildCorpus> {
   const { minLat, minLng, maxLat, maxLng } = polylineBbox(polyline)
@@ -515,6 +538,25 @@ async function loadCorpusForRoute(
     () => loadClusterTellings({ includeStaged }),
     { label: 'drive.clusterCorpus' },
   )
+
+  // …and SERVED is not the same question as REACHABLE. `notSupersededByServedCluster` retires a
+  // cluster's members the moment the fused telling clears the release gate, but whether that clip can
+  // actually PLAY on THIS route is geometry, and when the two disagreed the drive lost both. Measured
+  // 2026-08-03 on the Stateline→Stateline loop: "Emerald Bay and Vikingsholm" was refused for range
+  // (centre 605 m off Highway 89, past its own 516 m floor) while Vikingsholm's own released 81 s clip
+  // — 175 m off route — stayed retired behind it, inside a 17:56 silence on the drive that passes
+  // Emerald Bay. The docstring's own argument extends exactly one step: a caller who is being withheld
+  // a telling must not also lose its members, and neither must a ROUTE that cannot reach one.
+  //
+  // ⚠ Asked through `buildCandidatePlacer` — the SAME expression buildDrive admits on, not a second
+  // copy of the reach test. Two copies is how this broke in the first place; a placer that says "no"
+  // here and "yes" there would suppress members for a clip that then gets dropped anyway.
+  const place = buildCandidatePlacer(polyline, durationSeconds)
+  const clusterRows = clusterRowsToCorpus(clusters, new Map())
+  const reachableClusterIds = clusters
+    .filter((c) => place(candidateOf(clusterRows.get(c.clusterId)!)) !== null)
+    .map((c) => c.clusterId)
+
   const rows = await withRetry(
     () =>
       narrationCorpusSelect().where(
@@ -528,9 +570,10 @@ async function loadCorpusForRoute(
           // deliberately does not. `prune-corpus.ts` sets it; the reason string says which rule fired.
           isNull(pois.excludedReason),
           // A clustered member stops being a drive candidate once its cluster has a fused telling
-          // this caller can see (spec §4.2). BUILD path only — `loadCorpusBySubjectIds` deliberately
-          // does not re-adjudicate a frozen drive's stops, exactly as with `excluded_reason`.
-          notSupersededByServedCluster(clusters.map((c) => c.clusterId)),
+          // this caller can see AND this route can reach (spec §4.2 + the reachability note above).
+          // BUILD path only — `loadCorpusBySubjectIds` deliberately does not re-adjudicate a frozen
+          // drive's stops, exactly as with `excluded_reason`.
+          notSupersededByServedCluster(reachableClusterIds),
         ),
       ),
     { label: 'drive.corpus' },
@@ -923,7 +966,7 @@ driveRoutes.post('/', requireAccount, createDriveLimiter, withFreshSession, asyn
 
   const routeSig = routeSigOf(start, end, route.polyline)
   const bbox = polylineBbox(route.polyline)
-  const label = `${start.name} → ${end.name}`
+  const label = driveLabel(route.provenance.waypoints)
   const provenance: RouteProvenance = {
     source: 'google-routes-v2',
     waypoints: route.provenance.waypoints,
@@ -1136,7 +1179,7 @@ export async function readJsonBody<T>(
  *
  *  `admin` widens the corpus to staged clips as well as released ones (region-release-gate). */
 async function selectStopsForRoute(route: { polyline: LngLat[]; durationSeconds: number }, admin: boolean) {
-  const corpus = await loadCorpusForRoute(route.polyline, admin)
+  const corpus = await loadCorpusForRoute(route.polyline, route.durationSeconds, admin)
   const stops = buildDrive({
     polyline: route.polyline,
     totalSec: route.durationSeconds,
