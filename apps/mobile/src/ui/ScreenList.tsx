@@ -51,8 +51,7 @@ export function ScreenList<T>({
 }: ScreenListProps<T>) {
   const theme = useTheme()
   const bg = { backgroundColor: theme.colors.surface }
-  const { showTopFade, showBottomFade, onScroll, onLayout, onContentSizeChange } =
-    useScrollEdgeFades()
+  const fades = useScrollEdgeFades()
 
   const basePad = padded ? space.gutter : 0
   const contentPadding = useScreenPadding({ top: basePad, bottom: basePad })
@@ -67,18 +66,11 @@ export function ScreenList<T>({
           keyExtractor={keyExtractor}
           ListHeaderComponent={ListHeaderComponent}
           contentContainerStyle={[
-            // Fills the viewport even with two rows in the list, so the scrollable area is the whole
-            // usable height (founder, 2026-08-04 — every scrolling shell). Rows still stack from the
-            // top; the blank space below them simply belongs to the list now.
-            styles.grow,
             padded && styles.padded,
             contentPadding,
             contentContainerStyle,
           ]}
-          onLayout={onLayout}
-          onContentSizeChange={onContentSizeChange}
-          onScroll={onScroll}
-          scrollEventThrottle={16}
+          {...fades.scrollProps}
           // ⛔ PINNED OFF ON PURPOSE. Android defaults this to true, and the prior art
           // (chat-render-performance's ⛔ section) shipped it and pulled it one commit later: it
           // remounts variable-height rows when they are yanked back into view. Drive labels are
@@ -87,7 +79,7 @@ export function ScreenList<T>({
           removeClippedSubviews={false}
         />
         {/* Each fade mounts only when its edge is genuinely clipped, so a short list shows none. */}
-        <EdgeFade top={showTopFade} bottom={showBottomFade} underHeader />
+        <EdgeFade top={fades.showTopFade} bottom={fades.showBottomFade} underHeader />
       </View>
     </SafeAreaView>
   )
@@ -98,8 +90,5 @@ const SIDE_EDGES = ['left', 'right'] as const
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  // flexGrow, never flex:1 — inside a list the latter caps the content at one viewport and a long
-  // list stops scrolling entirely.
-  grow: { flexGrow: 1 },
   padded: { padding: space.gutter },
 })

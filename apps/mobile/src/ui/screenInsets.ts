@@ -93,15 +93,24 @@ export interface ScreenPaddingArgs {
   homeIndicator?: boolean
 }
 
-/** The content padding a scroll shell owes the chrome around it — see the two rules up top. */
+/**
+ * The content-container rules a scroll shell follows: the chrome's two insets (above), plus the fill.
+ *
+ * `flexGrow: 1` — the scroll CONTENT fills the viewport even when it doesn't need to, so the
+ * scrollable area is the whole usable height rather than a short box with dead paper under it
+ * (founder, 2026-08-04). It changes no layout — content still stacks from the top — and it is
+ * flexGrow rather than `flex: 1` on purpose: the latter CAPS content at one viewport, and a long
+ * screen would stop scrolling entirely.
+ */
 export function useScreenPadding({
   top,
   bottom,
   homeIndicator = true,
-}: ScreenPaddingArgs): { paddingTop: number; paddingBottom: number } {
+}: ScreenPaddingArgs): { flexGrow: number; paddingTop: number; paddingBottom: number } {
   const insets = useSafeAreaInsets()
   const headerInset = useFloatingHeaderInset()
   return {
+    flexGrow: 1,
     paddingTop: top + headerInset,
     paddingBottom: bottom + (homeIndicator ? insets.bottom : 0),
   }

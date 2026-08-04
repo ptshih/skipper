@@ -150,10 +150,7 @@ function StopListBase({
             // The default scroll indicator renders as a stark white bar on the cream card — hide
             // it; the edge fades carry "there's more" instead.
             showsVerticalScrollIndicator={false}
-            scrollEventThrottle={16}
-            onScroll={fades.onScroll}
-            onLayout={fades.onLayout}
-            onContentSizeChange={fades.onContentSizeChange}
+            {...fades.scrollProps}
             onScrollBeginDrag={onScrollBeginDrag}
             onScrollEndDrag={onScrollEndDrag}
             onMomentumScrollEnd={onMomentumScrollEnd}

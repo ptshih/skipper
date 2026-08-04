@@ -90,8 +90,6 @@ export function ConversationScreen({
     fades.onScroll(e)
   }
 
-  const onLayout = fades.onLayout
-
   const onContentSizeChange = (w: number, h: number) => {
     fades.onContentSizeChange(w, h)
     // ⚠ NEVER re-pin here. A rider who scrolled up to re-read turn 2 while turn 9 streams must stay
@@ -158,19 +156,15 @@ export function ConversationScreen({
             // same keyboard the KAV is already padding for. ⚠ Do NOT add
             // `maintainVisibleContentPosition` — it anchors on PREPEND; a conversation appends.
             contentContainerStyle={[
-              // The scroll CONTENT fills the viewport even when the conversation is two lines long,
-              // so the "scrollable area" is the whole usable height rather than a short box with
-              // dead paper under it (founder, 2026-08-04). It changes no layout — the turns still
-              // stack from the top — but blank space below them now belongs to the scroll content.
-              styles.grow,
               { paddingHorizontal: space.gutter },
               contentPadding,
               contentContainerStyle,
             ]}
-            onLayout={onLayout}
+            // ⚠ SPREAD FIRST, then override: this shell wraps two of the handlers (the pin
+            // decision rides the same events), and the throttle it must not forget comes with them.
+            {...fades.scrollProps}
             onContentSizeChange={onContentSizeChange}
             onScroll={onScroll}
-            scrollEventThrottle={16}
           >
             {children}
           </ScrollView>
@@ -218,8 +212,5 @@ function useKeyboardVisible(): boolean {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  // flexGrow, never flex:1 — inside a ScrollView the latter would CAP the content at one viewport
-  // and stop a long transcript from scrolling at all.
-  grow: { flexGrow: 1 },
   footer: { paddingHorizontal: space.gutter, paddingTop: space.sm },
 })

@@ -45,7 +45,7 @@ export function Screen({
 
   // Overflow-aware scroll-edge fades — the rule and the reason live in ./useScrollEdgeFades, which
   // ConversationScreen shares. Change it there.
-  const { showTopFade, showBottomFade, onScroll, onLayout, onContentSizeChange } = useScrollEdgeFades(fadeEdges)
+  const fades = useScrollEdgeFades(fadeEdges)
 
   if (scroll) {
     return (
@@ -55,28 +55,19 @@ export function Screen({
         <View style={styles.flex}>
           <ScrollView
             contentContainerStyle={[
-              // The scroll CONTENT fills the viewport even when it doesn't need to, so the
-              // scrollable area is the whole usable height rather than a short box with dead paper
-              // under it (founder, 2026-08-04 — applied to every scrolling shell). Layout is
-              // unchanged: content still stacks from the top, there is just no gap that belongs to
-              // nothing. `center` already grew for its own reasons and is unaffected.
-              styles.grow,
               padded && styles.padded,
               center && styles.center,
               contentPadding,
               contentContainerStyle,
             ]}
-            onLayout={onLayout}
-            onContentSizeChange={onContentSizeChange}
-            onScroll={onScroll}
-            scrollEventThrottle={16}
+            {...fades.scrollProps}
           >
             {children}
           </ScrollView>
           {/* Each fade is mounted only when its edge is genuinely clipped, so a short or
               centered screen shows no dissolve at rest. `underHeader`: this IS the screen's top
               edge, so where the bar floats the strip grows to cover it (see ./EdgeFade). */}
-          <EdgeFade top={showTopFade} bottom={showBottomFade} underHeader />
+          <EdgeFade top={fades.showTopFade} bottom={fades.showBottomFade} underHeader />
         </View>
       </SafeAreaView>
     )
@@ -103,9 +94,6 @@ export function Screen({
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  // flexGrow, never flex:1 — inside a ScrollView the latter caps the content at one viewport and a
-  // long screen stops scrolling entirely. (Same reason `center` uses flexGrow; see its note.)
-  grow: { flexGrow: 1 },
   padded: { padding: space.gutter },
   center: {
     // flexGrow (not flex:1): identical layout when content fits, but inside a ScrollView it

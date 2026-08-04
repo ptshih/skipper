@@ -15,6 +15,9 @@
 import { useState } from 'react'
 import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from 'react-native'
 
+/** How often the scroll view may report an offset. See `scrollProps` for why it lives here. */
+const SCROLL_THROTTLE_MS = 16
+
 export interface ScrollEdgeFades {
   /** Scrolled past the top AND the content overflows. */
   showTopFade: boolean
@@ -24,6 +27,21 @@ export interface ScrollEdgeFades {
   onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) => void
   onLayout: (e: LayoutChangeEvent) => void
   onContentSizeChange: (w: number, h: number) => void
+  /**
+   * The whole wiring, ready to spread onto a scroll view: `<ScrollView {...fades.scrollProps}>`.
+   *
+   * ⚠ THE THROTTLE IS PART OF THE CONTRACT, not a caller's taste — it is what collapses a 60fps
+   * event stream into the couple of setStates this hook's rounding is built around. It was written
+   * out beside the three handlers in all four scroll views, which is four places to forget it and
+   * no test that could see the omission (a fade simply stops tracking). A caller that needs its own
+   * per-event work spreads this FIRST and overrides the one handler it wraps.
+   */
+  scrollProps: {
+    onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) => void
+    onLayout: (e: LayoutChangeEvent) => void
+    onContentSizeChange: (w: number, h: number) => void
+    scrollEventThrottle: number
+  }
 }
 
 /**
@@ -56,5 +74,12 @@ export function useScrollEdgeFades(enabled = true): ScrollEdgeFades {
     setContentH((prev) => (prev === rounded ? prev : rounded))
   }
 
-  return { showTopFade, showBottomFade, onScroll, onLayout, onContentSizeChange }
+  return {
+    showTopFade,
+    showBottomFade,
+    onScroll,
+    onLayout,
+    onContentSizeChange,
+    scrollProps: { onScroll, onLayout, onContentSizeChange, scrollEventThrottle: SCROLL_THROTTLE_MS },
+  }
 }
