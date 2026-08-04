@@ -23,6 +23,80 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
+## Planner eval — PAID RUN 2026-08-04, $0.4911, routing gate FAIL (0.93, 4/54 turns)
+
+Founder go given explicitly. Full suite, 13 scenarios / 54 turns + judge, `--apply` with the judge on.
+Raw turns are on disk (`apps/api/eval/.runs/2026-08-04T05-48-55-670Z-mem.json`, gitignored), so any NEW
+metric can be back-applied to this run at zero further spend — do that before paying for another arm.
+
+**Not a regression from the 2026-08-04 plan-route hardening**, and the reason is structural: `eval/run.ts`
+calls `runPlannerTurn` DIRECTLY, not the HTTP handler, so it never touches `toPlannedRoute` /
+`toResponse`. ⚠ **Which is itself worth knowing: the panel is BLIND to the whole translation layer** — the
+off-roster drop, the degenerate-route refusal and the leak suppression are unmeasurable by it. If those
+ever need measuring, the panel has to go through the route, not around it.
+
+- [ ] **⚠ FINDING 1 — THE LOOP WAY-HOME BEAT BLOCKS A YES. This is the answer to "is the example
+      teaching the wrong order?", and it is YES, but not in the shape it was guessed at.** 2 of the 4
+      routing failures are the same defect: the rider says yes and the skipper asks for the way home
+      instead of drawing.
+      - `deflect-plan-draw-chat` #2 — rider: *"Yeah, do it."* → *"That 'do it' jumped my question,
+        friend. A loop needs a second place to come home by…"*
+      - `everything-in-one-breath` #1 — rider: *"that is right"* → *"That's the one bit I still need,
+        friend — a place on the other side to come home by…"*
+      **The mechanism, which is a prompt-structure bug and not a wording one:** `== Drawing it up ==`
+      states the way-home requirement and the read-back gate as two independent rules. Nothing says the
+      read-back **may not happen until a loop's way home is in hand**. So the model reads back an
+      incomplete loop, collects a yes, and only then discovers it is short an answer — producing exactly
+      the "rider says yes and watches nothing happen" symptom, one turn later than
+      `loop_without_return` catches it. ⚠ The fix is to make the way home a PRECONDITION of the
+      read-back, not a fourth thing to remember; do NOT just reword the beat.
+      ⚠ **In range historically, so do not read the FAIL as new breakage**: the spatial arms measured
+      routing failures at 2, 2, 0, 3 per ~50 turns. 4/54 is the same order. The gate has been red on this
+      beat for a while and nobody had attributed it.
+      The other two failures are separate and less clear-cut: `midpoint` #2 asked for confirmation a
+      second time after *"yes that"*, and `wrap-up-long-conversation` #7 DREW on a deliberately ambiguous
+      yes (`hold_no_repeat`) — that one is the gate wanting more caution than the prompt gives, and is
+      arguably the scenario's call rather than the model's.
+
+- [ ] **⚠ FINDING 2 — THINKING IS CONFIGURED ON AND PRODUCED ZERO TOKENS ON ALL 54 TURNS. INV-8's
+      protection should be treated as UNVERIFIED, possibly inactive.** `planner.ts` sends
+      `thinking: { type: 'adaptive', display: 'omitted' }` at `effort: 'low'`, and CLAUDE.md's INV-8
+      says thinking stays on *because* disabling it on this model "can emit a tool call as plain TEXT —
+      turn succeeds, no error, call never runs".
+      Measured: `output_tokens_details.thinking_tokens` was **0 on 54 of 54 turns**, tool-use turns
+      included. ⚠ **Not a reporting artifact, and the arithmetic is the argument**: chat turns spent
+      `out: 29–95` total and tool turns `out: 176–209` — a tool call with five UUID fields plus a `say`
+      string accounts for the whole of the latter. On a turn with 40 output tokens there is no room for a
+      thinking block whether or not it is reported.
+      ⚠ **And this is exactly the condition under which INV-8 predicts the leak that was actually
+      OBSERVED on 2026-08-03** (`say` came back as tool-call markup). That stops being a mystery if
+      adaptive thinking at low effort simply never engages. Stated as correlation, not proof.
+      **Cheapest next step, and it is a paid run (~$0.50, founder go):**
+      `bun apps/api/eval/run.ts --apply --effort medium --no-judge` and check whether
+      `thinking_tokens` goes non-zero at all. If it does, the production `effort` value becomes a real
+      decision (latency vs. INV-8 actually being on) rather than the latency-only lever `planner.ts`
+      documents it as. Until then the WIDENED `LEAKED_TOOL_CALL` filter is the only live protection,
+      not a belt to INV-8's braces.
+
+- [ ] **FINDING 3 — the read-back turn is both the persona sag AND the duration leak, and it is one
+      turn.** Persona scored 0.64 advisory (6/54 flagged) and every single flagged turn is a draw/
+      read-back: *"Tahoe City out to Incline Village, straight through, about an hour."* → judge
+      *"Flat confirm, no voice"*, 4/10, four times over. Separately, `durations asserted as road fact`
+      came in at **10**, and the quoted lines are the SAME turns — *"about an hour of road"*,
+      *"a straight run of about two hours"*. The prompt already says how long they want is theirs
+      "never as a fact about the road"; the read-back is where it gets restated as one.
+      ⚠ Both numbers are in historical range (durations measured 12, 10, 6, 12 across the spatial arms),
+      so this is the standing state of that turn, not a new slip. The prompt itself predicts it — *"This
+      is the turn you will do more than any other, so it is the one that goes stale first"* — and gives
+      it no sample line on purpose. Worth an ear before another prompt edit.
+      Also measured: 9/54 turns echo an earlier turn of the SAME chat, 17 distinct within-chat repeated
+      phrases (all read-back stems: *"tahoe city out to incline village"* ×2 etc.), 1 turn judged CANNED.
+
+✅ **Clean, and worth recording so nobody re-checks:** `voice` and `discipline` gates both PASS at 1.00,
+0/54. No boat, no markdown, no id ever recited, no place fact handed over. **And the prompt cache is
+healthy** — `cache_read` ~6.9k on every turn after the first of each scenario, `cache_write` only on the
+first, so the roster prefix is intact and the `cache_read: 0` regression is not present.
+
 ## Virtualize the chat transcript (step 8) — NEEDS A FOUNDER GO, and not yet justified
 
 The last un-taken step of [docs/designs/chat-render-performance.md](docs/designs/chat-render-performance.md),
