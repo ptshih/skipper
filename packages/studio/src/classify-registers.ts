@@ -1,8 +1,10 @@
-// classify-registers — assign each enriched POI a `delivery_register` (landscape | story | town |
+// classify-registers — assign each QID-bearing POI a `delivery_register` (landscape | story | town |
 // civic), which picks its TTS read (`ttsStyleFor`) + length band (`lengthForRegister`). HYBRID,
 // founder-chosen 2026-06-19 after external research:
 //   1. STRUCTURAL (free): the Wikidata P31/P279* walk (classify-register.ts) — a unanimous single
-//      register is trusted (~75% of the live corpus).
+//      register is trusted. It carries most of the corpus; run the free preview for today's split
+//      rather than trusting a number here (it read 877/1393 on 2026-08-04, when the scope below was
+//      widened past enriched-only — the older "~75%" described the enriched population alone).
 //   2. LLM FALLBACK (paid, the tail): a POI whose P31 matched NO register or CONFLICTING ones is
 //      handed to a cheap Haiku call over its fact sheet.
 // The register is a STABLE place property, classified ONCE and stored on `pois`, shared by every
@@ -53,14 +55,40 @@ const printDist = (d: Record<DeliveryRegister, number>): void => {
 
 async function main(): Promise<void> {
   const flags = parseFlags(process.argv.slice(2))
+  // ⚠ DELIBERATELY NOT REGION-SCOPED, and it says so rather than ignoring the flag. A register is a
+  // STABLE PLACE PROPERTY classified once and shared by every drive, so scoping it to a region would
+  // make one place's read depend on which region it was swept under. no-default-region.md requires
+  // `--region` of every REGION-SCOPED CLI; this is not one. But every other corpus CLI does require it,
+  // so an operator will reach for it here — and silently ignoring it is how a run does something other
+  // than what the operator asked for.
+  if (flags.has('region')) {
+    throw new Error(
+      'classify-registers takes no --region: a delivery register is a stable per-place property, ' +
+        'classified once corpus-wide and shared by every drive. Re-run without it.',
+    )
+  }
   const apply = flags.has('apply')
   const force = flags.has('force')
   const maxCostUsd = maxCostFlag(flags)
   announce({ tool: 'classify-registers', blast: ['SPENDS $', 'MUTATES DB'], apply })
   if (force) console.log('(force: re-classifying POIs that already carry a register)\n')
 
-  // The narratable corpus = enriched POIs with a QID. Skip already-classified unless --force, so a
-  // re-run only spends the LLM on the still-unclassified tail.
+  // Every POI with a QID. Skip already-classified unless --force, so a re-run only spends the LLM on
+  // the still-unclassified tail.
+  //
+  // ⚠ THIS USED TO REQUIRE `enrichedAt`, AND THAT EXCLUDED EXACTLY THE STOPS THE REGISTER EXISTS FOR.
+  // Measured 2026-08-04: 309 of 730 audible clips (42%) carried NO register, and every single one was
+  // `form=scenic`, un-enriched, and QID-bearing. Scenic stops are never enriched — by design, a scenic
+  // stop needs no fact sheet — so they never reached this CLI and were all read with the `story`
+  // default. The irony is exact: the `landscape` suffix is written for them ("a piece of landscape, not
+  // a tale — so give it a little more air"), and they were the only stops that never got it. They also
+  // inherited story's 90s length aim instead of landscape's 60s, on stops whose own contract is "a
+  // glance, not a story".
+  // A fact sheet was never needed here anyway: the register is decided from what KIND of place it is,
+  // "never its facts" (classify-register.ts), the free structural pass reads only the QID, and the LLM
+  // fallback already degrades to `name (kind)` when a sheet is absent — which is the right input.
+  // ⚠ The register is baked at SYNTHESIS, so classifying changes no existing audio; the value lands on
+  // the next regeneration. Which is the argument for doing it BEFORE one, not after.
   const rows = await db
     .select({
       id: pois.id,
@@ -70,16 +98,10 @@ async function main(): Promise<void> {
       factSheet: pois.factSheet,
     })
     .from(pois)
-    .where(
-      and(
-        isNotNull(pois.enrichedAt),
-        isNotNull(pois.qid),
-        force ? undefined : isNull(pois.deliveryRegister),
-      ),
-    )
+    .where(and(isNotNull(pois.qid), force ? undefined : isNull(pois.deliveryRegister)))
 
   if (rows.length === 0) {
-    console.log('Nothing to classify — every enriched POI already has a register (use --force to redo).')
+    console.log('Nothing to classify — every POI with a QID already has a register (use --force to redo).')
     return
   }
   console.log(`${rows.length} POIs to classify.\n`)
