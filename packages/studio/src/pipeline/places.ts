@@ -289,6 +289,36 @@ export function isAddressLike(types: string[] | undefined): boolean {
   return (types ?? []).some((t) => ADDRESS_TYPES.has(t))
 }
 
+/** Types whose whole identity is "somewhere you leave the car" rather than somewhere you go.
+ *  ⚠ VERIFIED against the live API, 2026-08-04 — `California Main Lodge Parking` came back as
+ *  `["parking_lot","parking","transportation_service","service","point_of_interest","establishment"]`.
+ *  The two parking types are the precise ones; the rest of that list is shared with real destinations
+ *  (`Heavenly Mountain Scenic Gondola` is `["tourist_attraction","point_of_interest","establishment"]`)
+ *  and matching on them would gut the set. */
+const PARKING_TYPES = new Set(['parking_lot', 'parking', 'parking_garage'])
+
+/**
+ * True when a resolve came back as a CAR PARK rather than the place it serves.
+ *
+ * ⚠ WHY A SECOND GUARD RATHER THAN A BETTER PROMPT — no draft can prevent this, because the draft was
+ * RIGHT. Asked for `Heavenly Mountain Resort` (a legitimate, top-ranked destination), the bbox-restricted
+ * Autocomplete returns `California Main Lodge Parking`: the resort's own parking structure. Details then
+ * confirms it is in the box and it lands as a curated endpoint at rank 2, so the planner would offer a
+ * rider a drive that ENDS in a ski resort's parking garage. Same shape as `isAddressLike` — a silent
+ * wrong answer, not a failed one — and the same fix: check what came back, not what was asked for.
+ *
+ * ⚠ It also poisoned the routability sweep, because a rank-2 row is a probe ORIGIN: every route measured
+ * FROM the car park read "restricted usage or private roads", so the sweep flagged South Lake Tahoe and
+ * Stateline as undrivable and proposed an access point 25 km from Downtown.
+ *
+ * ⚠ Mirrored in the sibling copy (apps/admin/server/places.ts / packages/studio/src/pipeline/places.ts)
+ * — the two must move together, like the draft prompt and the resolver they sit beside.
+ */
+export function isParkingLike(types: string[] | undefined): boolean {
+  return (types ?? []).some((t) => PARKING_TYPES.has(t))
+}
+
+
 /** Resolve an LLM-drafted place NAME to a stored CuratedPlace within the region bbox, or null if it
  *  can't be pinned in-region (no prediction, missing details, or — a Details-coords guard — the
  *  canonical point lands OUTSIDE the bbox even though Autocomplete biased toward it). Non-fatal:

@@ -34,7 +34,7 @@ import { announce, maxCostFlag, parseFlags } from './pipeline/ops'
 import { requireRegionBbox, requireRegionKey, resolveRegion, type RegionBbox } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'
 import { withRetry, sleep } from './pipeline/http'
-import { isAddressLike, resolveCuratedPlace, type CuratedPlace, type PlacesBbox } from './pipeline/places'
+import { isAddressLike, isParkingLike, resolveCuratedPlace, type CuratedPlace, type PlacesBbox } from './pipeline/places'
 import { ENRICH_MODELS, getAnthropic, type EnrichModelChoice } from './models'
 import { llmSpendLines, llmSpentUsd, recordModelUsage, usageUsd } from '@skipper/shared'
 import { ANTHROPIC_READY, GOOGLE_READY, requireEnv } from './config'
@@ -296,6 +296,13 @@ async function main(): Promise<void> {
     // so it must be a real place; a BREAK is a pull-off, where a `route` is a legitimate answer.
     if (isAddressLike(place.types)) {
       console.log(`  ·  ${d.name}: resolved to a street address ("${place.name}") — skipped, not a real endpoint.`)
+      unresolved++
+      continue
+    }
+    // ⚠ The draft was RIGHT and the resolve substituted — "Heavenly Mountain Resort" comes back as its
+    // parking structure. See isParkingLike; no prompt can prevent this.
+    if (isParkingLike(place.types)) {
+      console.log(`  ·  ${d.name}: resolved to a car park ("${place.name}") — skipped, that is not the destination.`)
       unresolved++
       continue
     }

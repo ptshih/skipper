@@ -17,7 +17,7 @@
  * plural `types` separates them.
  */
 import { describe, expect, it } from 'bun:test'
-import { isAddressLike } from './places'
+import { isAddressLike, isParkingLike } from './places'
 
 // Shapes as the Places API (New) returns them — address-component types vs a locality's types.
 const TOWN = ['locality', 'political']
@@ -58,5 +58,45 @@ describe('isAddressLike', () => {
   it('rejects a mixed list containing an address type', () => {
     // Google can return several types; one address component is enough to disqualify an endpoint.
     expect(isAddressLike(['establishment', 'route'])).toBe(true)
+  })
+})
+
+/**
+ * The CAR-PARK guard — the second way a resolve substitutes, and the one no prompt can prevent.
+ *
+ * The address guard above catches a draft naming something OUTSIDE the box. This catches a draft that
+ * was entirely RIGHT: asked for `Heavenly Mountain Resort` — a real, top-ranked destination inside the
+ * box — the bbox-restricted Autocomplete returns `California Main Lodge Parking`, the resort's own
+ * parking structure. Details confirms it is in the box, so it landed as a curated endpoint at RANK 2,
+ * and the planner would have offered a rider a drive ending in a ski resort's parking garage.
+ *
+ * ⚠ It also poisoned the routability sweep, because a rank-2 row is used as a probe ORIGIN: every route
+ * measured FROM the car park read "restricted usage or private roads", so the sweep reported South Lake
+ * Tahoe and Stateline as undrivable and proposed an access point 25 km from Downtown's pin.
+ */
+describe('isParkingLike', () => {
+  // Verified against the live Places API, 2026-08-04 — this is the exact payload that shipped the bug.
+  const MAIN_LODGE = ['parking_lot', 'parking', 'transportation_service', 'service', 'point_of_interest', 'establishment']
+
+  it('rejects the car park Google returns for a resort name', () => {
+    expect(isParkingLike(MAIN_LODGE)).toBe(true)
+  })
+
+  it('⚠ KEEPS the real destination, whose types OVERLAP the car park\'s', () => {
+    // `Heavenly Mountain Scenic Gondola` — the row that replaced it — shares point_of_interest and
+    // establishment with the lot above. A guard written against those would delete the fix along with
+    // the bug, which is why only the two parking types are matched.
+    expect(isParkingLike(['tourist_attraction', 'point_of_interest', 'establishment'])).toBe(false)
+  })
+
+  it('⚠ KEEPS a town — the failure mode the sibling guard already documents', () => {
+    // A locality carries no primaryType and no parking type. Rejecting broadly here would repeat the
+    // "reject a null primaryType" mistake the block above exists to prevent.
+    expect(isParkingLike(['locality', 'political'])).toBe(false)
+  })
+
+  it('is empty-safe, like its sibling', () => {
+    expect(isParkingLike(undefined)).toBe(false)
+    expect(isParkingLike([])).toBe(false)
   })
 })

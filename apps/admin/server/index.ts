@@ -62,7 +62,7 @@ import { checkAccessPoint, checkSpeakableAnchor } from '@skipper/engine'
 import { groundingHash } from '@skipper/db/hash'
 import { requireAdmin, type AdminEnv } from './auth'
 import { bboxError, bboxOverlapsRect, parseBbox, pointInBbox, type BboxCorners } from './bbox'
-import { draftCuratedPlaces, isAddressLike, resolvePlaceInBbox, type PlaceDraft, type ResolvedPlace } from './places'
+import { draftCuratedPlaces, isAddressLike, isParkingLike, resolvePlaceInBbox, type PlaceDraft, type ResolvedPlace } from './places'
 import { contentTypeForKey, presignGet } from './storage'
 import {
   buildJobArgs,
@@ -755,6 +755,16 @@ app.post('/admin/places/curate', async (c) => {
         status: 'dropped',
         resolvedName: place.name,
         message: `resolved to a street address (“${place.name}”) — Google substituted an in-box name-alike, so this is not a real endpoint`,
+      })
+      continue
+    }
+    // ⚠ The draft was RIGHT and the resolve substituted — see isParkingLike. No prompt can prevent it.
+    if (isParkingLike(place.types)) {
+      results.push({
+        name: d.name,
+        status: 'dropped',
+        resolvedName: place.name,
+        message: `resolved to a car park (“${place.name}”) — Google returned the lot that SERVES the place, not the place`,
       })
       continue
     }
