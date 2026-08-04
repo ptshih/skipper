@@ -20,7 +20,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Pressable, StyleSheet, View, type TextInput } from 'react-native'
 import { Stack, useFocusEffect, useIsFocused, useRouter } from 'expo-router'
-import type { PlannedRoute } from '@skipper/shared'
+import { MAX_PLAN_DRAWN, type PlannedRoute } from '@skipper/shared'
 // ⚠ The TYPED contract, and the only analytics surface there is (src/lib/analytics.tsx owns the raw
 // client, unexported). Every property below is a number, a boolean or a closed union — INV-13 applies
 // to analytics exactly as it applies to logs: no rider prose, no place name, no coordinate, no url, no
@@ -225,7 +225,14 @@ export default function HomeScreen() {
   // but the PLANNER re-emitting a route it already gave (see `drawUp`). A ref rather than derived
   // state for the same reason `creatingRef` is one: the decision is made synchronously, before the
   // setCards it would otherwise have to read back.
-  const drawnRef = useRef<Set<string>>(new Set())
+  // ⚠ A MAP, NOT A SET, AND THE VALUE IS THE POINT. The key still answers "have we drawn this?"; the
+  // value is now sent to the server as `drawn` so the MODEL can be told what it already drew. The
+  // transcript is text-only (`toWire` drops the route), so without that the skipper's only evidence of
+  // having drawn is his own sentence — the defect class behind answering "what do I call you?" with
+  // "Consider it drawn". One structure rather than two: a parallel list of routes would be a second
+  // copy of this set's membership, and keeping two copies of "the same" set in step is the bug this
+  // file has already paid for more than once.
+  const drawnRef = useRef<Map<string, PlannedRoute>>(new Map())
 
   /** Bumped by "Start fresh", and its ONLY job is to schedule the autofocus below.
    *
@@ -603,7 +610,7 @@ export default function HomeScreen() {
         bumpScroll()
         return
       }
-      drawnRef.current.add(key)
+      drawnRef.current.set(key, route)
       const id = uuidV4()
       // Minted WITH the card and reused across every retry of that same create, so a lost-ACK retry
       // dedupes server-side; a new route is a new card and therefore a new key.
@@ -717,7 +724,12 @@ export default function HomeScreen() {
       const isCurrent = () => convSeq.current === seq
       try {
         const resp = await planTurn(
-          { turns: wire, regionId },
+          // ⚠ `drawn` is the model's MEMORY, and it is sent from here because the server has none —
+          // the planner is stateless and this client holds the only copy of the conversation (D10).
+          // Ids only; the server resolves the names off its own roster, so nothing typed on this
+          // screen can reach a system block. Capped at MAX_PLAN_DRAWN by the shared schema; the
+          // newest are the ones worth keeping if a conversation ever exceeded it.
+          { turns: wire, regionId, drawn: [...drawnRef.current.values()].slice(-MAX_PLAN_DRAWN) },
           {
             onDelta: (d) => applyBuf((b) => pushDelta(b, d, Date.now())),
             signal: ctrl.signal,

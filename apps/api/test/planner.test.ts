@@ -16,7 +16,13 @@ import Anthropic from '@anthropic-ai/sdk'
 import { CLAUDE_MODELS } from '@skipper/shared'
 import { PLAN_ROUTE_TOOL, PLANNER_SYSTEM_PROMPT, PLANNER_WRAP_UP_NOTICE } from '../src/planner-prompt'
 import { MAX_ROUTE_VIA } from '@skipper/shared'
-import { buildRosterBlock, PlannerTurnError, runPlannerTurn, type PlannerModelArgs } from '../src/planner'
+import {
+  buildDrawnBlock,
+  buildRosterBlock,
+  PlannerTurnError,
+  runPlannerTurn,
+  type PlannerModelArgs,
+} from '../src/planner'
 import {
   checkTranscript,
   MAX_PLAN_MESSAGES,
@@ -173,6 +179,56 @@ describe('plan_route tool', () => {
     // why `say` is a required field rather than a hope. The description must point at it by name.
     expect(PLAN_ROUTE_TOOL.description).toContain('`say`')
     expect(PLAN_ROUTE_TOOL.description).toContain('watch nothing happen')
+  })
+})
+
+/* -------------------------------------------------------------------------- */
+/* The model's MISSING MEMORY — what it already drew.                          */
+/* -------------------------------------------------------------------------- */
+
+// ⚠ WHY THIS BLOCK EXISTS. The transcript is text-only — `toWire` carries role + text and DROPS the
+// route — so the model cannot see that it ever called the tool, and its whole evidence of having drawn
+// is its own sentence. That single fact caused most of this surface's defects: answering "What do I
+// call you?" with "Consider it drawn", re-emitting an identical route on "sweet", and guessing at
+// whether a new ask was a DIFFERENT drive. The client now sends what it drew and this renders it back.
+describe('buildDrawnBlock', () => {
+  const A = { id: 'a1', name: 'Kings Beach' }
+  const B = { id: 'b2', name: 'Emerald Bay State Park' }
+  const C = { id: 'c3', name: 'Tahoe City' }
+
+  test('names the drive in order, from the ROSTER — never from the caller', () => {
+    const block = buildDrawnBlock([{ start: 'a1', end: 'b2' }], [A, B, C])
+    expect(block).toContain('Kings Beach to Emerald Bay State Park')
+    // The instruction is the point of the block, not the list.
+    expect(block).toContain('already drawn')
+  })
+
+  test('midpoints ride in order', () => {
+    const block = buildDrawnBlock([{ start: 'a1', end: 'b2', via: ['c3'] }], [A, B, C])
+    expect(block).toContain('Kings Beach to Tahoe City to Emerald Bay State Park')
+  })
+
+  // ⚠ THE SECURITY SHAPE. The caller sends ids; names come from the allowlist. An id that is not on it
+  // is DROPPED rather than rendered or rejected — this is CONTEXT, not a routing instruction, so a
+  // stale or forged entry must degrade to one fewer remembered drive, never to an error and never to a
+  // place name the region does not have.
+  test('an unknown id drops the whole drive rather than printing a gap', () => {
+    expect(buildDrawnBlock([{ start: 'a1', end: 'nope' }], [A, B, C])).toBeNull()
+    const block = buildDrawnBlock([{ start: 'a1', end: 'nope' }, { start: 'a1', end: 'b2' }], [A, B, C])
+    expect(block).toContain('Kings Beach to Emerald Bay State Park')
+    expect(block).not.toContain('nope')
+  })
+
+  test('nothing to say returns null, so the caller can omit the block entirely', () => {
+    expect(buildDrawnBlock([], [A, B])).toBeNull()
+  })
+
+  test('a name carrying a newline cannot forge an extra line', () => {
+    // Same rule the roster block enforces: this is a SYSTEM block, so a smuggled newline would read as
+    // authoritative structure.
+    const block = buildDrawnBlock([{ start: 'a1', end: 'x' }], [A, { id: 'x', name: 'Bad\nPlace' }])
+    expect(block).toContain('Bad Place')
+    expect(block!.split('\n').filter((l) => l.includes('Kings Beach')).length).toBe(1)
   })
 })
 

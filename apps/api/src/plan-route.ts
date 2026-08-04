@@ -281,6 +281,13 @@ planRoutes.post('/', async (c) => {
     turns: read.data.turns,
     regionName: roster.name,
     anchors: roster.anchors,
+    // ⚠ THE MODEL'S MISSING MEMORY. The transcript is text-only, so without this the skipper cannot
+    // see that he ever drew anything and has to infer it from his own prose — the defect class behind
+    // "Consider it drawn" in answer to "what do I call you?", and behind re-emitting an identical
+    // route on "sweet". Ids in, names resolved from the roster (./planner `buildDrawnBlock`), so
+    // nothing a caller types reaches a system block. ⚠ Spread, so the key is ABSENT on the first turn
+    // rather than an empty array that would render an empty block.
+    ...(read.data.drawn?.length ? { drawn: read.data.drawn } : {}),
     // D12 — the in-persona wrap-up, and THIS IS THE PRODUCER. It has three halves and they only work
     // together: the THRESHOLD in ./limits, this line, the volatile system block in ./planner, and the
     // `== Wrapping up ==` section of ./planner-prompt that the notice's opening phrase is the trigger

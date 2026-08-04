@@ -307,6 +307,27 @@ export const plannerTurn = z.object({
 })
 export type PlannerTurn = z.infer<typeof plannerTurn>
 
+/** The route the planner proposes once the rider says yes — already translated out of the model's own
+ *  tool vocabulary into the shape `POST /drives/propose` takes, so the client re-sends it verbatim and
+ *  never reconstructs an endpoint from a display string.
+ *  ⚠ DEFINED BEFORE `drivePlanRequest` because that request now carries an array of these; a schema
+ *  referenced before its `const` is initialised is a TDZ throw at import, not a type error. */
+export const plannedRoute = z.object({
+  start: anchorId,
+  end: anchorId,
+  via,
+  /** Rough drive length the rider asked for, in minutes. Advisory — the route is materialized from the
+   *  endpoints, and Google decides the real duration. */
+  targetMinutes: z.number().int().positive().nullish(),
+})
+export type PlannedRoute = z.infer<typeof plannedRoute>
+
+/** Parse-level ceiling on the drives-already-drawn context. A real conversation carries one or two
+ *  cards; this only has to stop an unbounded array reaching the prompt assembler. ⚠ A SHAPE bound, so
+ *  it lives here with the other shape bounds — the caps that price model tokens live in
+ *  `apps/api/src/limits.ts` and cannot be imported from this package. */
+export const MAX_PLAN_DRAWN = 8
+
 /** POST /drives/plan — one conversational turn. Anonymous-capable (D14/D15).
  *
  *  ⚠ THE BOUNDS THAT MATTER ARE NOT ALL HERE, on purpose. The per-message and total-character caps
@@ -321,21 +342,30 @@ export const drivePlanRequest = z.object({
   /** Which region's skipper is being talked to. The anchor roster is resolved SERVER-side from this —
    *  the client never sends the allowlist, and could not be trusted with it if it did (INV-1). */
   regionId: z.uuid(),
+  /**
+   * The drives ALREADY DRAWN in this conversation, oldest first — the model's missing memory.
+   *
+   * ⚠ WHY THIS EXISTS. The transcript is text-only: `toWire` carries role + text and DROPS the route,
+   * so the model cannot see that it ever called the tool. Its whole evidence of having drawn is its
+   * own sentence about it — which is the single fact behind most of this surface's defects, from
+   * answering "what do I call you?" with "Consider it drawn" to re-emitting an identical route on
+   * "sweet". The server renders these back as a short volatile system block so the character KNOWS
+   * what is already on the rider's screen.
+   *
+   * ⚠ IDS ONLY, AND THAT IS THE SECURITY SHAPE, not a convenience. Every field of `plannedRoute` is a
+   * curated anchor id or an integer — there is no free-text field — and the server looks the NAMES up
+   * from the roster it already loaded. So nothing a caller types can reach a system block, which is
+   * the one place injected text would be read as authoritative. An id that is not on the region's
+   * allowlist is DROPPED rather than rejected: this is context, not a routing instruction, and a
+   * bad entry must never turn a legitimate conversation into an error.
+   *
+   * ⚠ It is CONTEXT, never a source of truth for what gets built. A caller lying here can only make
+   * the skipper believe he drew something he did not; INV-1 still re-asserts every id at the wire on
+   * the next real draw, and no billed call is made from this field.
+   */
+  drawn: z.array(plannedRoute).max(MAX_PLAN_DRAWN).optional(),
 })
 export type DrivePlanRequest = z.infer<typeof drivePlanRequest>
-
-/** The route the planner proposes once the rider says yes — already translated out of the model's own
- *  tool vocabulary into the shape `POST /drives/propose` takes, so the client re-sends it verbatim and
- *  never reconstructs an endpoint from a display string. */
-export const plannedRoute = z.object({
-  start: anchorId,
-  end: anchorId,
-  via,
-  /** Rough drive length the rider asked for, in minutes. Advisory — the route is materialized from the
-   *  endpoints, and Google decides the real duration. */
-  targetMinutes: z.number().int().positive().nullish(),
-})
-export type PlannedRoute = z.infer<typeof plannedRoute>
 
 /** What a planner turn hands back.
  *

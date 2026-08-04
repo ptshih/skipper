@@ -57,6 +57,10 @@ const suite = ONLY ? SCENARIOS.filter((s) => s.id === ONLY) : SCENARIOS
 async function replay(scenario: Scenario): Promise<TurnOutcome[]> {
   const transcript: PlannerTurnInput[] = []
   const outcomes: TurnOutcome[] = []
+  // ⚠ MIRRORS THE CLIENT'S `drawnRef` EXACTLY, and it has to: the model's memory of what it drew is
+  // sent from the client (the server is stateless), so a replay that omitted it would measure a
+  // planner nobody runs. Keyed like the client's, so a re-emitted identical route does not enter twice.
+  const drawn = new Map<string, { start: string; end: string; via?: string[] | null }>()
 
   for (const [index, t] of scenario.turns.entries()) {
     transcript.push({ role: 'rider', text: t.rider })
@@ -71,6 +75,7 @@ async function replay(scenario: Scenario): Promise<TurnOutcome[]> {
       regionName: FIXTURE_REGION,
       anchors: FIXTURE_ANCHORS,
       ...wrapUp,
+      ...(drawn.size ? { drawn: [...drawn.values()] } : {}),
       ...(EFFORT ? { effort: EFFORT } : {}),
       ...(SPATIAL ? { extraSystem: FIXTURE_SPATIAL_BLOCK } : {}),
     })
@@ -90,6 +95,14 @@ async function replay(scenario: Scenario): Promise<TurnOutcome[]> {
     // Faithful to production: the client appends whatever came back, and `toModelMessages` filters an
     // empty one out at the vendor seam. Pushing it here keeps the two paths identical.
     transcript.push({ role: 'skipper', text: turn.say })
+
+    // ...and so does remembering the draw. `drawUp` on the client records the route the moment one
+    // arrives, so the NEXT turn's request carries it.
+    const key = routeKey(turn.rawRoute)
+    if (key && !drawn.has(key)) {
+      const r = turn.rawRoute as { start_anchor_id: string; end_anchor_id: string; via_anchor_ids?: string[] }
+      drawn.set(key, { start: r.start_anchor_id, end: r.end_anchor_id, via: r.via_anchor_ids ?? null })
+    }
   }
   return outcomes
 }

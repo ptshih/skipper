@@ -87,6 +87,10 @@ export interface PlannerModelArgs {
    *  the cache breakpoint, which is the whole reason it is a separate field instead of prose spliced
    *  into the roster — anything volatile ahead of the breakpoint re-bills the entire prefix. */
   wrapUpNotice?: string
+  /** Drives already drawn in this conversation — the model's missing memory (see `buildDrawnBlock`).
+   *  Ids only; names are resolved here from `anchors`. Also rendered after the cache breakpoint,
+   *  because it changes the moment a route is drawn. */
+  drawn?: readonly { start: string; end: string; via?: string[] | null }[]
   /** Called per token as the rider-visible text streams, for a caller relaying its OWN SSE frames.
    *  ⚠ Never proxy the raw Anthropic stream — it carries thinking blocks, signatures and tool
    *  internals. Deltas already emitted are NOT retracted if the turn later fails. */
@@ -294,6 +298,53 @@ export function buildRosterBlock(regionName: string, anchors: PlannerAnchor[]): 
 }
 
 /**
+ * The drives already on the rider's screen, as the model's missing memory.
+ *
+ * ⚠ THIS IS THE FIX FOR THE DEFECT CLASS THAT CAUSED MOST OF THIS SURFACE'S BUGS. The transcript is
+ * text-only — `toWire` carries role + text and drops the route — so the model cannot see that it ever
+ * called the tool, and its entire evidence of having drawn is its own sentence. That is why it
+ * answered "What do I call you?" with "Consider it drawn", why it re-emitted identical routes on
+ * "sweet", and why judging "is this a DIFFERENT drive?" was guesswork. Now it is told.
+ *
+ * ⚠ NAMES ARE RESOLVED HERE, FROM THE ROSTER — the caller sends ids only. That is what keeps rider
+ * text out of a system block, which is the one place injected prose would be read as authoritative.
+ * An id not on this region's allowlist is DROPPED silently: this is CONTEXT, not a routing
+ * instruction, so a stale or forged entry must degrade to "he remembers one fewer drive" and never to
+ * an error or a fabricated place name.
+ *
+ * ⚠ It says nothing about round trips. `PlannedRoute` encodes a loop as `end === start` with the
+ * turnaround as the last midpoint, and re-deriving that shape here would put a second copy of the
+ * translation rule (./plan-route owns it) somewhere nobody would think to keep in sync. Naming the
+ * places in order is enough for the model to recognise its own drive.
+ *
+ * Exported for tests. Returns null when there is nothing to say, so the caller can omit the block
+ * rather than send an empty one.
+ */
+export function buildDrawnBlock(
+  drawn: readonly { start: string; end: string; via?: string[] | null }[],
+  anchors: readonly PlannerAnchor[],
+): string | null {
+  const byId = new Map(anchors.map((a) => [a.id, a.name]))
+  const lines: string[] = []
+  for (const r of drawn) {
+    const stops = [r.start, ...(r.via ?? []), r.end].map((id) => byId.get(id))
+    // One unknown id makes the whole drive unnameable — skip it rather than print a gap the model
+    // would have to interpret.
+    if (stops.some((n) => !n)) continue
+    lines.push(`${flatten(stops.join(' to '))}.`)
+  }
+  if (lines.length === 0) return null
+  return [
+    '== Drives you have already drawn for these folks ==',
+    '',
+    'These are on their screen right now. You drew them; they can see them. Do not draw one of these',
+    'again, and do not announce them as though you just this moment made them.',
+    '',
+    ...lines,
+  ].join('\n')
+}
+
+/**
  * Domain roles -> vendor roles, with the two vendor-contract checks that belong at this seam.
  *
  * ⚠ THE TRANSCRIPT IS CALLER-CONTROLLED (D10), skipper turns included — so a forged shape must fail as
@@ -356,6 +407,11 @@ export async function runPlannerTurn(args: PlannerModelArgs): Promise<PlannerTur
       cache_control: { type: 'ephemeral' },
     },
   ]
+  // ⚠ BEFORE the wrap-up notice, so the LAST thing the model reads on a long conversation is still
+  // "bow out" rather than a list of drives — the wrap-up is the instruction that has to win at the
+  // recency edge.
+  const drawnBlock = args.drawn?.length ? buildDrawnBlock(args.drawn, args.anchors) : null
+  if (drawnBlock) system.push({ type: 'text', text: drawnBlock })
   if (args.wrapUpNotice) system.push({ type: 'text', text: args.wrapUpNotice })
   // Experiment-only, and last so it can never sit between the prefix and its breakpoint.
   if (args.extraSystem) system.push({ type: 'text', text: args.extraSystem })
