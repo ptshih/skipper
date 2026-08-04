@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Image, StyleSheet, View } from 'react-native'
-import { setAudioModeAsync, setIsAudioActiveAsync, useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { Stack, useRouter } from 'expo-router'
 import type { ImageSourcePropType } from 'react-native'
+import { applyExclusiveBackgroundAudio, releaseAudioSession } from '@/lib/audio-session'
 import { track } from '@/lib/analytics'
 import { markSamplePlayed } from '@/lib/client-flags'
 import { getSample } from '@/lib/api'
@@ -79,18 +80,14 @@ export default function SampleScreen() {
   // full-screen player the rider navigated to, and a one-minute taste that dies mid-sentence when the
   // phone locks is worse than one that finishes.
   useEffect(() => {
-    setAudioModeAsync({
-      playsInSilentMode: true,
-      shouldPlayInBackground: true,
-      interruptionMode: 'doNotMix',
-    }).catch(() => {})
+    void applyExclusiveBackgroundAudio()
     // ⚠ AND HAND IT BACK ON THE WAY OUT. This is the other half of the flip and it is not optional:
     // `doNotMix` INTERRUPTS the rider's music, and iOS resumes theirs only once the session is
     // deactivated — pausing the player is not enough. Without this, a stranger taps the postcard, we
     // pause their podcast, and it never comes back — on the app's very first impression, which
     // autoplays. `useDrive` already pays this at the end of a drive; every exclusive surface owes it.
     return () => {
-      void setIsAudioActiveAsync(false).catch(() => {})
+      releaseAudioSession()
     }
   }, [])
 
@@ -166,7 +163,7 @@ export default function SampleScreen() {
       // Hand the audio session back the moment the taste is over, not on unmount: the rider sits on
       // the end card deciding, and under `doNotMix` their own music stays paused for as long as they
       // do. The unmount teardown above is the backstop for leaving mid-clip.
-      void setIsAudioActiveAsync(false).catch(() => {})
+      releaseAudioSession()
     }
   }, [status.didJustFinish, status.playing, status.currentTime, durSec, phase])
 

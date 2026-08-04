@@ -13,7 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { PRE_START_STALL_MS } from '@skipper/engine'
 import { loadPlayback, resignPlayback } from './offline'
-import { applyPreviewAudioMode, releaseAudioSession } from './audio-session'
+import { applyExclusiveForegroundAudio, releaseAudioSession } from './audio-session'
 import { useStartWatchdog } from './preview-audio'
 import { decideFail, decideToggle, sawFreshAudio } from './preview-util'
 
@@ -149,7 +149,7 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
       playbackAttempted.current = false // nothing started yet — a failure here holds no session
       handledErrorRef.current = status.error ?? null // snapshot, so a stale error can't blame this seq
       clearStartWatchdog()
-      applyPreviewAudioMode() // exclusive focus + foreground-only (a prior live drive left background-on)
+      applyExclusiveForegroundAudio() // exclusive focus + foreground-only (a prior live drive left background-on)
       void (async () => {
         // resolveUri can THROW on the first tap (its loadPlayback → getDrive hits the network for a
         // not-fully-downloaded drive) — a signal drop after the page loaded lands here. Treat any throw

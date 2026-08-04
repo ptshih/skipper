@@ -8,16 +8,23 @@
 // home: it has already been softened once by someone reading only half of it.
 //
 // ⚠ AND IT IS PROCESS-WIDE, LAST WRITER WINS. Only one surface may own the mode at a time, so the
-// difference between these two calls is not cosmetic: a drive plays in the BACKGROUND (the phone is
-// in a mount, the screen sleeps, the drive continues), a preview does not (a clip that outlived the
-// screen the rider left is the skipper talking to an empty car).
+// difference between the two modes below is not cosmetic: a drive and the sample clip play in the
+// BACKGROUND (the phone is in a mount or a pocket, the screen sleeps, the audio continues), a
+// preview does not.
 import { setAudioModeAsync, setIsAudioActiveAsync } from 'expo-audio'
 
 /** Never `duckOthers`, never `mixWithOthers` — see the header before changing this. */
 const SKIPPER_INTERRUPTION_MODE = 'doNotMix' as const
 
-/** The DRIVING player's session: exclusive, and alive with the screen off. */
-export function applyDriveAudioMode(): Promise<void> {
+/**
+ * Exclusive focus, and playback CONTINUES with the screen off.
+ *
+ * ⚠ NAMED FOR THE POLICY, NOT THE CALLER. It was `applyDriveAudioMode` for a day, and the sample
+ * screen — which needs exactly this and is not a drive — kept its own inline copy rather than call
+ * something named after somebody else's screen. What actually differs between the two modes below
+ * is background vs foreground, so that is what they are called.
+ */
+export function applyExclusiveBackgroundAudio(): Promise<void> {
   return setAudioModeAsync({
     playsInSilentMode: true,
     shouldPlayInBackground: true,
@@ -25,8 +32,9 @@ export function applyDriveAudioMode(): Promise<void> {
   }).catch(() => {})
 }
 
-/** A pre-drive preview clip: exclusive too, but foreground-only. */
-export function applyPreviewAudioMode(): void {
+/** Exclusive focus, foreground only — a clip that outlived the screen the rider left is the skipper
+ *  talking to an empty car. */
+export function applyExclusiveForegroundAudio(): void {
   void setAudioModeAsync({
     playsInSilentMode: true,
     shouldPlayInBackground: false,

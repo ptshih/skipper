@@ -18,7 +18,7 @@ import {
   useAudioPlayer,
   useAudioPlayerStatus,
 } from 'expo-audio'
-import { applyDriveAudioMode, releaseAudioSession } from './audio-session'
+import { applyExclusiveBackgroundAudio, releaseAudioSession } from './audio-session'
 import {
   clampSeekSec,
   cumulativeMeters,
@@ -428,6 +428,32 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   // Whether THIS rider may record. Mirrored into a ref by the effect near `dataRef` — see there.
   const isAdminRef = useRef(false)
 
+  // ── THE TWO WAYS THE AUDIO STOPS, and the distinction that was missing ──────────────────────
+  // `silence` quiets the player and drops the lock screen. `endAudio` does that AND hands the audio
+  // session back.
+  //
+  // ⚠ THEY ARE NOT INTERCHANGEABLE, and reading them as if they were is what broke this: a drive
+  // holds an EXCLUSIVE `doNotMix` session for its whole length, which means it STOPPED the rider's
+  // own music, and pausing the player does not give it back — iOS resumes them only once the session
+  // is deactivated. Only `finishDrive` ever did that, so a rider who tapped "Pull over" or swiped
+  // back mid-drive was left with silence where their podcast used to be, until something else
+  // happened to grab focus. Every way OUT of a drive owes the session back; `resetForReady` is the
+  // one caller that must not, because it is also how a drive is prepared — it runs inside
+  // `beginDrive`, moments before the first clip plays.
+  const silence = useCallback(() => {
+    try {
+      player.pause()
+    } catch {}
+    try {
+      player.setActiveForLockScreen(false)
+    } catch {}
+  }, [player])
+
+  const endAudio = useCallback(() => {
+    silence()
+    releaseAudioSession()
+  }, [silence])
+
   const teardownSource = useCallback(() => {
     subRef.current?.stop()
     subRef.current = null
@@ -451,7 +477,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       setError(null)
       setNeedsAccount(false)
       try {
-        await applyDriveAudioMode()
+        await applyExclusiveBackgroundAudio()
         // OFFLINE-FIRST: a downloaded drive loads its manifest + local file:// clips with zero
         // network; otherwise this fetches the manifest (clips pre-signed inline) and streams. The
         // url map keys place narrations by seq.
@@ -517,15 +543,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   // ---- the whole drive finished (sim ran out + nothing left to play) ----
   const finishDrive = useCallback(() => {
     teardownSource()
-    try {
-      player.pause()
-    } catch {}
-    try {
-      player.setActiveForLockScreen(false)
-    } catch {}
-    // Hand the session back at the end of the drive — the obligation that pairs with holding an
-    // exclusive one for its whole length (./audio-session states it once, for every surface).
-    releaseAudioSession()
+    endAudio()
     setActiveSeq(null)
     setDriving(false)
     setDone(true)
@@ -548,7 +566,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
         stops_skipped: t.skipped,
       })
     }
-  }, [player, teardownSource])
+  }, [endAudio, teardownSource])
 
   // ---- pump: if idle, play the next queued stop; else, end the drive if the road's done ----
   const pump = useCallback(() => {
@@ -653,12 +671,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       clearTimeout(watchdog.current)
       watchdog.current = null
     }
-    try {
-      player.pause()
-    } catch {}
-    try {
-      player.setActiveForLockScreen(false)
-    } catch {}
+    silence()
     engineRef.current = null
     queue.current = []
     clipBusy.current = false
@@ -687,11 +700,12 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     setDriving(false)
     setLocationBlock(null)
     setGpsSearching(false)
-  }, [player, dot, teardownSource])
+  }, [silence, dot, teardownSource])
 
   // ---- the live fix source couldn't produce GPS (watch failed to acquire) — surface, don't hang ----
   const handleSourceError = useCallback(() => {
     resetForReady()
+    releaseAudioSession() // the drive is over before it began — don't sit on the rider's music
     setError(voice.player.gpsError) // → 'error' phase with a retry, instead of a silent frozen drive
   }, [resetForReady])
 
@@ -831,6 +845,9 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
 
   const end = useCallback(() => {
     resetForReady()
+    // "Pull over" is a way OUT of the drive, so the session goes back — see `endAudio`. (Not folded
+    // into resetForReady, which also runs on the way IN, inside beginDrive.)
+    releaseAudioSession()
   }, [resetForReady])
 
   const restart = useCallback(() => {
@@ -1159,15 +1176,10 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   useEffect(() => {
     return () => {
       teardownSource()
-      try {
-        player.pause()
-      } catch {}
-      try {
-        player.setActiveForLockScreen(false)
-      } catch {}
+      endAudio() // navigating away is an exit too — the rider's music must come back
       if (watchdog.current) clearTimeout(watchdog.current)
     }
-  }, [player, teardownSource])
+  }, [endAudio, teardownSource])
 
   // ---- derived view-model ----
   const phase: DrivePhase = needsAccount

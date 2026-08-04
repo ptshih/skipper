@@ -25,7 +25,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { PRE_START_STALL_MS } from '@skipper/engine'
 import { track } from './analytics'
-import { applyPreviewAudioMode, releaseAudioSession } from './audio-session'
+import { applyExclusiveForegroundAudio, releaseAudioSession } from './audio-session'
 import { useStartWatchdog } from './preview-audio'
 import { decideFail, decideToggle, PREVIEW_END_EPS_SEC, sawFreshAudio } from './preview-util'
 
@@ -143,7 +143,7 @@ export function useRoutePreview(): RoutePreview {
       // Snapshot the error showing right now so a stale one can't be blamed on this card (above).
       handledErrorRef.current = status.error ?? null
       completedCardRef.current = null // a fresh load — this clip has reported no completion yet
-      applyPreviewAudioMode()
+      applyExclusiveForegroundAudio()
       try {
         player.replace({ uri: url })
         player.play()
