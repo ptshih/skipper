@@ -792,3 +792,14 @@ Owed, in dependency order — **nothing below is started**:
       [corpus-as-the-planners-world](docs/designs/corpus-as-the-planners-world.md) and
       [what-is-a-drive-endpoint](docs/designs/what-is-a-drive-endpoint.md). Wikidata knows what is NOTABLE,
       Google knows where people GO, and neither set contains the other. Resolve the class, not these two.
+
+- [ ] **`Taylor Creek Visitor Center` is the one endpoint still not drivable as pinned.** Confirmed from
+      TWO independent origins (Pope Beach and South Lake Tahoe, 2026-08-04), so it is a real restriction on
+      the approach rather than a bad probe origin — and `--snap` found NO clean point to fall back to
+      ("the restriction starts at the origin end"), so there is nothing to store automatically. It needs an
+      access point chosen BY HAND in the admin Places view — the visitor centre has a real USFS lot off
+      Hwy 89; the pin is on the building, not the lot.
+      ⚠ Do not "fix" it by deleting the row: a restricted-usage warning is about the ROAD, not about
+      whether a rider may use it (founder, 2026-08-04 — private or not is not our call, a rider may have
+      access). The same principle is why `Incline Beach` was kept and given an access point rather than
+      pruned.
