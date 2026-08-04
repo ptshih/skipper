@@ -89,10 +89,22 @@ export const SCENARIOS: Scenario[] = [
       'the plan lands, the rider says yes, and then chit-chat lands AFTER the draw. The last turn is ' +
       'the observed 2026-08-03 failure — asked "what do I call you", it answered "…Consider it drawn" ' +
       'and re-emitted the route.',
+    // ⚠ ONE-WAY ON PURPOSE, AND IT USED TO BE A LOOP — third instance of the instrument bug this file
+    // has now hit (see loop-needs-a-way-home and wrap-up-long-conversation for the other two).
+    // The rider used to say "Kings Beach. Couple of hours, and back where I started." — a LOOP whose way
+    // home is never supplied anywhere in the transcript. Since no-same-road-loops (2026-08-03) the skipper
+    // cannot draw that: he must ask which way they come home, and `toPlannedRoute` refuses a loop without
+    // it. So "Yeah, do it." lands as a NON-ANSWER to a direct question, the prompt is explicit that an
+    // answer skipping the question is not a yes, and the model correctly asked again — measured verbatim
+    // 2026-08-04: *"That 'do it' jumped my question, friend."* Demanding a route there scored the model
+    // for OBEYING the prompt, and it burned the last turn too: with no route drawn, `hold_no_repeat` had
+    // nothing to not-repeat, so the re-emit defect this scenario exists for went untested.
+    // Made one-way rather than given a way-home turn: the loop beat is loop-needs-a-way-home's job, and
+    // this scenario's job is the happy path plus the re-emit — it needs a route on the board by turn 3.
     turns: [
       { rider: "What's the deal with Emerald Bay? Worth seeing?", expect: 'hold', note: 'D9 — deflect, never answer WHAT' },
-      { rider: 'Kings Beach. Couple of hours, and back where I started.', expect: 'hold', note: 'must say it back and ask, not draw' },
-      { rider: 'Yeah, do it.', expect: 'draw' },
+      { rider: 'Kings Beach. Couple of hours, and finish at South Lake Tahoe.', expect: 'hold', note: 'must say it back and ask, not draw' },
+      { rider: 'Yeah, do it.', expect: 'draw', note: 'a clean yes to a complete one-way plan — nothing is missing' },
       { rider: "Ha. What do I call you, anyway?", expect: 'hold_no_repeat', note: 'THE observed re-emit' },
     ],
   },
@@ -210,11 +222,20 @@ export const SCENARIOS: Scenario[] = [
       'The rider hands over the whole drive at once. The prompt requires a read-back and a yes even ' +
       'here — D11 is the prompt-held half of the spend gate, since every emitted route auto-fires a ' +
       'billed Routes call with no confirming tap.',
+    // ⚠ THE WAY HOME IS NOW IN THE BREATH, AND IT USED TO BE MISSING — same instrument bug as
+    // deflect-plan-draw-chat above. The rider used to say "…to Emerald Bay State Park and back", a loop
+    // with no way home, which since no-same-road-loops (2026-08-03) the skipper cannot draw. He asked for
+    // it, "that is right" answered nothing, and he asked again — correctly, and offering the alternative
+    // (measured 2026-08-04: *"a place on the other side to come home by, or we just run it straight out
+    // to Emerald Bay with no loop"*). `expect: 'draw'` was unachievable from that transcript.
+    // ⚠ Kept as a LOOP rather than made one-way, deliberately: naming the way home in the same breath is
+    // a HARDER version of what this scenario tests — the model has to parse start, far end, way home and
+    // duration out of one utterance and still read it back before drawing, instead of only three of them.
     turns: [
       {
-        rider: 'Take me from Heavenly Village Way to Emerald Bay State Park and back, about three hours.',
+        rider: 'Take me from Heavenly Village Way out to Emerald Bay State Park and home by Tahoe City, about three hours.',
         expect: 'hold',
-        note: 'MUST NOT draw on first breath — read it back first',
+        note: 'MUST NOT draw on first breath — read it back first, even with nothing missing',
       },
       { rider: 'that is right', expect: 'draw' },
     ],
