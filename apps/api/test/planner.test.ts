@@ -14,7 +14,8 @@
 import { describe, expect, spyOn, test } from 'bun:test'
 import Anthropic from '@anthropic-ai/sdk'
 import { CLAUDE_MODELS } from '@skipper/shared'
-import { PLANNER_SYSTEM_PROMPT, PLANNER_WRAP_UP_NOTICE } from '../src/planner-prompt'
+import { PLAN_ROUTE_TOOL, PLANNER_SYSTEM_PROMPT, PLANNER_WRAP_UP_NOTICE } from '../src/planner-prompt'
+import { MAX_ROUTE_VIA } from '@skipper/shared'
 import { buildRosterBlock, PlannerTurnError, runPlannerTurn, type PlannerModelArgs } from '../src/planner'
 import {
   checkTranscript,
@@ -56,12 +57,36 @@ describe('planner prompt', () => {
   })
 
   // The example must not stop at the draw — one that does teaches the drive as the end of the
-  // conversation, which is the failure above in miniature. This is the fourth beat: chit-chat landing
-  // right after "Consider it drawn", answered without re-announcing anything.
-  test('the example exchange carries a beat AFTER the draw', () => {
-    const drawn = PLANNER_SYSTEM_PROMPT.indexOf('Consider it drawn')
-    expect(drawn).toBeGreaterThan(-1)
-    expect(PLANNER_SYSTEM_PROMPT.slice(drawn)).toContain('whole of my paperwork')
+  // conversation, which is the failure above in miniature.
+  //
+  // ⚠ THIS USED TO PIN THE LITERAL "Consider it drawn", AND THAT WAS THE BUG IT WAS GUARDING. The
+  // prompt quotes that exact phrase as its canonical example of claiming work you did not just do —
+  // and the example then taught it as the model's draw line. A few-shot beats an instruction, so the
+  // prompt was maximising the probability of the one string it forbids, and the observed 2026-08-03
+  // device failure was that string verbatim. The draw beat now RESTATES THE DRIVE instead, which also
+  // gives the model the record it otherwise lacks (it cannot see its own tool call — see the prompt's
+  // header). Pinned as the PROPERTY the phrase was standing in for: enough beats, and the exchange
+  // does not end on the draw.
+  test('the example exchange carries beats AFTER the draw', () => {
+    const ex = PLANNER_SYSTEM_PROMPT.slice(PLANNER_SYSTEM_PROMPT.indexOf('== One example exchange =='))
+    expect(ex).toContain('<example>')
+    expect((ex.match(/^Them:/gm) ?? []).length).toBeGreaterThanOrEqual(4)
+    // The last spoken beat is the skipper's, so the exchange never models the draw as the end.
+    expect(ex.trimEnd().split('\n').filter((l) => l.startsWith('You:')).length).toBeGreaterThanOrEqual(4)
+    expect(ex).toContain('whole of my paperwork')
+  })
+
+  // ⚠ THE PERMISSION, NOT ONLY THE PROHIBITION — and the asymmetry it corrects is what shipped a bug.
+  // Every pin above suppresses a redraw; nothing pinned the case where a redraw is CORRECT, so the
+  // prompt drifted toward refusing them. Founder, 2026-08-03: the chat was "refusing to redraw the
+  // route after changing it up and chatting more". Root cause was that the prompt named "a different
+  // length" as an axis earning a redraw, while `toProposeRequest` DROPS `targetMinutes` — so the only
+  // compliant emission for "shorter" was a byte-identical route the client then refused.
+  test('a duration change is NOT an axis that earns a redraw; moving an end is', () => {
+    const drawn = PLANNER_SYSTEM_PROMPT.slice(PLANNER_SYSTEM_PROMPT.indexOf('== Once it is drawn =='))
+    expect(drawn).toContain('a nearer far end')
+    // The dead axis must not be listed among the things that earn another draw.
+    expect(drawn).not.toContain('a different length')
   })
 
   // ⚠ INV-10: the OTHER prompt is written around a fact sheet ("the card") and stop kinds. If any of
@@ -84,6 +109,57 @@ describe('planner prompt', () => {
   // It rides in the CACHED prefix, so a byte change per request would re-bill the whole prompt.
   test('the prompt is a static literal — nothing interpolated', () => {
     expect(PLANNER_SYSTEM_PROMPT).not.toContain('${')
+  })
+})
+
+/* -------------------------------------------------------------------------- */
+/* The tool — PROMPT SURFACE, and until 2026-08-03 nothing imported it at all.  */
+/* -------------------------------------------------------------------------- */
+
+// ⚠ WHY THIS BLOCK EXISTS. `PLAN_ROUTE_TOOL.description` is read by the MODEL and renders BEFORE the
+// system prompt (order is tools → system → messages), so it is the highest-salience text for the
+// call/do-not-call decision — and it was imported by ZERO tests, meaning the ~10 lines at the centre of
+// the founder's "refusing to redraw" report could be rewritten to anything with every suite green.
+describe('plan_route tool', () => {
+  test('the name the classifier matches on is stable', () => {
+    // ./planner finds the block by `b.name === PLAN_ROUTE_TOOL.name`; a rename silently degrades every
+    // route turn to 'say' — a rider says yes and watches nothing happen.
+    expect(PLAN_ROUTE_TOOL.name).toBe('plan_route')
+  })
+
+  test('the five fields the handler translates all exist, and only the endpoints are required', () => {
+    // These names are the MODEL's vocabulary, deliberately not the wire DTO's camelCase — toPlannedRoute
+    // (./plan-route) reads exactly these keys, so a rename here is a silently dropped route.
+    const props = PLAN_ROUTE_TOOL.input_schema.properties as Record<string, unknown>
+    expect(Object.keys(props).sort()).toEqual(
+      ['end_anchor_id', 'round_trip', 'start_anchor_id', 'target_minutes', 'via_anchor_ids'].sort(),
+    )
+    // Requiring round_trip or target_minutes would push the model to assert an intent the rider never
+    // expressed just to satisfy the schema.
+    expect(PLAN_ROUTE_TOOL.input_schema.required).toEqual(['start_anchor_id', 'end_anchor_id'])
+  })
+
+  test('the via cap leaves room for the turnaround the server APPENDS', () => {
+    // A round trip maps to `{ start, end: start, via: [...via, end] }`, so a model that filled `via` to
+    // this tool's brim must still clear the shared wire cap — otherwise toPlannedRoute drops the whole
+    // route and the rider hears the retry line for a drive that was fine.
+    const via = PLAN_ROUTE_TOOL.input_schema.properties as { via_anchor_ids: { maxItems: number } }
+    expect(via.via_anchor_ids.maxItems + 1).toBeLessThanOrEqual(MAX_ROUTE_VIA)
+  })
+
+  // The founder's 2026-08-03 report, from the tool's side. The description must define drive IDENTITY
+  // the same way `proposeKey` does (start + end + via), so the model cannot believe a new
+  // `target_minutes` makes a new drive — and it must not carry a blanket "never call this again",
+  // which also closed the client's own propose-failure retry path.
+  test('it defines a drive by its endpoints, not its duration', () => {
+    expect(PLAN_ROUTE_TOOL.description).toContain('target_minutes included')
+    expect(PLAN_ROUTE_TOOL.description).not.toContain('never call this a second time')
+  })
+
+  test('it still demands a line in the same turn as the call', () => {
+    // Nothing STRUCTURALLY guarantees a text block rides with a tool call (`say` is deliberately not a
+    // tool field), so this sentence plus the prompt's are the only things preventing `route_wordless`.
+    expect(PLAN_ROUTE_TOOL.description).toContain('a call with no line')
   })
 })
 

@@ -655,6 +655,34 @@ slipped rather than an outage. ⚠ A residual re-emit still gets through on word
 name; it is contained by BOTH structural guards (no second billed call, and always a line), which is
 the intended division of labour — the prompt reduces it, the code contains it.
 
+⚠ **THE THIRD PROMPT FIX, AND IT IS THE ONE THAT OWNED THE FOUNDER'S BUG (2026-08-03).** A ten-lens
+review found the redraw dead end was never really a client defect: `== Once it is drawn ==` named **"a
+different length"** among the axes that earn a second `plan_route` call, while `toProposeRequest`
+DROPS `targetMinutes` — so two routes differing only in the duration the rider asked for key
+identically. And because the prompt forbids the model any distances at all, re-emitting the same two
+ends with a smaller `target_minutes` was the ONLY compliant emission it had for *"shorter"*. **D9
+compliance was what manufactured the dead end.** The reflow above fixed the SILENCE; it could not fix
+the falsehood — the rider asked for shorter, the skipper said he redrew it, and an identical card slid
+down. A confident claim over an unchanged drive is a worse honesty failure than a frozen screen.
+The prompt now teaches the arithmetic instead: *"a shorter drive means a nearer far end… Until they
+pick which end moves, there is nothing new to draw"*, and hands back the choice. The tool description
+single-sources drive identity against `proposeKey` (`start` + `end` + `via`, **`target_minutes`
+included**) and its unscopeable *"never call this a second time"* absolute is gone — that clause also
+closed the client's own propose-failure retry path.
+
+⚠ Landed with it, from the same review: the example no longer teaches **"Consider it drawn"** (the
+prompt quotes that exact phrase as its canonical violation, and a few-shot beats an instruction — the
+observed device failure was that string verbatim); the draw beat now RESTATES the drive, which is also
+the only record the model keeps of what it drew. Route-metric questions ("how far?", "how long?") got
+an honest line for the first time — they previously fell through to the place-spoiling deflection.
+Midpoints, which the tool has always accepted, now exist in the prose at all. Quoted SPEECH is
+contracted (the contraction-free style was a test convenience that had leaked into the voice). And
+**every `wire: true` client line in `apps/mobile/src/ui/voice.ts` is now recognised as PROMPT SURFACE**
+— three of them stated things the prompt forbids and rode back to the model as its own precedent.
+⚠ Founder call, same day: a rider who sincerely asks whether they are talking to a machine gets **the
+truth, in persona**. Dodging it would have the honesty spine tell the one lie the character is built
+not to tell.
+
 ⚠ **Unverified without a device** (stated rather than implied): that deltas render progressively over
 URLSession; `keyboardVerticalOffset={useHeaderHeight()}` (`ConversationScreen.tsx` carries the concrete
 on-device check — do it first); the three client timers; `AbortSignal.any` on device; and that closing

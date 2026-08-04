@@ -255,7 +255,14 @@ export function buildRosterBlock(regionName: string, anchors: PlannerAnchor[]): 
     '',
     '== The places you can start or end a drive at ==',
     '',
-    'This is the whole list. Name first, then the id you copy when you draw a route up.',
+    // ⚠ THE SECOND SENTENCE IS A GUARD, NOT A COURTESY. `byAnchorRank` puts `featured` rows first and
+    // then sorts alphabetically, and D9 gives the model no coordinates at all — so a model handed a
+    // ranked list with no explanation of the ranking will read list POSITION as proximity ("these two
+    // are next to each other") or as quality ("the top one is the good one") and route on it. ~20
+    // tokens inside the cached prefix closes both readings.
+    'This is the whole list, the ones folks ask for most at the top and the rest in no particular ' +
+      'order. Where a name sits on this list says nothing about where the place sits on the map. ' +
+      'Name first, then the id you copy when you draw a route up.',
     '',
     rows,
   ].join('\n')

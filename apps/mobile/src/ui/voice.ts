@@ -139,10 +139,21 @@ export const voice = {
     exampleLoopTitle: 'Take a loop',
     exampleOpenTitle: 'Let the skipper pick',
     exampleAToB: '{a} to {b}, the scenic way.',
-    exampleAToBReply: '{a} out to {b}. About how long do you want to be out?',
+    // ⚠ EVERY `wire: true` SKIPPER LINE BELOW IS PROMPT SURFACE. These are seeded into the transcript
+    // and re-sent to the model as its OWN prior sentences, so a line the prompt forbids becomes
+    // in-context precedent that contradicts the instructions before the rider has typed anything —
+    // and these three chips are the app's highest-traffic entry points. They change under
+    // apps/api/src/planner-prompt.ts's review, not the design system's. The set is:
+    // `exampleAToBReply`, `exampleLoopReply`, `exampleOpenReply`, `adjustSay`, `noStopsSay`.
+    // ⚠ Fixed 2026-08-03: this one silently DROPPED the rider's road ask ("the scenic way") while the
+    // pipeline sends `travelMode: 'DRIVE'` with no route modifiers at all — so it modelled agreeing to
+    // something that never happens. It now says which half is the skipper's, matching the prompt's
+    // `== When they ask about the road ==`.
+    exampleAToBReply: '{a} out to {b} — I pick the ends, the road picks itself. About how long do you want to be out?',
     exampleLoop: 'A loop out of {a}, couple of hours.',
-    exampleLoopReply:
-      'Out of {a} and back around: good shape for an afternoon. Where do you want to turn around?',
+    // ⚠ "good shape for an afternoon" was a DRIVE-TIME judgement, which the prompt forbids outright
+    // ("no distances, no drive times ... not even as a guess with a shrug in front of it").
+    exampleLoopReply: 'Out of {a} and back around. Where do you want to turn around?',
     // ⚠ NOT "Somewhere pretty. You pick." — that read fine as a standalone chip and stopped making
     // sense the moment it sat under the title "Let the skipper pick": the row said the same thing
     // twice, and the second time in the rider's mouth ("you pick") pointing at the skipper while the
@@ -155,7 +166,10 @@ export const voice = {
     // known, `open` when one is not.
     exampleOpenRegion: 'Surprise me: somewhere pretty around {r}.',
     exampleOpen: 'Surprise me: somewhere pretty.',
-    exampleOpenReply: 'Happy to pick. Where are you starting from?',
+    // ⚠ "Happy to pick" committed the character to choosing "somewhere pretty" off a list of BARE
+    // NAMES — the exact name-inference trap the prompt spends a paragraph forbidding ("A Lakeview
+    // Point earns you no lake"). He can point somewhere; he cannot know it is pretty.
+    exampleOpenReply: 'I can point us somewhere. Where are you starting from?',
     // The turn cap (D12). ⚠ The composer is REPLACED by these, never greyed out — a disabled field
     // reads as broken, and the skipper bowing out in character is the whole point of the cap being
     // expressed in persona rather than as an error.
@@ -197,8 +211,14 @@ export const voice = {
     // whole response was a caret appearing in a field that already looked identical, and it was
     // filed as a dead button. Seeded like the example replies — no model call, no dollars — and it
     // rides the WIRE, because the rider's next line ("shorter") is an answer to this question and
-    // reads as a non-sequitur without it. Ends on a question, per the prompt's ask-ONE-thing rule;
-    // names the three axes the planner can actually act on rather than asking an open "what?".
+    // reads as a non-sequitur without it. Ends on a question, per the prompt's ask-ONE-thing rule.
+    // ⚠ THE COMMENT HERE USED TO CLAIM THESE ARE "the three axes the planner can actually act on".
+    // Two of them are not: `toProposeRequest` DROPS `targetMinutes`, so longer/shorter cannot change
+    // the drive at all — only moving an end can. The LINE stays (founder-picked, and "shorter" is what
+    // riders genuinely want to say); what changed is that the prompt now answers it honestly instead
+    // of re-emitting an identical route — `== Once it is drawn ==` teaches that shorter means a nearer
+    // far end and asks which end moves. Do not "fix" this copy to hide the ask; the conversation IS
+    // the product.
     adjustSay: 'What would you change — longer, shorter, somewhere else?',
     // A route the corpus has nothing to say about. The server returns 200 with zero stops here, so
     // this is the only thing standing between a rider and a credit spent on a silent drive.
@@ -207,8 +227,11 @@ export const voice = {
     // a dead card. It ships on the wire (the model must know that route did not work, or it will
     // cheerfully offer it again). Safe under D9: "that road is quiet" is ROUTE information, not a fact
     // about any place on it.
+    // ⚠ Reworded 2026-08-03: "That road's a quiet one" is a judgement ABOUT the road, and the prompt
+    // gives the character no basis for one ("not whether it is any good"). Stating that it came back
+    // quiet ON HIM keeps the same beat while making it a fact about his own lookup, not the place.
     noStopsSay:
-      'That road’s a quiet one, and there’s nothing along it I can tell you about yet. Give me another pair and I’ll see what I’ve got.',
+      'That road came back quiet on me — nothing to tell out that way. Give me another pair and I’ll see what I’ve got.',
     // Fallback ONLY. The server's own 403 names the limit and the way past it; show that when it comes.
     capReached: 'That’s the last of your free drives, friend.',
     openMade: 'Open the drive',
