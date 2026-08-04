@@ -715,6 +715,11 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   const beginDrive = useCallback(() => {
     if (!data) return
     resetForReady()
+    // ⚠ RE-APPLY THE SESSION ON EVERY START, not just on load. Ending a drive releases it, and a
+    // release switches audio off app-wide (see ./audio-session) — so a rider who pulls over and rolls
+    // again would otherwise drive a completely silent route. The load effect cannot cover this: it is
+    // keyed on the drive id, and starting again reloads nothing.
+    void applyExclusiveBackgroundAudio()
     // Re-snap RAW POI coords to the route (the API ships raw coords, not trigger points),
     // then drop stops too far off-route to have an honest trigger point. (spec §3.2)
     const snapped = snapStopsToRoute(

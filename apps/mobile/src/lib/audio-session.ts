@@ -13,6 +13,15 @@
 // preview does not.
 import { setAudioModeAsync, setIsAudioActiveAsync } from 'expo-audio'
 
+// ⚠ RELEASING IS NOT MERELY "HANDING FOCUS BACK" — it switches the audio subsystem OFF, app-wide.
+// expo-audio's own words for `setIsAudioActiveAsync(false)`: it "will pause all audio playback and
+// PREVENT NEW AUDIO FROM PLAYING". Nothing plays again until something sets it back to true, which is
+// why every `apply*` below turns it on FIRST rather than assuming it is on. Skipping that shipped a
+// silent drive: the player applies its mode when the drive LOADS, so after a "Pull over" released the
+// session, starting again re-subscribed the GPS, rolled the car down the route, and played nothing at
+// all — no narration, no bed music (founder, 2026-08-04: "i think the music isnt playing anymore").
+const activate = (): Promise<void> => setIsAudioActiveAsync(true).catch(() => {})
+
 /** Never `duckOthers`, never `mixWithOthers` — see the header before changing this. */
 const SKIPPER_INTERRUPTION_MODE = 'doNotMix' as const
 
@@ -24,8 +33,9 @@ const SKIPPER_INTERRUPTION_MODE = 'doNotMix' as const
  * something named after somebody else's screen. What actually differs between the two modes below
  * is background vs foreground, so that is what they are called.
  */
-export function applyExclusiveBackgroundAudio(): Promise<void> {
-  return setAudioModeAsync({
+export async function applyExclusiveBackgroundAudio(): Promise<void> {
+  await activate()
+  await setAudioModeAsync({
     playsInSilentMode: true,
     shouldPlayInBackground: true,
     interruptionMode: SKIPPER_INTERRUPTION_MODE,
@@ -35,11 +45,13 @@ export function applyExclusiveBackgroundAudio(): Promise<void> {
 /** Exclusive focus, foreground only — a clip that outlived the screen the rider left is the skipper
  *  talking to an empty car. */
 export function applyExclusiveForegroundAudio(): void {
-  void setAudioModeAsync({
-    playsInSilentMode: true,
-    shouldPlayInBackground: false,
-    interruptionMode: SKIPPER_INTERRUPTION_MODE,
-  }).catch(() => {})
+  void activate().then(() =>
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+      interruptionMode: SKIPPER_INTERRUPTION_MODE,
+    }).catch(() => {}),
+  )
 }
 
 /**
