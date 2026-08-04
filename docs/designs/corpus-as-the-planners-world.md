@@ -16,7 +16,10 @@
 > sentences of prompt** and drew a route with names only, 0 off-list — which SPLITS the verdict:
 > arrivability is a prompt problem, notability is the only thing left needing a column. ⚠ Round 5 then
 > tried the obvious notability filter (drop scenic / no-fact-sheet) and it **took Sand Harbor with it** —
-> `form` records what we PAID TO ENRICH, not what is a destination. The notability signal is still open.
+> `form` records WIKIPEDIA COVERAGE, not what is a destination — Sand Harbor has no article at all, which
+> also kills every Wikipedia-derived fame signal. ⚠ The two tables turn out to be sourced from worlds that
+> disagree on purpose: Wikidata knows what is historically notable, Google knows where people GO. That is
+> the strongest argument in this entry AGAINST full decoupling.
 
 ## The flow being proposed
 
@@ -335,15 +338,49 @@ an enrichment gap wearing the costume of a quality signal. Fannette Island has a
 through, and it is an island. **The story/scenic split does not align with destination-worthiness in
 either direction.**
 
-**So the notability signal has to come from somewhere else.** Three candidates, none tested:
+### WHY Sand Harbor has no fact sheet — and why it reframes the whole entry
 
-1. **Enrich the gap.** Sand Harbor deserves a story on its own merits; if its class were enriched the
-   filter would start working. 💸 A paid corpus run, and it fixes the symptom by moving the boundary
-   rather than by measuring the right thing.
-2. **A real notability signal** — Wikipedia article length, pageviews, sitelink count. Free from data
-   already fetched, and it measures fame rather than spend.
-3. **Two lists in one prompt** — everything for RECOGNITION, a subset for DESTINATION. Clean, but it
-   still needs a correct subset, so it is a presentation choice rather than an answer.
+Checked rather than assumed, and the answer is not "we did not pay":
+
+| | Sand Harbor | Fannette Island |
+| --- | --- | --- |
+| `source` | **`wikidata`** (Q49390852) | `wikipedia` (3096902) |
+| summary / facts | none, never fetched | present |
+| `enriched_at` | **never** | 2026-06-16 |
+| form | scenic | story |
+
+**Sand Harbor has no English Wikipedia article.** `discover-pois` sweeps Wikidata; an entity WITH an
+enwiki sitelink can reach story tier, one WITHOUT is tiered scenic and never enriched — because `enrich`
+scouts Wikipedia PROSE, and there is none to scout. It is not an enrichment gap. There is nothing there
+to buy.
+
+⚠ **This kills the notability candidate this entry proposed one round earlier.** Article length,
+sitelink count and pageviews all score Sand Harbor **zero**, for the same reason. Any Wikipedia-derived
+fame signal fails the one case it exists to pass.
+
+**And it explains what the two tables actually are**, which is the most useful thing in this entry:
+
+- **`pois` is sourced from Wikidata/Wikipedia — it knows what is HISTORICALLY NOTABLE.** A tiny
+  uninhabited island gets an article.
+- **`places` is sourced from Google — it knows where people ACTUALLY GO.** Sand Harbor is among the
+  busiest spots on the lake.
+
+Sand Harbor is famous in the Google sense and invisible in the Wikipedia sense; Fannette Island is the
+reverse. **That is not a coverage accident, it is what the two sources are FOR** — and it is the
+strongest argument yet that the two tables are not redundant. Decoupling assumes one set can do both
+jobs; Sand Harbor is exactly where that assumption breaks.
+
+**So the surviving options are narrower than they looked:**
+
+1. **A Google-derived notability signal on `pois`** — rating count, popularity. It would rank Sand
+   Harbor correctly. 💸 Requires Places lookups per poi, and re-introduces the dependency decoupling
+   was meant to shed.
+2. **Keep both tables and let each do its own job** — `places` for where a drive begins and ends,
+   `pois` for what gets said and recognised. This is the current architecture, and Sand Harbor is an
+   argument for FIXING its curation (it is missing from a 103-row list it belongs on) rather than for
+   replacing it.
+3. **Human curation of destination-worthiness on `pois`** — honest, and exactly the cost decoupling was
+   supposed to remove.
 
 ### Correction to the token estimate: ids are ~6× names, not 3×
 
