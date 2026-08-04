@@ -10,6 +10,9 @@ export {
   type ConversationScreenProps,
   CONVERSATION_STICK_PX,
 } from './ConversationScreen'
+// A Screen that virtualizes. Also NOT a flag on Screen — a VirtualizedList may not nest inside
+// Screen's ScrollView, so the two shells are separate by construction rather than by taste.
+export { ScreenList, type ScreenListProps } from './ScreenList'
 export { EdgeFade, type EdgeFadeProps } from './EdgeFade'
 export { Button, type ButtonProps } from './Button'
 export { Input } from './Input'
@@ -34,6 +37,15 @@ export { RouteTrack } from './RouteTrack'
 export { Scrubber, type ScrubberProps } from './Scrubber'
 export { StopRow, STOP_ROW_HEIGHT, type StopState } from './StopRow'
 export { StopList, type StopListItem, type StopListProps } from './StopList'
+// The saved-drive card, shared by MY DRIVES and home's offline branch. ⚠ It was two copies that had
+// already drifted (a VoiceOver label fixed on one surface only) — keep it one.
+export {
+  DriveCard,
+  DriveList,
+  DriveCardSkeleton,
+  type DriveCardProps,
+  type DriveListProps,
+} from './DriveList'
 export { NowCard } from './NowCard'
 export { TransportBar, type TransportBarProps } from './TransportBar'
 export { StateView, type StateViewProps } from './StateView'

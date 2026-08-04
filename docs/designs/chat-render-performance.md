@@ -154,6 +154,25 @@ so forking it costs thirteen other screens; and the transcript is a heterogeneou
 first flatten to a tagged `{kind:'turn'|'card'}[]`. **Do not take this without an explicit founder
 decision, and not until steps 1–7 are measured.**
 
+✅ **2026-08-04 — the app now HAS a virtualized list, and it is not this one.** MY DRIVES
+(`app/drives/index.tsx`) went to `FlatList` through a new `src/ui/ScreenList.tsx`, because it is the
+one list in the app that grows WITHOUT BOUND (a row per drive the rider has ever made) and it is
+homogeneous. Two things that changes for step 8, and one it does not:
+
+- **The shell exists and the fades survive it.** `ScreenList` reproduces Screen's three rules —
+  bottom safe-area inset riding the CONTENT, the gutter, and the SHARED `useScrollEdgeFades` — so the
+  "does a FlatList lose the edge fades" question is answered: it does not. Verified on the simulator
+  at an AX Dynamic Type size, where the rows overflow and both fades are visible.
+- **`@shopify/flash-list` was NOT added.** RN's own `FlatList` was enough, so step 8's "new
+  native-adjacent dependency" cost is smaller than this section assumed — the dep decision may be
+  avoidable entirely.
+- ⚠ **It does NOT make step 8 cheap, and do not read it that way.** MY DRIVES is a homogeneous list on
+  a screen that owns its scrolling. The transcript is a heterogeneous interleave inside
+  `ConversationScreen`, which owns a pinned footer and an auto-follow state machine — that is the
+  actual hard part, and `ScreenList` does not touch it. The ⛔ finding below (FlatList window tuning is
+  a dead end for THIS surface) also still stands and is why `removeClippedSubviews` is pinned off
+  there.
+
 ⚠ **The trigger to revisit — do not take it on vibes.** A REAL DEVICE, on a LONG conversation, showing
 scroll jank or memory growth that steps 1–6 did not remove. Everything measured below is **simulator
 only** (no thermal or memory pressure) and nothing went past ~8 turns, so the long-conversation case is

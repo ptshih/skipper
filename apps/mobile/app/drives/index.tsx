@@ -29,13 +29,12 @@ import { errorMessage, listDrives, type DriveSummary } from '@/lib/api'
 import { isSignedIn, useSession } from '@/lib/auth'
 import { useIsOffline } from '@/lib/connectivity'
 import { listDownloadedDrives } from '@/lib/offline'
-import { cleanPlaceName } from '@/lib/labels'
 import { space } from '@/theme/tokens'
 import {
-  Badge,
-  Card,
+  DriveCard,
+  DriveCardSkeleton,
   Screen,
-  Skeleton,
+  ScreenList,
   SkeletonGroup,
   StateView,
   Text,
@@ -46,6 +45,15 @@ import {
  *  Drive → Drives is a confusing adjacent pair. It also states rule 1 above in the chrome. One const,
  *  reused by the header and by every `StateView` title so the three degraded states cannot drift. */
 const TITLE = 'My Drives'
+
+/** ⚠ A MODULE CONSTANT, not an inline `options={{ title }}` literal. A fresh options object forces a
+ *  navigator-wide re-render plus a native-stack header re-commit, synchronously before paint, on every
+ *  render of this screen — the step-1 finding in `docs/designs/chat-render-performance.md`. Shared by
+ *  the list and its skeleton so the two cannot disagree about the title. */
+const SCREEN_OPTIONS = { title: TITLE } as const
+
+/** FlatList identity. Module-level so it is stable without a hook. */
+const keyOfDrive = (dr: DriveSummary) => dr.driveId
 
 /** Show the remaining-drives hint only at or below this balance. Not derived from the server's grant
  *  amount on purpose: the rider's grant is FROZEN at signup while the server default moves, so a
@@ -105,6 +113,24 @@ export default function MyDrivesScreen() {
     navigatingRef.current = true
     go()
   }, [])
+
+  // ⚠ BOTH OF THESE ARE HOOKS AND THEY LIVE UP HERE ON PURPOSE, far from the list that reads them:
+  // five early returns sit between this line and the render, and a hook below any of them is a
+  // rules-of-hooks error. (`react-hooks` caught three of exactly this in the render-performance pass.)
+  //
+  // ⚠ And they must be STABLE, not merely tidy: `DriveCard` is memoized, so a freshly-built `onPress`
+  // would bust the memo on every render and the memo would silently do nothing — the trap that has now
+  // bitten TranscriptCard, Composer and StopList in turn.
+  const onPressDrive = useCallback(
+    (driveId: string) => {
+      navigateOnce(() => router.push({ pathname: '/drives/[id]', params: { id: driveId } }))
+    },
+    [navigateOnce, router],
+  )
+  const renderDriveCard = useCallback(
+    (dr: DriveSummary) => <DriveCard drive={dr} onPress={onPressDrive} />,
+    [onPressDrive],
+  )
 
   const reload = useCallback(async () => {
     const seq = ++loadSeq.current
@@ -231,78 +257,62 @@ export default function MyDrivesScreen() {
 
   // ── 6 · THE LIST ────────────────────────────────────────────────────────────────────────────────
   // The offline fallback is not a seventh state — it is this one with `offline === true`.
-  return (
-    <Screen scroll padded contentContainerStyle={styles.body}>
-      <Stack.Screen options={{ title: TITLE }} />
+  //
+  // ⚠ VIRTUALIZED (`ScreenList`), unlike home's offline branch, and the asymmetry is deliberate: this
+  // screen OWNS its scrolling, so only the rows on screen are built; home's copy is a section inside
+  // home's own ScrollView, where nesting a VirtualizedList is an error. The card itself is shared
+  // (`src/ui/DriveList.tsx`) precisely so that difference stays a scrolling detail and never becomes a
+  // second card that drifts — which is what it was before.
+  //
+  // ⚠ This list is UNBOUNDED — one row per drive the rider has ever made — which is why it is the one
+  // list in the app that virtualizes. Do not "simplify" it back to a mapped column inside <Screen>.
 
-      {/* The credit hint, on its OWN full-width line. It used to share a row with the "MY DRIVES"
-          kicker; that kicker is gone (the native header title replaces it), and a lone element beats a
-          paired row here for the reason §10/§14 settled elsewhere — a pair squeezes at AX Dynamic Type
-          sizes and this screen is uncapped. Deliberately SILENT until the balance is actually low:
-          with a generous allotment an always-on counter hangs a meter on a charm-first screen to
-          report a wall roughly a decade away. It reappears with enough runway to matter, which is the
-          only moment it informs anything. ⚠ It renders ONLY here — `credits` is set by a successful
-          `listDrives()` and nothing else, and a credit cannot be spent offline anyway. */}
-      {credits && credits.remaining <= CREDIT_HINT_THRESHOLD ? (
-        <Text variant="label" color="inkFaint">
-          {credits.remaining > 0
-            ? `${credits.remaining} free ${credits.remaining === 1 ? 'drive' : 'drives'} left`
-            : 'No free drives left'}
-        </Text>
-      ) : null}
+  // The credit hint, on its OWN full-width line. It used to share a row with the "MY DRIVES" kicker;
+  // that kicker is gone (the native header title replaces it), and a lone element beats a paired row
+  // here for the reason §10/§14 settled elsewhere — a pair squeezes at AX Dynamic Type sizes and this
+  // screen is uncapped. Deliberately SILENT until the balance is actually low: with a generous
+  // allotment an always-on counter hangs a meter on a charm-first screen to report a wall roughly a
+  // decade away. It reappears with enough runway to matter, which is the only moment it informs
+  // anything. ⚠ It renders ONLY here — `credits` is set by a successful `listDrives()` and nothing
+  // else, and a credit cannot be spent offline anyway.
+  const creditHint =
+    credits && credits.remaining <= CREDIT_HINT_THRESHOLD ? (
+      <Text variant="label" color="inkFaint">
+        {credits.remaining > 0
+          ? `${credits.remaining} free ${credits.remaining === 1 ? 'drive' : 'drives'} left`
+          : 'No free drives left'}
+      </Text>
+    ) : null
 
-      {offline ? (
-        <Text variant="dim" color="inkFaint">
-          {voice.offline.home}
-        </Text>
-      ) : null}
+  const offlineNote = offline ? (
+    <Text variant="dim" color="inkFaint">
+      {voice.offline.home}
+    </Text>
+  ) : null
 
-      {/* ⚠ THIS BLOCK IS A COPY OF THE ONE STILL IN `app/index.tsx`'s offline branch, and it should not
-          stay that way: §2 of the drives-screen spec calls for `src/ui/DriveList.tsx` (presentation) +
-          `src/lib/useMyDrives.ts` (the state machine above) so home and this screen cannot drift.
-          Neither file was mine to create. Two copies of the drive card is a real regression — hoist
-          them before the next change to either surface. */}
-      <View style={styles.list}>
-        {drives.map((dr) => {
-          const min = dr.durationSeconds ? Math.round(dr.durationSeconds / 60) : null
-          // ⚠ CLEANED ON BOTH SIDES. The label the a11y string used to carry was the RAW one while the
-          // screen showed the cleaned one, so VoiceOver read "Tahoe Keys comma California" where the
-          // card said "Tahoe Keys" — `cleanPlaceName` strips Wikipedia's disambiguator and is
-          // display-only, which is exactly what a spoken label is.
-          const label = cleanPlaceName(dr.label)
-          return (
-            <View
-              key={dr.driveId}
-              accessible
-              accessibilityRole="button"
-              accessibilityLabel={`${label}${dr.clipCount ? `, ${dr.clipCount} stops` : ''}${min ? `, ${min} minutes` : ''}`}
-            >
-              <Card
-                onPress={() =>
-                  navigateOnce(() =>
-                    router.push({ pathname: '/drives/[id]', params: { id: dr.driveId } }),
-                  )
-                }
-              >
-                {/* ⚠ NO `numberOfLines`. This is a scrollable, non-driving surface, so Dynamic Type is
-                    uncapped including the AX sizes — a clamp truncates a real route label ("Emerald Bay
-                    to Incline Village, the scenic way") for exactly the riders who need it largest. */}
-                <Text variant="title" color="ink">
-                  {label}
-                </Text>
-                <View style={styles.metaRow}>
-                  <Text variant="label" color="inkFaint" style={styles.flex}>
-                    {dr.clipCount} {dr.clipCount === 1 ? 'stop' : 'stops'}
-                  </Text>
-                  {/* A fill, not a glow — inside DESIGN §8's one-amber budget. */}
-                  {min ? <Badge tone="amber" label={`${min} MIN`} /> : null}
-                </View>
-              </Card>
-            </View>
-          )
-        })}
+  // ⚠ NULL when neither applies, never an empty <View>. The content container's `gap` spaces the
+  // header off the first card, so a zero-height header would still hang an unexplained band of air at
+  // the top of the list.
+  const header =
+    creditHint || offlineNote ? (
+      <View style={styles.header}>
+        {creditHint}
+        {offlineNote}
       </View>
-    </Screen>
+    ) : null
+
+  return (
+    <>
+      <Stack.Screen options={SCREEN_OPTIONS} />
+      <ScreenList
+        data={drives}
+        keyExtractor={keyOfDrive}
+        renderItem={renderDriveCard}
+        ListHeaderComponent={header}
+        padded
+        contentContainerStyle={styles.body}
+      />
+    </>
   )
 }
 
@@ -311,8 +321,10 @@ export default function MyDrivesScreen() {
  *  detail. Two cards: enough to read as "a list is coming", few enough not to promise a count. */
 function DrivesSkeleton() {
   return (
+    // ⚠ Still a plain <Screen>, NOT <ScreenList>: two silhouettes never overflow, so virtualizing
+    // them would buy nothing and cost a list shell around a fixed pair.
     <Screen scroll padded contentContainerStyle={styles.body}>
-      <Stack.Screen options={{ title: TITLE }} />
+      <Stack.Screen options={SCREEN_OPTIONS} />
       <SkeletonGroup accessibilityLabel={voice.loading.drives} style={styles.list}>
         <DriveCardSkeleton />
         <DriveCardSkeleton />
@@ -321,27 +333,8 @@ function DrivesSkeleton() {
   )
 }
 
-// A drive card's silhouette. Inert; the enclosing SkeletonGroup owns the pulse. (Rides along to
-// `src/ui/DriveList.tsx` with the card above — see the ⚠ there.)
-function DriveCardSkeleton() {
-  return (
-    <Card>
-      <Skeleton width="72%" height={20} />
-      <Skeleton width="48%" height={12} style={styles.skLine} />
-    </Card>
-  )
-}
-
 const styles = StyleSheet.create({
   body: { gap: space.md },
-  flex: { flex: 1 },
+  header: { gap: space.md },
   list: { gap: space.md },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: space.sm,
-    marginTop: space.xs,
-  },
-  skLine: { marginTop: space.sm },
 })

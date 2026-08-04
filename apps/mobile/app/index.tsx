@@ -40,7 +40,6 @@ import {
 import { isSignedIn, useSession } from '@/lib/auth'
 import { useIsOffline } from '@/lib/connectivity'
 import { listDownloadedDrives } from '@/lib/offline'
-import { cleanPlaceName } from '@/lib/labels'
 import { isPlanAborted, planTurn } from '@/lib/planner'
 import {
   buildExampleAsks,
@@ -79,16 +78,16 @@ import { uuidV4 } from '@/lib/uuid'
 import { useReducedMotion } from '@/theme'
 import { space } from '@/theme/tokens'
 import {
-  Badge,
   Button,
   Card,
   Composer,
   ConversationScreen,
   Divider,
+  DriveCardSkeleton,
+  DriveList,
   HeaderIconButton,
   Icon,
   PlannerUnavailableCard,
-  Skeleton,
   SkeletonGroup,
   RegionChip,
   Ridgeline,
@@ -303,6 +302,16 @@ export default function HomeScreen() {
     navigatingRef.current = true
     go()
   }, [])
+
+  // ⚠ STABLE ON PURPOSE — `DriveCard` (src/ui/DriveList.tsx) is memoized, and a freshly-built handler
+  // would bust that memo on every render of this screen, which ticks at 2 Hz while a preview clip
+  // plays. A memo whose caller rebuilds a prop does nothing and fails silently.
+  const onPressDrive = useCallback(
+    (driveId: string) => {
+      navigateOnce(() => router.push({ pathname: '/drives/[id]', params: { id: driveId } }))
+    },
+    [navigateOnce, router],
+  )
 
   // Monotonic request id: the focus load, the reconnect self-heal and a Better Auth session refetch
   // can all fire within the same moment (they share the network edge), and without this the SLOWER
@@ -1516,31 +1525,12 @@ export default function HomeScreen() {
           </Text>
         </Card>
       ) : (
-        <View style={styles.list}>
-          {drives.map((dr) => {
-            const min = dr.durationSeconds ? Math.round(dr.durationSeconds / 60) : null
-            return (
-              <View
-                key={dr.driveId}
-                accessible
-                accessibilityRole="button"
-                accessibilityLabel={`${dr.label}${dr.clipCount ? `, ${dr.clipCount} stops` : ''}${min ? `, ${min} minutes` : ''}`}
-              >
-                <Card onPress={() => navigateOnce(() => router.push({ pathname: '/drives/[id]', params: { id: dr.driveId } }))}>
-                  <Text variant="title" color="ink" numberOfLines={2}>
-                    {cleanPlaceName(dr.label)}
-                  </Text>
-                  <View style={styles.metaRow}>
-                    <Text variant="label" color="inkFaint" style={styles.flex}>
-                      {dr.clipCount} {dr.clipCount === 1 ? 'stop' : 'stops'}
-                    </Text>
-                    {min ? <Badge tone="amber" label={`${min} MIN`} /> : null}
-                  </View>
-                </Card>
-              </View>
-            )
-          })}
-        </View>
+        // ⚠ The MAPPED column, not the virtualized <ScreenList> that MY DRIVES uses — this list is a
+        // SECTION inside home's own ScrollView, and nesting a VirtualizedList in a ScrollView is an
+        // error. The CARD is the same component on both surfaces, which is the part that matters: the
+        // two used to be copies and had already drifted apart (this one carried the raw place name in
+        // its VoiceOver label while MY DRIVES had been fixed).
+        <DriveList drives={drives} onPressDrive={onPressDrive} />
       )}
     </View>
   )
@@ -1649,16 +1639,6 @@ export default function HomeScreen() {
   )
 }
 
-// A drive card's silhouette while the list loads. Inert; the enclosing SkeletonGroup owns the pulse.
-function DriveCardSkeleton() {
-  return (
-    <Card>
-      <Skeleton width="72%" height={20} />
-      <Skeleton width="48%" height={12} style={styles.skLine} />
-    </Card>
-  )
-}
-
 const styles = StyleSheet.create({
   body: { gap: space.md },
   flex: { flex: 1 },
@@ -1684,7 +1664,5 @@ const styles = StyleSheet.create({
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.md, marginBottom: space.sm },
   offlineNote: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: space.sm },
   list: { gap: space.md },
-  metaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm, marginTop: space.xs },
   zeroState: { gap: space.md, alignItems: 'center', paddingVertical: space.md },
-  skLine: { marginTop: space.sm },
 })
