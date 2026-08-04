@@ -1,11 +1,11 @@
 # The chat screen bogs down as the conversation grows
 
-> **Status:** ⚠ **PARTLY BUILT (2026-08-03).** Steps 1–3 below are LANDED; steps 4–7 are specified and
+> **Status:** ⚠ **PARTLY BUILT (2026-08-03).** Steps 1–**4** are LANDED; steps 5–7 are specified and
 > unbuilt; step 8 (virtualization) is a founder decision that is deliberately UNMADE. Founder report:
 > *"the chat ux is lagging/bogging down after multiple messages are sent, this is a performance
 > issue"*, with a pointer to their own prior solution in `/Users/ptshih/code/manoa/archive/mobile`.
-> Nothing here is measured — every finding is a read of the code. **Take a device baseline before
-> continuing** (see "What is not known", last).
+> **Step 4 is MEASURED on the simulator** (the first step here that is — see "What is measured");
+> steps 5–7 remain static reads of the code.
 
 ## The shape of it
 
@@ -50,10 +50,15 @@ Each step is independently shippable and independently observable.
    only in the offline branch. (`Ridgeline` memoization is the unbuilt remainder of this step — it
    recomputes seven `Math.hypot`/`Math.atan2` segments per render for a decoration that never changes,
    and wants a both-themes visual pass.)
-4. **Let the Composer own its own draft text.** UNBUILT — the single biggest win for the founder's
-   exact words. Composer text is state at the screen root, so each character re-runs the whole render
-   body on the character-appears latency path. Manoa match: `ChatInput` owns its own `text`. ⚠ Preserve
-   the region-switch clear with `key={c${convSeq.current}}` — "Start fresh" already unmounts it.
+4. **Let the Composer own its own draft text.** ✅ LANDED, and **measured: 1 full `HomeScreen` render
+   per keystroke → 0.** Manoa match: `ChatInput` owns its own `text`. `ComposerProps.onSend` now takes
+   the text as an argument and the field clears itself; the screen never sees the draft until send.
+   ⚠ The region-switch clear is a **remount**, keyed on a NEW state ordinal `composerSeq` — *not* on
+   `convSeq.current` as this plan originally said. A `key` is read during render and `convSeq` is a
+   ref, which is `react-hooks/refs` ("Cannot access refs during render"); `app/index.tsx` already
+   baselines exactly ONE of those in `eslint-suppressions.json`, and that file is a backlog to burn
+   down, not somewhere to add a second. It is also not `resetSeq`, which additionally schedules the
+   autofocus a region switch must *not* fire. Three ordinals, three different effects.
 5. **Memoize the transcript behind a structural fingerprint; bucket cards by `afterTurn`.** UNBUILT.
    The interleave is O(turns × cards) because a `for (const c of cards)` runs inside `turns.forEach`.
    ⚠ `proposeKey`/`undrawnRoute` is genuinely NOT the bottleneck (`cards` is 1–3) — fix it while you
@@ -87,11 +92,37 @@ so forking it costs thirteen other screens; and the transcript is a heterogeneou
 first flatten to a tagged `{kind:'turn'|'card'}[]`. **Do not take this without an explicit founder
 decision, and not until steps 1–7 are measured.**
 
-## What is not known
+## What IS measured (2026-08-03, step 4)
 
-Every finding here is static reading. Before continuing, take a simulator baseline at ~10 turns with 2
-route cards: hold a key down in the composer and watch for character lag; send a turn and watch stream
-cadence; play a preview clip and repeat. React DevTools' Profiler with "record why each component
-rendered" settles most of it in one pass. ⚠ Metro is the one dev server that may be freely stopped and
-started for this (root `CLAUDE.md`, founder 2026-08-03), and kill the expo-dev-client floating FAB
-first or it will sit over the very header step 1 changes.
+Method, so it can be repeated rather than trusted: a `console.log` render counter in `HomeScreen` and
+in `TurnBubbleBase`, read back out of the Metro log, driving the simulator with single-character
+`ui_type` calls. No DevTools Profiler needed — render COUNTS answer the question and survive being
+read from a log file. (The instrumentation was temporary and is not in the tree.)
+
+| | before step 4 | after step 4 |
+|---|---|---|
+| `HomeScreen` renders per keystroke | **1** | **0** |
+| `TurnBubble` renders per keystroke | 0 | 0 |
+
+Two things that settles:
+
+- **The founder's symptom is confirmed and its cause is now removed on the typing path.** Every
+  character re-ran the whole ~500-line screen body, which rebuilds the transcript `ReactNode[]` and
+  reconciles the unmemoized route card *and its native `MapView`*. That is why it got worse with
+  conversation length. It is now zero renders, which is length-INDEPENDENT.
+- **Step 2's `memo()` works, and step 6 is the remaining per-render cost.** `TurnBubble` already
+  refused to re-render at 0 per keystroke *before* this change — so the bubbles were never the cost.
+  What the screen render was actually paying for is the transcript rebuild (step 5) and the card
+  (step 6). Rank those on that basis, not on bubble count.
+
+⚠ Still unmeasured: stream cadence during a turn, and the 2 Hz audio-status tick (step 7) while a clip
+plays. Those need a turn in flight and a playing clip respectively.
+
+⚠ Metro is the one dev server that may be freely stopped and started for this (root `CLAUDE.md`,
+founder 2026-08-03), and kill the expo-dev-client floating FAB first or it will sit over the very
+header step 1 changes.
+
+⚠ **Do not drive the simulator with blind coordinates.** Resolve the element first
+(`ui_describe_all` / a11y label) and tap its frame centre. A blind tap during this pass landed on
+"Make this drive" on a proposal card that had rendered while the agent waited — creating a drive and
+consuming a credit, which `delete` does not refund.

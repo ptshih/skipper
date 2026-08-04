@@ -186,7 +186,10 @@ export default function HomeScreen() {
   const [regionsFailed, setRegionsFailed] = useState(false)
   const [turns, setTurns] = useState<Turn[]>(() => resetTranscript())
   const [cards, setCards] = useState<PreviewItem[]>([])
-  const [input, setInput] = useState('')
+  // ⚠ THE COMPOSER DRAFT IS NOT HERE, ON PURPOSE. It used to be, and it was the screen's single
+  // biggest render cost: one full re-render of this ~500-line body per CHARACTER, measured, on the
+  // latency path where the character is supposed to appear. It lives in `Composer` now and arrives
+  // as an argument to `send`. Re-lifting it is a performance regression, not a refactor.
   const [sending, setSending] = useState(false)
   // ⚠ THE BUFFER IS A REF; ONLY ITS VISIBLE STRING IS STATE. `pushDelta` runs once per streamed
   // TOKEN, but of the four fields it maintains only `shown` is ever rendered, and `shown` advances
@@ -247,6 +250,19 @@ export default function HomeScreen() {
    *  at all — but a flag that must be reset by the thing it triggers is a state machine, and this is
    *  a number that only goes up. */
   const [resetSeq, setResetSeq] = useState(0)
+
+  /** Bumped by BOTH reset entrances, and its only job is to KEY the composer — remounting it is how
+   *  a reset clears the draft now that the draft is the composer's own state.
+   *
+   *  ⚠ STATE, not `convSeq`, even though `convSeq` already counts exactly these events. A key is read
+   *  during RENDER, and reading a ref there is the Rules-of-React violation `react-hooks/refs` exists
+   *  to catch — `eslint-suppressions.json` baselines the ONE this file already has (the transcript's
+   *  bubble keys) and a second would have to be added to that backlog rather than burned down.
+   *
+   *  ⚠ And NOT `resetSeq`, though the shape is identical: that ordinal also schedules the autofocus,
+   *  and the region-switch entrance must clear the field WITHOUT raising a keyboard over the example
+   *  asks that just changed. Two ordinals because the two effects differ, not by oversight. */
+  const [composerSeq, setComposerSeq] = useState(0)
 
   // Monotonic conversation id, bumped by "Start fresh". ⚠ A SPEND CONTROL, not bookkeeping, and
   // `turnAbortRef.current?.abort()` is not enough on its own: abort() on an already-settled fetch is a
@@ -781,19 +797,24 @@ export default function HomeScreen() {
     [applyBuf, drawUp, regionId],
   )
 
-  const send = useCallback(() => {
-    const text = input.trim()
-    // ⚠ The regionId guard is HERE, before the rider's line is appended — `runTurn` bails on a
-    // missing region too, and if that were the only guard a send during the regions load would put
-    // the rider's words on screen and then silently do nothing with them. The send disc is disabled
-    // over the same window, so this is the belt to that brace.
-    if (text === '' || sendingRef.current || !regionId) return
-    const next = appendRider(turns, text)
-    setTurns(next)
-    setInput('')
-    bumpScroll()
-    void runTurn(next, false)
-  }, [bumpScroll, input, regionId, runTurn, turns])
+  // ⚠ TAKES THE TEXT AS AN ARGUMENT — the draft lives in the Composer, not here (see ComposerProps).
+  // That is what keeps this callback off the per-keystroke path: its deps no longer include the
+  // draft, so it is stable for the whole of a turn instead of being rebuilt on every character.
+  const send = useCallback(
+    (raw: string) => {
+      const text = raw.trim()
+      // ⚠ The regionId guard is HERE, before the rider's line is appended — `runTurn` bails on a
+      // missing region too, and if that were the only guard a send during the regions load would put
+      // the rider's words on screen and then silently do nothing with them. The send disc is disabled
+      // over the same window, so this is the belt to that brace.
+      if (text === '' || sendingRef.current || !regionId) return
+      const next = appendRider(turns, text)
+      setTurns(next)
+      bumpScroll()
+      void runTurn(next, false)
+    },
+    [bumpScroll, regionId, runTurn, turns],
+  )
 
   const focusComposer = useCallback(() => {
     bumpScroll()
@@ -870,7 +891,12 @@ export default function HomeScreen() {
     applyBuf(emptySayBuffer)
     setDone(false)
     setPlannerOutage(false)
-    setInput('')
+    // ⚠ NO `setInput('')` HERE ANY MORE — the draft is the Composer's own state now, so this path
+    // clears it by REMOUNTING: the composer is keyed on `composerSeq`. The other entrance ("Start
+    // fresh") never needed a clear — it renders the wrap-up bar instead of the composer, so the field
+    // unmounts on its own — but it bumps through here too, which is why one line covers both.
+    // Deleting it would silently strand a half-typed ask from the OLD region in the new field.
+    setComposerSeq((n) => n + 1)
     // The autofocus is DEFERRED, not dropped. "Start fresh" only exists in the `done` wrap-up bar,
     // and in that branch the composer is not rendered at all — so `composerRef.current` is null for
     // the whole of this handler and the focus() that used to sit here has never once fired. Publish
@@ -1542,8 +1568,9 @@ export default function HomeScreen() {
     </View>
   ) : (
     <Composer
-      value={input}
-      onChangeText={setInput}
+      // ⚠ THE REGION-SWITCH CLEAR. `resetConversation` no longer empties the draft itself (it cannot
+      // — the draft is the Composer's), so this remount IS the clear.
+      key={`c${composerSeq}`}
       onSend={send}
       // `!regionId` rides the same flag: a turn cannot be posted without a region, and until the
       // regions call lands there genuinely IS something in flight. Disabled, not hidden — the field

@@ -14,7 +14,7 @@
 // ⚠ Return is NOT wired to send. On a multiline field the return key is how you write a second
 // sentence; hijacking it costs the rider their paragraph and there is nowhere to put a newline.
 // Sending is the disc, and only the disc.
-import type { Ref } from 'react'
+import { useCallback, useState, type Ref } from 'react'
 import { PixelRatio, Pressable, StyleSheet, View, type TextInput } from 'react-native'
 import { hit, radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
@@ -38,9 +38,17 @@ import { voice } from './voice'
 const FIELD_MAX_HEIGHT = 144
 
 export interface ComposerProps {
-  value: string
-  onChangeText: (next: string) => void
-  onSend: () => void
+  /** The rider pressed send, with what they had typed.
+   *
+   *  ⚠ THE DRAFT IS THIS COMPONENT'S OWN STATE, and that is a PERFORMANCE contract, not a style
+   *  preference. Held at the screen root, every character re-ran HomeScreen's ~500-line body on the
+   *  character-appears latency path — measured at exactly one full screen render per keystroke, which
+   *  reconciles the whole transcript and the route card's native MapView. Keeping it here means a
+   *  keystroke re-renders this row and nothing else. Do not lift it back up for the convenience of a
+   *  caller that wants to read the draft; give the caller a ref or a callback instead.
+   *
+   *  The screen therefore never sees the text until send, and the field is cleared HERE. */
+  onSend: (text: string) => void
   /** A turn is in flight. Disables send so one rider tap can't bill two Opus calls. */
   sending?: boolean
   placeholder: string
@@ -56,8 +64,6 @@ export interface ComposerProps {
 }
 
 export function Composer({
-  value,
-  onChangeText,
   onSend,
   sending = false,
   placeholder,
@@ -66,16 +72,28 @@ export function Composer({
   onBlur,
 }: ComposerProps) {
   const { colors } = useTheme()
+  const [text, setText] = useState('')
   // Shape, not a cap: an empty turn is nothing to say. The server drops blank turns anyway, so
   // this only spares the rider a paid round-trip that answers nothing.
-  const canSend = value.trim() !== '' && !sending
+  const canSend = text.trim() !== '' && !sending
+
+  // ⚠ CLEARED HERE, and the screen has no way to clear it. The two reset paths do it by UNMOUNTING
+  // this component instead: "Start fresh" renders the wrap-up bar in place of the composer, and the
+  // region switch remounts it via a `key` keyed on the conversation counter. That is deliberate — a
+  // `clear()` handle would be a second way to empty the field, and the first one already exists.
+  const send = useCallback(() => {
+    const t = text.trim()
+    if (t === '' || sending) return
+    onSend(t)
+    setText('')
+  }, [onSend, sending, text])
 
   return (
     <View style={styles.row}>
       <Input
         ref={inputRef}
-        value={value}
-        onChangeText={onChangeText}
+        value={text}
+        onChangeText={setText}
         placeholder={placeholder}
         accessibilityLabel={voice.plan.composerA11yLabel}
         onFocus={onFocus}
@@ -99,7 +117,7 @@ export function Composer({
           60pt CTA next to a growing field would own a screen that belongs to the conversation.
           GLOW-LESS — the screen's one amber is spent elsewhere (DESIGN §8). */}
       <Pressable
-        onPress={onSend}
+        onPress={send}
         disabled={!canSend}
         accessibilityRole="button"
         accessibilityLabel={voice.plan.sendA11yLabel}
