@@ -52,18 +52,6 @@ describe('console copies of the planner-facing numbers', () => {
     expect(consoleVal).toBe(apiVal!)
   })
 
-  test('the Curate field offers exactly the range the route clamps to', () => {
-    // A field that offers a number the server silently clamps is worse than no field: the operator sets
-    // 200, the route quietly drafts 120, and the count they chose is not the count they got.
-    const server = read('apps/admin/server/index.ts')
-    const serverMax = server.match(/^const MAX_DRAFT_TARGET = (\d+)$/m)?.[1]
-    const serverMin = server.match(/^const MIN_DRAFT_TARGET = (\d+)$/m)?.[1]
-    expect(serverMax).toBeDefined()
-    expect(serverMin).toBeDefined()
-    expect(placesView.match(/^const DRAFT_MAX = (\d+)$/m)?.[1]).toBe(serverMax!)
-    expect(placesView.match(/^const DRAFT_MIN = (\d+)$/m)?.[1]).toBe(serverMin!)
-  })
-
   test('the resolve cap is DERIVED from the draft cap, and still clears it', () => {
     // The bug this guards is on the record in the constant's own comment: the two were independent
     // literals, the draft cap moved 60 → 120, this one stayed at 60, and a 103-place draft could not be
@@ -80,13 +68,6 @@ describe('console copies of the planner-facing numbers', () => {
     expect(Math.round((draftCap * 4) / 3)).toBeGreaterThan(draftCap)
   })
 
-  test('the draft floor is 1 — the smallest thing that is still a draft', () => {
-    // Pinned because it is the one number here with no external constraint behind it: the clamp exists
-    // only so an untrusted body cannot send a negative target into "Draft roughly -5 places". Anything
-    // above 1 is someone's preference wearing a guard's clothing (it was 8, for no recorded reason).
-    expect(read('apps/admin/server/index.ts')).toMatch(/^const MIN_DRAFT_TARGET = 1$/m)
-  })
-
   test('the draft call STREAMS — the token ceiling must not silently become a timeout again', () => {
     // The 16k ceiling this replaced was an artifact of a NON-streaming call (the SDK's HTTP timeout,
     // not the model), and it was propping up MAX_DRAFT_TARGET. If someone reverts to
@@ -99,16 +80,22 @@ describe('console copies of the planner-facing numbers', () => {
     expect(places).toMatch(/new Anthropic\(\{ maxRetries: 1, timeout: 90_000 \}\)/)
   })
 
-  test('the draft count DEFAULTS TO THE MAXIMUM on both sides (founder, 2026-08-04)', () => {
-    // The posture, not just the number: asking an operator to pick was asking for a decision with one
-    // right answer. If either side drifts back to a hand-picked default, the field silently becomes a
-    // question again — and the two sides would disagree about what "leave it alone" means.
+  test('the draft count is NOT AN INPUT — no field, no wire param, no clamp (founder, 2026-08-04)', () => {
+    // It went from a number the operator picked, to a number defaulting to the maximum, to nothing —
+    // because it only ever had one right answer. This pins all three halves of that removal together,
+    // because reintroducing any ONE of them alone is the broken state: a field with no clamp lets an
+    // untrusted body through, and a clamp with no field guards an input that cannot arrive.
     const server = read('apps/admin/server/index.ts')
-    expect(server).toContain('Number(body.target) || MAX_DRAFT_TARGET')
-    expect(placesView).toContain('useState(String(DRAFT_MAX))')
-    // ...and no stray literal default left behind on either side.
-    expect(server).not.toMatch(/Number\(body\.target\) \|\| \d+/)
-    expect(placesView).not.toMatch(/useState\('\d+'\)/)
+
+    // The route asks for the constant directly — no body-derived count, no clamp around it.
+    expect(server).toContain('targetN: MAX_DRAFT_TARGET')
+    expect(server).not.toContain('body.target')
+    expect(server).not.toContain('MIN_DRAFT_TARGET')
+
+    // ...and the console offers nothing to type into.
+    expect(placesView).not.toContain('curate-target')
+    expect(placesView).not.toMatch(/DRAFT_(MIN|MAX)/)
+    expect(read('apps/admin/client/src/lib/api.ts')).not.toMatch(/draftPlaces:.*target/)
   })
 
   test('the page reads both through the const, with no bare literal beside them', () => {

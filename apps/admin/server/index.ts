@@ -675,20 +675,8 @@ app.post('/admin/places', async (c) => {
   return c.json({ place: row }, 201)
 })
 
-/** What an operator may ASK the draft model for, and what the resolve step will ACCEPT.
- *
- * ⚠ THEY ARE DELIBERATELY DIFFERENT NUMBERS — collapsing them into one re-breaks this immediately.
- * `target` is GUIDANCE, not a limit: the prompt says "Draft roughly ${targetN} places", and the model
- * overshoots (a target of 100 came back with 103 on the first real run). So a resolve cap set EQUAL to
- * the draft cap rejects the very draft its own flow just produced. That is not hypothetical — when the
- * draft cap moved 60 -> 120 and this one stayed at 60, a 103-place draft could not be resolved at all,
- * and the comment here still asserted the two were in lockstep. The resolve cap is the draft cap plus
- * room for the overshoot; if you move one, move both.
- *
- * ⚠ The resolve cap is a SPEND bound, not tidiness: every accepted draft costs TWO billed Google Places
- * calls, so it is what stops one click from spending whatever the client happened to post. It is ALSO
- * bounded by the clock: the resolve loop is serial at ~0.8s/draft, so 160 is ~130s against the 240s
- * idleTimeout at the foot of this file — read that comment before raising it. */
+/** How many places the draft step ASKS FOR — one value, no longer a ceiling on an operator's choice,
+ * because the count stopped being an input (see the route below). */
 // ⚠ THIS IS DELIBERATELY LOWER THAN THE CLI's 250 (packages/studio/src/curate-places.ts), and the gap
 // is NOT drift — the two are bound by different things and must not be "unified" (founder, 2026-08-04).
 // The CLI is a batch process with no clock over it, so it drafts deep. This is a REQUEST PATH, and what
@@ -702,12 +690,6 @@ app.post('/admin/places', async (c) => {
 // So: deep, store-everything runs are a CLI job; this route stays the reviewable desk-sized preview it
 // was built to be.
 const MAX_DRAFT_TARGET = 120
-
-/** Floor on a draft — a request-path clamp, since the body is untrusted, not a UI nicety.
- *  ⚠ 1, and DERIVED rather than picked: it is the smallest number of places that is still a draft. It
- *  was 8, which was the one number in this chain with no reasoning behind it at all — the clamp exists
- *  to stop a hostile body sending `target: -5` into "Draft roughly -5 places", and 1 does that. */
-const MIN_DRAFT_TARGET = 1
 
 /** The resolve cap: the draft cap plus a third again, for the model's OVERSHOOT.
  *  ⚠ DERIVED, not declared — that is the whole point. It was a second independent literal (160) held
@@ -731,7 +713,7 @@ const MAX_CURATE_DRAFTS = Math.round((MAX_DRAFT_TARGET * 4) / 3)
  *  Raise it only with a real measurement of the quota in front of you. */
 const CURATE_CONCURRENCY = 6
 
-// POST /admin/places/draft { region, target? } — LLM-draft this region's curated hubs + pitstops with
+// POST /admin/places/draft { region } — LLM-draft this region's curated destinations with
 // Opus (forced tool). The REVIEWABLE preview: spends a few cents on ONE Opus call, makes NO Places calls
 // and writes NOTHING. The operator prunes the returned list, then POST /admin/places/curate resolves +
 // upserts the keepers. Founder-gated by IAP (+ the explicit button click). 503 if ANTHROPIC unset.
@@ -758,24 +740,20 @@ app.post('/admin/places/draft', async (c) => {
   // ⚠ MAX_PLAN_ANCHORS (apps/api/src/limits.ts, 200) is NO LONGER a total this set must stay under; it
   // is the planner's SERVE cap and a region is now expected to hold more rows than it. Exceeding it is
   // an ordinary state, not an alarm — the roster takes the top 200 by rank.
-  // ⚠ THE DEFAULT WAS SIZED FOR A UI THAT NO LONGER EXISTS. 30 was right when this set fed the
-  // tap-to-pick create form — a list a human THUMB-SCROLLED, where 120 is a wall. `GET /drives/anchors`
-  // was deleted end to end in 1.1 and the set's only consumer is now the PLANNER's roster, which Opus
-  // reads whole from a cached prefix. Thumb-scrolling stopped binding; MAX_PLAN_ANCHORS (200) and model
-  // attention are what bind, and every name added is one fewer in-persona "do not know that one".
-  // ⚠ DEFAULTS TO THE MAXIMUM (founder, 2026-08-04), which is a change of posture, not just a number.
-  // There is no longer a tradeoff for an operator to navigate on a normal run: the rider-facing list a
-  // human once thumb-scrolled is gone, this set is the planner's whole world, and the Places spend is
-  // decided by what they PRUNE before "Resolve & add" — not by this count. So asking them to pick was
-  // asking for a decision with one right answer.
-  // ⚠ The safety net is the TRUNCATION throw in draftCuratedPlaces: `max_tokens` is fixed, and a draft
-  // that overruns it surfaces as a 502 telling the operator to lower the count and draft again. That
-  // path is now load-bearing rather than a rare edge — do not soften it into a warning, and do not let
-  // a truncated list through as if it were a selective one.
-  const targetN = Math.max(MIN_DRAFT_TARGET, Math.min(MAX_DRAFT_TARGET, Number(body.target) || MAX_DRAFT_TARGET))
+  // ⚠ THE COUNT IS NOT AN INPUT (founder, 2026-08-04). It was a number the operator picked, it defaulted
+  // to the maximum, and then the field went too — because there was only ever one right answer. The
+  // rider-facing list a human once thumb-scrolled (`GET /drives/anchors`) was deleted end to end in 1.1,
+  // so this set is now the PLANNER's whole world, read whole from a cached prefix; every name missing
+  // from it is an in-persona "do not know that one". The Places spend is decided by what the operator
+  // PRUNES before "Resolve & add", never by this number, so asking for it bought nothing and cost a
+  // decision on every run. What binds the value is the route's CLOCK — see MAX_DRAFT_TARGET.
+  // ⚠ NOTHING TO CLAMP ANY MORE, and that is the point: with no operator-supplied number there is no
+  // untrusted value to floor or ceil, so the clamp and its floor constant are gone rather than left
+  // guarding an input that cannot arrive. If a count ever becomes an input again, the clamp comes back
+  // WITH it — do not reintroduce one without the other.
   try {
     const drafts = await draftCuratedPlaces(region.displayName, bbox, {
-      targetN,
+      targetN: MAX_DRAFT_TARGET,
       model: process.env.ADMIN_CURATE_MODEL ?? CLAUDE_MODELS.opus,
     })
     return c.json({ drafts })
@@ -2577,7 +2555,7 @@ const port = Number(process.env.PORT ?? 8788)
 // ⚠⚠ idleTimeout IS LOAD-BEARING HERE TOO, and this console needs it MORE than apps/api does.
 // Bun's default is 10 SECONDS and it fires WHILE A HANDLER IS STILL RUNNING (measured in apps/api on
 // 2026-08-01: a 16s handler had its socket closed at ~12s). Two admin routes structurally exceed that:
-//   • POST /admin/places/draft — one Opus call, max_tokens 16_000, up to MAX_DRAFT_TARGET places. The
+//   • POST /admin/places/draft — one streamed Opus call for MAX_DRAFT_TARGET places. The
 //     dialog's own copy says "this takes ~30s". It could therefore NEVER have completed: the socket
 //     died at ~12s, the operator saw a network error, and the Anthropic call billed to completion
 //     regardless.

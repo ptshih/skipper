@@ -46,19 +46,6 @@ const TOP_RANK = 3
  *  unverifiable claim: rows exist in the table that no rider can reach, and nothing on the page says so. */
 const PLANNER_ROSTER_CAP = 200
 
-/** The draft-count bounds, mirroring the route's own clamp (`MIN_DRAFT_TARGET`/`MAX_DRAFT_TARGET` in
- *  server/index.ts) — hand-copied for the same reason as the two above, and pinned by
- *  server/planner-constants.test.ts so the field can't offer a number the server would silently reject.
- *
- *  ⚠ THE DEFAULT IS THE MAXIMUM ON PURPOSE (founder, 2026-08-04). This field used to size a list a human
- *  thumb-scrolled in the rider's tap-to-pick form; that form went in 1.1, and the set is now the
- *  planner's entire world, where every missing name is an in-persona "don't know that one". Nothing
- *  about a normal run wants fewer, and the Places spend is decided by what gets PRUNED before
- *  "Resolve & add" — so the field is now a RECOVERY lever (lower it when a draft truncates), not a
- *  decision to make every time. */
-const DRAFT_MIN = 1
-const DRAFT_MAX = 120
-
 export function PlacesView() {
   // Shared ['regions'] cache — MUST store the unwrapped array (like RegionsView/PoisView), not the
   // `{ regions }` wrapper: a shape mismatch under the same key crashes whichever view reads it next.
@@ -459,13 +446,9 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
   const [kept, setKept] = useState<Set<number>>(new Set())
   const [results, setResults] = useState<CurateResult[] | null>(null)
   const [added, setAdded] = useState<number | null>(null)
-  // Held as a STRING so the field can be cleared/retyped without fighting a number cast mid-edit.
-  // Never clamped here: the server owns the range (see the route's targetN) and falls back to 30 on
-  // anything unparseable, so this input is an affordance and the clamp stays a single expression.
-  const [target, setTarget] = useState(String(DRAFT_MAX))
 
   const draftMut = useMutation({
-    mutationFn: () => api.draftPlaces({ region, target: Number(target) || undefined }),
+    mutationFn: () => api.draftPlaces({ region }),
     onSuccess: (res) => {
       setDrafts(res.drafts)
       setKept(new Set(res.drafts.map((_, i) => i))) // keep all by default; the operator prunes down
@@ -523,30 +506,19 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
               <span className="font-medium text-foreground">Resolve &amp; add</span> spends a few cents of Google
               Places and writes the keepers. You can fine-tune each row’s rank in the table afterward.
             </Callout>
-            <div className="flex items-end gap-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="curate-target">How many</Label>
-                <Input
-                  id="curate-target"
-                  type="number"
-                  min={DRAFT_MIN}
-                  max={DRAFT_MAX}
-                  value={target}
-                  onChange={(e) => setTarget(e.target.value)}
-                  className="w-24"
-                />
-              </div>
+            <div>
               <Button onClick={() => draftMut.mutate()}>
                 <Sparkles className="h-4 w-4" /> Draft places
               </Button>
             </div>
-            {/* The draft is scoped by the region BBOX, which is routinely WIDER than the region's name
-                suggests — so the count is a budget spread over that whole box: a box reaching several
-                towns needs the headroom, or the far ones get squeezed out. */}
+            {/* ⚠ NO COUNT TO PICK (founder, 2026-08-04). The draft always asks for as many as the route
+                allows, because there was only ever one right answer: the set IS the planner's world, the
+                Places spend is decided by what gets PRUNED before "Resolve & add", and the box is
+                routinely wider than the region's name suggests. */}
             <p className="text-xs text-muted-foreground">
-              Spread over the region’s whole bounding box, not just what its name suggests. These names are the
-              planner’s entire world — every one it lacks is a “don’t know that one” to a rider, so this
-              starts at the maximum. {DRAFT_MIN}–{DRAFT_MAX}; lower it only if a draft comes back truncated.
+              Drafts as many as the region can carry, spread over its whole bounding box rather than what its
+              name suggests. These names are the planner’s entire world — every one it lacks is a “don’t know
+              that one” to a rider.
             </p>
           </>
         )}

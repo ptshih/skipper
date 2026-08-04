@@ -430,7 +430,9 @@ export async function draftCuratedPlaces(
   // it was the whole draft. Surfaces as the route's 502 with this message.
   if (res.stop_reason === 'max_tokens') {
     throw new Error(
-      `the draft was TRUNCATED at max_tokens (asked for ~${opts.targetN} places) — the list is incomplete. Lower the count and draft again.`,
+      `the draft was TRUNCATED at max_tokens (asked for ~${opts.targetN} places) — the list is incomplete, ` +
+        `so nothing here is safe to resolve. Re-run the draft; if it truncates again, MAX_DRAFT_TARGET is too ` +
+        `high for this region and has to come down in code (there is no longer a count to lower from the console).`,
     )
   }
   const toolUse = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
