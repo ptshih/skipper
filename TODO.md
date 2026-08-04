@@ -824,13 +824,29 @@ Owed, in dependency order — **nothing below is started**:
       [what-is-a-drive-endpoint](docs/designs/what-is-a-drive-endpoint.md). Wikidata knows what is NOTABLE,
       Google knows where people GO, and neither set contains the other. Resolve the class, not these two.
 
-- [ ] **`Taylor Creek Visitor Center` is the one endpoint still not drivable as pinned.** Confirmed from
-      TWO independent origins (Pope Beach and South Lake Tahoe, 2026-08-04), so it is a real restriction on
-      the approach rather than a bad probe origin — and `--snap` found NO clean point to fall back to
-      ("the restriction starts at the origin end"), so there is nothing to store automatically. It needs an
-      access point chosen BY HAND in the admin Places view — the visitor centre has a real USFS lot off
-      Hwy 89; the pin is on the building, not the lot.
-      ⚠ Do not "fix" it by deleting the row: a restricted-usage warning is about the ROAD, not about
-      whether a rider may use it (founder, 2026-08-04 — private or not is not our call, a rider may have
-      access). The same principle is why `Incline Beach` was kept and given an access point rather than
-      pruned.
+- [ ] **The restricted-road signal does not discriminate, and a rider-facing 422 rests on it.**
+      `Taylor Creek Visitor Center` was flagged by the sweep and confirmed from two independent origins —
+      and it is WRONG. That road is not restricted to the visitor centre (founder, 2026-08-04, local
+      knowledge beats Google here). Measured side by side against the failure the guard was built for:
+
+      | | Google warning | avg speed | detour ratio |
+      |---|---|---|---|
+      | `Spooner Lake`, original lake-surface pin (the real bug) | restricted | 26 km/h | 2.22x |
+      | `Taylor Creek Visitor Center` (a false positive) | restricted | 51 km/h | 1.42x |
+
+      **The warning fires identically on both**, so it cannot tell an undrivable anchor from an ordinary
+      drive. ⚠ The sweep's `slow` backstop would not have saved it either: `MIN_AVG_KMH` is 20 and the
+      real bug averaged 26, so it sits ABOVE the floor — the restricted check is the only thing that
+      caught Spooner, and it is also the thing that falsely accuses Taylor Creek.
+      Consequence: `hasRestrictedRoads` gates `POST /drives/propose` and `/plan` with a 422, so a rider
+      asking for a drive to Taylor Creek is refused — silently, since the log line carries no place name
+      by design (INV-13). That is the same judgement the founder ruled out for Incline Beach, only
+      enforced in code where nobody can see it.
+      Proposal (NOT yet built — it changes an approved safety guard): refuse only when the warning is
+      CORROBORATED by implausibility — a detour ratio past ~1.8x, or an average under ~35 km/h. Both
+      inputs are already in hand at the call site (`materializeRoute` returns distance + duration; the
+      waypoints give the straight-line). ⚠ Two data points is not a tuned threshold — widen the evidence
+      before picking the number, and keep the warning as ADVISORY in the offline sweep either way, where
+      a human reads it and no drive is taken away.
+      ⚠ Until this lands, Taylor Creek flags on every sweep and is a KNOWN false positive — do not
+      "fix" it by re-pinning or deleting it.
