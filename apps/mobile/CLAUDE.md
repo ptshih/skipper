@@ -32,6 +32,24 @@ raw hex/rgba/`fontFamily`; colors live only in `src/theme`.
   ⚠ An unexplained exact pin reads like a scar from a bad upgrade — it isn't one here (one commit,
   `dda5dc9`, never bumped), and reading it that way already cost one wrong migration proposal. Bump
   these only via `expo install` / an SDK upgrade, and let `bun run doctor` tell you the target.
+- **⛔ `react-native-maps` → `expo-maps` was REJECTED (2026-08-02) on CAPABILITY, not effort — do not
+  re-propose without re-checking these three.** The prize is real and still wanted (drop
+  `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`, its billing surface, and the whole `react-native-maps` plugin
+  block in `app.config.ts`), which is exactly why the blockers are written down rather than the verdict:
+  1. **Custom React marker views are unsupported — image icons only.** The puck is a `<Marker>` wrapping
+     a halo, a `rotate(${heading}deg)` wedge and a dot; stop markers are styled views keyed to remount
+     on passed/active/upcoming. A rotating heading wedge cannot be an image icon at GPS rates without
+     pre-rendering a sprite per heading.
+  2. **`setCameraPosition()` animation duration is unsupported on iOS.** `DriveMap` animates the camera
+     throttled to 1/sec; losing the tween turns camera-follow into a hard jump-cut every second *while
+     the rider is driving* — a regression exactly where the product is least forgiving.
+  3. **It is ALPHA**, in Expo's own words, "will frequently experience breaking changes". Also lost:
+     `mapStyle.ts`'s dusk tint — custom JSON styling is Android-only there; AppleMaps gets `colorScheme`
+     and `mapType`, nothing more.
+  ⚠ **What would reopen it:** expo-maps leaving alpha AND either custom marker views or an animated iOS
+  camera landing. Until then the open question is only whether `react-native-maps` renders correctly on
+  SDK 57 on a DEVICE (expo/expo#43288 is SDK 55, so the risk may be theoretical) — a ten-minute check,
+  not a migration.
 - **`bun run doctor` (`expo-doctor`) is deliberately NOT in `check`:** it needs the network, and it reports
   a FALSE "node_modules may be corrupted / multiple copies" against bun's isolated linker. Run it when
   touching dependencies, and read the version table, not the duplicate warning.

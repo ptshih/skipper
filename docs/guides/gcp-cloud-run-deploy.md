@@ -164,6 +164,25 @@ If `connections create` reports us-east4 isn't a supported Cloud Build region, u
 `--region=us-central1` for all three commands (the build still deploys to us-east4 via
 `cloudbuild.yaml`; the trigger region is independent of the Cloud Run region).
 
+### ⚠ `includedFiles` — the path filter is load-bearing (fixed 2026-07-30)
+
+`skipper-api-deploy` shipped with an EMPTY `includedFiles`, the only one of the four triggers without a
+filter, so **any** commit rebuilt and redeployed the API at 100% traffic with no test step and no canary.
+Not theoretical: it fired on five docs-only commits in one day while 1.0.0 sat in App Review — a stray
+commit could have swapped the backend under the reviewer. The filter now matches the API's real closure
+(its workspace deps + the Dockerfile's COPY list):
+
+```
+apps/api/** packages/db/** packages/engine/** packages/routing/** packages/shared/**
+packages/storage/** cloudbuild.yaml bun.lock package.json
+```
+
+- ⚠ **`gcloud builds triggers update github` REJECTS this trigger** — it is a 2nd-gen
+  `repositoryEventConfig` connection, not the legacy `github` block. Use `triggers import` with the full
+  spec.
+- ⚠ **The dangerous direction is TOO NARROW, not too wide.** An over-broad filter is merely noisy; a
+  missing path makes a real API fix look shipped when it never deployed.
+
 ## Verify
 
 ```bash
@@ -254,7 +273,11 @@ gcloud billing budgets create --billing-account=019BCA-9D6FC9-B3E1DC \
   and raised to **$1,000** (founder, 2026-08-03). ⚠ The first threshold therefore lands at **$500**,
   far above any plausible normal month: this is a **catastrophic-runaway tripwire, not an early
   warning**, and a slow leak burning $50/mo forever would never trip it. Deliberate trade for silence;
-  re-price with `budgets update` if that stops being the right one.
+  re-price with:
+  ```sh
+  gcloud billing budgets update b0c32259-f947-4a8a-a612-53f1ee8c4897 \
+    --billing-account=019BCA-9D6FC9-B3E1DC --budget-amount=<n>USD
+  ```
 - ⚠ There is a SECOND, CLOSED billing account on this login (`0190CB-DE5D23-69436F`). The budget is on
   the open one that the project actually bills to; check `gcloud billing projects describe` before
   assuming which is which.

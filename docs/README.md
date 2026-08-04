@@ -129,6 +129,15 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   Bay). 31 → 41 stops across the four saved drives (2026-08-03). ⚠ §5 was a FINDING and has since been
   ANSWERED (see below): a there-and-back retraces 96% of its ground and 17 of 18 candidates snap to the
   outbound half, so the return leg is structurally silent.
+- [planner-directions-not-taken.md](decisions/planner-directions-not-taken.md) — two closed questions
+  about the LIVE planner, both answered NO and both expensive to re-derive. **Spatial context** (a
+  drive-time table for the model) was MEASURED at ~$1.40 and moved nothing it was for — routing flat, the
+  duration leak unchanged, and ⚠ the predicted secret-leak did NOT materialise (do not cite the pair-one
+  write-up, it didn't replicate). **An LLM framework** (BAML, then Vercel's AI SDK) was researched against
+  current docs: BAML is disqualified structurally (codegen vs a repo with no build step), the AI SDK
+  clears every hard requirement and is still declined for `planner.ts` — no capability gain, a multi-step
+  agent loop beside an INV-11 one-call-per-request path, and `display:'omitted'` unverified. ⚠ If either
+  is ever revisited, `packages/studio` is the first target and the planner is the last.
 - [no-same-road-loops.md](decisions/no-same-road-loops.md) — a loop is a RING or it is not a loop
   (founder, 2026-08-03). `round_trip` gained a rider-named `return_anchor_id` — the skipper asks *"which
   way do you want to come home?"* — because D9 gives the model NO coordinates, so it structurally cannot

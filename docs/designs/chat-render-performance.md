@@ -154,6 +154,13 @@ so forking it costs thirteen other screens; and the transcript is a heterogeneou
 first flatten to a tagged `{kind:'turn'|'card'}[]`. **Do not take this without an explicit founder
 decision, and not until steps 1–7 are measured.**
 
+⚠ **The trigger to revisit — do not take it on vibes.** A REAL DEVICE, on a LONG conversation, showing
+scroll jank or memory growth that steps 1–6 did not remove. Everything measured below is **simulator
+only** (no thermal or memory pressure) and nothing went past ~8 turns, so the long-conversation case is
+genuinely *unmeasured* rather than known-fine. Measure that first; it may close this question outright.
+⚠ Note also that the free-looking option is the one already rejected: FlatList/VirtualizedList window
+tuning is a DEAD END in the prior art for this exact surface (see the ⛔ section above).
+
 ## What IS measured (2026-08-03, step 4)
 
 Method, so it can be repeated rather than trusted: a `console.log` render counter in `HomeScreen` and

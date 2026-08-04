@@ -464,6 +464,27 @@ R2 — `sweep-orphans.ts` already exists for exactly that.
 - **Region-agnostic proof.** The only honest test is running phases 1–3 against a second region's
   corpus (Yosemite) and checking the treatment split looks sane without tuning.
 
+## Cluster geometry — the measurements that outlive the AREA build (kept 2026-08-03)
+
+⚠ **The AREA path itself was DELETED with roam in 1.1** — no hull is minted or served today, so none of
+this is live. It is kept because it was measured once, at cost, and extent work will return with a second
+region. Moved here from `TODO.md` in the backlog re-baseline.
+
+- ⚠ **The quantity that matters is DISTINCT ANCHORS, not members.** `convexHull` dedupes co-located
+  points and `speakableLat ?? lat` snapping co-locates them routinely — **Truckee is 4 members over 2
+  distinct anchors, hull area exactly 0.** Any future extent work must triage by distinct anchors;
+  triaging by member count clears exactly the cluster that would be dropped.
+- **16 clusters hull down to a 2-vertex ring and 0 were ever dropped** — not because they are small, but
+  because every one sits under `CLUSTER_MAX_TRIGGER_RADIUS_M`, so `needsArea` is false and the
+  "no honest polygon" guard is never reached (14 at the 250 m floor; Truckee 302 m, Mount Rose Summit
+  255 m).
+- **Only three clusters exceed the cap, and all three have honest polygons:** Downtown Reno 914 m/9 vtx,
+  UNR 903 m/5 vtx, Historic Homes 698 m/9 vtx.
+- **A sliver is honest, not broken.** Virginia City is 15 distinct anchors, a 6-vertex hull, 384 m² — a
+  genuine main street. It is point-triggered at 265 m so no `area` is served, but a district shaped like a
+  60 m corridor down the street is arguably the *ideal* district. A future guard should treat a sliver as
+  honest rather than widening it.
+
 ## Refs
 
 `packages/engine/src/drive-select.ts` (pick-one, §3a; `better()`, §2 — it is also where the 300 m/15-min

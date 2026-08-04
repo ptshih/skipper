@@ -5,12 +5,10 @@ persona, played as phone audio (CarPlay later). **Optimize for charm, not scale 
 product.** When a choice trades polish-for-the-builder against scale-for-a-market, pick polish.
 
 ⚠ **1.1 is DEPLOYED to prod (2026-08-02) but NOT released to riders** — roam is REMOVED entirely (git is
-the archive) and Create-a-Drive IS a conversation. The PUSH already happened (record + template for the
-next one: `docs/guides/1-1-cutover-runbook.md`). **What is left is one guide:
-`docs/guides/1-1-submission-sweep.md`** — two builds, the on-device sweep, then the listing. ⚠ TestFlight
-served a dead pre-1.1 client until **1.1.0 builds reached TestFlight** 2026-08-03 (newest wins → attach); and
-RISK-1's real drive was taken OFF the critical path (founder, 2026-08-03) in favour of that guide's two
-desk passes — its §0 owns what they can't prove, so don't re-argue it here.
+the archive) and Create-a-Drive IS a conversation. **What is left is one guide:
+`docs/guides/1-1-submission-sweep.md`** — the builds, the on-device sweep, then the listing (the push
+itself is recorded in `docs/guides/1-1-cutover-runbook.md`). RISK-1's real drive is OFF the critical path
+(founder, 2026-08-03); that guide's §0 owns what the desk passes can't prove, so don't re-argue it here.
 `docs/designs/drives-first-1-1.md` is the build truth — read it before touching `apps/api` or `apps/mobile`.
 
 ## STOP — the expensive or irreversible mistakes
@@ -51,6 +49,8 @@ desk passes — its §0 owns what they can't prove, so don't re-argue it here.
   `lint:tokens` + `lint` — root `test`/`typecheck` already filter into the workspace). ⚠ `lint` is ESLint,
   which exists ONLY in `apps/mobile` and only for `react-hooks` (the hooks are unreachable by `bun test`);
   pin it to 9.x and treat `eslint-suppressions.json` as a backlog — see `apps/mobile/CLAUDE.md`.
+  ⚠ **A new package needs its `test` script in the SAME commit** — `bun --filter '*' test` SILENTLY skips
+  one without it, so an absent script is indistinguishable from a passing suite (it hid two packages).
 
 ## Git workflow
 
@@ -285,8 +285,7 @@ The phone-player bet is unchanged — the artifact is a region's shared `narrati
    `/regions`, `/drives/plan`, `/drives/propose` anonymous+capped; the rest of `/drives*` behind PER-ROUTE
    `requireAccount`; signed R2 URLs). CarPlay stays deferred past the MVP — the phone plays via
    mount/Bluetooth. ⚠ **The one step still owed is the one that was always the point: drive it once for
-   real** (RISK-1 — off the 1.1 critical path by founder call; `docs/guides/1-1-submission-sweep.md` §0
-   owns what the desk passes can and cannot prove in its place).
+   real** (RISK-1 — see the sweep guide's §0).
 3. **Breadth:** more regions' corpora; live break-stop Places data.
 4. **Earn the machinery:** `route_sig` dedup + caching, human-review/feedback, more regions
    (Yosemite → Moab; mind seasons).
@@ -303,12 +302,6 @@ IS a live conversational agent; what stays deferred is letting it answer questio
 scores every clip through the eval panel and WITHHOLDS one whose grounding/tts gate stays dirty after the
 bounded `optimize()` retakes — never synthesized, never persisted, flagged in `eval_scores`. Veracity
 stays advisory (no auto-judge for world-truth). `docs/decisions/automated-grounding-gate.md`.
-
-## Future ideas (post-MVP, not scheduled)
-
-Captured so they aren't lost. Default is NOT scheduled — but a doc's own **Status** line wins: an entry a
-greenlit spec pulled in is in scope (e.g. `offline-region-packs.md`, 1.1 step 5). Index: `docs/README.md`.
-North-star delighter: **"Ask the Skipper"** (live, grounded, in-persona voice Q&A mid-drive).
 
 ## In-car player landmines (when you get there)
 
@@ -334,6 +327,8 @@ North-star delighter: **"Ask the Skipper"** (live, grounded, in-persona voice Q&
 - **`TODO.md` = engineering backlog** (actionable near-term items; delete when done — git history is the archive).
 - **`docs/` = durable records**, foldered by KIND with a dated **Status** line: `decisions/` (why,
   append-only), `designs/` (future truth at any maturity — the Status line carries idea → build-ready →
-  built, not the folder), `research/`, `guides/`. Index: `docs/README.md`.
+  built, not the folder), `research/`, `guides/`. Index: `docs/README.md`. A post-MVP idea defaults to NOT
+  scheduled, but **a doc's own Status line wins** — one a greenlit spec pulled in is in scope. North-star
+  delighter: **"Ask the Skipper"** (live, grounded, in-persona voice Q&A mid-drive).
 - **Code = the rest of current truth** — a doc that disagrees with the code is wrong; fix the doc. Handoff
   docs are ephemeral (deleted once consumed).
