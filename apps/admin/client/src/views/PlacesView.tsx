@@ -26,6 +26,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { EmptyState } from '@/components/ui/empty-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import { SectionLabel } from '@/components/ui/section-label'
+import { FilterToolbar, FilterSelect } from '@/components/ui/filter-toolbar'
+import { SelectionBar } from '@/components/ui/selection-bar'
+import { cn } from '@/lib/utils'
 import { PlacesMap, PLACE_PIN_COLORS } from '@/components/ui/google-map'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { FormDialog } from '@/components/ui/form-dialog'
@@ -45,6 +48,14 @@ const TOP_RANK = 3
  *  only stays honest if an operator can see where the line falls. Without this badge the tail is an
  *  unverifiable claim: rows exist in the table that no rider can reach, and nothing on the page says so. */
 const PLANNER_ROSTER_CAP = 200
+
+/** The rank filter's options. Static, so hoisted out of the render. Each value has a matching branch in
+ *  the `filtered` predicate — a value with no branch silently filters nothing rather than failing. */
+const RANK_FILTERS = [
+  { value: 'top', label: `Top-ranked (1–${TOP_RANK})` },
+  { value: 'unranked', label: 'Unranked' },
+  { value: 'access', label: 'Has an access point' },
+]
 
 export function PlacesView() {
   // Shared ['regions'] cache — MUST store the unwrapped array (like RegionsView/PoisView), not the
@@ -107,6 +118,40 @@ export function PlacesView() {
   /** The place whose access point is being edited, or null. */
   const [accessFor, setAccessFor] = useState<PlaceRow | null>(null)
 
+  // ── Filter + bulk selection ──────────────────────────────────────────────────
+  // ⚠ This list is the longest in the console (172 rows in Tahoe today) and was the ONLY one with no
+  // way to search it — finding a place meant paging. Filtering is client-side because the whole region
+  // is already in hand: the query returns every row for the bbox, so a server round-trip per keystroke
+  // would buy nothing.
+  const [q, setQ] = useState('')
+  const [rankFilter, setRankFilter] = useState('all')
+  const [sel, setSel] = useState<Set<string>>(new Set())
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    return places.filter((p) => {
+      if (rankFilter === 'top' && !(p.rank != null && p.rank <= TOP_RANK)) return false
+      if (rankFilter === 'unranked' && p.rank != null) return false
+      if (rankFilter === 'access' && p.accessLat == null) return false
+      if (!needle) return true
+      return p.name.toLowerCase().includes(needle) || (p.primaryType ?? '').toLowerCase().includes(needle)
+    })
+  }, [places, q, rankFilter])
+
+  // ⚠ ONE expression for the count, the authorisation and the act. `selectedRows` is what the bar
+  // counts, what the confirm names, and what the delete iterates — the repo's most-repeated bug is two
+  // copies of "the same" set drifting (a dialog that counted VISIBLE rows while the body posted
+  // hand-picked ids). Derived from `places`, not `filtered`, so a selection survives a filter change
+  // rather than silently shrinking the set the operator is about to delete.
+  const selectedRows = useMemo(() => places.filter((p) => sel.has(p.id)), [places, sel])
+
+  const toggleSel = (id: string) =>
+    setSel((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+
   // ── Row ⇄ pin focus ────────────────────────────────────────────────────────
   // A row carries every field a place HAS (the table is the detail view), so a row click has nothing to
   // open. What it can answer is the one question the table can't: WHERE is this. Clicking a row centers
@@ -130,8 +175,13 @@ export function PlacesView() {
     mapRef.current?.scrollIntoView({ block: 'nearest' })
   }
   // A selection belongs to the region it was made in — carrying an id across a region switch would
-  // highlight nothing and leave a stale pin id pointed at another region's list.
-  useEffect(() => setSelectedId(null), [region])
+  // highlight nothing and leave a stale pin id pointed at another region's list. The BULK selection is
+  // reset for a sharper reason: ids from the old region would still be live in `sel`, and "Remove 3"
+  // would delete rows the operator can no longer see.
+  useEffect(() => {
+    setSelectedId(null)
+    setSel(new Set())
+  }, [region])
 
   const confirm = useConfirm()
   const deleteMut = useMutation({
@@ -142,6 +192,25 @@ export function PlacesView() {
   const onDelete = async (p: PlaceRow) => {
     if (!(await confirm({ title: `Remove ${p.name}?`, body: 'It will no longer be offerable as a drive endpoint.', confirmLabel: 'Remove', tone: 'destructive' }))) return
     deleteMut.mutate({ id: p.id, key: queryKey })
+  }
+
+  // Bulk remove. ⚠ `selectedRows` is read ONCE and drives the count, the confirm copy and the loop, so
+  // the number in the dialog cannot describe a different set than the one deleted.
+  // ⚠ No bulk endpoint exists, so this is N single deletes. They are fired together and awaited as a
+  // group; the list is invalidated once at the end rather than N times.
+  const onBulkDelete = async () => {
+    const doomed = selectedRows
+    if (!doomed.length) return
+    const ok = await confirm({
+      title: `Remove ${doomed.length} place${doomed.length === 1 ? '' : 's'}?`,
+      body: `${doomed.map((p) => p.name).slice(0, 6).join(', ')}${doomed.length > 6 ? `, and ${doomed.length - 6} more` : ''}. They will no longer be offerable as drive endpoints.`,
+      confirmLabel: `Remove ${doomed.length}`,
+      tone: 'destructive',
+    })
+    if (!ok) return
+    await Promise.all(doomed.map((p) => api.deletePlace(p.id)))
+    setSel(new Set())
+    void qc.invalidateQueries({ queryKey })
   }
 
   // Pin set for the map. ⚠ Roles are gone (2026-08-04): every row is a destination, so the only
@@ -163,7 +232,32 @@ export function PlacesView() {
   )
   const topRankCount = places.filter((p) => p.rank != null && p.rank <= TOP_RANK).length
 
+  const allShownSelected = filtered.length > 0 && filtered.every((p) => sel.has(p.id))
   const columns: Column<PlaceRow>[] = [
+    {
+      header: (
+        <Checkbox
+          checked={allShownSelected}
+          aria-label="Select all shown"
+          onCheckedChange={() =>
+            setSel((prev) => {
+              const next = new Set(prev)
+              // ⚠ Acts on the SHOWN rows, matching what the operator can see ticking. The bulk actions
+              // still count `selectedRows` off the full set, so a filtered-away selection is never
+              // silently dropped from the number they are about to authorise.
+              if (allShownSelected) filtered.forEach((p) => next.delete(p.id))
+              else filtered.forEach((p) => next.add(p.id))
+              return next
+            })
+          }
+        />
+      ),
+      headClassName: 'w-9',
+      cellStopPropagation: true,
+      cell: (p) => (
+        <Checkbox checked={sel.has(p.id)} aria-label={`Select ${p.name}`} onCheckedChange={() => toggleSel(p.id)} />
+      ),
+    },
     {
       header: 'Place',
       cellClassName: 'font-medium',
@@ -175,7 +269,11 @@ export function PlacesView() {
             )}
             {p.name}
           </div>
-          <div className="text-xs text-muted-foreground">{p.lat.toFixed(4)}, {p.lng.toFixed(4)}</div>
+          {/* Kind folded in beside the coords rather than carrying its own column: it is null for most
+              rows (towns and cities have no primaryType), so a column of it was mostly dashes. */}
+          <div className="text-xs text-muted-foreground">
+            {p.primaryType ? `${kindLabel(p.primaryType)} · ` : ''}{p.lat.toFixed(4)}, {p.lng.toFixed(4)}
+          </div>
           {/* The access point is shown UNDER the pin, never instead of it — the two are different
               facts and the whole design rests on not confusing them. Only rendered when set, which is
               almost never, so the table stays a list of places rather than a list of coordinates. */}
@@ -187,11 +285,12 @@ export function PlacesView() {
         </>
       ),
     },
-    { header: 'Kind', cellClassName: 'text-muted-foreground', cell: (p) => kindLabel(p.primaryType) },
     {
       header: 'Rank',
-      headClassName: 'text-center w-24',
-      cellClassName: 'text-center',
+      // Right-aligned + tabular: a numeric column is compared DOWN it, and proportional digits make
+      // unequal numbers look equal at a glance.
+      headClassName: 'w-20 text-right',
+      cellClassName: 'text-right',
       // The row itself focuses the map, so this cell keeps its clicks: focusing the field to retype a
       // rank must not also fling the camera somewhere.
       cellStopPropagation: true,
@@ -201,7 +300,7 @@ export function PlacesView() {
         <Input
           type="number"
           min={1}
-          className="h-8 w-16 text-center"
+          className="h-8 w-16 text-right font-mono tabular-nums"
           defaultValue={p.rank ?? ''}
           aria-label={`${p.name} rank`}
           onBlur={(e) => {
@@ -298,39 +397,99 @@ export function PlacesView() {
             </Callout>
           )}
 
-          {region && pins.length > 0 && (
-            <div className="mb-5" ref={mapRef}>
-              <PlacesMap
-                places={pins}
-                bbox={bbox}
-                className="h-72"
-                selectedId={selectedId}
-                onSelect={setSelectedId}
-                focusNonce={focusNonce}
-              />
-              <p className="mt-1.5 text-xs text-muted-foreground">
-                <span style={{ color: PLACE_PIN_COLORS.featured }}>●</span> rank 1–{TOP_RANK} ·{' '}
-                <span style={{ color: PLACE_PIN_COLORS.endpoint }}>●</span> the rest · click a row to find
-                it here
-              </p>
-            </div>
-          )}
+          {/* ⚠ SIDE BY SIDE, not stacked (2026-08-04). The map used to sit ABOVE the table at a fixed
+              height, so it charged ~40% of the viewport on every visit for an answer the operator only
+              sometimes wants — you scrolled past it to reach the list. The list-and-details map pattern
+              puts the two side by side precisely so the map can stay useful without being in the way:
+              it is sticky, so it keeps answering "where is this" as you move DOWN a long list, and the
+              list is narrow enough to stay scannable. Below `lg` it stacks back, list first — a phone is
+              not what this screen is for, but a laptop at 1280 is. */}
+          <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
+            <div>
+              <FilterToolbar
+                search={q}
+                onSearch={setQ}
+                searchPlaceholder="Search name or kind…"
+                shown={filtered.length}
+                total={places.length}
+              >
+                <FilterSelect
+                  value={rankFilter}
+                  onChange={setRankFilter}
+                  allLabel="Any rank"
+                  options={RANK_FILTERS}
+                />
+              </FilterToolbar>
 
-          <DataTable
-            columns={columns}
-            rows={places}
-            rowKey={(p) => p.id}
-            onRowClick={(p) => focusPlace(p.id)}
-            rowClassName={(p) => (p.id === selectedId ? 'bg-muted hover:bg-muted' : undefined)}
-            loading={isPending && !!region}
-            skeletonRows={5}
-            empty={
-              <EmptyState icon={MapPin}>
-                <div className="font-medium text-foreground">No curated places yet</div>
-                <div>Run Curate to draft this region’s destinations, or add a place by name.</div>
-              </EmptyState>
-            }
-          />
+              {sel.size > 0 && (
+                <SelectionBar className="mt-2">
+                  <span className="font-medium">
+                    {sel.size} selected
+                    {/* Says so out loud when the selection reaches past the filter, so "Remove 6" can
+                        never quietly include rows that scrolled out of view behind a search. */}
+                    {selectedRows.length > filtered.filter((p) => sel.has(p.id)).length && (
+                      <span className="ml-1 font-normal text-muted-foreground">
+                        (including {selectedRows.length - filtered.filter((p) => sel.has(p.id)).length} hidden by the filter)
+                      </span>
+                    )}
+                  </span>
+                  <Button variant="outline" size="sm" onClick={() => void onBulkDelete()}>
+                    <Trash2 className="h-3.5 w-3.5" /> Remove {sel.size}
+                  </Button>
+                  <button className="ml-auto text-xs text-muted-foreground hover:text-foreground" onClick={() => setSel(new Set())}>
+                    Clear
+                  </button>
+                </SelectionBar>
+              )}
+
+              <div className="mt-2">
+                <DataTable
+                  columns={columns}
+                  rows={filtered}
+                  rowKey={(p) => p.id}
+                  onRowClick={(p) => focusPlace(p.id)}
+                  rowClassName={(p) => (p.id === selectedId ? 'bg-muted hover:bg-muted' : undefined)}
+                  loading={isPending && !!region}
+                  skeletonRows={5}
+                  pageSize={50}
+                  empty={
+                    <EmptyState icon={MapPin}>
+                      {places.length > 0 ? (
+                        <>
+                          <div className="font-medium text-foreground">Nothing matches</div>
+                          <div>No place here matches that search or filter.</div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="font-medium text-foreground">No curated places yet</div>
+                          <div>Run Curate to draft this region’s destinations, or add a place by name.</div>
+                        </>
+                      )}
+                    </EmptyState>
+                  }
+                />
+              </div>
+            </div>
+
+            {region && pins.length > 0 && (
+              // `top-4` clears the app chrome; the map tracks the list instead of scrolling away from it.
+              <div className="lg:sticky lg:top-4" ref={mapRef}>
+                <PlacesMap
+                  places={pins}
+                  bbox={bbox}
+                  className="h-[34rem]"
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                  focusNonce={focusNonce}
+                />
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  <span style={{ color: PLACE_PIN_COLORS.featured }}>●</span> rank 1–{TOP_RANK} ·{' '}
+                  <span style={{ color: PLACE_PIN_COLORS.endpoint }}>●</span> the rest · click either side
+                  to find it on the other
+                </p>
+              </div>
+            )}
+          </div>
         </>
       )}
 
@@ -443,41 +602,76 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
   onCurated: () => void
 }) {
   const [drafts, setDrafts] = useState<PlaceDraft[]>([])
-  const [kept, setKept] = useState<Set<number>>(new Set())
+  // ⚠ THREE STATES, NOT A CHECKBOX (2026-08-04). A draft is undecided until the operator says otherwise.
+  // This used to be a `Set` of kept indices seeded with EVERY index — keep-all-by-default — which is the
+  // shape human-in-the-loop review design names as manufacturing approvals: the cheap path was
+  // "resolve all 120", and dropping a place cost a click while keeping it cost nothing. Undecided is
+  // now its own state and is NOT resolved, so doing nothing spends nothing.
+  const [decided, setDecided] = useState<Map<number, 'keep' | 'drop'>>(new Map())
+  // Operator edits to the Places QUERY, by draft index. Absent = use what the model drafted.
+  const [edits, setEdits] = useState<Map<number, string>>(new Map())
+  const [editing, setEditing] = useState<number | null>(null)
   const [results, setResults] = useState<CurateResult[] | null>(null)
   const [added, setAdded] = useState<number | null>(null)
+
+  // The query a draft will actually be resolved with — the operator's edit if there is one, else the
+  // model's. ⚠ ONE expression: what the row displays, what the count is built from, and what is posted
+  // all read through this, so the string reviewed is by construction the string sent.
+  const queryOf = (i: number) => edits.get(i) ?? drafts[i]?.query ?? ''
 
   const draftMut = useMutation({
     mutationFn: () => api.draftPlaces({ region }),
     onSuccess: (res) => {
       setDrafts(res.drafts)
-      setKept(new Set(res.drafts.map((_, i) => i))) // keep all by default; the operator prunes down
+      setDecided(new Map())
+      setEdits(new Map())
     },
   })
   const curateMut = useMutation({
-    mutationFn: () => api.curatePlaces({ region, drafts: drafts.filter((_, i) => kept.has(i)) }),
+    mutationFn: () =>
+      api.curatePlaces({
+        region,
+        drafts: drafts.flatMap((d, i) => (decided.get(i) === 'keep' ? [{ ...d, query: queryOf(i) }] : [])),
+      }),
     // Keep the server's `added` — it is the count of rows actually WRITTEN, after dedupe by canonical
     // place_id and after any per-row write failure. Deriving the headline from the resolved rows
     // instead over-counted: two drafts can pin the SAME Google place, and an upsert can fail on its own.
     onSuccess: (res) => { setResults(res.results); setAdded(res.added); onCurated() },
   })
 
-  const toggleKeep = (i: number) =>
-    setKept((s) => {
-      const n = new Set(s)
-      if (n.has(i)) n.delete(i)
-      else n.add(i)
+  const decide = (i: number, v: 'keep' | 'drop') =>
+    setDecided((m) => {
+      const n = new Map(m)
+      // Clicking the decision a row already has clears it — the way back to undecided without a
+      // third button, and the reason Keep and Drop can stay equally weighted.
+      n.get(i) === v ? n.delete(i) : n.set(i, v)
       return n
     })
 
   // Start a fresh draft WITHOUT leaving the panel (after a results summary, or to re-draft).
   const reset = () => {
-    setDrafts([]); setKept(new Set()); setResults(null); setAdded(null)
+    setDrafts([]); setDecided(new Map()); setEdits(new Map()); setEditing(null)
+    setResults(null); setAdded(null)
     draftMut.reset(); curateMut.reset()
   }
 
   const hasDrafts = drafts.length > 0
-  const keptCount = kept.size
+  const keptCount = [...decided.values()].filter((v) => v === 'keep').length
+  const droppedCount = [...decided.values()].filter((v) => v === 'drop').length
+  const undecidedCount = drafts.length - decided.size
+
+  /** Drafts grouped by how far down the model's own confidence they sit. ⚠ The BANDS are the triage:
+   *  review design says route by confidence so attention lands where judgement changes the outcome.
+   *  Rank is the only confidence signal a draft carries, and the deep tail is exactly where the
+   *  business/parking substitutions were found — so it is banded last and never bulk-kept. */
+  const bands = useMemo(() => {
+    const idx = drafts.map((_, i) => i)
+    return [
+      { key: 'top', label: `Most likely to be named · rank 1–${TOP_RANK}`, rows: idx.filter((i) => drafts[i]!.rank <= TOP_RANK), bulk: true },
+      { key: 'mid', label: 'Solid · rank 4–7', rows: idx.filter((i) => drafts[i]!.rank > TOP_RANK && drafts[i]!.rank <= 7), bulk: true },
+      { key: 'tail', label: 'Deep tail · rank 8+ · read these', rows: idx.filter((i) => drafts[i]!.rank > 7), bulk: false },
+    ].filter((b) => b.rows.length > 0)
+  }, [drafts])
   const drafting = draftMut.isPending
   const resolving = curateMut.isPending
   const resolved = results?.filter((r) => r.status === 'resolved').length ?? 0
@@ -580,41 +774,131 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
           </>
         )}
 
-        {/* PRUNE — uncheck the unwanted, then resolve the keepers. */}
+        {/* REVIEW — decide each draft, then resolve only the keepers. */}
         {hasDrafts && !results && (
           <>
-            <SectionLabel>{keptCount} of {drafts.length} kept</SectionLabel>
-            <div className="max-h-[32rem] space-y-0.5 overflow-y-auto rounded-lg border p-1.5">
-              {drafts.map((d, i) => (
-                <label
-                  key={i}
-                  className="flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 hover:bg-muted/50"
-                >
-                  <Checkbox
-                    checked={kept.has(i)}
-                    onCheckedChange={() => toggleKeep(i)}
-                    className="mt-0.5"
-                    aria-label={`keep ${d.name}`}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 text-sm font-medium">
-                      {d.rank <= TOP_RANK && (
-                        <Star
-                          className="h-3 w-3 shrink-0"
-                          style={{ color: PLACE_PIN_COLORS.featured, fill: PLACE_PIN_COLORS.featured }}
-                        />
-                      )}
-                      <span className="truncate">{d.name}</span>
-                      <Badge variant="secondary" className="ml-auto shrink-0 text-[10px]">
-                        rank {d.rank}
-                      </Badge>
-                    </div>
-                    {d.rationale && <div className="truncate text-xs text-muted-foreground">{d.rationale}</div>}
-                  </div>
-                </label>
-              ))}
+            <div className="flex flex-wrap items-center gap-2">
+              <SectionLabel>
+                {keptCount} keeping · {droppedCount} dropped · {undecidedCount} undecided
+              </SectionLabel>
+              {/* ⚠ The honest reading of the spend, shown BEFORE it happens. Nothing in this panel has
+                  cost a Places call yet — the Opus draft is already paid for, the resolve is not. Two
+                  billed calls per keeper is the rate the curate route actually runs at. */}
+              <span className="ml-auto text-xs text-muted-foreground">
+                {keptCount === 0
+                  ? 'Nothing billed yet — Places is only called for what you keep.'
+                  : `≈ ${keptCount * 2} Google Places calls when you resolve · nothing billed yet`}
+              </span>
             </div>
-            <div className="flex justify-end">
+
+            <div className="max-h-[34rem] space-y-3 overflow-y-auto rounded-lg border p-2">
+              {bands.map((band) => {
+                const undecidedInBand = band.rows.filter((i) => !decided.has(i))
+                return (
+                  <div key={band.key}>
+                    <div className="mb-1 flex items-center gap-2 px-1">
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{band.label}</span>
+                      <span className="h-px flex-1 bg-border" />
+                      {/* ⚠ Bulk keep is offered for the confident bands ONLY, and never for the deep
+                          tail — that is where "Serene Lakes" comes back as a realtor. Making it an
+                          explicit button rather than a default is the whole point: approving in bulk
+                          stays possible, but it is an act, not the thing that happens if you do nothing. */}
+                      {band.bulk && undecidedInBand.length > 0 && (
+                        <button
+                          className="shrink-0 text-[11px] text-muted-foreground hover:text-foreground"
+                          onClick={() =>
+                            setDecided((m) => {
+                              const n = new Map(m)
+                              undecidedInBand.forEach((i) => n.set(i, 'keep'))
+                              return n
+                            })
+                          }
+                        >
+                          Keep all {undecidedInBand.length}
+                        </button>
+                      )}
+                    </div>
+
+                    {band.rows.map((i) => {
+                      const d = drafts[i]!
+                      const state = decided.get(i)
+                      return (
+                        <div
+                          key={i}
+                          className={cn(
+                            'mb-1 flex items-start gap-2.5 rounded-md border px-2.5 py-2',
+                            state === 'keep' && 'border-primary/45 bg-primary/5',
+                            state === 'drop' && 'border-transparent opacity-50',
+                            !state && 'border-border',
+                          )}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 text-sm font-medium">
+                              {d.rank <= TOP_RANK && (
+                                <Star className="h-3 w-3 shrink-0" style={{ color: PLACE_PIN_COLORS.featured, fill: PLACE_PIN_COLORS.featured }} />
+                              )}
+                              <span className="truncate">{d.name}</span>
+                              <Badge variant="secondary" className="shrink-0 text-[10px]">rank {d.rank}</Badge>
+                            </div>
+                            {d.rationale && <div className="truncate text-xs text-muted-foreground">{d.rationale}</div>}
+
+                            {/* ⚠ THE QUERY, SHOWN AND EDITABLE. This is the string sent to Google, and it
+                                was previously invisible — only `name` was rendered. So when a draft
+                                resolved to "Serene Lakes Realty" the operator could only discard it,
+                                never correct it, and the same substitution came back on the next run.
+                                Editing here is the cheapest possible fix: it happens BEFORE the billed
+                                resolve, where the guards can only refuse after it. */}
+                            {editing === i ? (
+                              <Input
+                                autoFocus
+                                className="mt-1.5 h-7 font-mono text-xs"
+                                value={queryOf(i)}
+                                aria-label={`Places query for ${d.name}`}
+                                onChange={(e) => setEdits((m) => new Map(m).set(i, e.target.value))}
+                                onBlur={() => setEditing(null)}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') setEditing(null) }}
+                              />
+                            ) : (
+                              <button
+                                className="mt-1 truncate rounded bg-muted/60 px-1.5 py-0.5 text-left font-mono text-[11px] text-muted-foreground hover:text-foreground"
+                                onClick={() => setEditing(i)}
+                                title="Edit the query sent to Google Places"
+                              >
+                                {queryOf(i)}
+                                {edits.has(i) && <span className="ml-1.5 not-italic text-primary">edited</span>}
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Keep and Drop carry the SAME weight — same size, same distance, neither
+                              pre-selected. Clicking the active one returns the row to undecided. */}
+                          <div className="flex shrink-0 gap-1 self-center">
+                            <Button
+                              variant={state === 'keep' ? 'default' : 'outline'}
+                              size="sm"
+                              className="h-7 px-2.5 text-xs"
+                              onClick={() => decide(i, 'keep')}
+                            >
+                              Keep
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className={cn('h-7 px-2.5 text-xs', state === 'drop' && 'border-destructive/50 text-destructive')}
+                              onClick={() => decide(i, 'drop')}
+                            >
+                              Drop
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="flex items-center gap-3">
               <PendingButton
                 onClick={() => curateMut.mutate()}
                 pending={resolving}
@@ -623,6 +907,11 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
                 idleLabel={`Resolve & add ${keptCount}`}
                 pendingLabel="Resolving…"
               />
+              {undecidedCount > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  {undecidedCount} still undecided — they are not resolved and cost nothing.
+                </span>
+              )}
             </div>
           </>
         )}

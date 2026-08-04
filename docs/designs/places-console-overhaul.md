@@ -1,7 +1,10 @@
 # Places console — UX overhaul
 
-**Status:** 💡 idea — 2026-08-04. Research done, three directions rendered as static variants and looked
-at; **nothing built**. Prompted by a founder observation ("the places screen ux could use an overhaul")
+**Status:** ✅ **BUILT 2026-08-04** — B (split workspace) and C (review queue) are both shipped, on the
+founder's call to do both rather than pick one. A was never built: everything in it is in B. Research +
+the three directions are kept below because they are the argument for what was built, and because the
+next person to touch this screen should know which parts were evidence and which were taste.
+Prompted by a founder observation ("the places screen ux could use an overhaul")
 after a session that removed the Curate "How many" field. Extends
 [admin-ux-review.md](admin-ux-review.md), whose 2026-06-19 pass covered Runs/Regions/POIs/Reference but
 **not** Places. The machinery this is about is [places-endpoints-spec.md](places-endpoints-spec.md);
@@ -70,9 +73,10 @@ Ordered by how much it costs. The first two are structural; the rest are gaps.
 7. **No bulk selection**, so "remove these six" is six confirm dialogs. `CorpusTab` already has the
    `SelectionBar` pattern to copy.
 
-⚠ Unverified: the map rendered as an empty block in two passes. The explicit "browser key not set"
-fallback did **not** appear, so the key is present — this may be tile loading or screenshot timing.
-Confirm before designing around it.
+✅ **Resolved 2026-08-04 — not a defect.** The map rendered as an empty block in two early passes,
+which is why it was recorded as unverified rather than asserted as a bug. Once B was on screen the map
+drew normally (satellite tiles, the region bbox in green): it was tile-load timing against the
+screenshot, not a missing key. Nothing to fix, and the map earns the space B gives it.
 
 ## Three directions
 
@@ -92,6 +96,30 @@ the browser. The file is a throwaway in the session scratch dir, not committed.
 **Recommendation: B for the steady-state screen, C for the Curate flow — they are different screens
 solving different jobs, and doing only one leaves half the problem.** A is what you build if only one
 afternoon exists; it is strictly a subset of B.
+
+### What shipped (2026-08-04)
+
+**B.** Map and list side by side, map sticky so it keeps answering as you move down a long list, and it
+collapses to a stacked layout below `lg`. Filter toolbar (search over name + kind, plus rank / unranked /
+has-access-point). Bulk select with a `SelectionBar` and one bulk remove. `Kind` folded into the name's
+sub-line because it is null for most rows. Rank right-aligned and tabular. Problems 1, 4, 5, 6, 7.
+
+⚠ One thing B does that the mockup did not: the selection is derived from the FULL set, not the filtered
+one, and the bar says so out loud when a selection reaches past the current filter
+("including N hidden by the filter"). Otherwise "Remove 6" could quietly include rows the operator can no
+longer see — the count and the act would be two different sets, which is the failure this repo keeps
+paying for.
+
+**C.** A draft is now **undecided** until the operator says otherwise — the pre-checked `Set` is gone.
+Candidates are banded by rank; the confident bands offer an explicit "Keep all N" button, the deep tail
+never does. The Places `query` is rendered and **editable in place**, and the edited value is what gets
+posted — `queryOf(i)` is the single expression behind what is displayed, what is counted, and what is
+sent. A running line says what the resolve will cost and that nothing has been billed yet. Problems 2
+and 3.
+
+⚠ No server change was needed for the editable query: the curate route already resolves on `d.query`,
+so the client posting a corrected one Just Works. That is worth knowing before anyone "adds an endpoint
+for it".
 
 ## Not proposed here
 
