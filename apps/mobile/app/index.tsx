@@ -48,6 +48,9 @@ import {
   type ExampleAsk,
 } from '@/lib/planner-examples'
 import { markListenRowSeen, shouldShowListenRow } from '@/lib/client-flags'
+import { driveMinutes } from '@/lib/labels'
+import { useLatestRun } from '@/lib/useLatestRun'
+import { useNavigateOnce } from '@/lib/useNavigateOnce'
 import {
   buildPlaceholderExamples,
   placeholderAt,
@@ -296,14 +299,8 @@ export default function HomeScreen() {
   const rotation = cachedRegion?.rotation ?? 0
   const nextRotation = rotation + 1
 
-  // Navigation in-flight guard: expo-router does NOT de-dupe identical pushes, so a fast
-  // double-tap would stack two identical screens. Set on the first push, cleared on refocus.
-  const navigatingRef = useRef(false)
-  const navigateOnce = useCallback((go: () => void) => {
-    if (navigatingRef.current) return
-    navigatingRef.current = true
-    go()
-  }, [])
+  // The double-push guard, and its release on refocus, both live in the hook (src/lib/useNavigateOnce).
+  const navigateOnce = useNavigateOnce()
 
   // ⚠ STABLE ON PURPOSE — `DriveCard` (src/ui/DriveList.tsx) is memoized, and a freshly-built handler
   // would bust that memo on every render of this screen, which ticks at 2 Hz while a preview clip
@@ -315,15 +312,12 @@ export default function HomeScreen() {
     [navigateOnce, router],
   )
 
-  // Monotonic request id: the focus load, the reconnect self-heal and a Better Auth session refetch
-  // can all fire within the same moment (they share the network edge), and without this the SLOWER
-  // of two overlapping loads wins and can stamp a stale list — or a stale error — over a good one.
-  // Only the newest run is allowed to write.
-  const loadSeq = useRef(0)
+  // Only the newest load may write — the focus load, the reconnect self-heal and a Better Auth
+  // session refetch all share one network edge (src/lib/useLatestRun).
+  const beginLoad = useLatestRun()
 
   const load = useCallback(async () => {
-    const seq = ++loadSeq.current
-    const isCurrent = () => loadSeq.current === seq
+    const isCurrent = beginLoad()
     setError(null)
     // Only an ACCOUNT can own drives. An anonymous session is truthy and owns nothing, so this goes
     // through the INV-9 helper rather than `!session` — skip the gated call and show whatever's saved
@@ -355,7 +349,7 @@ export default function HomeScreen() {
     } finally {
       if (isCurrent()) setLoading(false)
     }
-  }, [signedIn])
+  }, [beginLoad, signedIn])
 
   // The regions load. ⚠ It is the conversation's PREREQUISITE, not a nicety: POST /drives/plan
   // requires a regionId, so a failed load means there is nothing to talk to — hence the outage card
@@ -433,7 +427,6 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      navigatingRef.current = false // any in-flight nav settled (or the rider backed out)
       // ⚠ Re-reads CREDITS on the way back from sign-up, which is exactly what the disclosure on a
       // gated card needs. It must NOT re-fire the create — the rider taps once more (see doCreate).
       void load()
@@ -585,7 +578,7 @@ export default function HomeScreen() {
             // already. Null means UNKNOWN, and folding it into zero inflates the quiet-road rate
             // that drive selection gets tuned against.
             stop_count: p.estStopCount ?? null,
-            duration_min: Math.round(p.durationSeconds / 60),
+            duration_min: driveMinutes(p.durationSeconds),
             // ⚠ A loop is `end === start`, NEVER `via.length`. A one-way route KEEPS its via
             // midpoints (apps/api/src/plan-route.ts `toPlannedRoute` — the round-trip mapping only
             // moves the far end into `via`), so counting via would report every via'd one-way as a

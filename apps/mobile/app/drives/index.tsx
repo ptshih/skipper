@@ -26,6 +26,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect, useRouter } from 'expo-router'
 import { errorMessage, listDrives, type DriveSummary } from '@/lib/api'
+import { useLatestRun } from '@/lib/useLatestRun'
+import { useNavigateOnce } from '@/lib/useNavigateOnce'
 import { isSignedIn, useSession } from '@/lib/auth'
 import { useIsOffline } from '@/lib/connectivity'
 import { listDownloadedDrives } from '@/lib/offline'
@@ -83,16 +85,10 @@ export default function MyDrivesScreen() {
   // Monotonic request id: the focus load, the reconnect self-heal and a Better Auth `$sessionSignal`
   // refetch all share the same network edge and can fire in one moment. Without this the SLOWER of two
   // overlapping loads wins and can stamp a stale list — or a stale error — over a good one.
-  const loadSeq = useRef(0)
+  const beginReload = useLatestRun()
 
-  // Navigation in-flight guard: expo-router does NOT de-dupe identical pushes, so a fast double-tap on
-  // a card stacks two identical detail screens. Set on the first push, cleared on refocus.
-  const navigatingRef = useRef(false)
-  const navigateOnce = useCallback((go: () => void) => {
-    if (navigatingRef.current) return
-    navigatingRef.current = true
-    go()
-  }, [])
+  // The double-push guard, and its release on refocus (src/lib/useNavigateOnce).
+  const navigateOnce = useNavigateOnce()
 
   // ⚠ BOTH OF THESE ARE HOOKS AND THEY LIVE UP HERE ON PURPOSE, far from the list that reads them:
   // five early returns sit between this line and the render, and a hook below any of them is a
@@ -113,8 +109,7 @@ export default function MyDrivesScreen() {
   )
 
   const reload = useCallback(async () => {
-    const seq = ++loadSeq.current
-    const isCurrent = () => loadSeq.current === seq
+    const isCurrent = beginReload()
     setError(null)
     if (!signedIn) {
       // ⚠ NO `listDownloadedDrives()` here, and that omission IS rule 1. Home reads disk on this
@@ -154,13 +149,12 @@ export default function MyDrivesScreen() {
     } finally {
       if (isCurrent()) setLoading(false)
     }
-  }, [signedIn])
+  }, [beginReload, signedIn])
 
   // FOCUS, not mount, and both halves matter: a drive deleted on the detail screen must fall out of
   // this list on the way back, and a return from sign-up must repopulate it.
   useFocusEffect(
     useCallback(() => {
-      navigatingRef.current = false // any in-flight nav settled (or the rider backed out)
       void reload()
     }, [reload]),
   )

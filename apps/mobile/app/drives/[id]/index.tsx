@@ -19,7 +19,7 @@ import {
   type DownloadDirState,
   type DownloadProgress,
 } from '@/lib/offline'
-import { cleanPlaceName, clipLength, spokenLength, stopLabel, stopMeta } from '@/lib/labels'
+import { cleanPlaceName, clipLength, driveLength, spokenLength, stopLabel, stopMeta } from '@/lib/labels'
 import { useTheme } from '@/theme'
 import { border, space } from '@/theme/tokens'
 import {
@@ -570,7 +570,7 @@ export default function DriveDetailScreen() {
       />
     )
 
-  const durationMin = drive.durationSeconds ? Math.round(drive.durationSeconds / 60) : null
+  const length = driveLength(drive.durationSeconds)
   // The clip behind the now-playing card (name + per-clip CC BY-SA credit) while a stop plays.
   const activeClip =
     preview.activeSeq == null
@@ -660,7 +660,7 @@ export default function DriveDetailScreen() {
             <Divider dashed />
             <View style={styles.permitRow}>
               <Text variant="monoStrong" color="inkDim">
-                {stops.length} STOPS{durationMin ? ` · ~${durationMin} MIN` : ''}
+                {stops.length} STOPS{length ? ` · ~${length}` : ''}
               </Text>
               {/* Offline state rides here as a compact chip — the ACTION lives in the ⋯ menu. */}
               {downloading ? (

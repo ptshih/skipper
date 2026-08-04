@@ -15,7 +15,7 @@
 import { memo } from 'react'
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import type { DriveSummary } from '@/lib/api'
-import { cleanPlaceName } from '@/lib/labels'
+import { cleanPlaceName, driveLength, spokenDriveLength } from '@/lib/labels'
 import { space } from '../theme/tokens'
 import { Badge } from './Badge'
 import { Card } from './Card'
@@ -39,7 +39,9 @@ export interface DriveCardProps {
  * ever change by a refetch replacing the array.
  */
 export const DriveCard = memo(function DriveCard({ drive, onPress }: DriveCardProps) {
-  const min = drive.durationSeconds ? Math.round(drive.durationSeconds / 60) : null
+  const length = driveLength(drive.durationSeconds)
+  // The spoken twin of that badge — same seconds, one arithmetic (see labels.ts).
+  const spoken = spokenDriveLength(drive.durationSeconds)
   // ⚠ CLEANED ON BOTH SIDES — the drift this file exists to end. `cleanPlaceName` strips Wikipedia's
   // disambiguator and is display-only, which is exactly what a SPOKEN label is too.
   const label = cleanPlaceName(drive.label)
@@ -47,7 +49,7 @@ export const DriveCard = memo(function DriveCard({ drive, onPress }: DriveCardPr
     <View
       accessible
       accessibilityRole="button"
-      accessibilityLabel={`${label}${drive.clipCount ? `, ${drive.clipCount} stops` : ''}${min ? `, ${min} minutes` : ''}`}
+      accessibilityLabel={`${label}${drive.clipCount ? `, ${drive.clipCount} stops` : ''}${spoken ? `, ${spoken}` : ''}`}
     >
       <Card onPress={() => onPress(drive.driveId)}>
         {/* ⚠ NO `numberOfLines`, and this is the reconciliation of the second drift: MY DRIVES ran
@@ -63,7 +65,7 @@ export const DriveCard = memo(function DriveCard({ drive, onPress }: DriveCardPr
             {drive.clipCount} {drive.clipCount === 1 ? 'stop' : 'stops'}
           </Text>
           {/* A fill, not a glow — inside DESIGN §8's one-amber budget. */}
-          {min ? <Badge tone="amber" label={`${min} MIN`} /> : null}
+          {length ? <Badge tone="amber" label={length} /> : null}
         </View>
       </Card>
     </View>

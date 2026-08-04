@@ -63,6 +63,39 @@ export const spokenLength = (ms: number): string => {
   return `${m} minute${m === 1 ? '' : 's'} ${s} second${s === 1 ? '' : 's'}`
 }
 
+/**
+ * A drive's length in whole minutes. The arithmetic, once, for everything that needs the NUMBER —
+ * today that is the funnel's `duration_min` and `driveLength` below.
+ */
+export const driveMinutes = (seconds: number): number => Math.max(0, Math.round(seconds / 60))
+
+/**
+ * The same length as the cards SHOW it — `36 MIN` — or '' when there is none to show.
+ *
+ * ⚠ ONE expression, three renderings, and they had already drifted. The drive card, the proposal
+ * card and the drive placard each rounded `durationSeconds / 60` themselves; two of them guarded a
+ * missing duration and the third did not, so the same absent value rendered nothing on one surface
+ * and `0 MIN` on another. Same rule `clipLength` makes for a zero clip, for the same reason: a
+ * missing number is not a measurement of zero, and printing it as one reads as a broken drive.
+ * (The `~` on the detail placard stays at that call site — approximating the whole drive is that
+ * screen's voice, not this label's job.)
+ */
+export const driveLength = (seconds?: number | null): string =>
+  seconds == null || !Number.isFinite(seconds) || seconds <= 0 ? '' : `${driveMinutes(seconds)} MIN`
+
+/**
+ * The same length as a screen reader should HEAR it — `36 minutes`, or '' when there is none.
+ *
+ * ⚠ The pair rule `spokenLength` states for clips, now stated for drives: a glance format owes a
+ * spoken twin, and both must come from ONE arithmetic. The drive card renders `36 MIN` and speaks
+ * "36 minutes" from the same seconds — with the label extracted and this twin left behind, the two
+ * could have disagreed about a rounding forever and no test would have noticed.
+ */
+export const spokenDriveLength = (seconds?: number | null): string => {
+  const m = seconds == null || !Number.isFinite(seconds) || seconds <= 0 ? 0 : driveMinutes(seconds)
+  return m <= 0 ? '' : `${m} minute${m === 1 ? '' : 's'}`
+}
+
 // Wikipedia disambiguates place TITLES with a trailing ", <US State>" — "Tahoe Keys,
 // California", "Rubicon, California". Stripped at the VIEW boundary so a scraped article
 // title reads like a place a person would actually say. DISPLAY-ONLY: the data layer keeps

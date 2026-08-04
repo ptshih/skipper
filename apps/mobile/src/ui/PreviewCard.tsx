@@ -15,7 +15,7 @@
 import { useMemo, type ReactNode } from 'react'
 import { ActivityIndicator, StyleSheet, useAnimatedValue, View } from 'react-native'
 import type { DriveProposal } from '@/lib/api'
-import { cleanPlaceName } from '@/lib/labels'
+import { cleanPlaceName, driveLength } from '@/lib/labels'
 import { isRoundTrip, returnLegOf, turnaroundOf } from '@/lib/planner-route'
 import { border, radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
@@ -224,7 +224,7 @@ export function PreviewCard({
     )
   }
 
-  const min = Math.round(proposal.durationSeconds / 60)
+  const length = driveLength(proposal.durationSeconds)
   // ⚠ STRICT `=== 0`. `estStopCount` is nullish-able and `null` means UNKNOWN, not zero — a null must
   // never disable the CTA or claim the road is quiet.
   const noStops = proposal.estStopCount === 0
@@ -312,7 +312,7 @@ export function PreviewCard({
       </View>
 
       <View style={styles.statRow}>
-        <Badge tone="amber" label={`${min} MIN`} />
+        {length ? <Badge tone="amber" label={length} /> : null}
         {proposal.estStopCount != null ? (
           <Badge
             tone="pine"
