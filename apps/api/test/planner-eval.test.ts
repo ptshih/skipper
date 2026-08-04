@@ -95,6 +95,17 @@ describe('voice gate', () => {
     expect(voiceCheck(outcome({ say: 'Off we go 🚗' })).pass).toBe(false)
   })
 
+  // ⚠ INV-8, observed live 2026-08-03 during a replay: the model serialized the tool call into the
+  // rider-visible line instead of emitting a tool_use block, so the route never fired and the bubble
+  // would have shown raw markup. plan-route.ts suppresses it; the panel must COUNT it, or a
+  // suppressed defect grows in the dark.
+  test('a leaked tool call in the prose fails', () => {
+    const leaked = '<invoke name="plan_route">\n<parameter name="say">Kings Beach out to Incline.</parameter>'
+    const r = voiceCheck(outcome({ say: leaked }))
+    expect(r.pass).toBe(false)
+    expect(r.findings.join(' ')).toContain('TOOL CALL leaked')
+  })
+
   test('an ordinary short line passes', () => {
     expect(voiceCheck(outcome({ say: "Kings Beach out to Incline, and back around. Want me to draw that up?" })).pass).toBe(true)
   })

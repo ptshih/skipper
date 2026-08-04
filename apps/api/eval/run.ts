@@ -27,6 +27,11 @@ const args = process.argv.slice(2)
 const APPLY = args.includes('--apply')
 const NO_JUDGE = args.includes('--no-judge')
 const ONLY = args.includes('--only') ? args[args.indexOf('--only') + 1] : null
+/** ⚠ A MEASUREMENT LEVER, not a config. Sweeps reasoning depth so the empty-say-on-draw defect can be
+ *  attributed rather than guessed at; production keeps `PLANNER_EFFORT` until a founder moves it. */
+const EFFORT = args.includes('--effort')
+  ? (args[args.indexOf('--effort') + 1] as 'low' | 'medium' | 'high')
+  : undefined
 
 /** Rough per-turn cost, for the preview only. ⚠ Never used in the report — that reads real usage. */
 const EST_USD_PER_TURN = 0.02
@@ -58,6 +63,7 @@ async function replay(scenario: Scenario): Promise<TurnOutcome[]> {
       regionName: FIXTURE_REGION,
       anchors: FIXTURE_ANCHORS,
       ...wrapUp,
+      ...(EFFORT ? { effort: EFFORT } : {}),
     })
 
     outcomes.push({

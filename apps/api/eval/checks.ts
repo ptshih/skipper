@@ -90,6 +90,11 @@ export function routingCheck(o: TurnOutcome, drawnBefore: ReadonlySet<string>): 
 const MARKUP = [/\*\*/, /^#{1,6}\s/m, /^\s*[-*]\s/m, /\[.+\]\(.+\)/, /`/]
 /** Emoji and pictographs — banned, and the app's own icons are vector for the same reason. */
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u
+/** INV-8's failure mode: a tool call serialized into rider-visible prose instead of a tool_use block.
+ *  Observed live 2026-08-03 on a turn that should have drawn. ./plan-route suppresses it in
+ *  production; here it must be COUNTED, because a suppressed defect an eval cannot see is a defect
+ *  that silently grows. */
+const LEAKED_TOOL_CALL = /<(invoke|function_calls|parameter)\b/i
 
 export function voiceCheck(o: TurnOutcome): TurnEval {
   const findings: string[] = []
@@ -99,6 +104,9 @@ export function voiceCheck(o: TurnOutcome): TurnEval {
   // is the ONLY mechanism — and it has already failed in production (`route_wordless`).
   if (o.say.trim() === '') findings.push('empty say — the rider types and the screen does not move')
 
+  if (LEAKED_TOOL_CALL.test(o.say)) {
+    findings.push('a TOOL CALL leaked into the spoken line (INV-8) — the route never fired and the rider reads raw markup')
+  }
   if (MARKUP.some((re) => re.test(o.say))) findings.push('markup in a spoken line — it renders as literal characters')
   if (EMOJI.test(o.say)) findings.push('emoji in a spoken line')
 

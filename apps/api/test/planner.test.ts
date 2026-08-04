@@ -127,16 +127,28 @@ describe('plan_route tool', () => {
     expect(PLAN_ROUTE_TOOL.name).toBe('plan_route')
   })
 
-  test('the five fields the handler translates all exist, and only the endpoints are required', () => {
+  // ⚠ THE FIELD THAT REVERSED A LONG-STANDING DECISION, and it is pinned so nobody restores the old
+  // shape from the old argument. Measured 2026-08-03: on EVERY draw turn the model emitted the tool
+  // JSON and no text block — under the new prompt AND the pre-rewrite one — so every rider heard the
+  // server's one fixed fallback instead of the Skipper saying their drive back. Required, not
+  // optional: an optional field the model may omit reproduces exactly the defect it fixes.
+  test('`say` is a REQUIRED field on the tool', () => {
+    const props = PLAN_ROUTE_TOOL.input_schema.properties as Record<string, { type: string }>
+    expect(props.say?.type).toBe('string')
+    expect(PLAN_ROUTE_TOOL.input_schema.required).toContain('say')
+  })
+
+  test('every field the handler translates exists, and only the endpoints and the line are required', () => {
     // These names are the MODEL's vocabulary, deliberately not the wire DTO's camelCase — toPlannedRoute
     // (./plan-route) reads exactly these keys, so a rename here is a silently dropped route.
     const props = PLAN_ROUTE_TOOL.input_schema.properties as Record<string, unknown>
     expect(Object.keys(props).sort()).toEqual(
-      ['end_anchor_id', 'round_trip', 'start_anchor_id', 'target_minutes', 'via_anchor_ids'].sort(),
+      ['end_anchor_id', 'round_trip', 'say', 'start_anchor_id', 'target_minutes', 'via_anchor_ids'].sort(),
     )
     // Requiring round_trip or target_minutes would push the model to assert an intent the rider never
-    // expressed just to satisfy the schema.
-    expect(PLAN_ROUTE_TOOL.input_schema.required).toEqual(['start_anchor_id', 'end_anchor_id'])
+    // expressed just to satisfy the schema. `say` is different in kind — there is no honest default
+    // for "what the Skipper said", and an optional one reproduces the wordless-draw defect.
+    expect(PLAN_ROUTE_TOOL.input_schema.required).toEqual(['say', 'start_anchor_id', 'end_anchor_id'])
   })
 
   test('the via cap leaves room for the turnaround the server APPENDS', () => {
@@ -156,10 +168,11 @@ describe('plan_route tool', () => {
     expect(PLAN_ROUTE_TOOL.description).not.toContain('never call this a second time')
   })
 
-  test('it still demands a line in the same turn as the call', () => {
-    // Nothing STRUCTURALLY guarantees a text block rides with a tool call (`say` is deliberately not a
-    // tool field), so this sentence plus the prompt's are the only things preventing `route_wordless`.
-    expect(PLAN_ROUTE_TOOL.description).toContain('a call with no line')
+  test('it still demands the line, and now names the field that carries it', () => {
+    // The prompt's "say a line every single turn" was measured NOT to work on a draw turn, which is
+    // why `say` is a required field rather than a hope. The description must point at it by name.
+    expect(PLAN_ROUTE_TOOL.description).toContain('`say`')
+    expect(PLAN_ROUTE_TOOL.description).toContain('watch nothing happen')
   })
 })
 
@@ -274,6 +287,49 @@ describe('planner outcome classification', () => {
     )
     expect(turn.outcome).toBe('route')
     expect(turn.rawRoute).toEqual({ start_anchor_id: 'a', end_anchor_id: 'b' })
+  })
+
+  // ⚠ THE WORDLESS-DRAW FIX. Measured 2026-08-03: on a draw turn this model emits the tool JSON and NO
+  // text block at all — every time, under the pre-rewrite prompt too — so the rider heard the server's
+  // one fixed fallback instead of their drive said back. `say` is now a required tool field and gets
+  // unwrapped here.
+  test('the line is unwrapped from the tool call when no text block came back', async () => {
+    const turn = await runPlannerTurn(
+      baseArgs(
+        fakeClient({
+          stop_reason: 'tool_use',
+          content: [{ type: 'tool_use', name: 'plan_route', input: { say: 'There she is.', start_anchor_id: 'a', end_anchor_id: 'b' } }],
+        }),
+      ),
+    )
+    expect(turn.outcome).toBe('route')
+    expect(turn.say).toBe('There she is.')
+  })
+
+  test('a REAL text block still wins over the tool field', async () => {
+    // A model that speaks both ways must not have the streamed prose overridden by the call's copy.
+    const turn = await runPlannerTurn(
+      baseArgs(
+        fakeClient({
+          stop_reason: 'tool_use',
+          content: [textBlock('Streamed line.'), { type: 'tool_use', name: 'plan_route', input: { say: 'Tool line.', start_anchor_id: 'a', end_anchor_id: 'b' } }],
+        }),
+      ),
+    )
+    expect(turn.say).toBe('Streamed line.')
+  })
+
+  test('a non-string say reads as ABSENT rather than reaching the rider', async () => {
+    // `input` is model output. A cast here would put "[object Object]" in the bubble.
+    const turn = await runPlannerTurn(
+      baseArgs(
+        fakeClient({
+          stop_reason: 'tool_use',
+          content: [{ type: 'tool_use', name: 'plan_route', input: { say: { oops: 1 }, start_anchor_id: 'a', end_anchor_id: 'b' } }],
+        }),
+      ),
+    )
+    expect(turn.say).toBe('')
   })
 
   // ⚠ A tool block with the WRONG name is not a route. This is not hypothetical — writing these tests

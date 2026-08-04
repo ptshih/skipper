@@ -129,6 +129,28 @@ type DegradedReason =
   | 'refused'
   | 'route_untranslatable'
   | 'route_wordless'
+  /** The model serialized a TOOL CALL into rider-visible prose instead of emitting a tool_use block —
+   *  INV-8's documented failure mode. Observed on the live model 2026-08-03 during an eval replay. */
+  | 'say_leaked_tool_call'
+
+/**
+ * Did the model write a tool call into the prose instead of calling the tool?
+ *
+ * ⚠ THIS IS INV-8's FAILURE MODE, AND IT IS NOT HYPOTHETICAL — it was observed on the live model on
+ * 2026-08-03 during an eval replay, on a turn that should have drawn: `say` came back as
+ * `<invoke name="plan_route"><parameter name="say">…` and the route was never emitted. The turn
+ * succeeds, no error is raised, nothing upstream can tell — and the rider reads raw XML in a chat
+ * bubble from a character who is supposed to be a man at a car window.
+ *
+ * ⚠ The right response is to SUPPRESS, never to salvage. Parsing the leaked text back into a route
+ * would mean reconstructing a billed request from prose the model was told not to write, and the ids
+ * inside it are exactly as untrusted as any other model output — which is why INV-1 re-asserts them at
+ * the wire. The rider gets the retry line and says it again; that costs one turn and cannot go wrong.
+ *
+ * Matched on the block shape rather than the tool name, since a leak can name any tool, and kept
+ * deliberately narrow so ordinary prose about a drive can never trip it.
+ */
+const LEAKED_TOOL_CALL = /<(invoke|function_calls|parameter)\b|<\/(invoke|function_calls|parameter)>/i
 
 /**
  * ONE structured line when a paid turn produced nothing the rider can use.
@@ -179,6 +201,15 @@ function noteDegraded(reason: DegradedReason): void {
  *  operator sees" true by CONSTRUCTION rather than by convention. An emit at either call site instead
  *  would be a second thing to keep in sync — the same reason there is only one response builder. */
 function toResponse(turn: PlannerTurn): DrivePlanResponse {
+  // ⚠ FIRST, BEFORE ANY BRANCH, because it can happen on ANY of them and the consequence is identical:
+  // raw markup in the rider's chat bubble. See LEAKED_TOOL_CALL. The route (if any) is kept — it came
+  // from a real tool_use block and is unaffected — but the prose is replaced wholesale rather than
+  // sanitized, since a half-stripped tag is still not something this character would say.
+  if (turn.say && LEAKED_TOOL_CALL.test(turn.say)) {
+    noteDegraded('say_leaked_tool_call')
+    return { say: VOICE.retry, done: false }
+  }
+
   switch (turn.outcome) {
     case 'route': {
       const route = toPlannedRoute(turn.rawRoute)
@@ -186,11 +217,13 @@ function toResponse(turn: PlannerTurn): DrivePlanResponse {
       // simply are not handed a drive to confirm — which is why this, uniquely, is a degradation the
       // vendor's own stop_reason calls a success.
       if (!route) noteDegraded('route_untranslatable')
-      // ⚠ BOTH BRANCHES BACKSTOP AN EMPTY `say`, and the route branch did not until 2026-08-03. Nothing
-      // structurally guarantees a text block rides with a tool call (see PLAN_ROUTE_TOOL's note on why
-      // `say` is not a tool field) — the prompt's "say a line every single turn" is the only thing
-      // asking for one, and the model drops it on low-content turns: a rider answering "cool" after a
-      // draw got `{ say: "", route }` back, verbatim.
+      // ⚠ BOTH BRANCHES BACKSTOP AN EMPTY `say`, and this is now the LAST resort rather than the only
+      // one. The prompt's "say a line every single turn" was measured not to work at all on a draw
+      // turn — the model emits the tool JSON and no text block, on every draw, under either prompt
+      // (2026-08-03). So `say` became a REQUIRED field on PLAN_ROUTE_TOOL and ./planner unwraps it;
+      // read that note before touching this. Reaching this line now means the model returned a route
+      // with neither a text block NOR a `say` in the call, which is a schema violation rather than the
+      // ordinary case it used to be — so a rise in `route_wordless` is now a much sharper signal.
       //
       // That used to be survivable by accident: the empty bubble arrived WITH a card, so the turn still
       // looked like something happened. It stopped being survivable when the client began refusing to

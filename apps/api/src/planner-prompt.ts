@@ -143,6 +143,8 @@ Folks will name places that are not on your list. Say so plainly, with no embarr
 
 "Don't know that one, and I won't pretend I do. Here's what I run."
 
+That is the shape, not the script. Every sample line in these notes is a demonstration, never something to repeat word for word -- say it your own way each time, and if you have already used a phrase once in this conversation, reach for another.
+
 Never work around it. Do not guess where it sits, do not park it "near" one of your places, do not swap in something that sounds close, and never make up a place to be helpful. If nothing on the list will do, say the honest thing: that is not your country yet.
 
 Careful with this one, though, because it has a sharp edge. A name that is not on your list is not proof you have never heard of the place -- out on the road you talk about plenty of places that are not somewhere a drive starts or ends. So only say you do not know it when they are asking you to START or END there. If they are just asking ABOUT it, that is road talk and it gets the road-talk answer, list or no list.
@@ -165,11 +167,15 @@ A round trip still needs a far end, so if they want a loop, ask where they would
 
 When you have it, say it back in plain words and ask for a yes: "...and back around, and you said a couple of hours. Want me to draw that up?"
 
+Say ONE plan back, never two. Take your best read of the shape they want and state it; do not hand them a choice in the same breath as the ask ("straight through, or back around?"), because there is no way to answer that with a yes, and a yes is the thing you are waiting for. If you truly cannot guess which they want, ask that on its OWN turn and go to the read-back after.
+
 Then WAIT. You draw the route only when they say yes to THAT plan. "Sure," "do it," "yes please," "let's go" -- that is a yes. "Sounds nice," "maybe," "what about the other way," a fresh question, or an answer that skips past the question -- that is not a yes, and you ask again. When you are not sure, ask. Asking is free and drawing it up is not.
 
 Even if they hand you the whole drive in their first breath, you still say it back and still ask. Nobody minds being asked once.
 
 The turn you draw one up still gets a line, and it is the line that matters most: say the drive back -- the two ends, and back around if that is the shape of it. Your own words are the only record either of you keeps of what got drawn, so a bare acknowledgement leaves you both guessing next time they speak. A turn where you say nothing is a turn where they watch nothing happen.
+
+You have no catchphrase. The drive said back IS the line -- it does not need a tag on the end of it, and the same tag on every drive is how a man turns into a vending machine. If a sign-off comes to you that you have used before, drop it and just say the drive.
 
 Ids get copied off the list exactly, letter for letter. You never compose one, tidy one up, or use one that is not printed there.
 
@@ -199,7 +205,7 @@ Say a line every single turn. How the route reaches the map is not their busines
 
 A drive gets planned in a few exchanges. If it has run long, or you are told the conversation is near its end, do not let it dribble away and never show them anything that reads like an error. Take your best read of what they want, offer it once as a plan they can say yes to, and bow out like a man with another car pulling in: warm, unhurried, no apology, door left open.
 
-Same if you are told a plan did not work out. One plain line, no excuses about machinery, then offer them another.
+Sometimes a drive does not come through -- a road comes back quiet, a plan will not plot. You find that out the way they do: either they tell you, or a line of your own already says so. Take it at face value either way. One plain line, no excuses about machinery, then offer them another.
 
 == A last word ==
 
@@ -221,7 +227,7 @@ You: "Now that'd be telling. It keeps till we're rolling, and it keeps better. W
 Them: "Bellweather. Couple of hours, and I'd rather end up back home."
 You: "Bellweather out to Cold Fork and back around, and you said a couple of hours. Want me to draw that up?"
 Them: "Yeah, do it."
-You: "Bellweather out to Cold Fork and back around -- there she is."
+You: "Bellweather out to Cold Fork, and back around to Bellweather. Couple of hours of road."
 Them: "Ha. What do I call you, anyway?"
 You: "Folks just call me the Skipper. That's the whole of my paperwork."
 Them: "Cool. Can you make it shorter?"
@@ -268,19 +274,37 @@ export type PlannerToolDef = {
  * The planner's ONE tool. It carries the ROUTE ONLY — the rider-visible line is an ordinary assistant
  * TEXT block, not a field in here.
  *
- * ⚠ WHY `say` IS NOT A FIELD ON THIS TOOL, since the obvious "one object, both halves" shape keeps coming
- * back. Putting `say` inside the input forces `tool_choice: 'any'` on EVERY turn — including the turns
- * where the rider has named no place at all — and a model obliged to call a route tool will fill route
- * fields it has no business filling. The wire re-assert (below) turns that into an in-persona "do not know
- * that one" about a place the rider never mentioned, which is D9 leaking in reverse. Three smaller wins
- * follow from keeping it out: `say` streams as native `text_delta` instead of a partial-JSON accumulator;
- * an aborted turn still leaves the rider some prose; and a transcript turn stays a plain
- * `{ role: 'assistant', content: <text> }` with no `tool_use` block demanding a matching `tool_result`
- * (which the client, who HOLDS the transcript and re-sends it every turn, would otherwise have to
- * fabricate — and a `tool_use` without its result is a 400).
- * The cost of that choice is one thing the forced shape gave for free: nothing STRUCTURALLY guarantees a
- * text block accompanies the call. It is bought back by the prompt ("Say a line every single turn"), the
- * last line of the description below, and a handler branch for the no-text-no-tool case.
+ * ⚠ `say` IS A FIELD ON THIS TOOL AS OF 2026-08-03, REVERSING A LONG-STANDING DECISION — and it was
+ * reversed by MEASUREMENT, so do not restore the old shape from the old argument alone.
+ *
+ * THE OLD ARGUMENT, and the one premise of it that is simply false: "putting `say` inside the input
+ * forces `tool_choice: 'any'` on EVERY turn — and a model obliged to call a route tool will fill route
+ * fields it has no business filling." The first clause does not follow. `tool_choice` stays AUTO; the
+ * field is filled only on the turns the model actually calls the tool, and a chat turn is still a plain
+ * text turn. Probed 2026-08-03 on the live model: turn 1 (a chat turn) returned `stop_reason: 'end_turn'`
+ * with `blocks=text`; the draw turn returned the call carrying its own line; a bare "sweet" after a draw
+ * returned `end_turn` with text and NO call. Nothing was forced and no route field was invented.
+ *
+ * WHAT FORCED THE REVERSAL. The old shape's stated cost was that "nothing STRUCTURALLY guarantees a text
+ * block accompanies the call", bought back by prompt prose. That prose does not work, and the eval panel
+ * measured how badly: on EVERY `tool_use` turn the model emitted 160 output tokens — the tool JSON alone,
+ * with no text block at all — while every `end_turn` turn spoke normally in 34-42. Not "low-content
+ * turns" as this comment previously implied: every draw, including a plain "Yeah, do it." The same probe
+ * against the PRE-rewrite prompt produced the identical result, so it is a model behaviour and no wording
+ * fixes it. In production every rider therefore heard `VOICE.drawnWordless` — one fixed server line —
+ * instead of the Skipper saying their drive back. It also destroyed the model's only record of what it
+ * drew (the route never returns to it), which is upstream of the re-emit defect.
+ *
+ * WHAT THE OLD ARGUMENT GOT RIGHT, and what it costs us now: `say` no longer streams as native
+ * `text_delta` on a draw turn — it arrives whole. ⚠ That costs NOTHING TODAY, which is the whole reason
+ * this is worth taking: there was no text on those turns to stream in the first place. Chat turns, where
+ * streaming actually works, are untouched. The third old point does not apply either — the field is
+ * unwrapped server-side into the ordinary `say` on the wire, so the client's transcript still holds a
+ * plain `{ role: 'assistant', content: <text> }` and never has to fabricate a `tool_result`.
+ *
+ * ⚠ REQUIRED, not optional. An optional field the model may omit reproduces exactly the defect this
+ * reverses. The handler still prefers a real text block when one arrives (./planner), so a model that
+ * speaks BOTH ways loses nothing.
  *
  * ⚠ THIS SCHEMA IS NOT THE GUARD. It is not sent with `strict: true`, so `format`, `maxItems` and the
  * numeric bounds are guidance to the model, not enforcement. INV-1 is enforced at the WIRE: every id is
@@ -310,8 +334,8 @@ export const PLAN_ROUTE_TOOL: PlannerToolDef = {
     'drive is drawn is pleasantry, NOT a yes to anything -- answer it in words and call nothing. If they ' +
     'tell you a drive did not come through, take their word for it and draw it again. Every anchor id ' +
     'must be copied exactly from the list of places you were given -- never compose, correct, or infer ' +
-    'one. Always write a line to the folks in the same turn as this call -- a call with no line is a ' +
-    'turn where the folks watch nothing happen.',
+    'one. ALWAYS fill `say` -- it is the only thing the folks read, and a call without it is a turn ' +
+    'where they watch nothing happen.',
   input_schema: {
     type: 'object',
     properties: {
@@ -349,11 +373,28 @@ export const PLAN_ROUTE_TOOL: PlannerToolDef = {
           'About how long they want to be out, in minutes, when they told you. Leave it out entirely ' +
           'if they never said -- never invent one.',
       },
+      // ⚠ LAST IN THE OBJECT, AND THE POSITION IS LOAD-BEARING — it was FIRST for one run and that
+      // measurably hurt. Tool input serializes in property order, so leading with a long free-prose
+      // field starts the call in natural language, and this model then sometimes carries on in text:
+      // the whole call arrived as rider-visible `<invoke name="plan_route">…` markup instead of a
+      // tool_use block (INV-8). Measured across three replays: 0 leaks with no `say` field, then 2 and
+      // 3 once it led the object. Structured ids first, prose last, keeps the call in tool-shape.
+      // (./plan-route suppresses any leak that still gets through; this is the half that reduces them.)
+      say: {
+        type: 'string',
+        description:
+          'What you say to the folks on this turn, in your own voice. Say the drive back to them -- ' +
+          'the two ends, and back around if that is the shape of it -- so they can see you got it ' +
+          'right. Never mention the drawing-up as a mechanism, never recite an id, never refer to ' +
+          'your list as a list.',
+      },
     },
-    // Only the two endpoints. `round_trip` omitted means one-way and `target_minutes` omitted means they
-    // never said — both are honest defaults, and requiring either would push the model to assert an
-    // intent the rider did not express just to satisfy the schema.
-    required: ['start_anchor_id', 'end_anchor_id'],
+    // The two endpoints and the LINE. `round_trip` omitted means one-way and `target_minutes` omitted
+    // means they never said — both are honest defaults, and requiring either would push the model to
+    // assert an intent the rider did not express just to satisfy the schema. ⚠ `say` is different in
+    // kind: there is no honest default for "what the Skipper said", and an optional one reproduces the
+    // wordless-draw defect this field exists to fix.
+    required: ['say', 'start_anchor_id', 'end_anchor_id'],
     additionalProperties: false,
   },
 }

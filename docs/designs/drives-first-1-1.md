@@ -670,6 +670,37 @@ single-sources drive identity against `proposeKey` (`start` + `end` + `via`, **`
 included**) and its unscopeable *"never call this a second time"* absolute is gone — that clause also
 closed the client's own propose-failure retry path.
 
+⚠ **`say` IS NOW A REQUIRED FIELD ON `plan_route`, REVERSING A LONG-STANDING DECISION — and it was
+reversed by MEASUREMENT (2026-08-03).** The new planner eval panel (`apps/api/eval`) replayed 11
+scripted conversations on its first run and failed two gates. The cause was not a wording problem:
+on **every** `tool_use` turn the model emitted 160 output tokens — the tool JSON alone, with **no text
+block at all** — while every `end_turn` turn spoke normally in 34-42. A direct probe reproduced it
+against the **pre-rewrite** prompt too, so it is a model behaviour that no prose fixes. `route_wordless`
+was therefore never the occasional low-content-turn defect this doc described: **every rider heard the
+one fixed server fallback (`VOICE.drawnWordless`) instead of the Skipper saying their drive back** —
+and it destroyed the model's only record of what it drew, which is upstream of the re-emit defect.
+
+The old argument against the field rested on a premise that is simply false: that putting `say` in the
+input "forces `tool_choice: 'any'` on EVERY turn". It does not. With `tool_choice` left on **auto**, the
+probe showed a chat turn still returning `end_turn` with a text block, the draw turn carrying its own
+line inside the call, and a bare *"sweet"* after a draw returning `end_turn` with text and **no call at
+all** — where the same turn without the field had produced a silent re-draw. The one real cost the old
+argument named survives and is worth naming honestly: `say` no longer streams as native `text_delta` on
+a draw turn. ⚠ **That costs nothing today** — there was no text on those turns to stream. Chat turns,
+where streaming actually works, are untouched. The effort hypothesis was tested and **refuted**: the
+same failure reproduces at `effort: 'medium'`, so the production value stays where it is.
+
+⚠ **INV-8's FAILURE MODE WAS OBSERVED FOR THE FIRST TIME (2026-08-03), and it is no longer theoretical.**
+On a replay turn that should have drawn, the model serialized the tool call into the rider-visible line —
+`say` came back as `<invoke name="plan_route"><parameter name="say">…` — and no route was emitted. The
+turn succeeds, no error is raised, nothing upstream can tell, and the rider reads raw markup in a chat
+bubble. `toResponse` now suppresses any `say` carrying tool-call markup **before any other branch** and
+returns the retry line, counting it as a new `plan_degraded` reason (`say_leaked_tool_call`); the eval
+panel counts it too, because a defect suppressed in production and invisible to the panel grows in the
+dark. ⚠ It SUPPRESSES rather than salvages: parsing a route back out of prose the model was told not to
+write would mean reconstructing a billed request from untrusted text, which is the exact hole INV-1's
+wire re-assert exists to close.
+
 ⚠ Landed with it, from the same review: the example no longer teaches **"Consider it drawn"** (the
 prompt quotes that exact phrase as its canonical violation, and a few-shot beats an instruction — the
 observed device failure was that string verbatim); the draw beat now RESTATES the drive, which is also

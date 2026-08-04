@@ -101,6 +101,19 @@ export interface PlannerModelArgs {
    *  the SDK collapses both into an indistinguishable APIUserAbortError. Getting that wrong logs every
    *  rider who closes the app as a vendor outage. */
   signal?: AbortSignal
+  /** Reasoning depth override. Omitted in production, which uses `PLANNER_EFFORT`.
+   *
+   *  ⚠ IT EXISTS FOR THE EVAL PANEL AND FOR ONE MEASURED QUESTION (apps/api/eval). Anthropic documents
+   *  lower effort as making the model proceed to action WITHOUT PREAMBLE and make fewer tool calls —
+   *  and the first real replay (2026-08-03) measured exactly that shape: every `tool_use` turn emitted
+   *  160 output tokens, the tool JSON alone, with NO text block, while every `end_turn` turn spoke
+   *  normally in 34-42. That is the `route_wordless` defect, and on this path it also destroys the
+   *  model's only record of what it drew (the route never returns to it — see ./planner-prompt).
+   *  A seam, not a knob: changing the PRODUCTION value is a latency and cost decision that belongs to
+   *  the founder, and ./limits warns that raising effort against a fixed `max_tokens` buys
+   *  `stop_reason: 'max_tokens'` — which the handler classifies as `truncated` and the rider hears as
+   *  VOICE.retry. Measure with this, then decide there. */
+  effort?: 'low' | 'medium' | 'high'
   /** Test seam — the Anthropic client to call. Omitted in production, where the lazy module-level
    *  client is used instead.
    *  ⚠ It exists because the six-outcome classifier below is the entire reason this file exists, and
@@ -355,7 +368,7 @@ export async function runPlannerTurn(args: PlannerModelArgs): Promise<PlannerTur
       // rather than assumed: the SDK's own docstring claims a 'summarized' default that is stale here,
       // and rider-facing text must never carry reasoning.
       thinking: { type: 'adaptive', display: 'omitted' },
-      output_config: { effort: PLANNER_EFFORT },
+      output_config: { effort: args.effort ?? PLANNER_EFFORT },
       system,
       tools: [PLAN_ROUTE_TOOL],
       // AUTO, not forced — the reasoning lives on PLAN_ROUTE_TOOL in ./planner-prompt. In one line: a
@@ -455,7 +468,15 @@ export async function runPlannerTurn(args: PlannerModelArgs): Promise<PlannerTur
       )
       // A 'tool_use' stop with no matching block should not happen; if it ever does, it is not a route.
       if (!call) return { ...base, outcome: say ? 'say' : 'empty' }
-      return { ...base, outcome: 'route', rawRoute: call.input }
+      // ⚠ THE LINE MAY ARRIVE INSIDE THE CALL, and on this model it essentially always does — a draw
+      // turn emits the tool JSON and no text block at all (measured 2026-08-03; see PLAN_ROUTE_TOOL's
+      // note). A real text block still WINS when one exists, so a model that speaks both ways loses
+      // nothing and the `say`-first ordering never overrides prose the rider already saw streaming.
+      // Guarded rather than cast: `input` is model output, so a non-string `say` must read as absent
+      // and fall through to the handler's backstop instead of putting `[object Object]` on screen.
+      const spoken = (call.input as { say?: unknown })?.say
+      const fromTool = typeof spoken === 'string' ? spoken.trim() : ''
+      return { ...base, say: say || fromTool, outcome: 'route', rawRoute: call.input }
     }
 
     // ⚠ THE SILENT FAILURE, AND WHY IT IS BRANCHED BEFORE THE TOOL LOOKUP. A truncated turn can carry a
