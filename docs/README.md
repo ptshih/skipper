@@ -226,8 +226,11 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   103 curated endpoints, **14 of 15 towns** present, exactly **1** duplicate name, **96%** already
   road-snapped. Vocabulary is not what `places` provides; JUDGMENT is (endpoint-worthiness, the access
   point, `featured`), so the change is to move that judgment onto `pois`, not to delete it. ⚠ INV-1 moves
-  rather than weakens — a name still resolves server-side or 400s before any billed call. ⚠ Records four
-  objections I raised and then measured wrong. Not greenlit (2026-08-04).
+  rather than weakens — a name still resolves server-side or 400s before any billed call. Carries the
+  build estimate (~a week; 59 of 103 judgments reconcile confidently, ~44 need a human, and the wire
+  keeps its SHAPE so mobile is untouched) plus the ~$1 taste test to run first. ⚠ Records five objections
+  raised and then measured wrong — four of them the same mistake, a query whose shape did not match the
+  question. Not greenlit (2026-08-04).
 - [planner-lookup-tools.md](designs/planner-lookup-tools.md) — 💡 IDEA: let the planner CALL for what it
   does not know instead of carrying it — `find_place` turns "don't know that one" into a redirect to the
   nearest routable anchor, for ~2¢/turn against $0.11 a conversation for the fat-prefix alternative.
