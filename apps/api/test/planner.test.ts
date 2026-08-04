@@ -73,13 +73,18 @@ describe('planner prompt', () => {
   // gives the model the record it otherwise lacks (it cannot see its own tool call — see the prompt's
   // header). Pinned as the PROPERTY the phrase was standing in for: enough beats, and the exchange
   // does not end on the draw.
-  test('the example exchange carries beats AFTER the draw', () => {
-    const ex = PLANNER_SYSTEM_PROMPT.slice(PLANNER_SYSTEM_PROMPT.indexOf('== One example exchange =='))
-    expect(ex).toContain('<example>')
-    expect((ex.match(/^Them:/gm) ?? []).length).toBeGreaterThanOrEqual(4)
-    // The last spoken beat is the skipper's, so the exchange never models the draw as the end.
-    expect(ex.trimEnd().split('\n').filter((l) => l.startsWith('You:')).length).toBeGreaterThanOrEqual(4)
-    expect(ex).toContain('whole of my paperwork')
+  test('an example exchange carries beats AFTER the draw', () => {
+    const section = PLANNER_SYSTEM_PROMPT.slice(PLANNER_SYSTEM_PROMPT.indexOf('== One example exchange =='))
+    expect(section).toContain('<example>')
+    const blocks = [...section.matchAll(/<example>([\s\S]*?)<\/example>/g)].map((m) => m[1]!)
+    // ⚠ ASSERTED ON THE BLOCK THAT MODELS THE POST-DRAW BEATS, not across the whole section, so that a
+    // future second example cannot satisfy the counts while THIS block is gutted. That is not
+    // hypothetical: four examples were tried on 2026-08-04 (see the prompt's own note on why they were
+    // reverted), and under an aggregate count the assertion would have passed on the new ones alone.
+    const withTail = blocks.find((b) => b.includes('whole of my paperwork'))
+    expect(withTail).toBeDefined()
+    expect((withTail!.match(/^Them:/gm) ?? []).length).toBeGreaterThanOrEqual(4)
+    expect(withTail!.trimEnd().split('\n').filter((l) => l.startsWith('You:')).length).toBeGreaterThanOrEqual(4)
   })
 
   // ⚠ THE PERMISSION, NOT ONLY THE PROHIBITION — and the asymmetry it corrects is what shipped a bug.

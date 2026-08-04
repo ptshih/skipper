@@ -47,6 +47,28 @@
 // to make one of those concrete is also fine and stays. What is out is a rule whose whole content is
 // "do not say <string>".
 //
+// == Why there is ONE example exchange, and what four cost (measured 2026-08-04, $0.5752) ==
+// Anthropic's guidance is 3-5 examples, "diverse to cover edge cases and avoid unintended patterns",
+// and the independent literature agrees diversity is the cure for repetition. It was TRIED: three more
+// exchanges (everything-in-one-breath, a start with no far end, an off-list start), each with a
+// deliberately different yes-ask, measured on the full suite. It made this prompt WORSE on the exact
+// axis it was added to fix, and it broke a gate:
+//   · discipline PASS -> FAIL. The added off-list example opened "Don't know that one, and I won't
+//     pretend I do." — a line the PROSE already uses as its off-list sample. Double exposure, and the
+//     model recited it verbatim. Same mechanism as the "Consider it drawn" bug: quoting a phrase and
+//     then demonstrating it maximises the probability of the one string you were trying to control.
+//   · persona 0.66 -> 0.61, flagged turns 3/57 -> 12/57. SEVEN were draw turns scored 4/10 "Bare echo".
+//     Three of the four examples ended their draw on a bare place-to-place restatement ("Bellweather out
+//     to Cold Fork."), so the model took that as THE draw line. The examples diversified the ASKS and
+//     accidentally standardised the DRAW.
+//   · repeated phrases 11 -> 16, echoes 6/57 -> 10/57, turns judged canned 1 -> 2.
+// ⚠ The lesson is NOT "the guidance is wrong". It is that a worked exchange here teaches every beat it
+// contains, not only the beat you added it for — so an example that is skeletal anywhere teaches
+// skeletal there. If this is retried: every added exchange needs a draw line carrying as much voice as
+// its read-back, and no line may reuse a phrase the prose already quotes.
+// (Routing was 1.00 on that run, but that was the spend-gate reword confirming on the full suite — it
+// was already proved on a 9-turn arm without these examples, so the examples earned none of it.)
+//
 // == What must NOT be interpolated into this string ==
 // The prompt is the CACHED PREFIX of every planner request, and a cache miss is invisible in the response
 // body — it shows up only as a bill. So this constant is a plain literal with ZERO interpolation, and it
