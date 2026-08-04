@@ -169,9 +169,35 @@ homogeneous. Two things that changes for step 8, and one it does not:
 - ⚠ **It does NOT make step 8 cheap, and do not read it that way.** MY DRIVES is a homogeneous list on
   a screen that owns its scrolling. The transcript is a heterogeneous interleave inside
   `ConversationScreen`, which owns a pinned footer and an auto-follow state machine — that is the
-  actual hard part, and `ScreenList` does not touch it. The ⛔ finding below (FlatList window tuning is
-  a dead end for THIS surface) also still stands and is why `removeClippedSubviews` is pinned off
-  there.
+  actual hard part, and `ScreenList` does not touch it. ⚠ `ScreenList` is also **not reusable here as
+  written**: no footer slot, no keyboard avoidance, no scroll ref, no pin state. `ConversationScreen`
+  needs its own conversion; what transfers is the evidence, not the file. The ⛔ finding below
+  (FlatList window tuning is a dead end for THIS surface) also still stands and is why
+  `removeClippedSubviews` is pinned off on the drives list.
+
+### ⚠ The hazard MY DRIVES could not have surfaced — auto-follow rests on a height virtualization ESTIMATES
+
+Found 2026-08-04 while judging whether the drives work transfers; **nobody has hit this yet, and it is
+the reason step 8 stays a decision rather than a port.** MY DRIVES has NO auto-follow — it is a static
+list the rider scrolls — so nothing in that work exercised the mechanism below, and its success says
+nothing about it.
+
+`ConversationScreen` decides whether to keep following a streaming turn by measuring the distance from
+the bottom (`:87-88`): `contentSize.height - layoutMeasurement.height - contentOffset.y <=
+CONVERSATION_STICK_PX`. That test is **exact today because a ScrollView has laid out every row**. Under
+virtualization `contentSize.height` is an ESTIMATE for rows not yet measured — and these rows are
+variable-height by construction (uncapped Dynamic Type on a `title`, plus route cards). So the
+predicate that decides *"is the rider reading, or watching the stream"* becomes approximate, and it is
+consulted on every flush (5–15 per turn, `:94-103`).
+
+⚠ **The failure mode is not a crash, which is why it needs naming in advance:** the screen yanks a
+rider away from a turn they were mid-way through re-reading, or stops following when it should have
+kept up. `bun test` cannot see it, a simulator pass with a short conversation will not provoke it, and
+it lands on the surface where the rider is least forgiving.
+
+⚠ And the standard remedy is ALREADY RULED OUT one file over: `maintainVisibleContentPosition` is
+banned at `ConversationScreen.tsx:149-150` because it anchors on PREPEND and a conversation APPENDS.
+So a port owes a fresh answer to "how does the pin stay honest", not a lookup.
 
 ⚠ **The trigger to revisit — do not take it on vibes.** A REAL DEVICE, on a LONG conversation, showing
 scroll jank or memory growth that steps 1–6 did not remove. Everything measured below is **simulator
