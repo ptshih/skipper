@@ -1,6 +1,8 @@
 # What is a drive endpoint?
 
-> **Status:** 💡 **IDEA — not greenlit, nothing built (2026-08-04).** Written from a founder observation
+> **Status:** 💡 **IDEA — no code built; ONE data prune applied 2026-08-04** (five rows lost the endpoint
+> role — see *What I would do*, which also records why its first recommendation was reversed the same
+> day). Written from a founder observation
 > ("the main purpose of places is start/end/via, and a lot of these don't fit") plus a full audit of the
 > live Tahoe set. It proposes a CRITERION and a role split; it does not propose a migration. The build
 > record for the machinery this is about is
@@ -117,11 +119,45 @@ endpoint.
 
 ## What I would do
 
-**1 + 3 now, 2 written down and deferred.** The criterion is the thing missing, and it is free to state;
-stating it in the prompt stops the next region inheriting the problem, which is the only part of this
-that gets more expensive with time. Retiring the dead break flag is honesty about what exists. The
-destination/waypoint split is a genuine improvement and a genuine migration, and it should not ride
-along with a submission.
+⚠ **THIS SECTION WAS REVISED THE SAME DAY IT WAS WRITTEN.** The first version said "state the criterion
+in both draft prompts NOW". That was wrong for a reason worth keeping: **a prompt change cannot be
+validated without a paid curation run**, and there is no new region coming before 1.1 — so it would ship
+untested and be discovered months later, in the one artifact (the draft prompt) whose failures are
+invisible until someone reads a list of places. The corrected sequencing is below.
+
+**Also revised: how big the problem is.** The first pass characterised the tail from the TYPE histogram,
+where `island`, `castle` and `american_restaurant` jump out, and called it "a long tail that mostly
+isn't". Reading all 57 rows says otherwise — seven ski resorts, six state parks, six marinas, the
+beaches and the trailheads are all legitimately places a rider would name and arrive at. The genuinely
+wrong ones were **five**, not sixty. A histogram is not a list.
+
+**Done 2026-08-04 (endpoint role only; the rows stay, and so do their break roles):**
+
+| dropped | why |
+| --- | --- |
+| Fannette Island | an island in the middle of Emerald Bay — there is nowhere to arrive |
+| Vikingsholm | the car stops at Emerald Bay and you walk a mile down; a rider would say "Emerald Bay" |
+| Bridgetender Tavern and Grill | a restaurant — that is a break, not a destination |
+| Marriott's Timber Lodge | a hotel |
+| Sunnyside Marina & Watersport Rentals | a rental counter |
+
+108 → **103 endpoints**. ⚠ `endpoint_eligible` is OR-merged, so a re-curation of this region can restore
+all five; this prune is not durable on its own.
+
+**Deferred, deliberately:**
+
+- **The criterion in both draft prompts** — until a new region is actually being curated, so the change
+  is exercised by the run that motivates it. That is also the moment the breadth-vs-precision tension
+  first bites for real, so it wants to be decided with a second region's draft in front of you rather
+  than from Tahoe alone.
+- **The destination/waypoint split** — same trigger, same reason. `Echo Summit`, `Donner Pass`,
+  `Mount Rose Summit` and `Cave Rock` are the standing evidence for it: perfect to route PAST, odd to
+  end at. Four rows is not enough to justify a migration; a second region probably is.
+- **Retiring `break_eligible`** — until `detours` is genuinely being built. Doing it now is honesty with
+  no payoff, and re-deriving 85 curated judgements later costs more than the tidiness is worth.
+
+**Left alone on purpose:** `Secret Cove Nude Beach` is arrivable and real; whether the Skipper should
+offer it unprompted is taste, not correctness, and it is the founder's call rather than a cleanup.
 
 ## Open questions
 
