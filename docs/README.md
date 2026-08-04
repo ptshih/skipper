@@ -202,6 +202,12 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   the 1:1 `pois`↔`narrations` atom, no `roam_clips` table, and 1.1 then removed the mode outright.)
 
 ### designs/
+- [what-is-a-drive-endpoint.md](designs/what-is-a-drive-endpoint.md) — 💡 IDEA: `places` exists for
+  start/end/via and much of it could not play that part — an island, a castle a mile up a trail, a
+  tavern, a shopping mall. Proposes the missing criterion (*would a rider NAME it, and could they
+  ARRIVE at it?*) and a destination/waypoint/break split, against the real tension that pruning makes
+  the planner dumber. ⚠ Also records that `break_eligible` (85 rows) is read by NOTHING outside the
+  admin, and that `featured` (14) already approximates the destination role. Not greenlit (2026-08-04).
 - [drives-first-1-1.md](designs/drives-first-1-1.md) — **the 1.1 release**: DRIVES become the primary
   (and only) experience, the roam experience is removed COMPLETELY (client + server + engine + DTOs;
   git is the archive), and *prepare* is rebuilt as a **conversation with the skipper in character** —
