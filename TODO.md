@@ -23,6 +23,47 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
+## Spatial context for the planner — MEASURED 2026-08-03, and the answer is NO
+
+**Do not build a drive-time matrix, a routing-engine dependency, or any per-place spatial context for
+the live planner.** This was measured, not argued, and it cost about $1.40.
+
+**The experiment.** A hand-written banded drive-time table for the six fixture anchors, injected as a
+volatile system block after the cache breakpoint (`extraSystem`, a measurement seam on
+`PlannerModelArgs`). Two arms x two pairs, 50 turns each, judge off — the deterministic metrics are
+the point. Reproduce with `bun apps/api/eval/run.ts --apply [--spatial] --no-judge`.
+
+| metric | control x2 | spatial x2 | verdict |
+|---|---|---|---|
+| routing failures | 2, 2 | 0, 3 | no effect |
+| durations asserted as road fact | 12, 10 | 6, 12 | no effect |
+| repeated phrases (6+ words) | 37, 48 | 28, 37 | spatial lower BOTH pairs |
+
+**What it bought: nothing it was for.** Routing is flat. The `contradictory-ask` scenario — added
+specifically to fail on the observed `durationDrift` defect (Emerald Bay to Incline is ~50 min; the
+rider asks for two hours) — behaved IDENTICALLY in both arms. The skipper agreed to two hours with the
+table in front of him. The one axis that moved consistently is repetition, ~23% lower in both pairs,
+which is real but is not what the feature was for and does not justify the build.
+
+⚠ **THE LEAK FEAR DID NOT MATERIALISE, and this is the useful negative result.** The research that
+preceded this leaned hard on a study measuring 47% secret-leakage on Opus-class models, with
+suppression instructions worth only ~25 points — the expectation was that a model holding drive times
+it is forbidden to state would tilt or blurt. It did not: durations asserted were 6 vs 12 in the first
+pair and 12 vs 10 in the second, i.e. noise in both directions. ⚠ An intermediate write-up of pair one
+alone claimed the leak had HALVED. It did not replicate. Do not cite pair one.
+
+**Cost of building it anyway, for whoever revisits.** Google's Maps terms forbid storing computed
+durations outright (§3.2.3(a) names "distance matrix results" in the No-Scraping list; only place IDs
+are exempt indefinitely, lat/lng for 30 days), so the only storable source is a non-Google engine —
+OSRM/Valhalla/OpenRouteService — which is a real dependency, a new table, a migration, and an operator
+step that `curate-places` does not have today. Paying that for a flat routing metric is not a trade.
+
+**If it is ever revisited**, the encoding question is already settled: measured drive-time BANDS,
+per-anchor, name-keyed — a measurement, not a projection, so it reads correctly on a ring, a corridor,
+a hub-and-spoke and a blob alike. ⚠ Do NOT revive the projection family (1-D shore coordinate, MDS):
+a ring does not collapse to 1-D under classical MDS — the double-centred matrix is circulant, PC1 is
+~50%, the same score an isotropic blob and a symmetric hub get. There is no shape detector there.
+
 ## Should we adopt an LLM framework? — researched 2026-08-03, NOT scheduled
 
 Founder asked about **BAML** and then **Vercel's AI SDK**. Both were researched against current docs
