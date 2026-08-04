@@ -58,25 +58,37 @@ ever need measuring, the panel has to go through the route, not around it.
       yes (`hold_no_repeat`) — that one is the gate wanting more caution than the prompt gives, and is
       arguably the scenario's call rather than the model's.
 
-- [ ] **⚠ FINDING 2 — THINKING IS CONFIGURED ON AND PRODUCED ZERO TOKENS ON ALL 54 TURNS. INV-8's
-      protection should be treated as UNVERIFIED, possibly inactive.** `planner.ts` sends
-      `thinking: { type: 'adaptive', display: 'omitted' }` at `effort: 'low'`, and CLAUDE.md's INV-8
-      says thinking stays on *because* disabling it on this model "can emit a tool call as plain TEXT —
-      turn succeeds, no error, call never runs".
-      Measured: `output_tokens_details.thinking_tokens` was **0 on 54 of 54 turns**, tool-use turns
-      included. ⚠ **Not a reporting artifact, and the arithmetic is the argument**: chat turns spent
-      `out: 29–95` total and tool turns `out: 176–209` — a tool call with five UUID fields plus a `say`
-      string accounts for the whole of the latter. On a turn with 40 output tokens there is no room for a
-      thinking block whether or not it is reported.
-      ⚠ **And this is exactly the condition under which INV-8 predicts the leak that was actually
-      OBSERVED on 2026-08-03** (`say` came back as tool-call markup). That stops being a mystery if
-      adaptive thinking at low effort simply never engages. Stated as correlation, not proof.
-      **Cheapest next step, and it is a paid run (~$0.50, founder go):**
-      `bun apps/api/eval/run.ts --apply --effort medium --no-judge` and check whether
-      `thinking_tokens` goes non-zero at all. If it does, the production `effort` value becomes a real
-      decision (latency vs. INV-8 actually being on) rather than the latency-only lever `planner.ts`
-      documents it as. Until then the WIDENED `LEAKED_TOOL_CALL` filter is the only live protection,
-      not a belt to INV-8's braces.
+- [x] **FINDING 2 — thinking produced ZERO tokens on all 54 turns, and that is DOCUMENTED, EXPECTED
+      BEHAVIOUR at `effort: 'low'`. ⚠ MY FIRST WRITE-UP OF THIS WAS WRONG; the correction is the
+      finding.** The measurement stands: `output_tokens_details.thinking_tokens` was 0 on 54/54 turns,
+      tool-use turns included, and it is not a reporting artifact (chat turns spent `out: 29–95` total,
+      tool turns `176–209` — a five-field tool call plus a `say` string accounts for the latter, and a
+      40-token turn has no room for a thinking block either way).
+      **What I got wrong was the interpretation** — I filed it as "INV-8's protection is unverified,
+      possibly inactive", and implied it explained the tool-call-as-text leak observed 2026-08-03.
+      Checked against Anthropic's current docs (`build-with-claude/adaptive-thinking`), both halves fail:
+      - **Zero thinking at `low` is the parameter working as specified, not a misconfiguration.** The
+        effort table reads, verbatim: `low` — *"Claude minimizes thinking. Skips thinking for simple
+        tasks where speed matters most."* And: *"Thinking is optional for the model… A simple factual
+        question may get a direct response with no thinking block at all… a turn where Claude chose not
+        to think contains no thinking block."* Picking two endpoints off a printed list is that task.
+      - **`display: 'omitted'` does NOT suppress or unbill thinking, and `thinking_tokens` is populated
+        under it** — *"What you're billed for is the same regardless of the `display` setting; only what
+        you see changes"*, and the field *"reflects the raw reasoning the model generated (not the
+        summarized text returned in the body)"*. So the 0 is a TRUE zero. ⚠ When streaming, that
+        breakdown *"appears only on the final `message_delta` event"* — which is where we read it.
+      - **The leak is documented against `thinking: {type: 'disabled'}` specifically**, which this code
+        never sends. So it does NOT explain the observed leak. ⚠ The docs are silent on whether
+        adaptive-choosing-zero shares that failure mode — so treat it as an OPEN question, not a cause,
+        and do not re-file it as one without evidence.
+      ✅ **The real explanation was already in the repo**: `PLAN_ROUTE_TOOL`'s `say`-field-last note.
+      Leading the tool object with a long prose field measurably produced 2–3 leaks per replay vs 0 with
+      ids first. That is the same mechanism the vendor docs describe from the other side (the model wants
+      to write a preamble; suppressing it is what breaks the call shape) — convergent evidence that the
+      fix already shipped is the right one. The widened `LEAKED_TOOL_CALL` filter is the backstop.
+      ⚠ **Do NOT spend on an `--effort medium` arm to chase this.** The question it was going to answer
+      is answered above, for free. Effort is worth measuring for FINDING 1's sake — see below — not for
+      INV-8's.
 
 - [ ] **FINDING 3 — the read-back turn is both the persona sag AND the duration leak, and it is one
       turn.** Persona scored 0.64 advisory (6/54 flagged) and every single flagged turn is a draw/
@@ -96,6 +108,105 @@ ever need measuring, the panel has to go through the route, not around it.
 0/54. No boat, no markdown, no id ever recited, no place fact handed over. **And the prompt cache is
 healthy** — `cache_read` ~6.9k on every turn after the first of each scenario, `cache_write` only on the
 first, so the roster prefix is intact and the `cache_read: 0` regression is not present.
+
+## Planner vs. Anthropic's current docs — external pass 2026-08-04 (free, read-only)
+
+Checked `apps/api/src/planner.ts` against `platform.claude.com/docs` (adaptive-thinking, effort,
+structured-outputs, prompt-caching) rather than against memory, per CLAUDE.md's grounding rule. **Most of
+the config is right and is confirmed below so nobody re-checks it.** Four things came out.
+
+- [ ] **⚠ TRAP — RAISING `effort` ON THE DRAW TURN WOULD BREAK THE PROMPT CACHE. Read this BEFORE acting
+      on FINDING 1.** The obvious fix to a routing beat that needs the model to hold two constraints at
+      once is "raise effort just for that turn". It is a cost regression: *"**The resolved effort value is
+      rendered into the prompt**, so changing it between requests invalidates cache breakpoints"* — and
+      the docs' own worked example shows a `high` → `medium` switch taking `cache_read` from 3546 to
+      **0**. On this path that means re-billing the whole ~6.9k roster prefix at full rate on the most
+      expensive turn of the conversation, forever, anonymously (INV-11).
+      ⚠ Two corollaries worth keeping: *"pick a thinking configuration and an effort level per
+      conversation and keep them"*; and **`effort` must not become per-request** — the `effort?:` field
+      on `PlannerModelArgs` is an eval seam that passes ONE value for a whole run, which is why it is
+      safe there and would not be safe in the handler.
+      ✅ **The cache-safe lever is PER-MESSAGE STEERING**, which the docs name explicitly: thinking is
+      promptable from the user turn, and *"guidance appended to the newest user message leaves earlier
+      cache breakpoints intact, where a configuration or effort change does not"*. The documented phrase
+      to encourage it is *"This task involves multistep reasoning. Think carefully before responding."*
+      ⚠ *"Steering effectiveness can be sensitive to exact wording"*, and the docs warn that lowering
+      effort is the calibrated control while prose is the wording-sensitive one — so measure, and expect
+      to iterate on phrasing. A whole-run `--effort medium` arm is still the cheaper first measurement of
+      whether depth is what FINDING 1 is missing; only the PER-TURN version is the trap.
+
+- [ ] **The `drawn` / wrap-up system blocks reset the SECOND cache breakpoint — and there is now a
+      first-class API for exactly this.** `planner.ts` appends them as system blocks 3/4, after the
+      breakpoint on block 2, on the reasoning that anything volatile ahead of the breakpoint re-bills the
+      prefix. That reasoning is **correct but incomplete**: the prefix does survive, and the transcript
+      tail does not. Render order is tools → system → messages, so changing system bytes changes the
+      prefix of every message after them.
+      ✅ **Confirmed in the paid run's own numbers, not argued.** The cached system prefix reads 6897
+      tokens every turn. In `draw-then-pleasantry`, `cache_read` runs 6897 → 6988 → **6897** → 7133 →
+      7161: the drop back to exactly the prefix figure lands on the first turn carrying `drawn`, with
+      `cache_write` spiking to 236. `change-it-up-shorter` shows the same single drop, and
+      `return-to-earlier-plan` — which draws **twice** — shows exactly **two** (6897 → 6986 → 6897 →
+      7139 → 6897). One reset per draw, every time.
+      **The fix is documented and needs no beta header on this model:** send them as
+      `{ role: 'system', content: … }` entries in `messages[]` instead of top-level `system` — *"Preserves
+      the cached history prefix and is the prompt-injection-safe operator channel."* Available on Claude
+      Opus 5 / Opus 4.8 / Fable 5 / Mythos 5; ⚠ **NOT on Sonnet 5**, so it is model-gated and an
+      unsupported model 400s (`role 'system' is not supported on this model`).
+      ⚠ Placement rules bite here: such a message *"must follow a `role: "user"` message… and must be
+      either the last entry in `messages` or be followed by an `assistant` turn"* — our transcript always
+      ends on the rider, so appending is legal, **but the tail cache breakpoint currently sits on that
+      last rider turn and would need to move.** Cost saved is small in absolute terms (a few hundred
+      tokens per draw); the reason to do it is that it is the sanctioned channel and it makes the
+      second breakpoint actually hold.
+
+- [ ] **`strict: true` on `PLAN_ROUTE_TOOL` — a real but PARTIAL win with a latency cost. Judgment call,
+      not a slam dunk.** `planner-prompt.ts` correctly notes the schema "is not the guard"; what it does
+      not say is why strict isn't used. Strict tool use is **GA on Claude Opus 5 with no beta header**
+      (structured outputs are GA for 4.5+). What it would buy:
+      - **`say` becomes structurally required** — which retires `route_wordless` at the source rather
+        than backstopping it server-side, and that is the one defect the prompt currently can only ask
+        for. Field types and `additionalProperties: false` likewise stop being promises.
+      What it would NOT buy, so don't over-claim it: **`maxItems` is not enforced** (array constraints
+      beyond `minItems` 0/1 are unsupported), **`minimum`/`maximum` are not enforced** (so
+      `target_minutes` 20–480 stays advisory), and `format: uuid` is listed as supported but is a
+      semantic hint rather than reliably grammar-enforced. It also does **nothing** for the roster check
+      — a well-formed UUID that is not on the allowlist still passes, which is why the plan-time drop and
+      INV-1 both still matter.
+      ⚠ **The cost is on the latency-sensitive path:** *"The first time you use a specific schema, there
+      is additional latency while the grammar compiles"*, cached **24 hours from last use** and
+      invalidated by any schema-structure or tool-set change. On a rider-facing conversational route that
+      is a periodic first-request stall, and `PLANNER_TIMEOUT_MS` has to absorb it.
+      Also unstated in the docs: compatibility with `tool_choice: auto` + `disable_parallel_tool_use`.
+      Nothing suggests a conflict, but it is inference — prove it on one call before shipping.
+
+✅ **Confirmed CORRECT against current docs — do not re-audit these:**
+  - `thinking: { type: 'adaptive', display: 'omitted' }` — right shape; `omitted` IS the Opus 5 default,
+    so stating it is belt-and-braces, and it keeps reasoning off rider-facing text (INV-8).
+  - `tool_choice: { type: 'auto', disable_parallel_tool_use: true }` — documented as valid together:
+    *"Any `tool_choice` value can also include `disable_parallel_tool_use`"*.
+  - **Two cache breakpoints is legal** (max 4 per request), and the ~6.9k prefix clears Opus 5's **512**-
+    token minimum with room to spare — that minimum halved from Opus 4.8's 1024, so the code comment
+    naming 512 is current.
+  - **The 20-block cache lookback is not a hazard here.** A breakpoint walks back at most 20 content
+    blocks; our turns add exactly 2 messages, so the tail breakpoint always finds the previous one.
+    `MAX_PLAN_MESSAGES = 24` looks like it should trip this and does not — the window is the DISTANCE
+    between breakpoints, not the transcript length.
+  - **TS SDK `timeout` is milliseconds**, so `timeout: PLANNER_TIMEOUT_MS` (45_000) is 45s as intended —
+    the units differ per SDK (Python/Ruby take seconds) and this one is right.
+  - `maxRetries: 1` against the SDK default of 2, with the documented wall-clock consequence
+    (`timeout × (maxRetries + 1)`) already written down in `limits.ts`.
+  - ⚠ **`max_tokens: 2048` is the one live tension, not an error.** The docs recommend ~64000 for
+    streaming requests and warn that `max_tokens` caps *thinking plus text* and that a cap sized for a
+    no-thinking response is often too small once thinking engages. Today thinking never engages (see the
+    eval finding above) and observed `out` peaks at 209, so there is ~10x headroom. It becomes a real
+    risk the moment effort is raised — if that happens, raise this too, and watch for
+    `stop_reason: 'max_tokens'` surfacing as `truncated`.
+  - **`fallbacks` is available and deliberately NOT adopted.** Docs recommend including server-side
+    `fallbacks: "default"` by default on Opus 5 code so a classifier refusal is retried on another model.
+    Here a refusal is answered in persona (`VOICE.refused`) and that is arguably the right product
+    answer — and a fallback is a SECOND billed model call on an anonymous route, which makes adopting it
+    a founder spend decision under INV-11, not a hardening default. Recorded so the omission reads as a
+    choice.
 
 ## Virtualize the chat transcript (step 8) — NEEDS A FOUNDER GO, and not yet justified
 
