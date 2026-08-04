@@ -1,11 +1,11 @@
 # The chat screen bogs down as the conversation grows
 
-> **Status:** ⚠ **PARTLY BUILT (2026-08-03).** Steps 1–**5** are LANDED; steps 6–7 are specified and
-> unbuilt; step 8 (virtualization) is a founder decision that is deliberately UNMADE. Founder report:
-> *"the chat ux is lagging/bogging down after multiple messages are sent, this is a performance
-> issue"*, with a pointer to their own prior solution in `/Users/ptshih/code/manoa/archive/mobile`.
-> **Steps 4 and 5 are MEASURED on the simulator** (see "What is measured"); steps 6–7 remain static
-> reads of the code.
+> **Status:** ✅ **BUILT (2026-08-03).** Steps 1–**6** are LANDED and **measured on the simulator**;
+> **step 7 was measured and judged NOT justified** — see its entry, which records the numbers rather
+> than deferring it again. Step 8 (virtualization) remains a founder decision, deliberately UNMADE,
+> and the measurements below are the evidence it should be taken on. Founder report: *"the chat ux is
+> lagging/bogging down after multiple messages are sent, this is a performance issue"*, with a pointer
+> to their own prior solution in `/Users/ptshih/code/manoa/archive/mobile`.
 
 ## The shape of it
 
@@ -76,14 +76,28 @@ Each step is independently shippable and independently observable.
    `eslint-suppressions.json`) rather than adding a second.
    ⚠ `proposeKey`/`undrawnRoute` is genuinely NOT the bottleneck (`cards` is 1–3) — the O(turns×cards)
    nested scan was fixed in passing because this is the pass that reads it, not because it was slow.
-6. **Extract a memoized `TranscriptCard`.** UNBUILT. `React.memo` on `PreviewCard` alone will NOT bite:
-   `renderCard` hands it a freshly-built `previewClip` tree plus five fresh closures every render, so a
-   shallow comparator can never match.
-7. **Only if lag survives: move the 2 Hz audio-status subscription off the screen root.** UNBUILT and
-   ranked last on purpose. ⚠ Do NOT take the cheap alternative of widening `updateInterval` —
-   `status.currentTime` feeds the stall detector and the `atEnd` check, so that is a behaviour change
-   to clip-end handling. ⚠ The provider must sit INSIDE the screen: D35 exclusive audio focus assumes
-   exactly one owner.
+6. **Extract a memoized `TranscriptCard`.** ✅ LANDED, and **measured: card renders during 20 s of clip
+   playback went from ~50 (one per screen render) to 1** — the one legitimate render, when play state
+   flipped. `src/ui/TranscriptCard.tsx`; the plan's warning was right, `memo()` on `PreviewCard` alone
+   could never have bitten. ⚠ The trap the plan did not name: `preview.play` is itself a NEW function
+   every 500 ms (its dep chain runs through a `toggle` that reads `status.currentTime`), so passing it
+   through would have busted the memo at exactly the tick rate the memo exists to absorb. The screen
+   passes a stable wrapper over a ref instead. ⚠ `PreviewItem` moved into that file — `src/ui` may not
+   import from `app/`, and it is the card's own contract.
+   **Also memoized `Composer` in the same pass**, for the same tick: nothing in it depends on playback,
+   yet it — a controlled `TextInput` the rider may be mid-sentence in — was re-rendered 2×/sec while a
+   clip played. Its `onFocus`/`onBlur` had to become `useCallback`s or the comparator does nothing.
+7. **Move the 2 Hz audio-status subscription off the screen root.** ❌ **MEASURED AND NOT JUSTIFIED —
+   do not build this without new evidence.** It is real: the screen does still re-render twice a second
+   for the whole of a clip. But after steps 1–6 those renders produce **0 bubble rebuilds, 0 card
+   renders, 0 composer renders**, and the header options were already memoized in step 1 — every
+   expensive child bails out. The 500 ms intervals were also rock-steady under measurement
+   (500/500/499/500/501 ms), which is not what a struggling JS thread looks like. The remaining cost is
+   executing the screen body and reconciling a tree that bails out, against a refactor with a real
+   hazard: ⚠ the provider must sit INSIDE the screen (D35 exclusive audio focus assumes exactly one
+   owner). ⚠ And do NOT take the cheap alternative of widening `updateInterval` — `status.currentTime`
+   feeds the stall detector and the `atEnd` check, so that is a behaviour change to clip-end handling.
+   Revisit only if a real device shows jank during playback that steps 1–6 did not remove.
 
 ## ⛔ Do NOT reach for these — the prior art tried them HERE and reverted
 
@@ -144,10 +158,33 @@ appending and the reply landing; there is no third.
 correct slot immediately after the skipper turn that offered it. Worth re-doing on any change to the
 bucketing, because a mis-slotted card is silent: the transcript still renders, just wrong.
 
-⚠ Still unmeasured: the 2 Hz audio-status tick (step 7) while a clip plays — that needs a playing clip,
-and it is the measurement that would justify or kill steps 6 and 7. Note the stream case is now covered
-by the step 5 numbers above: the in-progress reply is its own bubble outside `turns`, so a sentence
-flush cannot bust the memo.
+### Step 6 + the step 7 decision — the audio tick, measured
+
+This is the measurement that justified step 6 and killed step 7, so it is the one to re-run first if
+any of this is ever doubted. Play a card's preview clip and count for 20 s.
+
+| during 20 s of clip playback | before step 6 | after step 6 |
+|---|---|---|
+| `HomeScreen` renders | ~50 (2.0/sec, 500 ms gaps dead on) | ~50 — **unchanged, and that is fine** |
+| `TranscriptCard` renders | ~50 (one per screen render) | **1** (the play-state flip) |
+| `TurnBubble` rebuilds | 0 (step 5) | 0 |
+| `Composer` renders | ~50 | 0 |
+
+⚠ **The screen render count is deliberately unchanged** — that was step 7's job, and step 7 is the one
+we chose not to do. What changed is that those renders now cost almost nothing, because everything
+underneath bails out. Read the table as "the tick still fires, and nothing listens".
+
+### The whole arc, in the two numbers the founder actually reported
+
+| | before | after |
+|---|---|---|
+| screen renders per keystroke | 1 (grows with conversation) | **0** |
+| card renders per second of playback | ~2.5 | **~0.05** |
+
+⚠ Still unmeasured, and honestly so: nothing here was measured on a REAL DEVICE, only the simulator,
+which has no thermal or memory pressure. And no measurement covers a conversation past ~8 turns —
+the structural ceiling (step 8) is still a ceiling; these steps lowered the cost of each render rather
+than bounding how many rows exist.
 
 ⚠ Metro is the one dev server that may be freely stopped and started for this (root `CLAUDE.md`,
 founder 2026-08-03), and kill the expo-dev-client floating FAB first or it will sit over the very

@@ -18,7 +18,7 @@
 // ⚠ INV-13: nothing here logs. Every string on this screen is rider content or model output, and none
 // of it is persisted — not to disk, not to the region cache (which holds public place NAMES only).
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Pressable, StyleSheet, View, type TextInput } from 'react-native'
+import { StyleSheet, View, type TextInput } from 'react-native'
 import { Stack, useFocusEffect, useIsFocused, useRouter } from 'expo-router'
 import { MAX_PLAN_DRAWN, type PlannedRoute } from '@skipper/shared'
 // ⚠ The TYPED contract, and the only analytics surface there is (src/lib/analytics.tsx owns the raw
@@ -51,7 +51,6 @@ import {
   PLACEHOLDER_ROTATE_MS,
 } from '@/lib/placeholder-util'
 import {
-  durationDrift,
   proposeKey,
   reflowDrawnCard,
   toCreateRequest,
@@ -72,10 +71,9 @@ import { pickRegionId } from '@/lib/region-select'
 import { emptySayBuffer, pushDelta, settle, tickHold, type SayBuffer } from '@/lib/say-buffer'
 import { useRoutePreview } from '@/lib/useRoutePreview'
 import { uuidV4 } from '@/lib/uuid'
-import { useReducedMotion, useTheme } from '@/theme'
-import { hit, radius, space } from '@/theme/tokens'
+import { useReducedMotion } from '@/theme'
+import { space } from '@/theme/tokens'
 import {
-  AttributionButton,
   Badge,
   Button,
   Card,
@@ -85,7 +83,6 @@ import {
   HeaderIconButton,
   Icon,
   PlannerUnavailableCard,
-  PreviewCard,
   Skeleton,
   SkeletonGroup,
   RegionChip,
@@ -95,10 +92,11 @@ import {
   SuggestionRow,
   ListenRow,
   Text,
+  TranscriptCard,
   TurnBubble,
   TypingDots,
   voice,
-  type PreviewCardState,
+  type PreviewItem,
 } from '@/ui'
 
 /** Show the remaining-drives hint only at or below this balance. Not derived from the server's grant
@@ -121,32 +119,11 @@ const CREDIT_HINT_THRESHOLD = 5
  *  SAY_MAX_HOLD_MS. Six ticks per hold is plenty; a faster interval would re-render for nothing. */
 const HOLD_TICK_MS = 100
 
-/** One route card living in the transcript.
- *
- *  `afterTurn` is the transcript LENGTH when the card was created, i.e. the slot it occupies between
- *  turns. Cards are held apart from `Turn[]` deliberately: a transcript is what the model is re-sent
- *  (`toWire`), and a card is a local artifact of a Routes call the model never sees.
- *
- *  ⚠ `idempotencyKey` and the in-flight guard are both PER-CARD (see the header) — a screen-level
- *  guard would let card #1 block card #2, or worse, let card #2 dedupe against card #1's key. */
-interface PreviewItem {
-  id: string
-  afterTurn: number
-  route: PlannedRoute
-  state: PreviewCardState
-  proposal: DriveProposal | null
-  /** The create key for THIS card, minted with it. ⚠ A FIELD, not a side table: it was a parallel
-   *  `Map<cardId, key>` ref that had to be torn down in lockstep with `cards` (and this very comment
-   *  described it as if it already lived here). One lifetime, one structure — a card cannot now exist
-   *  without its key, and clearing the cards cannot leave a key behind. */
-  idempotencyKey: string
-  errorMessage?: string
-  driveId?: string
-}
+// ⚠ `PreviewItem` MOVED to `src/ui/TranscriptCard.tsx` and is imported from `@/ui` — the card owns
+// its own contract, and `src/ui` may not import from `app/`.
 
 export default function HomeScreen() {
   const router = useRouter()
-  const { colors } = useTheme()
   const { data: session } = useSession()
   // ⚠ INV-9 — the ONE client-side "is this rider signed in?" (src/lib/auth.ts). A truthy `session` is
   // NOT signed in: after D16's mint every rider carries one and an anonymous rider owns nothing.
@@ -538,8 +515,12 @@ export default function HomeScreen() {
         const quiet = p.estStopCount === 0
         patchCard(cardId, { state: quiet ? 'noStops' : 'ready', proposal: p })
         // The beat where a rider first sees their own drive. Emitted IMPERATIVELY here, beside the
-        // patch, rather than from inside PreviewCard — the card is not memoized and re-renders on
-        // every composer keystroke, so a render-time emit would report typing speed. The `quiet`
+        // patch, rather than from inside the card's own render. ⚠ The original reason — "the card is
+        // not memoized and re-renders on every composer keystroke, so a render-time emit would report
+        // typing speed" — no longer holds: the draft left the screen and `TranscriptCard` is memoized.
+        // The rule stands on better ground anyway. An analytics beat that means "the rider SAW this"
+        // belongs at the moment the state that makes it true is written, not at a render, which React
+        // may run more than once for one logical change. The `quiet`
         // branch counts too: a quiet road is a proposal that was SHOWN, and dropping it would hide
         // the outcome most worth seeing from the one number that would reveal it.
         // ⚠ ONE GATE, TWO WRITES, AND THEY ARE A PAIR — do not let either drift back outside it.
@@ -1051,6 +1032,10 @@ export default function HomeScreen() {
   // The rows teach WHAT kinds of thing to ask for; this teaches HOW CASUALLY you may say it. Every
   // decision lives in `placeholder-util` (pure, tested); this is only the timer and the vetoes.
   const [fieldFocused, setFieldFocused] = useState(false)
+  // ⚠ STABLE ON PURPOSE — `Composer` is memoized, and inline arrows here would defeat its comparator
+  // completely and silently. The setter identity is guaranteed stable by React, so `[]` is honest.
+  const onFieldFocus = useCallback(() => setFieldFocused(true), [])
+  const onFieldBlur = useCallback(() => setFieldFocused(false), [])
   const [tick, setTick] = useState(0)
   const reduceMotion = useReducedMotion()
   // ⚠ EMPTY IN AN UNCURATED REGION, and that is the ROTATION's veto as well as the copy's: the
@@ -1212,116 +1197,58 @@ export default function HomeScreen() {
     />
   )
 
-  /** The in-card taste (D14/INV-5): ONE clip the server chose from THIS route's own release-filtered
-   *  selection — the drive's opening beat, so the preview and the product can never disagree.
+  /** A STABLE play handler for the transcript's cards, and the indirection earns its lines:
+   *  `preview.play` is a NEW function every 500 ms while a clip plays, because its dependency chain
+   *  runs through a `toggle` that reads `status.currentTime`. Handed straight to a memoized card it
+   *  would bust that memo at exactly the tick rate the memo exists to absorb.
    *
-   *  ⚠ NO AUTOPLAY, ever. The clip takes EXCLUSIVE audio focus (D35), so a card that lands mid-
-   *  conversation and starts talking would PAUSE the rider's music with no tap — hostile in a way the
-   *  old mixing behaviour would have hidden. Tap to play, always.
-   *
-   *  A null clip is a normal outcome (a 0-stop route, or a presign that failed) — the card renders
-   *  without the slot and nothing here says so; there is no missing-clip copy because there is no
-   *  missing thing from the rider's point of view. */
-  const renderClipRow = (c: PreviewItem): ReactNode => {
-    const clip = c.proposal?.previewClip
-    if (!clip) return null
-    // The presign is DEAD and this surface cannot mint another (`/drives/:id/assets/sign` is an owner
-    // route). So the disc goes away with it: leaving a play button under copy that says "make the
-    // drive instead" invites a tap that provably cannot work.
-    if (preview.failedCardId === c.id) {
-      return (
-        <View style={styles.clipRow}>
-          <Text variant="label" color="accentWarm">
-            {voice.proposal.clipKicker}
-          </Text>
-          <Text variant="dim" color="danger">
-            {voice.proposal.clipUnavailable}
-          </Text>
-        </View>
-      )
-    }
-    const active = preview.activeCardId === c.id
-    const playing = active && preview.playing
-    return (
-      <View style={styles.clipRow}>
-        <View style={styles.clipHead}>
-          <Pressable
-            onPress={() => preview.play(c.id, clip.url)}
-            accessibilityRole="button"
-            accessibilityLabel={playing ? voice.proposal.clipPauseA11y : voice.proposal.clipPlayA11y}
-            style={({ pressed }) => [
-              styles.clipDisc,
-              { backgroundColor: colors.primaryFill },
-              pressed && styles.clipPressed,
-            ]}
-          >
-            <Icon name={playing ? 'pause' : 'play'} size={22} color="onPrimary" />
-          </Pressable>
-          <View style={styles.flex}>
-            <Text variant="label" color="accentWarm">
-              {voice.proposal.clipKicker}
-            </Text>
-            {/* The place NAME comes from the server, never from the planner — it is a fact about a
-                stop, and D9 keeps facts out of the conversation. `places.name` carries Wikipedia's
-                ", California" disambiguation, hence cleanPlaceName. */}
-            <Text variant="bodyStrong" color="ink" numberOfLines={1}>
-              {cleanPlaceName(clip.name)}
-            </Text>
-          </View>
-          {/* ⚠ NOT decoration. Wikipedia is CC BY-SA, and this is the most-seen anonymous surface in
-              the app — the credit rides the clip wherever the adapted work is presented. It renders
-              nothing for a clip with no sources (scenic/break ground on none). */}
-          <AttributionButton items={clip.attribution} />
-        </View>
-        <Text variant="dim" color="inkDim">
-          {voice.proposal.clipHint}
-        </Text>
-      </View>
-    )
-  }
+   *  ⚠ The mirror is written in an EFFECT, never during render — a ref write during render is the
+   *  `react-hooks/refs` violation this file just finished burning down. Safe because an event handler
+   *  always runs after the effect that armed it, so this can never serve a stale `play`. */
+  const playRef = useRef(preview.play)
+  useEffect(() => {
+    playRef.current = preview.play
+  }, [preview.play])
+  const onPlayClip = useCallback((cardId: string, url: string) => {
+    playRef.current(cardId, url)
+  }, [])
 
-  /** The skipper's line when the drawn drive doesn't match the duration the rider named, or undefined
-   *  when it does (or when they never named one, which is the common case). The RULE is pure and
-   *  tested — `durationDrift` in @/lib/planner-route; this only picks the words. */
-  const durationNoteFor = (c: PreviewItem): string | undefined => {
-    if (!c.proposal) return undefined
-    const drift = durationDrift(c.route.targetMinutes, c.proposal.durationSeconds)
-    if (!drift) return undefined
-    return drift.direction === 'short'
-      ? voice.proposal.durationShort(drift.askedMinutes, drift.actualMinutes)
-      : voice.proposal.durationLong(drift.askedMinutes, drift.actualMinutes)
-  }
+  // The rest of a card's callbacks, hoisted to stable identities for the same reason — a memoized
+  // child compares props shallowly, so an arrow rebuilt at the call site defeats it on every render.
+  const onCreateCard = useCallback(
+    (c: PreviewItem) => {
+      if (c.proposal) void doCreate(c.id, c.proposal, c.idempotencyKey)
+    },
+    [doCreate],
+  )
+  const onOpenDriveCard = useCallback(
+    (driveId: string) => {
+      navigateOnce(() => router.push({ pathname: '/drives/[id]', params: { id: driveId } }))
+    },
+    [navigateOnce, router],
+  )
+  const onSignUpCard = useCallback(() => router.push('/sign-in?mode=up'), [router])
+  const onDismissGateCard = useCallback(
+    (id: string) => patchCard(id, { state: 'ready' }),
+    [patchCard],
+  )
 
   const renderCard = (c: PreviewItem, newest: boolean): ReactNode => (
-    <PreviewCard
+    <TranscriptCard
       key={c.id}
-      state={c.state}
-      proposal={c.proposal}
-      // Only the newest card instantiates a native MapView — and wears the one amber glow.
-      mapEnabled={newest}
-      disclosure={signedIn ? voice.proposal.costNote : voice.proposal.ownershipNote}
-      // ⚠ Computed HERE because this screen is the only place both halves exist: the rider's stated
-      // target rides on `c.route` (the PlannedRoute) and is dropped before `/propose`, so `c.proposal`
-      // — all the card ever sees — cannot know what was asked for.
-      durationNote={durationNoteFor(c)}
-      previewClip={renderClipRow(c)}
-      errorMessage={c.errorMessage}
-      ctaLabel={voice.proposal.cta}
-      onMake={() => c.proposal && void doCreate(c.id, c.proposal, c.idempotencyKey)}
+      item={c}
+      newest={newest}
+      signedIn={signedIn}
+      // Two booleans, not the preview hook: the hook's object identity changes on every 2 Hz status
+      // tick, while these two only change when playback actually starts, stops or fails.
+      clipPlaying={preview.activeCardId === c.id && preview.playing}
+      clipFailed={preview.failedCardId === c.id}
+      onCreate={onCreateCard}
       onAdjust={adjustDrive}
-      onOpenDrive={() =>
-        c.driveId &&
-        navigateOnce(() => router.push({ pathname: '/drives/[id]', params: { id: c.driveId! } }))
-      }
-      // ⚠ NEVER auto-fired on return from sign-up. The fresh account's grant does not exist until
-      // after signup, so the number D29 requires us to disclose does not exist at wall time — the
-      // rider comes back to a re-read balance and taps "Make this drive" once more, on purpose.
-      // Neither POST /drives NOR the billed POST /drives/propose may re-fire on refocus; the focus
-      // effect above calls `load()` and nothing else. (This rule used to live on the screen-level
-      // gate card that step 8a retired — /propose is open to anonymous now, so `needsAccount` can
-      // only arrive WITH a proposal, and PreviewCard's hoisted wall IS the wall.)
-      onSignUp={() => router.push('/sign-in?mode=up')}
-      onDismissGate={() => patchCard(c.id, { state: 'ready' })}
+      onOpenDrive={onOpenDriveCard}
+      onSignUp={onSignUpCard}
+      onDismissGate={onDismissGateCard}
+      onPlayClip={onPlayClip}
     />
   )
 
@@ -1632,8 +1559,8 @@ export default function HomeScreen() {
       // stays typeable, so a rider composing during a cold start loses nothing.
       sending={sending || !regionId}
       placeholder={placeholder}
-      onFocus={() => setFieldFocused(true)}
-      onBlur={() => setFieldFocused(false)}
+      onFocus={onFieldFocus}
+      onBlur={onFieldBlur}
       inputRef={composerRef}
     />
   )
@@ -1716,18 +1643,6 @@ const styles = StyleSheet.create({
   thinking: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   // The in-card taste. Flat, never lit: DESIGN §8 allows ONE amber glow on screen and the card's own
   // "Make this drive" CTA plus its MIN badge already spend it.
-  clipRow: { gap: space.sm },
-  clipHead: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  // hit.min, not the ~44 the design sketch showed — the in-car ≥48pt floor is a habit, not a
-  // per-surface judgement, and this rider is one tap from a drive.
-  clipDisc: {
-    width: hit.min,
-    height: hit.min,
-    borderRadius: radius.pill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clipPressed: { opacity: 0.85 },
   wrapUp: { gap: space.sm },
   section: { marginTop: space.lg },
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: space.md, marginBottom: space.sm },

@@ -14,7 +14,7 @@
 // ⚠ Return is NOT wired to send. On a multiline field the return key is how you write a second
 // sentence; hijacking it costs the rider their paragraph and there is nowhere to put a newline.
 // Sending is the disc, and only the disc.
-import { useCallback, useState, type Ref } from 'react'
+import { memo, useCallback, useState, type Ref } from 'react'
 import { PixelRatio, Pressable, StyleSheet, View, type TextInput } from 'react-native'
 import { hit, radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
@@ -63,7 +63,7 @@ export interface ComposerProps {
   onBlur?: () => void
 }
 
-export function Composer({
+function ComposerBase({
   onSend,
   sending = false,
   placeholder,
@@ -150,3 +150,12 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.85 },
   disabled: { opacity: 0.45 },
 })
+
+/** ⚠ MEMOIZED, and the reason is the audio tick rather than typing. Typing already costs the screen
+ *  nothing (the draft lives in here), but `useRoutePreview` re-renders HomeScreen twice a second for
+ *  as long as a preview clip plays — which re-rendered this whole row, TextInput included, 2×/sec
+ *  underneath a rider who may be mid-sentence. Nothing here depends on playback.
+ *
+ *  ⚠ SO THE CALLER MUST PASS STABLE CALLBACKS. `onFocus`/`onBlur` in particular were inline arrows at
+ *  the call site; left that way they defeat this comparator completely and it silently does nothing. */
+export const Composer = memo(ComposerBase)

@@ -44,6 +44,11 @@ export { TypingDots, type TypingDotsProps } from './TypingDots'
 export { Composer, type ComposerProps } from './Composer'
 export { ExampleAsks, type ExampleAsksProps } from './ExampleAsks'
 export { PreviewCard, type PreviewCardProps, type PreviewCardState } from './PreviewCard'
+export {
+  TranscriptCard,
+  type TranscriptCardProps,
+  type PreviewItem,
+} from './TranscriptCard'
 export { PlannerUnavailableCard, type PlannerUnavailableCardProps } from './PlannerUnavailableCard'
 // The pinned preview-clip transport (1.1 step 8). It rides the conversation's footer slot so a clip
 // that scrolls away cannot strand the rider — roam already paid for that lesson.
