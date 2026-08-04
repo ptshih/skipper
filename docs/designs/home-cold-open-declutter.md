@@ -29,7 +29,8 @@ three, and a composer that could not be typed into. Not a rendering bug — the 
 selected**, and every symptom follows from that.
 
 **Why a second region appeared at all.** `GET /regions` serves STAGED regions to an admin
-(`canPreview`, `apps/api/src/index.ts`), so a merely *seeded* `Yosemite-national-park` put the
+(`canPreview`, `apps/api/src/index.ts`), so a merely *seeded* Yosemite (`yosemite-national-park` —
+slugged `Yosemite-national-park` at the time, renamed 2026-08-03) put the
 signed-in founder into the multi-region path. Anonymous riders still got exactly one, which is why it
 reproduced only when signed in and why `curl` looked healthy.
 

@@ -70,10 +70,12 @@ export async function resolveRegion(idOrSlug: string | null | undefined): Promis
   )
   const row = rows[0]
   // ⚠ LIST THE REAL SLUGS on a miss. Now that `--region` is required rather than defaulted, a typo is
-  // the common failure instead of a rare one — and the match is exact and CASE-SENSITIVE, so a region
-  // seeded with a non-conforming slug (the admin only started validating lowercase-kebab later) is
-  // unreachable by the name an operator would reasonably guess. One extra query, only on the error
-  // path, turns "No region matches" from a dead end into the answer.
+  // the common failure instead of a rare one — and the match is exact and CASE-SENSITIVE, so a slug
+  // that differs only in case is simply unreachable. That was not hypothetical: Yosemite was seeded
+  // as `Yosemite-national-park` before the admin validated lowercase-kebab, so the name any operator
+  // would guess resolved to nothing (the row was renamed 2026-08-03; the hazard is the case-sensitive
+  // match, which remains). One extra query, only on the error path, turns "No region matches" from a
+  // dead end into the answer.
   if (!row) {
     const known = await withRetry(() => db.select({ slug: regions.slug }).from(regions).orderBy(regions.slug), {
       label: 'resolveRegion.known',
