@@ -31,8 +31,10 @@ import { useIsOffline } from '@/lib/connectivity'
 import { listDownloadedDrives } from '@/lib/offline'
 import { space } from '@/theme/tokens'
 import {
+  CreditHint,
   DriveCard,
   DriveCardSkeleton,
+  hasCreditHint,
   Screen,
   ScreenList,
   SkeletonGroup,
@@ -54,28 +56,6 @@ const SCREEN_OPTIONS = { title: TITLE } as const
 
 /** FlatList identity. Module-level so it is stable without a hook. */
 const keyOfDrive = (dr: DriveSummary) => dr.driveId
-
-/** Show the remaining-drives hint only at or below this balance. Not derived from the server's grant
- *  amount on purpose: the rider's grant is FROZEN at signup while the server default moves, so a
- *  ratio ("show under 10%") would mean different things to two riders on the same screen. An absolute
- *  count is the thing a rider can act on — it answers "should I be careful?", which a percentage of a
- *  number they never saw does not.
- *  ⚠ This moved here WITH the section it belongs to. `app/index.tsx` must not keep a copy — one home,
- *  or the two drift silently and nothing fails. */
-const CREDIT_HINT_THRESHOLD = 5
-
-/** ⚠ OWED TO `src/ui/voice.ts` (three keys under the existing `empty` group: `drives`, `drivesAction`,
- *  `drivesSignedOut`). They sit here only because `voice.ts` was being edited concurrently when this
- *  screen landed and the shared-tree rule says leave a mixed file to its owner — lift them and delete
- *  this block. `drives` is a VERBATIM move of the literal that lived in home's zero state; do not
- *  re-author it while lifting, or the move hides a rewrite. Every other string on this screen already
- *  comes from `voice`, which is where they all belong. */
-const OWED_VOICE = {
-  drives: 'No drives yet. Plan one and it lands here for the road.',
-  drivesAction: 'Plan a drive',
-  drivesSignedOut:
-    'Your drives ride with your ticket, friend. Grab one and they’ll be waiting right here.',
-} as const
 
 export default function MyDrivesScreen() {
   const router = useRouter()
@@ -220,7 +200,7 @@ export default function MyDrivesScreen() {
     return (
       <StateView
         title={TITLE}
-        message={OWED_VOICE.drivesSignedOut}
+        message={voice.empty.drivesSignedOut}
         action={{
           label: voice.gate.action,
           onPress: () => navigateOnce(() => router.push('/sign-in?mode=up')),
@@ -250,8 +230,8 @@ export default function MyDrivesScreen() {
     return (
       <StateView
         title={TITLE}
-        message={OWED_VOICE.drives}
-        action={{ label: OWED_VOICE.drivesAction, onPress: goBackToPlanner }}
+        message={voice.empty.drives}
+        action={{ label: voice.empty.drivesAction, onPress: goBackToPlanner }}
       />
     )
 
@@ -270,20 +250,9 @@ export default function MyDrivesScreen() {
   // The credit hint, on its OWN full-width line. It used to share a row with the "MY DRIVES" kicker;
   // that kicker is gone (the native header title replaces it), and a lone element beats a paired row
   // here for the reason §10/§14 settled elsewhere — a pair squeezes at AX Dynamic Type sizes and this
-  // screen is uncapped. Deliberately SILENT until the balance is actually low: with a generous
-  // allotment an always-on counter hangs a meter on a charm-first screen to report a wall roughly a
-  // decade away. It reappears with enough runway to matter, which is the only moment it informs
-  // anything. ⚠ It renders ONLY here — `credits` is set by a successful `listDrives()` and nothing
-  // else, and a credit cannot be spent offline anyway.
-  const creditHint =
-    credits && credits.remaining <= CREDIT_HINT_THRESHOLD ? (
-      <Text variant="label" color="inkFaint">
-        {credits.remaining > 0
-          ? `${credits.remaining} free ${credits.remaining === 1 ? 'drive' : 'drives'} left`
-          : 'No free drives left'}
-      </Text>
-    ) : null
-
+  // screen is uncapped. ⚠ It renders ONLY here — `credits` is set by a successful `listDrives()` and
+  // nothing else, and a credit cannot be spent offline anyway. The threshold and the sentence both
+  // live in `<CreditHint>`; this screen and home used to carry a copy each.
   const offlineNote = offline ? (
     <Text variant="dim" color="inkFaint">
       {voice.offline.home}
@@ -292,11 +261,12 @@ export default function MyDrivesScreen() {
 
   // ⚠ NULL when neither applies, never an empty <View>. The content container's `gap` spaces the
   // header off the first card, so a zero-height header would still hang an unexplained band of air at
-  // the top of the list.
+  // the top of the list. ⚠ `hasCreditHint` rather than a re-derived `remaining <= 5`: it is the same
+  // expression `<CreditHint>` acts on, so this test cannot fall out of step with what renders.
   const header =
-    creditHint || offlineNote ? (
+    hasCreditHint(credits) || offlineNote ? (
       <View style={styles.header}>
-        {creditHint}
+        <CreditHint credits={credits} />
         {offlineNote}
       </View>
     ) : null

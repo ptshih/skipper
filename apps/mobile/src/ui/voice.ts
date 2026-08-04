@@ -30,6 +30,21 @@ export const voice = {
   },
   empty: {
     drive: 'This drive took a wrong turn. Head back and pick another.',
+    // MY DRIVES' three degraded states. ⚠ `drives` is a VERBATIM move of the literal that lived in
+    // home's zero state — it was lifted, never re-authored, so the move could not hide a rewrite.
+    drives: 'No drives yet. Plan one and it lands here for the road.',
+    drivesAction: 'Plan a drive',
+    drivesSignedOut:
+      'Your drives ride with your ticket, friend. Grab one and they’ll be waiting right here.',
+  },
+  credits: {
+    /** The gentle remaining-balance line. ⚠ THE SENTENCE ONLY — *whether* it appears at all is
+     *  `<CreditHint>`'s threshold, and it lives there so the rule cannot be written twice (it already
+     *  had been, on home and on MY DRIVES, and two copies of a rule drift in silence). */
+    left: (remaining: number) =>
+      remaining > 0
+        ? `${remaining} free ${remaining === 1 ? 'drive' : 'drives'} left`
+        : 'No free drives left',
   },
   error: {
     generic: 'Well, that’s a kink in the hose. Give her another pull?',

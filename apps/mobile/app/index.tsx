@@ -82,6 +82,7 @@ import {
   Card,
   Composer,
   ConversationScreen,
+  CreditHint,
   Divider,
   DriveCardSkeleton,
   DriveList,
@@ -103,19 +104,12 @@ import {
   type PreviewItem,
 } from '@/ui'
 
-/** Show the remaining-drives hint only at or below this balance. Not derived from the server's grant
- *  amount on purpose: the rider's grant is FROZEN at signup while the server default moves, so a
- *  ratio ("show under 10%") would mean different things to two riders on the same screen. An absolute
- *  count is the thing a rider can act on — it answers "should I be careful?", which a percentage of a
- *  number they never saw does not. */
 // One glyph per ask SHAPE — keyed on `ExampleAsk.shape`, never on list position, because the list
 // degrades in regions with fewer than two curated names and position stops identifying a shape there.
 const EXAMPLE_ICONS: Record<ExampleAsk['shape'], IconName> = {
   aToB: 'trailSign', // a routed signpost: somewhere to somewhere
   open: 'scenic', // the skipper's own eye picks it
 }
-
-const CREDIT_HINT_THRESHOLD = 5
 
 /** How often the max-hold flush is re-evaluated while a turn streams. Not a token bucket and not a
  *  cap — it is only the resolution at which `tickHold` can notice that a fragment has waited out
@@ -1480,18 +1474,12 @@ export default function HomeScreen() {
           MY DRIVES
         </Text>
         {/* Gentle credit hint — informational, and deliberately SILENT until the balance is actually
-            low. The comment here used to claim it was "not a depleting X-left-of-N toll gauge" while
-            rendering unconditionally, which was true only while the allotment was small enough to be
-            interesting. With the allotment generous (2026-07-31) an always-on counter is worse than
-            none: it hangs a meter on a charm-first screen to report a wall roughly a decade away.
-            It reappears with enough runway to matter, which is the only moment it informs anything. */}
-        {credits && credits.remaining <= CREDIT_HINT_THRESHOLD ? (
-          <Text variant="label" color="inkFaint">
-            {credits.remaining > 0
-              ? `${credits.remaining} free ${credits.remaining === 1 ? 'drive' : 'drives'} left`
-              : 'No free drives left'}
-          </Text>
-        ) : null}
+            low. ⚠ The threshold, the test and the sentence ALL live in `<CreditHint>` now. This screen
+            and MY DRIVES each used to carry their own copy of all three, with a comment on the other
+            side warning that this one "must not keep a copy — one home, or the two drift silently and
+            nothing fails". They were still in step when they were merged; the saved-drive card next
+            door was not so lucky. */}
+        <CreditHint credits={credits} />
       </View>
       {offline ? (
         // ⚠ ICON *AND* THE WORD, which is the one rule worth taking from Google's offline guidance:

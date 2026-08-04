@@ -37,6 +37,9 @@ export { RouteTrack } from './RouteTrack'
 export { Scrubber, type ScrubberProps } from './Scrubber'
 export { StopRow, STOP_ROW_HEIGHT, type StopState } from './StopRow'
 export { StopList, type StopListItem, type StopListProps } from './StopList'
+// The "N free drives left" hint. ⚠ It owns the THRESHOLD too — home and MY DRIVES each used to carry
+// their own copy of the rule, which is how it drifts with nothing failing.
+export { CreditHint, hasCreditHint, type CreditHintProps } from './CreditHint'
 // The saved-drive card, shared by MY DRIVES and home's offline branch. ⚠ It was two copies that had
 // already drifted (a VoiceOver label fixed on one surface only) — keep it one.
 export {
