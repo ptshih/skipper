@@ -213,9 +213,10 @@ describe('isBusinessLike', () => {
  * curate DIFFERENT SETS from one draft, which is exactly the failure the mirroring was supposed to
  * prevent and the one nothing was watching for.
  *
- * Still NOT pinned, and worth knowing: `draftSystem` (the Opus draft prompt) is mirrored the same way
- * — server/places.ts vs packages/studio/src/curate-places.ts — but both copies are module-private, so
- * parity there needs a text comparison rather than a call. It is the highest-value remaining gap.
+ * ✅ `draftSystem` (the Opus draft prompt) is mirrored the same way — server/places.ts vs
+ * packages/studio/src/curate-places.ts — and was the highest-value remaining gap until 2026-08-04. It
+ * is now pinned at the bottom of this file, by TEXT comparison rather than by call, since both copies
+ * are module-private.
  */
 describe('mirrored guard parity (admin ↔ studio)', () => {
   const TYPE_CASES: (string[] | undefined)[] = [
@@ -251,5 +252,45 @@ describe('mirrored guard parity (admin ↔ studio)', () => {
     for (const [drafted, resolved] of NAME_CASES) {
       expect(nameDisagreesStudio(drafted, resolved)).toBe(nameDisagrees(drafted, resolved))
     }
+  })
+})
+
+/**
+ * ⚠ THE LAST MIRROR, AND THE ONE THE COMMENT ABOVE CALLED "the highest-value remaining gap".
+ *
+ * `draftSystem` — the Opus prompt that drafts a region's candidate places — is hand-copied into
+ * apps/admin/server/places.ts AND packages/studio/src/curate-places.ts, and BOTH are live: an operator
+ * curates from the console or from the CLI. What that prompt produces becomes the `places` set, which
+ * IS the planner's wire-level allowlist. So a divergence means the two entry points draft DIFFERENT
+ * candidate sets for one region, and a rider's endpoint options depend on which tool somebody happened
+ * to reach for. Nothing would surface that.
+ *
+ * Both copies are module-private, which is why this compares TEXT rather than calling them — the
+ * approach the note above prescribed. The signature line is skipped on purpose: the two files
+ * legitimately name the bbox type differently (`RegionBbox` vs `BboxCorners`), and that is the only
+ * difference allowed to exist.
+ */
+describe('draftSystem parity (admin ↔ studio)', () => {
+  /** The function's body, minus its signature line. Asserts its own extraction so a refactor that
+   *  renames or reshapes the function fails LOUDLY instead of comparing two empty strings. */
+  const bodyOf = (src: string, label: string): string => {
+    const start = src.indexOf('function draftSystem')
+    expect(start, `${label}: no \`function draftSystem\` found — did it get renamed?`).toBeGreaterThan(-1)
+    const rest = src.slice(start)
+    const end = rest.indexOf('\n}')
+    expect(end, `${label}: could not find the end of draftSystem`).toBeGreaterThan(-1)
+    const block = rest.slice(0, end)
+    return block.slice(block.indexOf('\n') + 1)
+  }
+
+  it('the drafting prompt is byte-identical in both copies', async () => {
+    const admin = bodyOf(await Bun.file(`${import.meta.dir}/places.ts`).text(), 'admin')
+    const studio = bodyOf(
+      await Bun.file(`${import.meta.dir}/../../../packages/studio/src/curate-places.ts`).text(),
+      'studio',
+    )
+    // Non-vacuous: this is a long prompt, so a few hundred bytes would mean the extraction broke.
+    expect(admin.length).toBeGreaterThan(1_500)
+    expect(studio).toBe(admin)
   })
 })
