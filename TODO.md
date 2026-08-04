@@ -38,11 +38,25 @@ without re-deriving the reasoning. **Delete items when done** — git history is
 > the read-back stems gone. Of run 2's two routing flags, **one was the instrument** (`wrap-up-long-conversation`
 > #7, the flip run 1 predicted and refused to make unmeasured — now measured and flipped) and **one is a
 > real regression, below.** So FINDING 3 from run 1 is closed and a new one is open.
-> ⚠ The `durations` detector itself now over-fires more than it under-fires: it flagged *"Two hours, or two
-> stops?"* (a clarifying question) and a line about his own identity. Tighten it before trusting a small
-> delta on that number again — the metric is cheap to re-apply to saved runs at zero spend.
+> ⚠ Read the two survivors as detector NOISE, not as leaks: it flagged *"Two hours, or two stops?"* (him
+> clarifying an ambiguous "actually two") and a line containing *"a minute ago"*.
+> ⛔ **Do NOT tighten it.** Its own definition says it is coarse ON PURPOSE and that *"its value is the
+> DELTA, not the count… tuning it until it could [tell those apart] would be fitting it to one run's
+> wording."* The 10 → 2 delta is valid precisely BECAUSE the identical coarse detector ran on both arms.
+> (Advice to tighten it was written here first and withdrawn on reading the definition — the same
+> read-the-definition trap this file keeps recording.)
 
-- [ ] **⚠ THE EITHER/OR IS BACK, IN A NEW FLAVOUR, AND A ONE-SCENARIO VERIFICATION IS WHY NOBODY KNEW.**
+- [x] **✅ FIXED + VERIFIED same day (`--only deflect-plan-draw-chat`, $0.0968 — routing 1.00, 0/4, all
+      three gates PASS). THE EITHER/OR WAS BACK, IN A NEW FLAVOUR, AND A ONE-SCENARIO VERIFICATION IS WHY
+      NOBODY KNEW.** Fixed by TWO CLARIFICATIONS of existing rules, not a new rule (the lesson from the last
+      round): *"Asking ABOUT a place is not asking to go BY it… it does not come back a few turns later as
+      something you offer them"*, and *"you HAVE it the moment you have a start and a far end — do not go
+      hunting for one more thing to ask."* Mechanism confirmed rather than just the score: turn 1 became
+      *"Kings Beach down to South Lake Tahoe. Shall I set it?"*, turn 2 DREW with `via_anchor_ids: null` and
+      `target_minutes: 120` recorded-but-unspoken, and the draw-ask came out different again so no new stamp
+      replaced the old one. ⚠ Still only ONE scenario — the next full suite is what confirms it. Full
+      rationale: [planner-stops-asking-how-long](docs/decisions/planner-stops-asking-how-long.md).
+      The original finding, kept because the diagnosis is the reusable part:
       `deflect-plan-draw-chat #2`: the rider said *"Yeah, do it."* and no route came back, because the turn
       before offered *"Kings Beach down to South Lake Tahoe — and you want Emerald Bay on the way, or
       straight through?"* — an either/or, which the prompt bans by name with almost that exact sentence as

@@ -112,7 +112,7 @@ persona turns went to zero. The judge's remaining complaint is CADENCE, not word
 volume of bare readback-confirm turns… fine but flavorless, and they drag the middle of several chats."*
 That is a different problem from the stamp and wants a different fix.
 
-## ⚠ What this change appears to have COST — measured, and open
+## What this change appears to have COST — found, fixed, and verified the same day
 
 The full run flagged `deflect-plan-draw-chat #2`: the rider said *"Yeah, do it."* to a plan and **no route
 came back.** The cause is on the turn before, where the skipper said:
@@ -135,9 +135,30 @@ Two things make it worth chasing rather than filing:
    model read **asked ABOUT** as **asked FOR**. That gap is real and specific: the prompt never says what
    becomes of a place the rider only asked about, and a deflected name stays live in the conversation.
 
-⚠ **And it may be this change's own doing** — stated as a hypothesis, not a finding. With both ends named
-and the duration question gone, the model had nothing left it was told to ask, and it filled the vacuum
-with an either/or about the one loose name on the table. If that is right, the fix is not to restore the
-duration ask but to say plainly that a place they asked ABOUT is not a place they asked to go BY, and that a
-settled pair of ends goes straight to the read-back. Verifiable for cents: `--only deflect-plan-draw-chat`
-is four turns.
+⚠ **And it may have been this change's own doing** — stated as a hypothesis then, and STILL a hypothesis
+now: with both ends named and the duration question gone, the model had nothing left it was told to ask, so
+it filled the vacuum with an either/or about the one loose name on the table. What is proven is only that
+the fix works without restoring the ask; the vacuum itself was never isolated and is not worth paying to
+isolate.
+
+✅ **FIXED AND VERIFIED (2026-08-04, `--only deflect-plan-draw-chat`, $0.0968): routing 1.00, 0/4 flagged,
+all three gates PASS.** Two clarifications of rules that already existed — deliberately NOT a new rule, the
+lesson from the last either/or round:
+
+1. On the pass-through rule: *"Asking ABOUT a place is not asking to go BY it. When they wonder what
+   somewhere is like, that is road talk: it gets the road-talk answer and then it is finished. It does not
+   join the plan, and it does not come back a few turns later as something you offer them."*
+2. On the read-back: *"And you HAVE it the moment you have a start and a far end. Do not go hunting for one
+   more thing to ask: not a stop to add, not a shape to choose between, not a number."*
+
+**The mechanism was checked, not just the score.** Turn 1 went from *"…and you want Emerald Bay on the way,
+or straight through?"* to *"Kings Beach down to South Lake Tahoe. Shall I set it?"* — no either/or, no
+invented via, straight to a read-back a yes can land on. Turn 2 then DREW, with `via_anchor_ids: null` (the
+manufactured stop is gone) and `target_minutes: 120` still recorded from *"Couple of hours"* and still never
+said back. The chit-chat turn held without re-emitting, so the defect this scenario originally existed for
+stays fixed. And the draw-ask came out different again (*"Shall I set it?"*), so no new stamp took its place.
+
+⚠ Verified on ONE scenario, which is the same narrowness that let the previous either/or fix look complete.
+The difference is that this one is a clarification of an existing rule rather than a behavioural default, so
+it has less room to be true in one scenario and false in another — but the next full suite is what confirms
+it, not this arm.
