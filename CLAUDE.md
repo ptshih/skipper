@@ -274,6 +274,11 @@ itself is recorded in `docs/guides/1-1-cutover-runbook.md`). RISK-1's real drive
   fact into prose — a bitrate, timeout, dep pin, migration number, table/provider name, or "today only X
   exists" claim. Each has ONE home (the constant, `cloudbuild`/`package.json`, the schema, a
   `docs/decisions/` entry); point there, don't duplicate the value where it silently drifts.
+- **Close a task in PLAIN ENGLISH; END with the next step.** A wrap-up REACHING THE FOUNDER opens with a few
+  sentences a non-engineer could follow — what changed, what it MEANS — and closes with a scannable
+  `**Next:**` line of its own, even when the answer is "nothing"; paths/symbols are the DETAIL between, never
+  the explanation. Keys on DESTINATION, not producer — a subagent reporting to an ORCHESTRATOR stays dense
+  and structured; the relay gets the treatment. ⚠ Judge by the WORK, not step count. `/wrap-up` = the craft.
 
 ## Milestones
 
