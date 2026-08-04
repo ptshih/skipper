@@ -230,8 +230,9 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   build estimate (~a week; 59 of 103 judgments reconcile confidently, ~44 need a human, and the wire
   keeps its SHAPE so mobile is untouched). ⚠ The taste test HAS been run, three rounds: the model COMPLIES
   when a rider directly names a bad endpoint, and the REAL prompt fed the POI roster unedited accepted
-  4 of 4 (agreed to end a drive on Fannette Island) — so the endpoint-worthiness column is MANDATORY and
-  the swap without a prompt rewrite is a REGRESSION, not a step. Also measured: uuids tokenize ~6× their
+  4 of 4 (agreed to end a drive on Fannette Island), and round 4 then FIXED 3 of those 4 with five
+  sentences of prompt while drawing a route from names alone, 0 off-list. Verdict SPLIT: arrivability is a
+  prompt problem; NOTABILITY (an obscure real park) is the only thing left that needs a column. Also measured: uuids tokenize ~6× their
   names, so ids-in-prefix is ~33k tokens, not the ~11k first estimated. ⚠ Records five objections
   raised and then measured wrong — four of them the same mistake, a query whose shape did not match the
   question. Not greenlit (2026-08-04).

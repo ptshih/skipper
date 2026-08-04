@@ -12,7 +12,9 @@
 > said to run first HAS BEEN RUN** (2026-08-04, three rounds): model taste is a good first filter and NOT
 > a sufficient one, so the endpoint-worthiness column is MANDATORY. ⚠ Round 3 fed the REAL prompt the POI
 > roster unedited and it accepted **4 of 4** bad endpoints — so the swap is not a data change with a
-> prompt follow-up; without the rewrite it is a REGRESSION.
+> prompt follow-up; without the rewrite it is a REGRESSION. ⚠ **Round 4 then fixed 3 of those 4 with five
+> sentences of prompt** and drew a route with names only, 0 off-list — which SPLITS the verdict:
+> arrivability is a prompt problem, notability is the only thing left needing a column.
 
 ## The flow being proposed
 
@@ -264,6 +266,47 @@ after the swap he cheerfully agrees to end your drive on an island in the middle
 ⚠ **Untested by round 3:** nothing DREW. The prompt correctly waits for both endpoints and a yes, so
 every opening ended in a question. The tool-call step — where an id is copied and a route emitted — has
 not been exercised against a 728-row roster.
+
+### Round 4 — names only, no cap, plus the criterion. The verdict above needs splitting.
+
+Round 3's roster carried ids and no criterion. Round 4 kept the REAL prompt and tool, applied a
+mechanical `id`→`name` substitution, removed the 200 cap, printed all 728 names WITHOUT ids, and added
+**five sentences** of arrivability instruction — most of these are things folks drive past; a start or
+finish has to be somewhere a car can pull up and the drive be over; offer the nearest place that can.
+
+**Three of round 3's four failures fixed, in character:**
+
+> *"Fannette Island I know — trouble is it's an island, and I've yet to meet a car that swims. I can
+> finish you at Emerald Bay State Park, or D. L. Bliss State Park a little ways off."*
+
+> *"Boca Dam I know, but a dam's no place to start a drive — nobody pulls up at one and calls it a day."*
+
+> *"The tram I know — but there's no pulling up and calling it a day at a cable car. Olympic Valley's the
+> place a car can actually stop out that way."*
+
+Homewood Canyon likewise redirected to Homewood. Yosemite still refused. *"Can we go by Sand Harbor?"* →
+*"happy to run you PAST it"* — which is the nudge-the-routing behaviour
+([the-road-trip-planner.md](the-road-trip-planner.md)) arriving for free.
+
+**And it DREW**, which round 3 never reached: `Stateline, Nevada → Tahoe City, California`, names copied
+verbatim, **0 off-list across the run**. The name→id resolution mechanism is sound.
+
+⚠ **The one survivor changes the verdict.** *"Drive me to Audrey Harris Park"* → *"Happy to."* And that
+is NOT an arrivability failure — a park is a perfectly reasonable place to drive to, so the criterion
+has nothing to catch. It is a **notability** failure: an obscure real park the model has no signal about
+(and, separately, the one duplicated name in the corpus).
+
+**So the two failure classes are different problems with different fixes:**
+
+| class | example | fixed by |
+| --- | --- | --- |
+| **Arrivability** — you cannot stop there | island, dam, canyon, cable car | ✅ the PROMPT, ~5 sentences |
+| **Notability** — you can stop, but nobody would name it | `Audrey Harris Park`, `The Montage Reno` | ❌ prompt cannot; only DATA can |
+
+⚠ **This narrows the "endpoint-worthiness column is MANDATORY" verdict recorded above.** It is still
+wanted, but for a smaller and better-understood job: notability, which is what `featured` already
+encodes for the 14 curated hubs and what `pois` has no signal for. The arrivability half — the part that
+looked like it needed a curator — is carried by prose.
 
 ### Correction to the token estimate: ids are ~6× names, not 3×
 
