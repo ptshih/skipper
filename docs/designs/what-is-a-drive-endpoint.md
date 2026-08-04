@@ -1,8 +1,9 @@
 # What is a drive endpoint?
 
-> **Status:** 💡 **IDEA — no code built; ONE data prune applied 2026-08-04** (five rows lost the endpoint
-> role — see *What I would do*, which also records why its first recommendation was reversed the same
-> day). Written from a founder observation
+> **Status:** 💡 **IDEA for the role split; PARTLY ACTED ON 2026-08-04** — five rows lost the endpoint
+> role, and the arrivability criterion is now IN both draft prompts (see *What I would do*, which records
+> both reversals: the "defer the prompt change" call, and the claim that the tail was mostly bad). The
+> destination/waypoint split remains unbuilt. Written from a founder observation
 > ("the main purpose of places is start/end/via, and a lot of these don't fit") plus a full audit of the
 > live Tahoe set. It proposes a CRITERION and a role split; it does not propose a migration. The build
 > record for the machinery this is about is
@@ -144,12 +145,43 @@ wrong ones were **five**, not sixty. A histogram is not a list.
 108 → **103 endpoints**. ⚠ `endpoint_eligible` is OR-merged, so a re-curation of this region can restore
 all five; this prune is not durable on its own.
 
-**Deferred, deliberately:**
+**Also done 2026-08-04 — the criterion is IN both draft prompts.** ⚠ This reverses the deferral written
+two hours earlier in this same section, and the reason it was deferred turned out to be false: *"a
+prompt change cannot be validated without a paid curation run"* conflated the DRAFT with the CURATE. The
+draft (`draftCuratedPlaces`, `apps/admin/server/places.ts`) is **one Opus call that writes nothing and
+makes no Places calls**, ~$0.60 — which is precisely the instrument for judging a prompt, with today's
+137 rows as the baseline.
 
-- **The criterion in both draft prompts** — until a new region is actually being curated, so the change
-  is exercised by the run that motivates it. That is also the moment the breadth-vs-precision tension
-  first bites for real, so it wants to be decided with a second region's draft in front of you rather
-  than from Tahoe alone.
+The prompt already carried HALF the criterion and had for weeks: *"The test is whether somebody says
+'let's drive from ___ to ___'"*. What was missing was arrivability. So the change is one clause, not a
+rewrite: two tests, both required, plus the concrete failure shapes (an island, a summit with no road, a
+mansion a mile down a trail) and the instruction to *name the place a car arrives AT, never the thing you
+walk to from it*.
+
+**What a draft against it showed** (105 places, 85 endpoint-or-both):
+
+- Fannette Island, the tavern, the hotel and the rental counter: **gone**.
+- Vikingsholm came back as **"Vikingsholm Overlook", tagged break** — not dropped but RENAMED to the
+  thing a car can reach. That is the instruction working better than asked.
+- Emerald Bay, Truckee, Tahoe City, Cave Rock: still there.
+- ⚠ **Donner Pass vanished and Echo Summit fell to break-only.** The clause said "a peak", and a model
+  reasonably reads a mountain pass as one. Since the planner roster is ENDPOINT-ONLY
+  (`loadRegionAnchors` filters on `endpoint_eligible`), break-only means the Skipper stops knowing it —
+  so this was a real loss, not a tidy reclassification. Fixed by carving out the opposite case
+  explicitly: a pass or summit **the road itself crosses** belongs on the list, because the highway goes
+  over the top and you can pull over there.
+
+⚠ **THE CARVE-OUT IS UNVERIFIED AT SCALE, AND ONE DRAFT IS A SAMPLE, NOT A MEASUREMENT** — two runs of
+the same prompt returned 105 and 96 places with different composition. It was landed anyway on the
+grounds that the previous prompt had NO arrivability test at all and demonstrably produced an island as
+a drive destination, so this is strictly better even unmeasured. **The real validation is the next
+region's curation**, where a human prunes the draft regardless: read that list for passes and summits
+before applying it.
+
+⚠ Both copies must change together and are byte-identical BY HAND (`packages/studio/src/curate-places.ts`
++ `apps/admin/server/places.ts`), since the admin deliberately does not depend on `@skipper/studio`.
+
+**Deferred, deliberately:**
 - **The destination/waypoint split** — same trigger, same reason. `Echo Summit`, `Donner Pass`,
   `Mount Rose Summit` and `Cave Rock` are the standing evidence for it: perfect to route PAST, odd to
   end at. Four rows is not enough to justify a migration; a second region probably is.
