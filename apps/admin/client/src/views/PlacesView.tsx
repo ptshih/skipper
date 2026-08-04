@@ -1,9 +1,11 @@
-// /places — curate the per-region set of real-world PLACES that feed the drive endpoint picker (and,
-// later, break pitstops). The `places` table is role-tagged: an ENDPOINT hub (town/marina/lookout a
-// rider starts or ends at) and/or a BREAK pitstop; FEATURED floats the popular subset to the top of the
-// rider's picker. Coords are resolved + STORED at curation, so the runtime picker makes zero live
-// Places calls. This page is the review/prune/promote + manual-add surface; the bulk seed is the
-// interactive Curate button (Opus draft → prune → Places resolve). See docs/designs/places-endpoints-spec.md.
+// /places — curate the per-region set of real-world DESTINATIONS that feed the planner's endpoint
+// allowlist. ⚠ ROLES ARE GONE (2026-08-04): every row IS a destination — somewhere a driver would name
+// as a start or a finish — so there is nothing to tag, and the only axis left is RANK (how likely a
+// visitor is to name it out loud; 1 is most, blank sorts last). Break pitstops went with the roles and
+// return with live Places data in M3. Coords are resolved + STORED at curation, so the runtime picker
+// makes zero live Places calls. This page is the review/prune/rank + manual-add surface; the bulk seed
+// is the interactive Curate button (Opus draft → prune → Places resolve).
+// See docs/designs/places-endpoints-spec.md.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2, MapPin, Navigation, Plus, Search, Sparkles, Star, Trash2 } from 'lucide-react'
@@ -71,8 +73,8 @@ export function PlacesView() {
   const places = data?.places ?? []
   const bbox = data?.bbox ?? null
 
-  // Inline role/featured toggle — optimistic (the cache flips instantly; rolls back on error) so the
-  // prune loop stays snappy over a short curated list.
+  // Inline RANK edit — optimistic (the cache flips instantly; rolls back on error) so the prune/rank
+  // loop stays snappy over a short curated list.
   //
   // ⚠⚠ THE KEY TRAVELS IN THE VARIABLES, NOT THE CLOSURE, AND THAT IS LOAD-BEARING. These callbacks
   // used to close over the render-scoped `queryKey`, and React Query hands a PENDING mutation the
@@ -138,7 +140,7 @@ export function PlacesView() {
     onSuccess: (_d, vars) => void qc.invalidateQueries({ queryKey: vars.key }),
   })
   const onDelete = async (p: PlaceRow) => {
-    if (!(await confirm({ title: `Remove ${p.name}?`, body: 'It will no longer be pickable as a drive endpoint or break.', confirmLabel: 'Remove', tone: 'destructive' }))) return
+    if (!(await confirm({ title: `Remove ${p.name}?`, body: 'It will no longer be offerable as a drive endpoint.', confirmLabel: 'Remove', tone: 'destructive' }))) return
     deleteMut.mutate({ id: p.id, key: queryKey })
   }
 
@@ -238,7 +240,7 @@ export function PlacesView() {
     <div>
       <PageHeader
         title="Places"
-        description="Curated start / end / midpoint hubs (and break pitstops) for the drive picker. Coords are stored at curation — the rider's picker makes zero live Places calls."
+        description="A region’s curated real-world DESTINATIONS — the planner’s entire endpoint allowlist. Ranked by how likely a visitor is to name each out loud. Coords are stored at curation, so the rider’s picker makes zero live Places calls."
         actions={
           <>
             <Button variant="outline" disabled={!region || curating} onClick={() => setAdding(true)}>
@@ -325,7 +327,7 @@ export function PlacesView() {
             empty={
               <EmptyState icon={MapPin}>
                 <div className="font-medium text-foreground">No curated places yet</div>
-                <div>Run Curate to draft this region’s hubs + pitstops, or add a place by name.</div>
+                <div>Run Curate to draft this region’s destinations, or add a place by name.</div>
               </EmptyState>
             }
           />
@@ -423,11 +425,12 @@ function AccessPointDialog({ place, onClose, onSaved }: {
 /* ── CURATE (interactive: Opus draft → operator prunes → Places resolve → upsert) ── */
 
 // Two-step curate so the operator REVIEWS the LLM's picks before paying to resolve them:
-//  1. Draft  — one Opus call names the region's hubs + pitstops (a few cents; writes nothing).
+//  1. Draft  — one Opus call names the region's destinations, ranked (a few cents; writes nothing).
 //  2. The operator unchecks anything they don't want.
-//  3. Resolve & add — the keepers are resolved against Google Places (bbox-bound) + upserted role-tagged.
-// Re-runnable (OR-merges roles). Both steps spend, so the founder-gate is the explicit button click
-// (this whole console is behind IAP). Roles/featured can be fine-tuned in the table after they land.
+//  3. Resolve & add — the keepers are resolved against Google Places (bbox-bound) + upserted.
+// Re-runnable (upserts; it never deletes, so pruning is a separate delete). Both steps spend, so the
+// founder-gate is the explicit button click (this whole console is behind IAP). ⚠ There are no roles to
+// fine-tune afterward (2026-08-04) — what IS editable in the table is each row's RANK.
 //
 // Rendered INLINE on the page (not a modal): the Draft step is a long synchronous Opus call (~30s), and a
 // modal that dismisses on a stray overlay-click / Esc is a footgun there — it reads as frozen and one
@@ -505,7 +508,7 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
               <span className="font-medium text-foreground">Draft</span> spends a few cents (one Opus call) and
               writes nothing — review the picks first.{' '}
               <span className="font-medium text-foreground">Resolve &amp; add</span> spends a few cents of Google
-              Places and writes the keepers. You can fine-tune roles in the table afterward.
+              Places and writes the keepers. You can fine-tune each row’s rank in the table afterward.
             </Callout>
             <div className="flex items-end gap-2">
               <div className="space-y-1.5">
@@ -538,7 +541,7 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
         {drafting && (
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Drafting this region’s hubs + pitstops with Opus… this takes ~30s.
+              <Loader2 className="h-4 w-4 animate-spin" /> Drafting this region’s destinations with Opus… this takes ~30s.
             </div>
             <div className="space-y-0.5 rounded-lg border p-1.5" aria-hidden>
               {['w-40', 'w-52', 'w-32', 'w-48', 'w-36', 'w-44'].map((w, i) => (
@@ -652,7 +655,7 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
 /* ── ADD A PLACE (manual single-add via live Google Places search) ── */
 
 // The "I want THIS exact hub the draft missed" escape hatch: type a name → resolve it against live
-// Google Places (bbox-bound to the region) → pick roles → insert (upsert by place_id).
+// Google Places (bbox-bound to the region) → insert (upsert by place_id).
 function AddPlaceDialog({ open, onOpenChange, region, onAdded }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -695,7 +698,7 @@ function AddPlaceDialog({ open, onOpenChange, region, onAdded }: {
       onOpenChange={onOpenChange}
       icon={Plus}
       title="Add a place"
-      description="Search Google Places for a specific hub or pitstop in this region. The match is resolved + stored once — no live Places calls at drive time."
+      description="Search Google Places for a specific destination in this region. The match is resolved + stored once — no live Places calls at drive time."
       onSubmit={() => addMut.mutate()}
       submitIcon={Plus}
       submitLabel="Add place"
