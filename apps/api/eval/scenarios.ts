@@ -282,12 +282,18 @@ export const SCENARIOS: Scenario[] = [
       { rider: 'maybe an hour', expect: 'hold' },
       { rider: 'actually two', expect: 'hold' },
       { rider: 'end at Kings Beach', expect: 'hold' },
-      // ⚠ `hold` is CORRECT here and this used to assert `draw`, which made the panel report a
-      // failure that was the instrument's fault. By this turn the skipper has usually asked something
-      // ("straight through, or back around?"), and "yes draw it" does not answer it — the prompt is
-      // explicit that an answer skipping the question is NOT a yes. He was right to ask again; the
-      // scenario was wrong to demand a route. (The real defect upstream is that he offers an
-      // either/or at all, which the prompt also forbids — but that is a different turn's problem.)
+      // ⚠ **THIS EXPECTATION'S PREMISE IS GONE AND IT HAS NOT BEEN RE-MEASURED.** It used to assert
+      // `draw`, was changed to `hold` because "by this turn the skipper has usually asked something
+      // ('straight through, or back around?')", and "yes draw it" does not answer an either/or — so he
+      // was right to ask again and the scenario was wrong to demand a route.
+      // That justification died on 2026-08-03: loops became an EXPLICIT-ASK exception
+      // (docs/decisions/no-same-road-loops.md §8) and this rider never asks for one, so the skipper no
+      // longer has an unanswered question on the board. Verified on `midpoint`, where the identical
+      // either/or is gone and the yes now lands: routing 0.93 → 1.00, 0/3 flagged.
+      // ⚠ Left as `hold` DELIBERATELY rather than flipped back to `draw` on reasoning alone — changing
+      // an expectation without measuring it is precisely the instrument bug this file has now produced
+      // four times. Re-measure this scenario (9 rider turns, so it is not free) and set it from what the
+      // run actually does.
       { rider: 'yes draw it', expect: 'hold_no_repeat', note: 'ambiguous yes — asking again is correct' },
       { rider: 'thanks, this is great', expect: 'hold_no_repeat', note: 'wrap-up is riding now — must not re-offer or redraw' },
       { rider: 'one more thing, do you work weekends?', expect: 'hold_no_repeat', note: 'and must not say goodbye twice' },

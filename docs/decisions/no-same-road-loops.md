@@ -6,7 +6,8 @@
 > [drive-density-and-the-return-leg.md](drive-density-and-the-return-leg.md) §5 — which measured the
 > problem and deliberately greenlit nothing.
 > ⚠ **REFINED later the same day (founder): a loop is an EXPLICIT-ASK EXCEPTION and one-way is the voiced
-> default.** The planner never offers a loop. See §8, which supersedes §5's cost accounting.
+> default.** The planner never offers a loop. See §8, which supersedes §5's cost accounting — and which is
+> **VERIFIED on a paid eval arm**, not just reasoned: routing 0.93 → 1.00.
 
 ## 0. The complaint, and why it was not a selection bug
 
@@ -183,6 +184,14 @@ eval caught the model producing nearly the banned sentence verbatim on `midpoint
 rider asks for a plain A→B and never mentions a loop. **That was filed as a prompt-ADHERENCE problem and
 it was a CONTRADICTION**: the model was obeying the other rule. Strengthening the ban would have chased a
 rule the prompt taught against elsewhere.
+
+✅ **VERIFIED, not just reasoned (2026-08-03, $0.0616).** `--only midpoint --no-judge` on the scenario
+that measured the defect: **routing 0.93 → 1.00, 0/3 turns flagged**, voice and discipline 1.00, 0
+durations asserted as road fact. Turn #0 went from *"Straight run up, or did you want to come back
+around?"* to *"Nice and simple — South Lake Tahoe up to Kings Beach, one way. Want me to draw that one
+up?"*, and turn #2 DREW on *"yes that"* where it previously re-asked. That second half is the important
+one: it confirms the **mechanism** the finding predicted — an either/or leaves no turn presenting a plan a
+yes can land on, so the draw slips. Remove the question and the yes lands.
 
 **This also retires a backlog item outright.** `TODO.md`'s *"A round trip goes QUIET on the return leg"*
 proposed two fixes — snapping a candidate to every LOCAL minimum so one place could be told on both legs,

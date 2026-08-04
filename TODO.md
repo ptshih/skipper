@@ -80,20 +80,22 @@ ever need measuring, the panel has to go through the route, not around it.
       different way home?"* The model was obeying those. Strengthening the ban would have chased a rule the
       prompt taught against elsewhere, which is why the "adherence" framing would have burned a paid arm
       for nothing.
-      ✅ **FIXED (founder call, 2026-08-03) — and by a product rule, not a wording tweak: a loop is now an
-      EXPLICIT-ASK EXCEPTION and one-way is the voiced default.** The model never raises coming back around
-      at all, so on `midpoint` — whose rider asks for a plain A→B and never mentions a loop — the either/or
-      has no occasion to exist. Both offending lines now land on the default instead of a menu. Rationale +
-      the Moab/Arches note: [docs/decisions/no-same-road-loops.md](docs/decisions/no-same-road-loops.md) §8.
-- [ ] **VERIFY the loop-default change on one paid arm (~$0.50, founder go).** ⚠ Do NOT re-run the whole
-      suite for this — `--only midpoint` is three turns and is the scenario that measured the defect.
-      What to check: turn #0 no longer offers a shape the rider did not ask for, and #2 DRAWS rather than
-      re-asking. ⚠ **Then look at `wrap-up-long-conversation` #7 second**, because this change may flip it:
-      its `expect: 'hold_no_repeat'` was calibrated against a skipper who "has usually asked something
-      ('straight through, or back around?')" by that turn. With no either/or, *"yes draw it"* becomes an
-      unambiguous yes and the correct expectation is probably `draw` — an INSTRUMENT update, and the fourth
-      instance of that file's expectations outliving a product rule. Do not score the model against it
-      until it has been re-read.
+      ✅ **FIXED AND VERIFIED (founder call + one paid arm, 2026-08-03) — by a PRODUCT rule, not a wording
+      tweak: a loop is now an EXPLICIT-ASK EXCEPTION and one-way is the voiced default.** Measured on
+      `--only midpoint --no-judge`, **$0.0616**: routing **0.93 → 1.00, 0/3 flagged**, voice and discipline
+      1.00, 0 durations asserted as road fact. Turn #0 went from *"Straight run up, or did you want to come
+      back around?"* to *"Nice and simple — South Lake Tahoe up to Kings Beach, one way. Want me to draw
+      that one up?"*, and #2 DREW on *"yes that"* where it used to re-ask — which confirms the mechanism
+      rather than just the outcome: the either/or was what kept a yes from having anything to land on.
+      Rationale + the Moab/Arches note:
+      [docs/decisions/no-same-road-loops.md](docs/decisions/no-same-road-loops.md) §8.
+- [ ] **Re-measure `wrap-up-long-conversation` #7 — its premise is gone and it has NOT been re-run.** Its
+      `expect: 'hold_no_repeat'` was calibrated against a skipper who "has usually asked something
+      ('straight through, or back around?')" by that turn, and he no longer does. The expectation is
+      probably `draw` now — but ⚠ **it was deliberately NOT flipped on reasoning alone**, because changing
+      an expectation without measuring it is the exact instrument bug this file has now produced four
+      times. 9 rider turns, so it is not free. The stale justification is corrected in place at the
+      scenario so nobody reads it as current.
 - [ ] **FINDING 3 — the read-back turn is both the persona sag AND the duration leak, and it is one
       turn.** Persona scored 0.64 advisory (6/54 flagged) and every flagged turn is a draw/read-back:
       *"Tahoe City out to Incline Village, straight through, about an hour."* → judge *"Flat confirm, no
