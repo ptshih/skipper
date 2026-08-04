@@ -50,7 +50,9 @@ import { withRetry } from './pipeline/http'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { leaderGroups, mergeDuplicateGroups, metersBetween, pickSubject, type ClassifiedGroup } from './pipeline/clustering'
 import { isContainer } from './pipeline/containment'
+import { z } from 'zod'
 import { getAnthropic, JUDGMENT_MODEL } from './models'
+import { parseToolReply } from './pipeline/tool-call'
 import { llmSpendLines, llmSpentUsd, recordModelUsage } from '@skipper/shared'
 import { NARRATION_CONCURRENCY } from './config'
 
@@ -76,7 +78,6 @@ const REVIEW_MAX_MEMBERS = 2
 const REVIEW_MAX_CONFIDENCE = 0.85
 
 const TREATMENTS = ['SOLO', 'CLUSTER', 'DISTRICT'] as const
-type Treatment = (typeof TREATMENTS)[number]
 
 const TOOL: Anthropic.Tool = {
   name: 'classify',
@@ -132,14 +133,23 @@ interface Row {
   sheet: string | null
   seedable: boolean
 }
-interface Verdict {
-  treatment: Treatment
-  title: string
-  highlights?: string[]
-  drop?: string[]
-  why: string
-  confidence: number
-}
+// ⚠ VALIDATED, not asserted. This used to be `(call?.input as Verdict | undefined) ?? null`, and the
+// field that made it dangerous is `treatment`: it is read as `v.treatment.toLowerCase()` and becomes the
+// group's kind, so anything the model said other than the three legal values would have flowed into the
+// grouping as a garbage value with nothing to stop it.
+// ⚠ `highlights`/`drop`/`confidence` are OPTIONAL here even though the wire schema marks `highlights`
+// required — deliberately more lenient than the wire, because every consumer already defaults them
+// (`v.highlights?.length ?? 0`, `?.confidence ?? 1`, `?.drop ?? []`). Validate what the code needs, not
+// more: rejecting a reply the code handles fine would turn a working run into a failed one.
+const VERDICT = z.object({
+  treatment: z.enum(TREATMENTS),
+  title: z.string(),
+  highlights: z.array(z.string()).optional(),
+  drop: z.array(z.string()).optional(),
+  why: z.string(),
+  confidence: z.number().optional(),
+})
+type Verdict = z.infer<typeof VERDICT>
 
 async function classify(group: Row[]): Promise<Verdict | null> {
   let spread = 0
@@ -168,8 +178,18 @@ async function classify(group: Row[]): Promise<Verdict | null> {
   // classified 64 groups reported nothing about what it billed. `--clear` makes no model calls, which
   // is why the reporter at the bottom is conditional rather than unconditional.
   recordModelUsage(JUDGMENT_MODEL, res.usage)
-  const call = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
-  return (call?.input as Verdict | undefined) ?? null
+  // ⚠ Validated OUTSIDE the `withRetry` above, and that placement is load-bearing: `withRetry` retries
+  // EVERY error four times, so validating inside it would re-bill this Opus call four times over a
+  // deterministic schema failure — once per group, on a paid run. Returning null rather than throwing
+  // preserves this function's existing contract (the caller treats a null verdict as "leave the group
+  // alone"), so one unusable reply costs one group instead of aborting a run that has already spent on
+  // every group before it — `mapLimit` fails fast.
+  try {
+    return parseToolReply({ content: res.content, toolName: TOOL.name, schema: VERDICT, label: `classify(${group[0]!.name})` })
+  } catch (e) {
+    console.warn(`  ⚠ ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`)
+    return null
+  }
 }
 
 async function main(): Promise<void> {

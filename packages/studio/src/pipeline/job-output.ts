@@ -10,9 +10,10 @@
 // EVERYTHING here is best-effort: capture must never corrupt real output, and a synthesis
 // failure must never block the job from settling (job-progress swallows it).
 
-import Anthropic from '@anthropic-ai/sdk'
 import { format } from 'node:util'
+import { z } from 'zod'
 import { SUMMARY_MODEL } from '../models'
+import { callTool } from './tool-call'
 
 // Cap the in-memory tail we keep (synth truncates further). Bounds memory on a chatty run;
 // the head of a very long log is the least useful part, so we keep the TAIL.
@@ -58,10 +59,18 @@ export interface JobOutputSynthesis {
   data: Record<string, unknown>
 }
 
-// Lazy so importing this module never constructs the client — sweep/refetch run without a
-// narration key locally, and local CLI never synthesizes anyway (STUDIO_JOB_ID unset).
-let _client: Anthropic | undefined
-const client = (): Anthropic => (_client ??= new Anthropic())
+// ⚠ This module used to build its OWN `new Anthropic()`, which quietly made models.ts's promise of
+// "ONE lazily-built singleton for every call site" false — two clients, two retry policies. It now goes
+// through `callTool`, i.e. the shared `getAnthropic()`, which is lazy for the same reason the local
+// client was: importing this module must not require a key, because sweep/refetch run without one
+// locally and a local CLI never synthesizes anyway (STUDIO_JOB_ID unset). A missing key now surfaces as
+// a thrown error inside the try below and lands in the same fallback an API failure does.
+const REPORT = z.object({
+  summary: z.string(),
+  /** Free-form on purpose — the useful metrics differ per job kind, and the SYSTEM prompt asks for
+   *  whatever this run can support rather than a fixed set. */
+  data: z.record(z.string(), z.unknown()).optional(),
+})
 
 const SYSTEM = `You are a concise technical analyst for Skipper, an AI-narrated driving audio tour app.
 You will be given stdout logs from a Cloud Run gen job. Extract:
@@ -72,9 +81,17 @@ You will be given stdout logs from a Cloud Run gen job. Extract:
    Include any kind-specific fields you can reliably extract (wpm, tailCollapses, groundingScore, etc.).
    Omit fields you cannot determine.`
 
-/** Summarize the captured log + extract structured metrics. Falls back to a minimal object on
- *  any error so the caller never has to handle null. Bounded by a request timeout so a hung
- *  call can't keep the job process alive past settling. */
+/** Summarize the captured log + extract structured metrics. Falls back on any error so the caller never
+ *  has to handle null. Bounded by a request timeout so a hung call can't keep the job process alive past
+ *  settling.
+ *
+ *  ⚠ This used to ask for free text and then scrape it: `text.match(/\{[\s\S]*\}/)` — a GREEDY match from
+ *  the first brace to the last, so any prose brace broke it — then `JSON.parse`, inside a catch-all that
+ *  returned `{ summary: 'Synthesis failed.', data: {} }`. Two failures compounded: nothing forced the
+ *  shape, and a SYSTEMATICALLY broken extraction was indistinguishable from a job that simply had no
+ *  metrics to report. A forced tool call fixes the first; naming the failure in the summary fixes the
+ *  second. The fallback itself is kept, deliberately — this runs while a job is SETTLING, so throwing
+ *  here could take down the reporting of an otherwise successful run. */
 export async function synthesizeJobOutput(kind: string, log: string): Promise<JobOutputSynthesis> {
   if (!log.trim()) return { summary: 'No log output captured.', data: {} }
   // Keep the TAIL (~30k chars) — the buffer is already tail-capped, and a failed run's terminal
@@ -82,28 +99,24 @@ export async function synthesizeJobOutput(kind: string, log: string): Promise<Jo
   const truncated = log.length > 30_000 ? '…[truncated]\n' + log.slice(-30_000) : log
 
   try {
-    const msg = await client().messages.create(
-      {
-        model: SUMMARY_MODEL,
-        max_tokens: 1024,
-        system: SYSTEM,
-        messages: [
-          {
-            role: 'user',
-            content: `Job kind: ${kind}\n\nLogs:\n${truncated}\n\nRespond with a JSON object: { "summary": "...", "data": { ... } }`,
-          },
-        ],
-      },
-      { timeout: 20_000, maxRetries: 1 },
-    )
-    const text = msg.content.find((b) => b.type === 'text')?.text ?? ''
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]) as { summary?: string; data?: Record<string, unknown> }
-      return { summary: parsed.summary ?? 'No summary generated.', data: parsed.data ?? {} }
-    }
-    return { summary: text.slice(0, 500), data: {} }
-  } catch {
-    return { summary: 'Synthesis failed.', data: {} }
+    const report = await callTool({
+      model: SUMMARY_MODEL,
+      system: SYSTEM,
+      messages: [{ role: 'user', content: `Job kind: ${kind}\n\nLogs:\n${truncated}\n\nCall the report tool.` }],
+      maxTokens: 1024,
+      tool: { name: 'report', description: 'Report the plain-English summary and the extracted metrics.' },
+      schema: REPORT,
+      label: 'job output synthesis',
+      // Per-request, so this short leash wins over the shared client's maxRetries: 5 — that default is
+      // tuned for narration surviving a sustained overload, which is the wrong trade for a settling job.
+      requestOptions: { timeout: 20_000, maxRetries: 1 },
+    })
+    return { summary: report.summary, data: report.data ?? {} }
+  } catch (e) {
+    // Say WHAT went wrong. The old 'Synthesis failed.' read the same whether the model was down, the key
+    // was missing, or the reply was malformed — and an operator reading the job row could not tell any of
+    // those from a job with nothing to report.
+    const why = e instanceof Error ? e.message : String(e)
+    return { summary: `Job output synthesis failed — ${why.slice(0, 200)}`, data: {} }
   }
 }
