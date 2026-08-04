@@ -215,6 +215,18 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   the 1:1 `pois`↔`narrations` atom, no `roam_clips` table, and 1.1 then removed the mode outright.)
 
 ### designs/
+- [studio-structured-output-hardening.md](designs/studio-structured-output-hardening.md) — 💡 ASSESSED
+  2026-08-04: answers the half of [planner-directions-not-taken](decisions/planner-directions-not-taken.md)
+  §2 that named `packages/studio` as the AI SDK's first target — and **reverses it after counting.** Zero
+  `zod`/`safeParse` in studio src, so **no model output is validated at runtime**: 8 of 10 sites hand-write
+  a JSON Schema then `input as T` (10 duplicated find-and-cast blocks), `classify-treatments` **spends and
+  reports nothing** (no `recordModelUsage`, no `runJob`), and `job-output.ts` regex-scrapes JSON out of
+  prose behind a catch-all that makes a broken extraction look like a quiet job. ⚠ `z.toJSONSchema()`
+  (zod 4, already in the tree) emits the same shape studio hand-writes, so the fix is a ~40-line
+  `callTool()` helper with **no new dependency** — the SDK fixes 2 of 4 defects and loses `stop_reason:
+  'refusal'`/`stop_details` on narration plus veracity's web search. ⚠ Two traps: `z.int()` changes the
+  bytes the CALIBRATED judges see, and strict validation everywhere would kill a paid run over an
+  ADVISORY score. ⚠ Currency: §2 verified `ai@6`; `ai@7.0.51` shipped a day later.
 - [the-road-trip-planner.md](designs/the-road-trip-planner.md) — 💡 VISION: choose a start and an end,
   let the model NUDGE THE ROUTING (never the stops — deterministic selection stands), spurs rather than
   branching, saved as today's drive. ⚠ Touches NO hard invariant once read correctly, and nearly all the
