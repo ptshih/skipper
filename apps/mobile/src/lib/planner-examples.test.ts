@@ -12,11 +12,18 @@ import {
 const T: ExampleAskTemplates = {
   aToBTitle: 'Drive somewhere',
   aToB: '{a} to {b}, the scenic way.',
-  aToBReply: '{a} out to {b}. How long do you want to be out?',
+  // ⚠ DELIBERATELY NOT PROSE ANYONE COULD SHIP. This fixture used to read "{a} out to {b}. How long do
+  // you want to be out?" — a line the planner prompt forbids, sitting in a file whose whole job is to
+  // be copied from. The real reply is seeded into the transcript and re-read by the model as its own
+  // words, so a plausible-but-banned string here is one careless paste away from production. These
+  // only need placeholders; the prose lives in voice.ts and changes under the prompt's review.
+  aToBReply: '{a} REPLY {b}.',
   openTitle: 'Let the skipper pick',
   open: 'Surprise me — somewhere pretty.',
   openRegion: 'Surprise me — somewhere pretty around {r}.',
-  openReply: 'Happy to pick. Where are you starting from?',
+  // Same reasoning: "Happy to pick" is a REJECTED line in voice.ts (it commits him to judging a place
+  // pretty off a bare name), so it does not belong in a fixture either.
+  openReply: 'OPEN REPLY.',
 }
 
 describe('shape degradation', () => {
@@ -75,7 +82,7 @@ describe('the names themselves', () => {
   test('cleanPlaceName runs before interpolation', () => {
     const asks = buildExampleAsks(['Tahoe Keys, California', 'Rubicon, California'], T)
     expect(asks[0]?.ask).toBe('Tahoe Keys to Rubicon, the scenic way.')
-    expect(asks[0]?.reply).toContain('Tahoe Keys out to Rubicon.')
+    expect(asks[0]?.reply).toContain('Tahoe Keys REPLY Rubicon.')
   })
 
   test('blank and duplicate names are dropped, so no chip reads back an empty gap', () => {
@@ -88,7 +95,7 @@ describe('the names themselves', () => {
 
   test('the reply is interpolated too — it ships into the transcript, not just onto a chip', () => {
     const asks = buildExampleAsks(['Tahoe City', 'Emerald Bay'], T)
-    expect(asks[0]?.reply).toBe('Tahoe City out to Emerald Bay. How long do you want to be out?')
+    expect(asks[0]?.reply).toBe('Tahoe City REPLY Emerald Bay.')
   })
 })
 

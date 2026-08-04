@@ -173,7 +173,22 @@ export const voice = {
     // pipeline sends `travelMode: 'DRIVE'` with no route modifiers at all — so it modelled agreeing to
     // something that never happens. It now says which half is the skipper's, matching the prompt's
     // `== When they ask about the road ==`.
-    exampleAToBReply: '{a} out to {b} — I pick the ends, the road picks itself. About how long do you want to be out?',
+    // ⚠ FIXED 2026-08-04, AND IT ENDS ON A STATEMENT ON PURPOSE — do not "restore" a question here.
+    // This line asked "About how long do you want to be out?" for a day after the prompt was changed to
+    // forbid exactly that ask (planner-prompt.ts, `You never ask how long`). Because it is SEEDED, the
+    // skipper appeared to ask it while no model turn existed to fix — deploying the prompt changed
+    // nothing, the eval passed, and the founder saw it on TestFlight regardless. Worse, per the wire
+    // note above it was re-sent as his OWN prior sentence, so the app was teaching the model to ask the
+    // thing the prompt had just banned, on the highest-traffic entry point in the app.
+    // ⚠ WHY NO ASK AT ALL (founder, 2026-08-04, over three drafts that each ended in a yes-ask): by
+    // this turn he has a start AND a far end, and the prompt is explicit that this is ENOUGH — "do not
+    // go hunting for one more thing to ask: not a stop to add, not a shape to choose between, not a
+    // number". There is genuinely nothing left to ask for, so any question here is the APP deciding how
+    // the turn goes. It also sidesteps the stamp: the prompt refuses to demonstrate a yes-ask anywhere
+    // because every demonstration became the stamp, and seeding one into the turn every new rider taps
+    // first would be the strongest possible version of that. The composer ("Go on, I'm listening")
+    // already invites the next line; the model picks the conversation up from here.
+    exampleAToBReply: '{a} out to {b} — I pick the ends, the road picks itself.',
     // ⚠ NOT "Somewhere pretty. You pick." — that read fine as a standalone chip and stopped making
     // sense the moment it sat under the title "Let the skipper pick": the row said the same thing
     // twice, and the second time in the rider's mouth ("you pick") pointing at the skipper while the

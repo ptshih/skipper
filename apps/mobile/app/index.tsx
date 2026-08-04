@@ -978,10 +978,13 @@ export default function HomeScreen() {
       const ex = exampleAsks[i]
       if (!ex) return
       setTurns((ts) => seedExample(ts, ex.ask, ex.reply))
-      // ⚠ FOCUS, not just the scroll pin (`focusComposer` does both). Every authored reply ends on a
-      // direct question — "About how long do you want to be out?" — so the seeded turn hands the ball
-      // straight back to the rider, and leaving the cursor nowhere makes them find the field for a
-      // question that was just asked of them. "Change it up" already earns this; so does this.
+      // ⚠ FOCUS, not just the scroll pin (`focusComposer` does both), and it matters MORE since
+      // 2026-08-04, not less. The A-to-B reply used to end on a direct question, which is what this
+      // comment used to cite: the rider was asked something, so the cursor had to be waiting. That
+      // question is gone — it asked how long they wanted to be out, which the planner prompt forbids —
+      // and the reply now ends on a plain read-back. Nothing prompts the rider to speak, so the blinking
+      // cursor IS the prompt. Removing this focus would leave a seeded exchange sitting there looking
+      // finished. "Change it up" already earns this; so does this.
       // The keyboard covering the hero is fine: the first rider turn has already collapsed it (see
       // `collapsed`), which is the same render that puts this pair on screen.
       focusComposer()
