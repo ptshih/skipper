@@ -9,6 +9,19 @@
 // a mistake, which is the one failure mode an eval exists to catch.
 
 import { PLANNER_SYSTEM_PROMPT } from '../src/planner-prompt'
+// INV-8's failure mode: a tool call serialized into rider-visible prose instead of a tool_use block.
+// ../src/plan-route SUPPRESSES it in production; here it must be COUNTED, because a suppressed defect
+// an eval cannot see is a defect that silently grows.
+//
+// ⚠ SHARED WITH THE SUPPRESSOR, and it has to be. This was a LOCAL COPY until 2026-08-04, frozen at
+// the pattern's first cut — bare names only — while production widened it to catch closing and
+// NAMESPACED tags after one got through to a rider. So the eval scored exactly the shape production
+// had just been fixed for as CLEAN, on a run that spends real money to produce that score. A counter
+// blind to what its guard catches is worse than no counter.
+// ⚠ ../src/tool-call-leak imports NOTHING, which is what keeps this half runnable with no network, no
+// key and no spend — importing ../src/plan-route for the same constant would drag in the Anthropic SDK
+// and @skipper/db and break exactly the property ../test/planner-eval.test.ts exists to protect.
+import { LEAKED_TOOL_CALL } from '../src/tool-call-leak'
 import type { PlannerDimension, ScenarioTurn, TurnEval, TurnOutcome } from './types'
 
 /* -------------------------------------------------------------------------- */
@@ -99,11 +112,6 @@ export function routingCheck(o: TurnOutcome, drawnBefore: ReadonlySet<string>): 
 const MARKUP = [/\*\*/, /^#{1,6}\s/m, /^\s*[-*]\s/m, /\[.+\]\(.+\)/, /`/]
 /** Emoji and pictographs — banned, and the app's own icons are vector for the same reason. */
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u
-/** INV-8's failure mode: a tool call serialized into rider-visible prose instead of a tool_use block.
- *  Observed live 2026-08-03 on a turn that should have drawn. ./plan-route suppresses it in
- *  production; here it must be COUNTED, because a suppressed defect an eval cannot see is a defect
- *  that silently grows. */
-const LEAKED_TOOL_CALL = /<(invoke|function_calls|parameter)\b/i
 
 export function voiceCheck(o: TurnOutcome): TurnEval {
   const findings: string[] = []

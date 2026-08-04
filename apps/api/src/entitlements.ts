@@ -89,6 +89,21 @@ export const withFreshSession: MiddlewareHandler<ApiEnv> = async (c, next) => {
   await next()
 }
 
+/** The ONE body the account wall answers with — this middleware AND both tier-keyed backstops in
+ *  ./drives (`POST /` and `GET /`).
+ *
+ *  ⚠ IT IS ONE CONST BECAUSE THE WALL WAS SPEAKING WITH TWO VOICES. There were three copies: the
+ *  middleware's, a verbatim duplicate in `POST /drives`, and a third in `GET /drives` that carried NO
+ *  `message` at all. The mobile client renders an ApiError's `message` VERBATIM, so a rider who tripped
+ *  the GET backstop got the client's generic fallback line while the identical refusal on POST got the
+ *  friendly copy — one wall, one rider, two different answers depending which route they hit first.
+ *  ⚠ The backstops are NOT dead code (see the note above `withFreshSession`: they are now also what
+ *  catches an erased account whose cached session still passes the gate), so all three are reachable. */
+export const ACCOUNT_REQUIRED = {
+  error: 'account_required',
+  message: 'Create a free account to make a drive.',
+} as const
+
 /**
  * Free-account wall: reject anonymous callers. (Requires withSession upstream.)
  * Applied PER-ROUTE on the five owner routes in drives.ts (D15/INV-15, 1.1 step 8a) — `POST /`,
@@ -103,12 +118,7 @@ export const withFreshSession: MiddlewareHandler<ApiEnv> = async (c, next) => {
  * gates stay aligned. Do NOT "remove the unused gate" — it is load-bearing.
  */
 export const requireAccount: MiddlewareHandler<ApiEnv> = async (c, next) => {
-  if (c.get('tier') === 'anonymous') {
-    return c.json(
-      { error: 'account_required', message: 'Create a free account to make a drive.' },
-      401,
-    )
-  }
+  if (c.get('tier') === 'anonymous') return c.json(ACCOUNT_REQUIRED, 401)
   await next()
 }
 

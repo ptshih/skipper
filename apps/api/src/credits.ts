@@ -116,7 +116,11 @@ export function driveConsumeEntry(userId: string, driveId: string): typeof credi
     userId,
     amount: -1,
     kind: 'consume',
-    reason: `drive:${driveId}`,
+    // Same builder as the key below, not a second copy of its format — the two are read together in
+    // the admin ledger view, and a drift would show a consume whose reason names a different drive
+    // than the key it is deduped on. Nothing pins `reason` (test/credits.test.ts pins only the key),
+    // so the builder IS the guard.
+    reason: driveConsumeKey(driveId),
     idempotencyKey: driveConsumeKey(driveId),
   }
 }

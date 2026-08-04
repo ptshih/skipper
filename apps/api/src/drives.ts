@@ -57,8 +57,9 @@ import {
   varietyKey,
   type RegionAnchor,
 } from '@skipper/shared'
-import { requireAccount, withFreshSession, withSession, type ApiEnv } from './entitlements'
+import { ACCOUNT_REQUIRED, requireAccount, withFreshSession, withSession, type ApiEnv } from './entitlements'
 import { creditSummary, driveConsumeEntry, ensureFreeGrant } from './credits'
+import { SUPPORT_EMAIL } from './email'
 import { DRIVE_CREATE_RATE, MAX_DRIVE_BODY_BYTES, MAX_PLAN_ANCHORS, readBoundedText } from './limits'
 import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
@@ -66,13 +67,12 @@ import { audioUnavailable, contentTypeForKey, presignGet } from './storage'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/** Where a rider who runs out of free drives is sent. `hello@skipper.fm` is the founder rule for every
- *  PUBLISHED address (same inbox as the legal pages, the support page and the in-app report link) —
- *  never a personal address. Env-overridable with the same default as ./email's reply-to, so a redirect
- *  is a config change rather than a code edit.
- *  ⚠ This address must actually be READ by a human: since 2026-07-31 it is the only route past the
- *  free-drive wall, so an unmonitored inbox turns a friendly top-up into a dead end. */
-const SUPPORT_EMAIL = process.env.EMAIL_REPLY_TO ?? 'hello@skipper.fm'
+// Where a rider who runs out of free drives is sent — the SAME const ./email puts in `reply_to`, not a
+// second read of the same env var (it was exactly that until 2026-08-04). One home matters here
+// because the two readers are halves of one conversation: this address is offered to a rider at the
+// wall, and ./email is what makes a reply to it land somewhere a human reads.
+// ⚠ Since 2026-07-31 it is the only route past the free-drive wall, so an unmonitored inbox turns a
+// friendly top-up into a dead end.
 
 // Drive credits live in the user-owned `credit_entries` LEDGER (see ./credits + the decision doc), NOT
 // a count of drive rows. Every account is granted `FREE_DRIVE_CAP` credits once — but that amount is
@@ -386,6 +386,15 @@ interface LoopShape {
   /** A loop that drives the same road twice. THE decision — never re-derive it from the two above. */
   refuse: boolean
 }
+
+/** What a rider hears when Google can find no drivable line between two real, curated places. ⚠ A
+ *  const like its three siblings below, and for the same reason they are: BOTH billed paths answer
+ *  with it (`/propose` and `POST /`), and a create stricter — or merely differently worded — than the
+ *  preview sells a rider a drive and then refuses it at the till. */
+const NO_ROUTE = {
+  error: 'no_route',
+  message: "Couldn't find a drivable route between those points.",
+} as const
 
 /** What a rider hears when their loop turns out to be an out-and-back. ⚠ It names the ONE thing they
  *  can change — the way home — because a dead end they cannot route around is a real answer too, and
@@ -914,7 +923,7 @@ driveRoutes.post('/propose', async (c) => {
     route = await materializeRoute(routeWaypoints(startEp, endEp, via))
   } catch (e) {
     console.error('[api] drive propose route failed', e)
-    return c.json({ error: 'no_route', message: "Couldn't find a drivable route between those points." }, 422)
+    return c.json(NO_ROUTE, 422)
   }
   // The bill just landed — record it HERE, before the (throwable, unbilled) selection below. See
   // logRouteSpend for why this line exists and what may never ride on it.
@@ -1002,8 +1011,8 @@ driveRoutes.post('/', requireAccount, createDriveLimiter, withFreshSession, asyn
   // ⚠ It must stay BEFORE ensureFreeGrant. An anonymous user id that reached the ledger would write a
   // grant against a row better-auth HARD-DELETES at link — no FK, no cascade, no purgeUserData (INV-4)
   // — stranding a row forever in an append-only ledger with no second copy.
-  const userId = c.get('tier') === 'free' ? c.get('session')?.user.id : undefined
-  if (!userId) return c.json({ error: 'account_required', message: 'Create a free account to make a drive.' }, 401)
+  const userId = ownerId(c)
+  if (!userId) return c.json(ACCOUNT_REQUIRED, 401)
 
   const parsed = await readJsonBody(
     c,
@@ -1089,7 +1098,7 @@ driveRoutes.post('/', requireAccount, createDriveLimiter, withFreshSession, asyn
     route = await materializeRoute(routeWaypoints(start, end, via))
   } catch (e) {
     console.error('[api] drive create route failed', e)
-    return c.json({ error: 'no_route', message: "Couldn't find a drivable route between those points." }, 422)
+    return c.json(NO_ROUTE, 422)
   }
   // Create bills its OWN Routes call (it does not reuse the proposal — nothing is persisted at
   // /propose), so it gets its own line, distinguished by `path`. Placed before the selection for the
@@ -1253,8 +1262,10 @@ driveRoutes.post('/', requireAccount, createDriveLimiter, withFreshSession, asyn
 driveRoutes.get('/', requireAccount, withFreshSession, async (c) => {
   // Backstop, not the wall — and TIER-keyed for the same reason as POST / above: after the anonymous
   // mint an id-presence check is permanently false, and this route reaches the ledger (INV-4/INV-15).
-  const userId = c.get('tier') === 'free' ? c.get('session')?.user.id : undefined
-  if (!userId) return c.json({ error: 'account_required' }, 401)
+  const userId = ownerId(c)
+  // ⚠ The SAME body as the wall and as POST /'s backstop. This site used to omit `message` entirely,
+  // and the client renders that field verbatim — so the one wall answered in two voices.
+  if (!userId) return c.json(ACCOUNT_REQUIRED, 401)
   // ⚠ The list and the ledger read share NO data, and this route is hit on every app focus — so they
   // go together rather than one after the other. The PAIR inside stays ordered: `ensureFreeGrant`
   // materializes the allotment so a brand-new user reads the full balance even before their first

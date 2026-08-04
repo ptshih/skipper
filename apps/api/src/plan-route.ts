@@ -45,6 +45,14 @@ import { checkTranscript, MAX_PLAN_BODY_BYTES, PLAN_WRAP_UP_AFTER_MESSAGES } fro
 import { PlannerTurnError, runPlannerTurn, type PlannerModelArgs, type PlannerTurn } from './planner'
 import { PLANNER_WRAP_UP_NOTICE } from './planner-prompt'
 import { loadRegionRoster } from './roster-cache'
+// ⚠ SUPPRESS, NEVER SALVAGE. Parsing a leaked tool call back into a route would mean reconstructing a
+// billed request out of prose the model was told not to write, and the ids inside it are exactly as
+// untrusted as any other model output — which is why INV-1 re-asserts them at the wire. The rider gets
+// the retry line and says it again; that costs one turn and cannot go wrong.
+// The pattern and the argument for its exact shape live in ./tool-call-leak, shared with the eval,
+// which must COUNT what this file suppresses — they were two copies until 2026-08-04 and the eval's had
+// gone stale against the very widening it was supposed to measure.
+import { LEAKED_TOOL_CALL } from './tool-call-leak'
 
 export const planRoutes = new Hono<ApiEnv>()
 
@@ -225,38 +233,6 @@ type DegradedReason =
    *  double-count a failure or page on healthy traffic. */
   | 'not_configured'
   | 'bad_transcript'
-
-/**
- * Did the model write a tool call into the prose instead of calling the tool?
- *
- * ⚠ THIS IS INV-8's FAILURE MODE, AND IT IS NOT HYPOTHETICAL — it was observed on the live model on
- * 2026-08-03 during an eval replay, on a turn that should have drawn: `say` came back as
- * `<invoke name="plan_route"><parameter name="say">…` and the route was never emitted. The turn
- * succeeds, no error is raised, nothing upstream can tell — and the rider reads raw XML in a chat
- * bubble from a character who is supposed to be a man at a car window.
- *
- * ⚠ The right response is to SUPPRESS, never to salvage. Parsing the leaked text back into a route
- * would mean reconstructing a billed request from prose the model was told not to write, and the ids
- * inside it are exactly as untrusted as any other model output — which is why INV-1 re-asserts them at
- * the wire. The rider gets the retry line and says it again; that costs one turn and cannot go wrong.
- *
- * Matched on the block shape rather than the tool name, since a leak can name any tool, and kept
- * deliberately narrow so ordinary prose about a drive can never trip it.
- *
- * ⚠ THE NAMESPACE PREFIX IS NOT OPTIONAL TO MATCH, AND LEAVING IT OUT WAS A HOLE. The first cut listed
- * the bare names only (`<invoke`, `<parameter`), which is the form the 2026-08-03 leak happened to take
- * — but the tag family these models emit is routinely namespace-qualified (`<ns:invoke`), and a
- * prefixed tag matched NOTHING: the guard passed the markup straight through to the rider's bubble.
- * Verified by probe before widening. The `<` is still REQUIRED, which is what keeps ordinary prose safe
- * ("we'll pass the parameter road" and "the Invoke overlook" both stay clean) — the prefix is matched as
- * an optional `word:` and never as bare words.
- *
- * ⚠ Still narrow ON PURPOSE, and one shape is knowingly out of scope: a tool call the model writes as
- * JSON prose (`{"name":"plan_route",…}`) is not matched, because every pattern loose enough to catch it
- * also catches a rider being shown a legitimate object. That case degrades to `route_untranslatable`
- * (no tool_use block ⇒ no route), which is the correct outcome — ugly prose, but never a wrong drive.
- */
-const LEAKED_TOOL_CALL = /<\/?(?:[a-z][\w.-]*:)?(?:invoke|function_calls|parameter)\b/i
 
 /**
  * ONE structured line when a paid turn produced nothing the rider can use.

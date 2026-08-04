@@ -35,8 +35,16 @@ const EMAIL_FROM = process.env.EMAIL_FROM ?? 'Skipper <skipper@notifications.ski
  *
  *  ⚠ `reply_to`, snake_case — Resend's REST API. Their SDK takes `replyTo`, and we deliberately don't
  *  use the SDK (see the note above the endpoint), so the camelCase spelling would be silently ignored
- *  rather than rejected. Verified against Resend's API reference, 2026-07-27. */
-const REPLY_TO = process.env.EMAIL_REPLY_TO ?? 'hello@skipper.fm'
+ *  rather than rejected. Verified against Resend's API reference, 2026-07-27.
+ *
+ *  ⚠ EXPORTED, because this is not only the reply-to header — it is THE published support address, and
+ *  ./drives serves it to a rider as the one route past the free-drive wall. That was a second
+ *  `process.env.EMAIL_REPLY_TO ?? 'hello@skipper.fm'` until 2026-08-04, i.e. two independent chances
+ *  to point a rider at an address this mailer does not accept replies for. `hello@skipper.fm` is the
+ *  founder rule for every PUBLISHED address (same inbox as the legal pages and the in-app report
+ *  link), never a personal one — and it must be READ by a human, since both readers are a rider
+ *  expecting an answer. */
+export const SUPPORT_EMAIL = process.env.EMAIL_REPLY_TO ?? 'hello@skipper.fm'
 
 /** Whether transactional email can actually be sent. Callers log; they don't silently degrade. */
 export function emailConfigured(): boolean {
@@ -57,7 +65,7 @@ async function sendEmail(opts: { to: string; subject: string; text: string }): P
     headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
     body: JSON.stringify({
       from: EMAIL_FROM,
-      reply_to: REPLY_TO,
+      reply_to: SUPPORT_EMAIL,
       to: [opts.to],
       subject: opts.subject,
       text: opts.text,
