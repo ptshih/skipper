@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { personaFromKey, SKIPPER } from '../src/persona'
-import { bannedTicsIn, PROMPT_PROSE_EXEMPT } from '../src/pipeline/lint'
+import { BANNED_LABELS, bannedTicsIn, PROMPT_PROSE_EXEMPT } from '../src/pipeline/lint'
 
 describe('personaFromKey', () => {
   test('the skipper key resolves to the Skipper', () => {
@@ -64,6 +64,30 @@ describe('Skipper persona def', () => {
       // quotes or an unquoted block and this test goes silently vacuous while staying green, on the one
       // prompt the repo iterates on hardest. Every example must yield at least one narration to lint.
       expect(checked).toBeGreaterThanOrEqual(exampleBlocks.length)
+    })
+
+    // ⚠ THE OTHER HALF OF THE 148-CLIP GAP, and until 2026-08-04 nothing checked it. The two tests
+    // above stop the prompt from USING a banned tic. This one stops the prompt from staying SILENT
+    // about one. That silence is the documented cause of the corpus's worst quality failure: the lint
+    // banned nine completions of the "here's the …" family, the prose named three, and "the model
+    // avoided the three it was told about and wrote the rest" — 148 of 457 released clips. Measured
+    // again on 2026-08-04 before this landed: 15 labels in the table, 8 named, SEVEN linted-but-never-
+    // mentioned ("wait for it", "wrap your head around", "and get this", "pretty cool, right", "the
+    // story doesn't end there", "to this day", "over the years").
+    //
+    // The failure it prevents is not a bad clip — the lint catches those — it is a WITHHELD one:
+    // retakes are bounded, so a clip can burn its budget and be dropped for a tic the model was never
+    // told to avoid, which reads as the generator failing rather than the prompt under-specifying.
+    //
+    // ⚠ It asks `BANNED_LABELS` rather than listing phrases, so ADDING a pattern to the lint fails
+    // this test until the prompt mentions it. That direction is the point: the table and the prose are
+    // two hand-maintained lists and only ONE of them the model ever reads.
+    test('the prompt NAMES every tic the lint bans (add to the table → say it in the prose)', () => {
+      const quoted = [...prose.matchAll(/"([^"]*)"/g)].map((m) => m[1]!)
+      expect(quoted.length).toBeGreaterThan(0) // the quotes must actually be found, or this is vacuous
+      const named = new Set(quoted.flatMap((q) => bannedTicsIn(q)))
+      const missing = BANNED_LABELS.filter((l) => !named.has(l))
+      expect(missing).toEqual([])
     })
   })
 })

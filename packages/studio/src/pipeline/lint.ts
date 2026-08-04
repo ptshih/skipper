@@ -112,6 +112,14 @@ const BANNED: [RegExp, string][] = [
  *  card IS, but an example narration that says it is teaching the leak. One did — the Coyote Mesa
  *  scenic example read "That is all the card gives me" — which is where a good share of the 18 came
  *  from. Add to this set only when the prompt must NAME a thing it forbids the Skipper from saying. */
+/** Every label in the hard-banned table, so a test can assert the PERSONA PROMPT names each one.
+ *
+ *  ⚠ Exported rather than re-listed, because a second copy is the whole bug: this table banned nine
+ *  completions of the "here's the …" family while the prompt's prose named three, so the model avoided
+ *  the three it was told about and wrote the rest — 148 of 457 released clips. The comment above says
+ *  "nothing yet checks that the prompt MENTIONS each one"; `persona.test.ts` now does, through this. */
+export const BANNED_LABELS: readonly string[] = BANNED.map(([, label]) => label)
+
 export const PROMPT_PROSE_EXEMPT: ReadonlySet<string> = new Set([
   '"the card" — the fact sheet named out loud',
 ])
