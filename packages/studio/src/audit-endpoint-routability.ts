@@ -123,11 +123,14 @@ const routedPoint = (a: Anchor): { lat: number; lng: number } =>
  * that rather than silently falling back, because a fallback origin would quietly change what the
  * whole sweep measured.
  */
-function originFor(candidate: Anchor, featured: Anchor[]): Anchor | null {
+function originFor(candidate: Anchor, featured: Anchor[], exclude?: ReadonlySet<string>): Anchor | null {
   let best: Anchor | null = null
   let bestM = Infinity
   for (const f of featured) {
     if (f.id === candidate.id) continue
+    // ⚠ `exclude` is how the confirmation pass asks for a DIFFERENT origin — see confirmFlags. Skipping
+    // by id rather than by distance keeps "second nearest" honest when two origins sit on one spot.
+    if (exclude?.has(f.id)) continue
     const m = haversineMeters([candidate.lng, candidate.lat] as LngLat, [f.lng, f.lat] as LngLat)
     if (m < bestM) {
       bestM = m
@@ -150,6 +153,8 @@ interface Probe {
   note?: string
   /** The route Google returned, kept only so `--snap` can search along it. */
   polyline?: LngLat[]
+  /** Set by the confirmation pass — see confirmFlags. Present only on anchors that were flagged once. */
+  confirmation?: { origin: Anchor; verdict: Verdict; kmh?: number; note?: string }
 }
 
 /**
@@ -279,7 +284,10 @@ async function main() {
   // sweep has run, so the bound assumes EVERY candidate is flagged. `--max-cost` exists to stop a run
   // before it spends; an estimate that priced the base sweep while --snap quietly multiplied it would be
   // bounding one quantity with a number derived from a different one — the trap `numericFlag` documents.
-  const estimate = candidates.length * ROUTES_CALL_USD * (snap ? 1 + SNAP_PROBES : 1)
+  // ⚠ The `+ 1` is the CONFIRMATION pass (one call per flag). Worst case is every candidate flagged, so
+  // it is priced per candidate for the same reason --snap is: a bound derived from a quantity the run
+  // has not measured yet is not a bound.
+  const estimate = candidates.length * ROUTES_CALL_USD * (snap ? 2 + SNAP_PROBES : 2)
 
   console.log(
     `${rows.length} curated destination(s), ${featured.length} of them towns at rank <= ${ORIGIN_MAX_RANK} (the probe origins).`,
@@ -367,7 +375,71 @@ async function main() {
     }
   }
 
+  // ─────────────────────────────────────────────────────────────────────────────────────────────
+  // CONFIRMATION: re-probe every flag from a DIFFERENT origin before believing it.
+  //
+  // ⚠ WHY THIS EXISTS — a flag can be a property of the ORIGIN, not of the anchor. `originFor` picks
+  // the nearest row with no `primaryType` at rank <= ORIGIN_MAX_RANK, which is MEANT to mean "a town"
+  // and does not: on lake-tahoe that set also holds Pope Beach, Heavenly, Meeks Bay, Glenbrook, Crystal
+  // Bay and Zephyr Cove. Measured 2026-08-04 — `Lakeside Marina` probed from Heavenly read 17 km/h over
+  // 1.3 km and was reported as undrivable; from Stateline the same anchor is 1.6 km at 25 km/h with no
+  // restriction at all. One bad origin, one false accusation, and an operator sent to re-pin a place
+  // that was never broken.
+  //
+  // ⚠ THIS DOES NOT REPLACE THE "ORIGIN MUST BE A TOWN" RULE, it survives its failure. There is no
+  // reliable town signal to fix the selector with — Google returns no `primaryType` for Pope Beach any
+  // more than for Truckee — so rather than tighten a heuristic that cannot be made exact, a second
+  // opinion is bought only for the anchors that actually failed. Cost is one call per FLAG, not per
+  // anchor: on this region that is 4 calls against 172.
+  //
+  // ⚠ A CLEARED FLAG IS REPORTED, NEVER SILENTLY DROPPED. Both verdicts are printed. "A run that did
+  // nothing must not settle green" cuts both ways: a sweep that quietly downgraded its own findings
+  // would be indistinguishable from one that found nothing, and the second origin can be wrong too.
+  const firstPass = probes.filter((p) => p.verdict === 'restricted' || p.verdict === 'slow')
+  for (const p of firstPass) {
+    if (!p.origin) continue
+    const second = originFor(p.anchor, featured, new Set([p.origin.id]))
+    if (!second) continue
+    try {
+      const route = await materializeRoute([
+        { label: second.name, ...routedPoint(second) },
+        { label: p.anchor.name, ...routedPoint(p.anchor) },
+      ])
+      billed++
+      const km = route.distanceMeters / 1000
+      const minutes = route.durationSeconds / 60
+      const kmh = minutes > 0 ? km / (minutes / 60) : 0
+      const speedTrusted = route.distanceMeters >= MIN_SPEED_ROUTE_METERS
+      const verdict: Verdict = route.restricted ? 'restricted' : speedTrusted && kmh < MIN_AVG_KMH ? 'slow' : 'ok'
+      p.confirmation = { origin: second, verdict, kmh, note: route.warnings.join(' | ') || undefined }
+      // ⚠ ONLY A CLEAN SECOND OPINION CLEARS A FLAG, and only the anchor's verdict moves — the first
+      // pass's numbers are left intact so the printed line still shows what was actually measured.
+      if (verdict === 'ok') p.verdict = 'ok'
+    } catch (e) {
+      // A confirmation that never resolved proves nothing; leave the flag standing and say so.
+      p.confirmation = { origin: second, verdict: 'error', note: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
   for (const p of probes) console.log(line(p))
+
+  const cleared = firstPass.filter((p) => p.verdict === 'ok')
+  if (firstPass.length) {
+    console.log(`\nConfirmation — ${firstPass.length} flag(s) re-probed from a second origin:`)
+    for (const p of firstPass) {
+      const c = p.confirmation
+      if (!c) {
+        console.log(`  ${p.anchor.name.padEnd(32)} no second origin available — flag STANDS (unconfirmed)`)
+        continue
+      }
+      const how = c.verdict === 'ok' ? 'CLEARED' : c.verdict === 'error' ? 'inconclusive — flag STANDS' : 'CONFIRMED'
+      console.log(`  ${p.anchor.name.padEnd(32)} from ${c.origin.name} → ${c.verdict} — ${how}`)
+      if (c.note) console.log(`      ${c.note}`)
+    }
+    if (cleared.length) {
+      console.log(`  ⚠ ${cleared.length} flag(s) were the ORIGIN's fault, not the anchor's — nothing to fix on those.`)
+    }
+  }
 
   const flagged = probes.filter((p) => p.verdict === 'restricted' || p.verdict === 'slow')
   const skipped = probes.filter((p) => p.verdict === 'skipped')
