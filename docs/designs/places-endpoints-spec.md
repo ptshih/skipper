@@ -60,11 +60,25 @@
 > be routed past it, not that any given drive will — selection is still `buildDrive`'s call.
 > ✅ **`isAddressLike` FIRED ON LIVE DATA** — previously recorded here as unexercised. It refused
 > "Heavenly Village" → *Heavenly Village Way* and "Secret Cove" → *Secret Harbor Drive*, both real
-> substitutions, both correctly kept out. ⚠ The pre-1.1 **`Heavenly Village Way` row still sits in the
-> table, ENDPOINT + featured** — the guard only screens new curations, and this one predates it. Its
-> COORDS are right (the street runs through the village), so it routes correctly and is a NAMING wart,
-> not the Hope Court failure; left in place deliberately, and `PATCH /admin/places/:id` sends booleans
-> only, so a rename is a DB edit.
+> substitutions, both correctly kept out.
+>
+> ✅ **THE PRE-GUARD STREET ROWS WERE TRIAGED 2026-08-03 — and they were NOT all one bug.** Hope Court /
+> Carson Court were SUBSTITUTIONS (a cul-de-sac standing in for a valley 40 km away). The rest pointed at
+> the RIGHT place and merely carried a road's name because Google has no establishment there, so each
+> needed a different answer, not a blanket purge:
+> **`Heavenly Village Way` → `Heavenly Village`** (the real `shopping_mall` 36 m away, stored under the
+> rider-facing name rather than Google's clunky "The Shops at Heavenly Village" — the manual-add route
+> takes the name, so the id + coords stay canonical; keeps its ★). **`Angora Lake Trail` → `Angora Lakes
+> Resort`** (naming win only — the resort is a mile up a foot trail, so routing is unchanged).
+> **`Cascade Falls Trail` DELETED** — `Bayview Trailhead`, the actual drivable start of that trail,
+> landed in the same curation. **`Ponderosa Ranch Road` DELETED** — the ranch closed in 2004, no Google
+> place exists, and `Incline Village` already covers it. **`Logan Creek Drive` DELETED** (a real
+> break-role substitution of "Logan House Creek", proving the break gap).
+> ⚠ **`Mount Tallac Trail` and `Luther Pass Road` were KEPT ON PURPOSE.** They are address-typed, so
+> `isAddressLike` WOULD reject them today — but no Google establishment exists for either, their coords
+> are right, and "Mount Tallac Trail" is exactly what a rider would say. **The guard is deliberately
+> blunter than the real rule** (which is "is this a substitution?", not "is this address-typed"), and
+> these two are the standing evidence of that gap. Do not "clean them up" to satisfy the lint.
 >
 > ⚠ **SECOND, SEPARATE DEFECT FOUND IN THAT RUN — a silent WRONG resolve, now guarded.** Autocomplete is
 > sent a HARD bbox restriction and the resolver takes the FIRST prediction with no check that it
