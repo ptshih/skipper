@@ -61,7 +61,7 @@ ever need measuring, the panel has to go through the route, not around it.
       "the model refused to draw", check whether the transcript actually contains everything a draw needs
       before reaching for the prompt.
 
-- [ ] **⚠ THE ONE GENUINE ROUTING DEFECT, AND IT IS A DIFFERENT RULE: the model offers EITHER/OR
+- [x] **⚠ THE ONE GENUINE ROUTING DEFECT, AND IT IS A DIFFERENT RULE: the model offers EITHER/OR
       questions, which the prompt forbids by name.** On `midpoint` #0 it said *"Straight run up, or did
       you want to come back around?"* — and `== Drawing it up ==` reads: *"do not hand them a choice in
       the same breath as the ask ('straight through, or back around?'), because there is no way to answer
@@ -72,14 +72,28 @@ ever need measuring, the panel has to go through the route, not around it.
       drawn). ⚠ `wrap-up-long-conversation`'s comment already named this as the upstream cause on its own
       turn (*"the real defect upstream is that he offers an either/or at all"*) and it was never chased.
       So it is now measured on two independent scenarios.
-      **This is a prompt-ADHERENCE question, not a structure one** — the rule exists, is unambiguous, and
-      quotes the counter-example; it simply is not landing. Do not add a fourth rule. Options worth
-      measuring, cheapest first: strengthen where that rule sits (it is currently one clause inside a long
-      paragraph, competing with the read-back guidance around it), or give the beat its own line the way
-      the way-home beat got one — the way-home beat lands reliably and it is the one that got its own
-      paragraph, which is at least suggestive.
-      ⚠ Verifying costs one paid arm (~$0.50, founder go). Do NOT re-run the whole suite to check this
-      one beat — `--only midpoint` is three turns.
+      ⚠ **THE DIAGNOSIS ABOVE WAS WRONG AND THE CORRECTION IS THE FINDING: it was never an ADHERENCE
+      problem, it was a CONTRADICTION.** This item read "the rule exists, is unambiguous… it simply is not
+      landing. Do not add a fourth rule." In fact the prompt **instructed the banned construction in two
+      other places** — *"say what the choice actually is and let them take it — somewhere on the other side
+      to come home by, or a straight run out"* and *"do they want it straight through instead, or a
+      different way home?"* The model was obeying those. Strengthening the ban would have chased a rule the
+      prompt taught against elsewhere, which is why the "adherence" framing would have burned a paid arm
+      for nothing.
+      ✅ **FIXED (founder call, 2026-08-03) — and by a product rule, not a wording tweak: a loop is now an
+      EXPLICIT-ASK EXCEPTION and one-way is the voiced default.** The model never raises coming back around
+      at all, so on `midpoint` — whose rider asks for a plain A→B and never mentions a loop — the either/or
+      has no occasion to exist. Both offending lines now land on the default instead of a menu. Rationale +
+      the Moab/Arches note: [docs/decisions/no-same-road-loops.md](docs/decisions/no-same-road-loops.md) §8.
+- [ ] **VERIFY the loop-default change on one paid arm (~$0.50, founder go).** ⚠ Do NOT re-run the whole
+      suite for this — `--only midpoint` is three turns and is the scenario that measured the defect.
+      What to check: turn #0 no longer offers a shape the rider did not ask for, and #2 DRAWS rather than
+      re-asking. ⚠ **Then look at `wrap-up-long-conversation` #7 second**, because this change may flip it:
+      its `expect: 'hold_no_repeat'` was calibrated against a skipper who "has usually asked something
+      ('straight through, or back around?')" by that turn. With no either/or, *"yes draw it"* becomes an
+      unambiguous yes and the correct expectation is probably `draw` — an INSTRUMENT update, and the fourth
+      instance of that file's expectations outliving a product rule. Do not score the model against it
+      until it has been re-read.
 - [ ] **FINDING 3 — the read-back turn is both the persona sag AND the duration leak, and it is one
       turn.** Persona scored 0.64 advisory (6/54 flagged) and every flagged turn is a draw/read-back:
       *"Tahoe City out to Incline Village, straight through, about an hour."* → judge *"Flat confirm, no
@@ -656,51 +670,6 @@ not a Wikipedia RS. Read the guide before filing.
       Vikingsholm article naming the wrong architect, but that article names **no architect at all** (0
       occurrences of "Palme", checked 2026-08-03). ⚠ Also `vikingsholm.com`, that row's `source_url`, did
       not respond on 2026-08-03 — do not cite a dead link.
-
-## A round trip goes QUIET on the return leg (founder ask 2026-08-03)
-
-Founder: *"round trip routes should probably include POIs going both directions so it isn't completely
-quiet on the return trip."*
-
-- [ ] **Give the return leg something to say.** The mechanic, traced so nobody re-derives it:
-      - A round trip IS a real out-and-back — `toPlannedRoute` maps the model's `round_trip` to
-        `{ start, end: start, via: [...via, end] }`, so the frozen polyline genuinely contains BOTH legs.
-      - But **a candidate is snapped ONCE**. `buildRouteSnapper` calls `nearestOnRoute`, which scans every
-        vertex and keeps the single globally-nearest one. So one POI ⇒ one `alongSec` ⇒ **at most one
-        stop, on whichever leg won** — and its comparison is a strict `<`, so an exact tie breaks to the
-        OUTBOUND leg.
-      - ⚠ **The direction-independent statement is the durable one:** a round trip has roughly HALF the
-        stop density of the equivalent one-way over the same road, because the candidate supply is the
-        road's POIs but the clock is doubled. The pacing budget is NOT the binding constraint —
-        `driveMaxStops` is ~1 stop / 4 min of the WHOLE round trip, so a 2-hour loop is budgeted ~24 stops
-        while `DRIVE_MIN_GAP_SEC` lets the outbound half hold ~half that. The cap has room; the geometry
-        never offers it anything.
-      - ⚠ **The glance fill cannot rescue it.** Glances are placed on the SAME geometry in the same step-1
-        loop — they inherit the identical one-leg-only bias, so the quiet stretch they exist to fill is
-        precisely the stretch they are also absent from.
-
-      Two candidate fixes, cheapest first, NOT mutually exclusive:
-      1. **Snap to every LOCAL minimum, not the global one — free, no new audio, no spend.** Let a
-         candidate offer both its outbound and its return occurrence to the pacing pass and let step 3
-         pick. This does not repeat a clip; it MOVES a stop the outbound leg's `minGap` crowded out onto
-         the return leg, where there is room. ⚠ **Step 2's co-located dedupe is the landmine**: it
-         collapses anything within `DRIVE_MIN_SEPARATION_M` (1 km) of a kept anchor by comparing PLACED
-         ANCHORS, and one place's two occurrences are ~0 m apart, so it would eat the second one and the
-         whole change would no-op. It has to become "one telling appears once" (subject identity) rather
-         than "two points 1 km apart are one stop" (position) — a real rule change with its own blast
-         radius, not a constant tweak.
-      2. **Let a repeated place get a DIFFERENT telling — that is exactly the b-side** (section below).
-         ⚠ **But do NOT plan on it as the primary fix**: only **1 of 8** stops on a real drive carries
-         usable leftover material (~90 s added to a 39-minute drive). It also costs a founder-gated paid
-         run; fix 1 costs nothing.
-
-      ⛔ **Anti-goal: replaying the SAME clip on the way back.** The rider hears an identical telling twice
-      inside an hour — the one outcome worse than the quiet we are fixing.
-      ⚠ **Verify by BEHAVIOUR, not by unit test alone.** The symptom is a DISTRIBUTION, so the check is to
-      plan one out-and-back and compare the selection's `alongSec` values against `totalSec / 2` — today
-      they should pile up below it. A test that asserts "a stop exists" passes on the broken version. ⚠ And
-      `drives.selection` is FROZEN at create against a non-refundable credit, so this only ever improves
-      NEW drives.
 
 ## "Tell me more" (the b-side) — generation BUILT + ear-checked, storage DECIDED, NOTHING persists
 

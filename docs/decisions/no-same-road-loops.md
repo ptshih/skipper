@@ -5,6 +5,8 @@
 > both billed paths. Closes the open question left by
 > [drive-density-and-the-return-leg.md](drive-density-and-the-return-leg.md) §5 — which measured the
 > problem and deliberately greenlit nothing.
+> ⚠ **REFINED later the same day (founder): a loop is an EXPLICIT-ASK EXCEPTION and one-way is the voiced
+> default.** The planner never offers a loop. See §8, which supersedes §5's cost accounting.
 
 ## 0. The complaint, and why it was not a selection bug
 
@@ -145,3 +147,54 @@ Valley), so "every loop is the whole lake" is a Tahoe-south-shore statement, not
 the card reads the far end at `.at(-2)`. It read `.at(-1)` while a loop appended only the turnaround —
 correct then, and it would now print the return leg where the destination belongs, on the one screen
 that costs a credit to act on. That is the same defect as the earlier `via[0]` bug, one position over.
+
+## 8. Refinement: the loop is an exception the RIDER raises (founder, 2026-08-03)
+
+> *"A user can just create an A to B and when they get to B they can shut off Skipper and drive home.
+> Loops should be real like the Tahoe ring or Yosemite Valley."*
+
+**This retires the out-and-back question rather than trading against it, and it supersedes §5.** That
+section files "a 54-minute out-and-back becomes a ~2-hour ring or a one-way drive" as a cost the founder
+accepted. It is not a cost. **The rider never needed the app to route them home** — they stop listening at
+the far end and drive back. So the out-and-back loop was never serving a need the one-way drive does not
+already serve, and it served it worse: the same audio, twice the wheel time, half the coverage (§0), and a
+non-refundable credit spent on a second half that was silent by construction.
+
+**What changed in the prompt** (`planner-prompt.ts`):
+
+- **One-way is the DEFAULT and it is now voiced, not implied** — the skipper gets them to the far end and
+  says plainly that home again is theirs. That is stated as the normal drive, not a shortfall.
+- **The model must never RAISE coming back around.** The grounds are the same ones §2 already
+  established: with no coordinates and no road graph it cannot know which places make a circuit, so
+  offering one is a promise it has no standing to make. It was removed from "your one job" and from the
+  plan shape it works toward.
+- **A loop opens only on an outright ask** — *"make it a loop," "bring me back around," "I'd rather end up
+  where I started."* Wanting a few hours out is not one, and neither is starting and ending in the same
+  town by coincidence. `round_trip: false` is now stated as the normal answer in the tool schema itself.
+- **Both no-way-home branches land on the default instead of a menu**: if they will not name a way home,
+  or the road cannot honour the one they named, the skipper says the honest sentence and runs them
+  one-way.
+
+⚠ **Two either/or instructions were deleted, and they were the measured defect.** The prompt banned the
+construction in one place — *"do not hand them a choice in the same breath as the ask ('straight through,
+or back around?')"* — while **instructing it in two others** (*"say what the choice actually is and let
+them take it"*; *"do they want it straight through instead, or a different way home?"*). The 2026-08-04
+eval caught the model producing nearly the banned sentence verbatim on `midpoint` #0 — a scenario whose
+rider asks for a plain A→B and never mentions a loop. **That was filed as a prompt-ADHERENCE problem and
+it was a CONTRADICTION**: the model was obeying the other rule. Strengthening the ban would have chased a
+rule the prompt taught against elsewhere.
+
+**This also retires a backlog item outright.** `TODO.md`'s *"A round trip goes QUIET on the return leg"*
+proposed two fixes — snapping a candidate to every LOCAL minimum so one place could be told on both legs,
+and putting a b-side on the return. Both exist to rescue a **retraced** route, which is the shape §3's
+wire gate refuses and §8 says should never have been a loop. Deleted 2026-08-03. ⚠ The one case that
+survives is a ONE-WAY that doubles back because the rider asked to pass through somewhere on the way (§6),
+and that is their explicit request rather than a defect.
+
+⚠ **Region note for whoever scopes Moab.** Of the three examples the founder named, Tahoe's lake ring and
+Yosemite Valley (Northside/Southside Drive are a one-way pair) are genuine circuits at ~0% retrace.
+**Arches is not** — its main scenic drive runs ~18 miles in to Devils Garden and back out the same road,
+with only small spur loops off it, so an Arches "loop" measures near-100% and the wire refuses it. That is
+the rule working rather than failing: Arches is an A→B drive, narrated on the way in. Confirm against the
+park's road network when the region is scoped, but plan for that shape — otherwise it gets filed as a bug.
+
