@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test'
-import { buildRoutesRequestBody, shapeRoute, type RoutesApiRoute, type Waypoint } from '../src/index'
+import {
+  buildRoutesRequestBody,
+  hasRestrictedRoads,
+  ROUTES_FIELD_MASK,
+  shapeRoute,
+  type RoutesApiRoute,
+  type Waypoint,
+} from '../src/index'
 
 const wp = (label: string, lat: number, lng: number): Waypoint => ({ label, lat, lng })
 
@@ -55,6 +62,67 @@ describe('buildRoutesRequestBody', () => {
     expect(body.polylineQuality).toBe('HIGH_QUALITY')
     expect(body.travelMode).toBe('DRIVE')
   })
+
+  test('PINS languageCode — the restricted-road gate matches on localized warning text', () => {
+    // Unset, Google infers the display language from the route's location, and `warnings` comes back
+    // in it. The phrase list in RESTRICTED_ROAD_WARNINGS is English, so an unpinned language means the
+    // gate quietly stops matching — passing every restricted route instead of refusing it. Nothing
+    // else in the response would look wrong.
+    expect(buildRoutesRequestBody([a, b]).languageCode).toBe('en-US')
+  })
+})
+
+describe('ROUTES_FIELD_MASK', () => {
+  test('ASKS FOR routes.warnings — without it the restricted-road gate silently passes everything', () => {
+    // The one failure in this file that produces no error anywhere: proto3 omits fields the mask did
+    // not request, so a mask missing this makes every route look unwarned, `restricted` false for all
+    // of them, and the gate a no-op that still appears to run.
+    expect(ROUTES_FIELD_MASK.split(',')).toContain('routes.warnings')
+  })
+
+  test('still asks for the three fields a frozen route is built from', () => {
+    const fields = ROUTES_FIELD_MASK.split(',')
+    expect(fields).toContain('routes.distanceMeters')
+    expect(fields).toContain('routes.duration')
+    expect(fields).toContain('routes.polyline.encodedPolyline')
+  })
+})
+
+// Google will route a drive up a gated forest track and say so only here — there is no avoid-unpaved
+// or avoid-private modifier to ask for instead. This predicate is the whole gate.
+describe('hasRestrictedRoads', () => {
+  test('catches the phrase that actually shipped a 143-minute drive', () => {
+    expect(hasRestrictedRoads(['This route has restricted usage or private roads.'])).toBe(true)
+  })
+
+  test('catches private and unpaved roads too', () => {
+    expect(hasRestrictedRoads(['This route includes a private road.'])).toBe(true)
+    expect(hasRestrictedRoads(['This route includes unpaved roads.'])).toBe(true)
+  })
+
+  test('case-insensitive — the phrasing is Google’s, not ours', () => {
+    expect(hasRestrictedRoads(['RESTRICTED USAGE OR PRIVATE ROADS'])).toBe(true)
+  })
+
+  test('FAILS OPEN on ordinary travel advice — a warned route is not the same as a bad one', () => {
+    // The failure this guards against is a gate that refuses most of the drives worth taking. Tolls,
+    // borders and seasonal closures are normal road-trip facts, not reasons to withhold a drive.
+    expect(hasRestrictedRoads(['This route has tolls.'])).toBe(false)
+    expect(hasRestrictedRoads(['This route may cross country borders.'])).toBe(false)
+    expect(hasRestrictedRoads(['Parts of this route may be closed at certain times.'])).toBe(false)
+  })
+
+  test('no warnings at all is the normal case, not a failure', () => {
+    // proto3 omits the empty list, so `undefined` is what an unremarkable route actually sends.
+    expect(hasRestrictedRoads(undefined)).toBe(false)
+    expect(hasRestrictedRoads([])).toBe(false)
+  })
+
+  test('one bad phrase among benign ones still refuses', () => {
+    expect(
+      hasRestrictedRoads(['This route has tolls.', 'This route has restricted usage or private roads.']),
+    ).toBe(true)
+  })
 })
 
 describe('shapeRoute', () => {
@@ -105,6 +173,33 @@ describe('shapeRoute', () => {
     expect(shapeRoute(route(), [wp('A', 0, 0), wp('B', 1, 1)], STAMP).provenance.source).toBe(
       'google-routes-v2',
     )
+  })
+
+  test('AN ABSENT warnings FIELD IS THE NORMAL ROUTE — it must not read as restricted', () => {
+    // Same proto3 omission as distanceMeters. If this coalesced wrong the gate would refuse every
+    // ordinary drive, which is the loudest possible failure — but the mirror bug is the silent one:
+    // see the field-mask test below.
+    const shaped = shapeRoute(route(), [wp('A', 0, 0), wp('B', 1, 1)], STAMP)
+    expect(shaped.warnings).toEqual([])
+    expect(shaped.restricted).toBe(false)
+  })
+
+  test('a restricted-roads warning rides through to `restricted`, with the raw text kept', () => {
+    // The raw list is kept because the auditor prints it — a phrase the allowlist does not know about
+    // must be discoverable by an operator rather than invisible.
+    const shaped = shapeRoute(
+      route({ warnings: ['This route has restricted usage or private roads.'] }),
+      [wp('A', 0, 0), wp('B', 1, 1)],
+      STAMP,
+    )
+    expect(shaped.restricted).toBe(true)
+    expect(shaped.warnings).toEqual(['This route has restricted usage or private roads.'])
+  })
+
+  test('a benign warning is preserved but does NOT mark the route restricted', () => {
+    const shaped = shapeRoute(route({ warnings: ['This route has tolls.'] }), [wp('A', 0, 0), wp('B', 1, 1)], STAMP)
+    expect(shaped.restricted).toBe(false)
+    expect(shaped.warnings).toHaveLength(1)
   })
 
   test('duration and distance agree between the route and its provenance', () => {

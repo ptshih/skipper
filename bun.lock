@@ -196,6 +196,7 @@
         "@anthropic-ai/sdk": "^0.112.1",
         "@skipper/db": "workspace:*",
         "@skipper/engine": "workspace:*",
+        "@skipper/routing": "workspace:*",
         "@skipper/shared": "workspace:*",
         "@skipper/storage": "workspace:*",
         "drizzle-orm": "^0.45.2",

@@ -135,6 +135,13 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   content in-app), releasing a region auto-releases all its clips. The *human* gate downstream of the
   automated eval gate. ✅ BUILT 2026-06-20; preview gate moved from `user.tester` → the Better Auth
   `admin` plugin role 2026-06-20 (migration `0030`).
+- [undrivable-endpoint-anchors.md](decisions/undrivable-endpoint-anchors.md) — a curated endpoint must
+  be a place a car can reach: the `Spooner Lake` pin sat on the WATER, so Routes snapped it to a gated
+  forest track and a Carson City round trip came back **143 min** instead of 39, with a "Make this
+  drive" button under it. Routes has no avoid-unpaved/avoid-private, so `routes.warnings` is the only
+  signal — now read in `@skipper/routing`, refused at both billed sites, and swept offline by
+  `audit-endpoint-routability` (9 of 111 Tahoe anchors flagged). ⚠ `curate-places` restores a corrected
+  pin (last-write-wins), so the sweep is the standing guard. ✅ ADOPTED + BUILT 2026-08-04.
 - [corpus-enrichment.md](decisions/corpus-enrichment.md) — the paid `enrich` step that scouts story
   POIs into curated fact wells (`pois.fact_sheet`) every drive shares; ✅ BUILT 2026-06-15, RUN
   2026-06-16 (315 welled).
