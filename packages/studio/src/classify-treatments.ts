@@ -84,6 +84,16 @@ const TOOL: Anthropic.Tool = {
   description: 'Classify how a driver should experience this group of nearby places.',
   input_schema: {
     type: 'object',
+    // ⚠ `treatment` IS FIRST AND THE ORDER IS LOAD-BEARING — do not sort these alphabetically or move
+    // it down. Tool input serializes in PROPERTY ORDER (the fact planner-prompt.ts measured when a long
+    // prose field led its tool object and the call started arriving as text), so the classification is
+    // committed BEFORE the model writes `title`/`highlights`/`drop`. That matters because those three
+    // are REQUIRED and meaningless for a SOLO verdict: a group with no shared subject still has to be
+    // handed a title and a list of "members worth naming aloud". Being asked to name highlights while
+    // deciding whether a shared subject EXISTS would pull the answer toward finding one — the same way
+    // a required `biggestRisk` made the charm judge invent risks on clean runs (fixed 2026-08-04). Here
+    // it cannot, purely because the verdict is emitted first. Reorder and the bias returns silently,
+    // with nothing in the tests to catch it.
     properties: {
       treatment: { type: 'string', enum: [...TREATMENTS] },
       title: { type: 'string', description: 'What a driver would call this place. 6 words or fewer.' },
