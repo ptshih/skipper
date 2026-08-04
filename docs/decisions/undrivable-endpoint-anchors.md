@@ -1,6 +1,8 @@
 # A curated endpoint must be a place a car can reach
 
-**Status:** ✅ **ADOPTED + BUILT 2026-08-04.** Four parts, all live: `@skipper/routing` asks Routes for
+**Status:** ✅ **ADOPTED + BUILT 2026-08-04; AMENDED the same day** — the wire gate no longer refuses on
+Google's warning alone, because one of the anchors this record called "genuinely restricted" turned out
+to be drivable. See "AMENDED 2026-08-04" below, including the risk the amendment does NOT retire. Four parts, all live: `@skipper/routing` asks Routes for
 `routes.warnings` and derives `restricted` (`hasRestrictedRoads`); `apps/api` refuses a restricted route
 at BOTH billed sites (`POST /drives/propose`, `POST /drives`) before the corpus read and before the
 ledger batch; `places.access_lat/lng` (migration `0044`) carries where a car is sent when the pin is not
@@ -79,6 +81,46 @@ Carson City by fire road is only 2.2×, because the outbound and return legs are
 way. Implied average speed separates the founder's actual drive (26 km/h) and fails on the sweep's own
 Spooner probe (42 km/h, inflated by the highway portion). A gate tuned on one origin is a gate that
 passes the same bad anchor asked for from somewhere else.
+
+### AMENDED 2026-08-04 — one of the eight was a false positive, and the blunt gate is now corroborated
+
+**The claim below that "the eight are genuinely restricted too" is FALSIFIED for at least one of them.**
+`Taylor Creek Visitor Center` is drivable; that road is not restricted to the visitor centre (founder,
+local knowledge). Two independent probe origins both returned the warning, so this was not a bad probe —
+Google's warning is simply wrong there, which means the wire gate was refusing a real drive to a real
+destination and doing it silently. A second founder call the same day settles the wider principle:
+*private or not is not our decision — a rider might have access*, which removes the reading of "failing
+closed" that treated a restricted road as equivalent to an unreachable one.
+
+Measured side by side, the warning carries no information on its own:
+
+| route | warning | detour | km/h | truth |
+| --- | --- | --- | --- | --- |
+| `Spooner Lake`, original lake-surface pin | restricted | **2.22x** | 26 | genuinely undrivable |
+| `Lakeside Marina` | restricted | 1.71x | **16** | fine |
+| `Lake Forest Campground` | restricted | 1.51x | 42 | fine |
+| `Taylor Creek Visitor Center` (from S. Lake Tahoe) | restricted | 1.42x | 51 | fine |
+| `Incline Beach` | restricted | 1.21x | 30 | fine |
+| `Taylor Creek Visitor Center` (from Pope Beach) | restricted | 1.09x | 32 | fine |
+
+So `apps/api` now refuses only when the warning is CORROBORATED by an absurd route:
+`route.restricted && detour >= DETOUR_REFUSE_RATIO` (1.8x), where detour is routed distance over the
+straight-line chain SUMMED LEG BY LEG (a round trip's start-to-end line is ~0, and dividing by it would
+refuse every loop). ⚠ Note this also retires the speed idea recorded below as a candidate: `Lakeside
+Marina` is legitimate at 16 km/h, *slower* than the true failure at 26, so any average-speed floor that
+catches Spooner eats a real destination first.
+
+⚠ **WHAT THIS AMENDMENT DOES NOT ANSWER, and it is the original argument's strongest point.** Detour
+ratio IS origin-dependent, exactly as recorded below. The six rows above come from probe origins of the
+sweep's choosing, and a rider picks their own start. The residual risk is a bad anchor that measures
+under 1.8x from some origin nobody probed, which would now be ALLOWED where the blunt gate refused it —
+and at `POST /drives` that costs a non-refundable credit, which is the specific harm the blunt gate was
+chosen to prevent. The threshold rests on ONE true positive. That is why `route_spend` now logs `detour`
+on every billed route: it is the corpus to re-derive the number from, and it should be re-derived before
+anyone trusts 1.8 as more than a first cut. If a bad drive reaches a rider, the recorded fallback is to
+restore the blunt gate at the credit-spending site and keep the corroborated one on the free preview.
+
+### The original argument (SUPERSEDED IN PART — read the amendment above first)
 
 So the gate refuses on the warning alone, and **the eight are genuinely restricted too** — each has a
 gate, a fee station or a private road on its final approach. They are not false positives. Failing

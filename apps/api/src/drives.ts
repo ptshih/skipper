@@ -34,6 +34,7 @@ import {
   candidateTriggerRadiusM,
   DRIVE_MIN_GAP_SEC,
   driveMaxStops,
+  haversineMeters,
   LOOP_MAX_RETRACE,
   OFF_ROUTE_MAX_M,
   retraceFraction,
@@ -415,6 +416,62 @@ const RESTRICTED_ROUTE = {
 } as const
 
 /**
+ * How far past the straight line a route may wander before a restricted-road warning is BELIEVED.
+ *
+ * ⚠ THE WARNING ALONE IS NOT EVIDENCE, and this number exists because that was measured rather than
+ * assumed (2026-08-04). Google's `warnings` array says "restricted usage or private roads" identically
+ * for the failure this gate was built for and for ordinary drives to real places:
+ *
+ *     Spooner Lake, original lake-surface pin   2.22x detour   26 km/h   <- genuinely undrivable
+ *     Lakeside Marina                           1.71x          16 km/h   <- fine
+ *     Lake Forest Campground                    1.51x          42 km/h   <- fine
+ *     Taylor Creek Visitor Center               1.42x          51 km/h   <- fine, confirmed by founder
+ *     Incline Beach                             1.21x          30 km/h   <- fine
+ *
+ * Refusing on the warning alone therefore took away real drives, silently — the 422 below is all a
+ * rider sees, and the spend log carries no place name by design (INV-13), so nobody could tell which
+ * anchor it was or that it had happened at all. That is the same call the founder ruled out for
+ * Incline Beach ("private or not is not our decision — a rider might have access"), only enforced in
+ * code where it was invisible.
+ *
+ * ⚠ SPEED WAS THE OBVIOUS DISCRIMINATOR AND IT IS THE WRONG ONE. Lakeside Marina is legitimate at
+ * 16 km/h — SLOWER than the true failure at 26 — so any average-speed floor that catches Spooner eats
+ * a real destination first. Detour ratio separates cleanly; speed does not.
+ *
+ * ⚠ ONE TRUE POSITIVE, and the gap it sits in is narrow (1.71x .. 2.22x). Widen the evidence before
+ * moving this number — `route_spend` now logs the ratio on every billed route, which is the corpus to
+ * re-derive it from. Erring low takes drives away; erring high ships a 143-minute one.
+ *
+ * ⚠ READ docs/decisions/undrivable-endpoint-anchors.md BEFORE TOUCHING THIS. That record originally
+ * REJECTED narrowing this gate, and its reason is not retired: detour ratio is ORIGIN-DEPENDENT, and a
+ * rider picks their own start. A bad anchor that measures under this threshold from some origin nobody
+ * probed is now allowed — and at `POST /drives` that costs a NON-REFUNDABLE credit, which is the exact
+ * harm the blunt gate was chosen to prevent. What overturned the original call was evidence, not
+ * reasoning: one of the anchors it named as "genuinely restricted" is drivable. If a bad drive ever
+ * reaches a rider, the recorded fallback is to restore the blunt gate at the credit-spending site and
+ * keep this corroborated one on the free preview.
+ */
+const DETOUR_REFUSE_RATIO = 1.8
+
+/**
+ * Straight-line distance ALONG THE WAYPOINT CHAIN, in metres.
+ *
+ * ⚠ SUMMED LEG BY LEG, NEVER START-TO-END. A round trip is `end === start` with the turnaround as the
+ * last `via` (see routeWaypoints), so a start-to-end straight line is ~0 metres and the ratio would be
+ * infinite — which would refuse EVERY round trip, the single most common drive there is. Summing the
+ * legs asks the question that was meant: how much further than necessary is this?
+ */
+function crowMeters(points: Waypoint[]): number {
+  let m = 0
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!
+    const b = points[i]!
+    m += haversineMeters([a.lng, a.lat] as LngLat, [b.lng, b.lat] as LngLat)
+  }
+  return m
+}
+
+/**
  * A drive's title: every waypoint it was routed through, in order — `Stateline → Emerald Bay State
  * Park → Stateline` for a round trip.
  *
@@ -491,6 +548,11 @@ function logRouteSpend(spend: {
    *  gate is countable: a refusal still bills a Routes call, so "how many loops did we pay for and
    *  then refuse" is a real operating question, and this is the only field that can answer it. */
   retrace: number
+  /** Routed distance over the straight-line chain. ⚠ Logged on EVERY billed route, not just refused
+   *  ones, because it is the corpus DETOUR_REFUSE_RATIO must be re-derived from — that threshold rests
+   *  on a single true positive today, and a number nobody can re-measure is a number nobody can move.
+   *  A ratio names no place (INV-13). */
+  detour: number
   /** Google warned the route uses restricted / private / unpaved roads (`hasRestrictedRoads`). Here for
    *  the same reason as `retrace`: the refusal happens AFTER the bill, so this is the only field that
    *  can answer "how many Routes calls did we pay for and then throw away". A BOOLEAN about the route,
@@ -516,9 +578,97 @@ function logRouteSpend(spend: {
       seconds: Math.round(spend.seconds),
       // Two decimals: the gate reads in whole percent, and a full float here is noise in a metric.
       retrace: Math.round(spend.retrace * 100) / 100,
+      detour: Math.round(spend.detour * 100) / 100,
       restricted: spend.restricted,
     }),
   )
+}
+
+/**
+ * THE BILLED SEQUENCE, ONCE — everything between "the rider named some anchor ids" and "we have a
+ * route worth building on", for BOTH paths that pay Google.
+ *
+ * ⚠ IT IS ONE FUNCTION BECAUSE THE ORDER IS THE PRODUCT. This was written out twice, in `/propose` and
+ * in `POST /`, differing only in a label — and the two copies' COMMENTS had already drifted apart,
+ * which is the tell that the code was next. Four things happen here and each is load-bearing in a way
+ * that is invisible once the copies disagree:
+ *   1. INV-1 FIRST: every id — start, end AND every via — is re-asserted against the curated allowlist
+ *      BEFORE anything can bill. An unknown or de-curated id is a 400 that costs nothing.
+ *   2. Materialize. THIS IS THE BILL; everything above it is free and everything below it is not.
+ *   3. Log the spend THE INSTANT that resolves, ahead of both gates. A refused route still cost money,
+ *      so a cost line placed after them would lose exactly the requests that spent and produced
+ *      nothing — the condition `logRouteSpend` exists to make countable.
+ *   4. RESTRICTED BEFORE RETRACE, and the ordering is the whole reason they sit together. An
+ *      undrivable anchor produces BOTH at once — Carson City → the Spooner Lake pin goes out and back
+ *      up one forest track, so it is a ~100% retrace as well — and the loop message would tell the
+ *      rider to "pick a different way round" when there is no way round: the SPOT is the problem. The
+ *      more fundamental refusal has to speak first, or the advice is wrong.
+ *
+ * ⚠ NEITHER GATE IS REDUNDANT ON THE CREATE PATH. A client can reach `POST /` without ever calling
+ * `/propose`, and that is the path that spends a credit — so both refusals must land there too, before
+ * the selection and before the ledger batch. A refused route costs a Routes call (already billed at
+ * step 3) and never a rider's credit.
+ *
+ * ⚠ THE CALLER STILL CHOOSES WHEN TO CALL THIS, and that difference is deliberate rather than an
+ * oversight worth "fixing" into a middleware: `/propose` calls it straight after parsing, while
+ * `POST /` calls it only after the idempotent-replay lookup and the credit gate — so a lost-ACK retry
+ * never pays to re-route a drive it already has, and a rider with no credits is turned away before we
+ * spend on their behalf.
+ *
+ * `path` is the ONLY thing that differs between the two callers, and it reaches exactly one field of
+ * one log line plus the error label.
+ */
+async function materializeAndGate(
+  c: Context<ApiEnv>,
+  path: 'propose' | 'create',
+  ids: { start: string; end: string; via?: string[] },
+): Promise<
+  | {
+      ok: true
+      start: ResolvedEndpoint
+      end: ResolvedEndpoint
+      via: ResolvedEndpoint[]
+      route: Awaited<ReturnType<typeof materializeRoute>>
+      shape: LoopShape
+    }
+  | { ok: false; res: Response }
+> {
+  const anchors = await resolveRouteAnchors(ids.start, ids.end, ids.via)
+  if (!anchors) return { ok: false, res: c.json(NOT_AN_ANCHOR, 400) }
+  const { start, end, via, count } = anchors
+
+  const waypoints = routeWaypoints(start, end, via)
+  let route: Awaited<ReturnType<typeof materializeRoute>>
+  try {
+    route = await materializeRoute(waypoints)
+  } catch (e) {
+    console.error(`[api] drive ${path} route failed`, e)
+    return { ok: false, res: c.json(NO_ROUTE, 422) }
+  }
+  const shape = loopShapeOf(start, end, route.polyline)
+  // ⚠ Guarded against a zero denominator, which is a REAL case and not defensive padding: a round trip
+  // with no via is start === end, so the chain has no length at all. Treating that as 1x (no detour)
+  // leaves it to the loop gate below, which is the check that actually understands that shape.
+  const crow = crowMeters(waypoints)
+  const detour = crow > 0 ? route.distanceMeters / crow : 1
+  logRouteSpend({
+    detour,
+    path,
+    anchors: count,
+    via: via.length,
+    loop: shape.loop,
+    meters: route.distanceMeters,
+    seconds: route.durationSeconds,
+    retrace: shape.retrace,
+    restricted: route.restricted,
+  })
+
+  // ⚠ BOTH CONDITIONS, and the ordering note below still holds. The warning says a restricted segment
+  // is SOMEWHERE on the route; the ratio says the route is also absurd. Either alone is a false
+  // positive generator — see DETOUR_REFUSE_RATIO for the measurements that establish it.
+  if (route.restricted && detour >= DETOUR_REFUSE_RATIO) return { ok: false, res: c.json(RESTRICTED_ROUTE, 422) }
+  if (shape.refuse) return { ok: false, res: c.json(SAME_ROAD_LOOP, 422) }
+  return { ok: true, start, end, via, route, shape }
 }
 
 /** Quantize a coordinate to ~110 m for the route signature. */
@@ -913,43 +1063,15 @@ driveRoutes.post('/propose', async (c) => {
   if (!parsed.ok) return parsed.res
   const { start: startId, end: endId, via: viaIds } = parsed.data
 
-  // ⚠ BEFORE the Routes call — this is the billed boundary (INV-1). start, end AND every via.
-  const anchors = await resolveRouteAnchors(startId, endId, viaIds)
-  if (!anchors) return c.json(NOT_AN_ANCHOR, 400)
-  const { start: startEp, end: endEp, via, count: anchorCount } = anchors
-
-  let route
-  try {
-    route = await materializeRoute(routeWaypoints(startEp, endEp, via))
-  } catch (e) {
-    console.error('[api] drive propose route failed', e)
-    return c.json(NO_ROUTE, 422)
-  }
-  // The bill just landed — record it HERE, before the (throwable, unbilled) selection below. See
-  // logRouteSpend for why this line exists and what may never ride on it.
-  const shape = loopShapeOf(startEp, endEp, route.polyline)
-  logRouteSpend({
-    path: 'propose',
-    anchors: anchorCount,
-    via: via.length,
-    loop: shape.loop,
-    meters: route.distanceMeters,
-    seconds: route.durationSeconds,
-    retrace: shape.retrace,
-    restricted: route.restricted,
-  })
-
-  // ⚠ RESTRICTED BEFORE RETRACE, AND THE ORDER IS THE WHOLE POINT OF PUTTING THEM TOGETHER. An
-  // undrivable anchor produces BOTH conditions at once — Carson City → the Spooner Lake pin went out
-  // and back up the same forest track, so it is a 100% retrace as well — and the loop message would
-  // then tell the rider to "pick a different way round", which cannot help: there is no way round, the
-  // SPOT is the problem. The more fundamental refusal has to speak first or the advice is wrong.
-  if (route.restricted) return c.json(RESTRICTED_ROUTE, 422)
-
-  // A loop that drives the same road twice is not a loop (`loopShapeOf`). Refused HERE, on the
-  // preview, so the rider meets it on the FREE path rather than after a credit — and so the card they
-  // are offered is never one the create path would go on to reject.
-  if (shape.refuse) return c.json(SAME_ROAD_LOOP, 422)
+  // ⚠ THE BILLED BOUNDARY (INV-1), and the whole of it — allowlist, the Routes call, the spend line,
+  // and both refusals — is `materializeAndGate`. Called HERE, first thing after parsing, because
+  // nothing on this route needs to happen before it: /propose persists nothing and charges nothing, so
+  // the Routes call IS the request. ⚠ The refusals landing on the FREE path is the point of them being
+  // here at all — the rider meets a bad loop or an unreachable spot before a credit is ever spent, and
+  // the card they are offered is never one the create path would go on to reject.
+  const billed = await materializeAndGate(c, 'propose', { start: startId, end: endId, via: viaIds })
+  if (!billed.ok) return billed.res
+  const { start: startEp, end: endEp, via, route } = billed
 
   // Accurate est. stop count: run the real selection (pure, free) so the confirm screen matches.
   // An admin previews over staged clips too, so the proposed count matches what they'll build.
@@ -1085,43 +1207,19 @@ driveRoutes.post('/', requireAccount, createDriveLimiter, withFreshSession, asyn
     )
   }
 
-  // ⚠ BEFORE the Routes call — the same billed boundary /propose guards (INV-1). Deliberately placed
-  // HERE rather than at parse time: the idempotent-replay path above returns without routing, and it
-  // is the hot path for a lost-ACK retry, so it should not pay for a lookup it does not need. A rider
-  // who reached this line has already passed the credit gate, so an off-list id costs them nothing.
-  const anchors = await resolveRouteAnchors(startId, endId, viaIds)
-  if (!anchors) return c.json(NOT_AN_ANCHOR, 400)
-  const { start, end, via, count: anchorCount } = anchors
-
-  let route
-  try {
-    route = await materializeRoute(routeWaypoints(start, end, via))
-  } catch (e) {
-    console.error('[api] drive create route failed', e)
-    return c.json(NO_ROUTE, 422)
-  }
-  // Create bills its OWN Routes call (it does not reuse the proposal — nothing is persisted at
-  // /propose), so it gets its own line, distinguished by `path`. Placed before the selection for the
-  // same reason as /propose: below this point a corpus read, a 0-stop rejection or the ledger batch can
-  // all end the request, and the Routes call is paid for either way.
-  const shape = loopShapeOf(start, end, route.polyline)
-  logRouteSpend({
-    path: 'create',
-    anchors: anchorCount,
-    via: via.length,
-    loop: shape.loop,
-    meters: route.distanceMeters,
-    seconds: route.durationSeconds,
-    retrace: shape.retrace,
-    restricted: route.restricted,
-  })
-
-  // ⚠ BOTH GATES AS /propose, IN THE SAME ORDER, and neither is redundant: a client can reach this
-  // route without ever calling /propose, and this is the path that spends. Placed BEFORE the selection
-  // and the ledger batch, so a refused route costs a Routes call (already billed above) and never a
-  // rider's credit. The restricted-first ordering is argued at the /propose copy.
-  if (route.restricted) return c.json(RESTRICTED_ROUTE, 422)
-  if (shape.refuse) return c.json(SAME_ROAD_LOOP, 422)
+  // ⚠ THE SAME BILLED BOUNDARY /propose guards (INV-1), and deliberately NOT called at parse time like
+  // /propose does. Two earlier returns have to get their chance first: the idempotent-replay path above
+  // returns without routing at all — the hot path for a lost-ACK retry, which must not pay to re-route
+  // a drive it already has — and the credit gate turns away a rider with no balance before we spend on
+  // their behalf. A rider who reaches this line has already cleared both, so an off-list id costs them
+  // nothing. ⚠ Create bills its OWN Routes call (it does not reuse the proposal — /propose persists
+  // nothing), which is why the spend line inside carries a different `path`.
+  const billed = await materializeAndGate(c, 'create', { start: startId, end: endId, via: viaIds })
+  if (!billed.ok) return billed.res
+  // ⚠ No `via` here, unlike /propose: the waypoint chain this drive is NAMED by comes from
+  // `route.provenance.waypoints` (see `driveLabel`), which is the array materializeRoute actually
+  // froze — so it cannot disagree with the route about which places are on it or in what order.
+  const { start, end, route, shape } = billed
 
   // Release gate: an admin builds over staged clips too; everyone else gets released-only. The frozen
   // selection then references whatever was eligible at build time (monotonic → stays valid). (region-release-gate)

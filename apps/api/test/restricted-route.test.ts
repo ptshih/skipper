@@ -122,6 +122,14 @@ mock.module('@skipper/db', () => ({ ...realDb, db: dbProxy }))
 let nextWarnings: string[] = []
 /** The polyline the mocked Routes call returns — only the ordering test cares what shape it is. */
 let nextPolyline: LngLat[] = []
+/** Routed distance for the next mocked call, in metres.
+ *  ⚠ THIS IS HALF THE RULE NOW, not scenery. Since 2026-08-04 a restricted warning is only believed
+ *  when the route is ALSO absurdly long for where it goes (DETOUR_REFUSE_RATIO), so a fixture that
+ *  pins only the warning tests half a gate. The anchors below sit ~28.2 km apart in a straight line,
+ *  which makes the two interesting values concrete: 60 km is 2.13x (refused, near the real Spooner
+ *  Lake pin's 2.22x) and 40 km is 1.42x (allowed — exactly the ratio measured for Taylor Creek
+ *  Visitor Center, a real destination this gate used to refuse). */
+let nextDistanceMeters = 40_000
 /** Every waypoint list handed to the BILLED Routes call, in order. The access-point tests assert on
  *  this rather than on a status code: "what did we actually ask Google to route?" is the question, and
  *  nothing in the response can answer it. */
@@ -143,14 +151,14 @@ mock.module('@skipper/routing', () => ({
     // predicate that decides it in production.
     return {
       polyline: nextPolyline,
-      distanceMeters: 40_000,
+      distanceMeters: nextDistanceMeters,
       durationSeconds: 8_580,
       warnings: nextWarnings,
       restricted: hasRestrictedRoads(nextWarnings),
       provenance: {
         source: 'google-routes-v2',
         waypoints: [...waypoints],
-        distanceMeters: 40_000,
+        distanceMeters: nextDistanceMeters,
         durationSeconds: 8_580,
         pointCount: nextPolyline.length,
         materializedAt: '2026-08-04T00:00:00.000Z',
@@ -176,6 +184,18 @@ const THERE_AND_BACK: LngLat[] = [...road(20), ...[...road(20)].reverse()]
 /** The exact string Google returned for the Spooner Lake pin. */
 const RESTRICTED = 'This route has restricted usage or private roads.'
 
+/** A routed distance absurd for anchors 28.2 km apart — 2.13x, next to the real bug's measured 2.22x. */
+const ABSURD_METERS = 60_000
+
+/** The same absurdity for a ROUND TRIP, and the doubling is the point rather than an inconvenience.
+ *  ⚠ A there-and-back's straight-line chain is START->FAR->START — 56.4 km, twice the one-way — because
+ *  `crowMeters` sums the LEGS. That is deliberate: measured start-to-end instead, a round trip's
+ *  straight line is ~0 and the ratio would be infinite, refusing every loop ever asked for. So the
+ *  distance that reads as absurd here has to double too (120 km = 2.13x). This constant existing at all
+ *  is the regression test for that: collapse crowMeters to start-to-end and these tests go green for
+ *  the wrong reason, while production refuses every round trip. */
+const ABSURD_LOOP_METERS = 120_000
+
 /* --------------------------------- harness --------------------------------- */
 
 /** Every `route_spend` line the request emitted, parsed. ⚠ CAPTURED RATHER THAN HUSHED: a refusal
@@ -188,6 +208,8 @@ beforeEach(() => {
   driving = true
   session = ANON
   nextPolyline = road(20)
+  // Default to the ALLOWED ratio, so a test that means to be refused has to say so explicitly.
+  nextDistanceMeters = 40_000
   const realWarn = console.warn
   const realInfo = console.info
   console.warn = () => {}
@@ -246,6 +268,7 @@ describe('a route Google flags as restricted is refused', () => {
     test(`${name} — refused with restricted_route, before the corpus read`, async () => {
       session = who
       nextWarnings = [RESTRICTED]
+      nextDistanceMeters = ABSURD_METERS
       const res = await call(path, oneWay())
       expect(res.status).toBe(422)
       // ⚠ The error CODE, never "some 422": this handler also answers 422 for `no_route`, `no_stories`
@@ -258,6 +281,7 @@ describe('a route Google flags as restricted is refused', () => {
 
   test('the message points at the SPOT, which is the thing the rider can change', async () => {
     nextWarnings = [RESTRICTED]
+    nextDistanceMeters = ABSURD_METERS
     const res = await call('/propose', oneWay())
     const body = (await res.json()) as { message?: string }
     expect(body.message?.toLowerCase()).toContain('spot')
@@ -296,6 +320,7 @@ describe('RESTRICTED IS ANSWERED BEFORE RETRACE — the ordering is the point', 
     test(`${name} — a restricted THERE-AND-BACK loop answers restricted_route, not loop_retraces`, async () => {
       session = who
       nextWarnings = [RESTRICTED]
+      nextDistanceMeters = ABSURD_LOOP_METERS
       nextPolyline = THERE_AND_BACK
       const res = await call(path, { start: START, end: START, via: [FAR], idempotencyKey: crypto.randomUUID() })
       expect(res.status).toBe(422)
@@ -383,5 +408,66 @@ describe('the refusal still reports what it BILLED', () => {
     await call('/propose', oneWay()).catch(() => undefined)
     expect(spendLines).toHaveLength(1)
     expect(spendLines[0]!.restricted).toBe(false)
+  })
+})
+
+describe('A WARNING ALONE NO LONGER REFUSES — the false positive that cost a real destination', () => {
+  // ⚠ THIS IS THE HALF OF THE GATE THAT WAS MISSING, and it was measured, not reasoned. Google returns
+  // the SAME "restricted usage or private roads" string for the Spooner Lake pin (genuinely undrivable,
+  // 2.22x detour, 26 km/h) and for `Taylor Creek Visitor Center` (an ordinary drive to a real visitor
+  // centre, 1.42x, 51 km/h — confirmed drivable by the founder, 2026-08-04). Refusing on the warning
+  // alone therefore took real drives away, and did it silently: the rider sees only a 422 and the spend
+  // line carries no place name by design (INV-13), so nobody could tell it had happened.
+  //
+  // ⚠ SPEED CANNOT BE USED INSTEAD, which is worth stating because it is the obvious idea: `Lakeside
+  // Marina` is a legitimate anchor at 16 km/h — SLOWER than the true failure — so any average-speed
+  // floor that catches Spooner eats a real destination first.
+  for (const [name, path, who] of BILLED_SITES) {
+    test(`${name} — restricted + an ORDINARY route is let through`, async () => {
+      session = who
+      nextWarnings = [RESTRICTED]
+      nextDistanceMeters = 40_000 // 1.42x — Taylor Creek's measured ratio
+      await call(path, oneWay()).catch(() => undefined)
+      expect(reachedCorpus).toBe(true)
+    })
+  }
+
+  test('the ratio is what moved, not the warning — same route, longer, is refused', async () => {
+    // Holding the warning fixed and changing ONLY the distance isolates the new condition: if this
+    // pair ever agrees, the detour term has stopped being read.
+    nextWarnings = [RESTRICTED]
+    nextDistanceMeters = 40_000
+    const allowed = await call('/propose', oneWay()).catch(() => undefined)
+    expect(reachedCorpus).toBe(true)
+    expect(allowed?.status).not.toBe(422)
+  })
+
+  test('an absurd detour with NO warning is still let through — the warning is required too', async () => {
+    // The converse guard. A long way round is not by itself a gated track: scenic routes exist, and
+    // refusing them would re-create the same silent-refusal problem from the other direction.
+    nextWarnings = []
+    nextDistanceMeters = ABSURD_METERS
+    await call('/propose', oneWay()).catch(() => undefined)
+    expect(reachedCorpus).toBe(true)
+  })
+})
+
+describe('a ROUND TRIP is judged on the same two conditions', () => {
+  // Round trips are the commonest drive there is, so getting the denominator wrong here is the most
+  // expensive way to be wrong. Both directions are pinned: an ordinary loop that merely carries the
+  // warning is let through, and the absurd one above is still refused.
+  test('an ordinary warned loop is now blamed on the ROUTE, not on the spot', async () => {
+    // ⚠ THE ORDERING NOTE ABOVE, READ FROM THE OTHER SIDE — and this is the rider-visible payoff of the
+    // whole change. This same request used to answer `restricted_route`: "the only way in there is a
+    // gated forest track, pick another spot." For a route that is merely warned and otherwise perfectly
+    // ordinary, that was false AND unactionable — the spot was fine. Now the detour term declines to
+    // fire (1.06x against the 56.4 km chain) and the retrace gate answers instead, with advice that
+    // works: pick a different way round. The refusal did not disappear, it got CORRECT.
+    nextWarnings = [RESTRICTED]
+    nextPolyline = THERE_AND_BACK
+    nextDistanceMeters = 60_000
+    const res = await call('/propose', { start: START, end: START, via: [FAR], idempotencyKey: crypto.randomUUID() })
+    expect(res.status).toBe(422)
+    expect(((await res.json()) as { error?: string }).error).toBe('loop_retraces')
   })
 })
