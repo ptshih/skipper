@@ -29,6 +29,8 @@
 //   apply:    ... --region lake-tahoe --apply         probe every endpoint (one Routes call each)
 //   ... --limit 10                                    probe only the first N (cheap spot-check)
 //   ... --max-cost 0.25                               refuse to start if the estimate exceeds this
+//   ... --apply --snap                                ALSO propose an access point per flagged anchor
+//                                                     (a few more Routes calls each; still writes nothing)
 
 import { and, between, eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
@@ -129,6 +131,63 @@ interface Probe {
   kmh?: number
   warnings?: string[]
   note?: string
+  /** The route Google returned, kept only so `--snap` can search along it. */
+  polyline?: LngLat[]
+}
+
+/**
+ * How many probes the access-point search may spend per flagged anchor.
+ *
+ * ⚠ IT IS A CEILING, NOT A TARGET — the search stops as soon as it has bracketed a single polyline
+ * segment, so a short route costs far fewer. 10 halvings resolve a ~1000-point polyline exactly, which
+ * is why this is the number: the first cut used 6 and stopped ~1.5% of the route early, reporting
+ * Baldwin Beach 899 m short where the true turn-off was ~861 m. Harmless for a proposal a human signs
+ * off, but a tool that quietly rounds in one direction should say so or stop doing it.
+ */
+const SNAP_PROBES = 10
+
+/**
+ * Where a car can actually be sent for a place whose own pin is not drivable.
+ *
+ * ⚠ THE FURTHEST CLEAN POINT ALONG ITS OWN ROUTE, not the nearest highway. Both work, and this one is
+ * strictly better: it stops as close to the place as the public road allows, so the drive ends at the
+ * turn-off rather than wherever a through-road happens to pass. Measured against the alternative on the
+ * CA-89 cluster, nearest-highway left the rider 292–861 m out; this cannot do worse and often does
+ * better, because part of an access road is frequently unrestricted.
+ *
+ * ⚠ IT ASSUMES THE RESTRICTION IS A SUFFIX — a clean run out from the origin, then the gated bit at the
+ * end. That is what an undrivable ENDPOINT looks like, and it is why this only runs on flagged anchors.
+ * A restricted segment in the MIDDLE of an otherwise fine route breaks the assumption, and the search
+ * would then land somewhere arbitrary before it — which is why the caller prints the distance from the
+ * proposal to the place and a human signs it off. It never writes.
+ */
+async function findAccessPoint(
+  origin: Anchor,
+  polyline: LngLat[],
+): Promise<{ point: LngLat; probes: number } | null> {
+  if (polyline.length < 2) return null
+  // lo is known clean (the origin end), hi is known restricted (the place). Invariant held throughout.
+  let lo = 0
+  let hi = polyline.length - 1
+  let probes = 0
+  for (let i = 0; i < SNAP_PROBES && hi - lo > 1; i++) {
+    const mid = Math.floor((lo + hi) / 2)
+    const p = polyline[mid]!
+    try {
+      const r = await materializeRoute([
+        { label: origin.name, lat: origin.lat, lng: origin.lng },
+        { label: 'access probe', lat: p[1], lng: p[0] },
+      ])
+      probes++
+      if (r.restricted) hi = mid
+      else lo = mid
+    } catch {
+      // A probe that never resolved bought nothing and proves nothing — stop rather than let a network
+      // blip narrow the range in a direction the evidence does not support.
+      break
+    }
+  }
+  return lo === 0 ? null : { point: polyline[lo]!, probes }
 }
 
 function line(p: Probe): string {
@@ -152,6 +211,8 @@ async function main() {
   const bbox = requireRegionBbox(region)
   const limit = numericFlag(flags, 'limit', { fallback: Infinity, min: 0 })
   const maxCost = maxCostFlag(flags)
+  // Only meaningful with --apply: it searches along routes the sweep itself had to fetch first.
+  const snap = flags.has('snap')
 
   announce({ tool: 'audit-endpoint-routability', blast: ['SPENDS $'], apply })
   console.log(`Region: ${region.displayName} (${region.slug})\n`)
@@ -189,7 +250,11 @@ async function main() {
 
   const featured = rows.filter((r) => r.featured)
   const candidates = rows.slice(0, Number.isFinite(limit) ? limit : rows.length)
-  const estimate = candidates.length * ROUTES_CALL_USD
+  // ⚠ WORST CASE WHEN --snap IS ON, deliberately. How many anchors get snapped is not knowable until the
+  // sweep has run, so the bound assumes EVERY candidate is flagged. `--max-cost` exists to stop a run
+  // before it spends; an estimate that priced the base sweep while --snap quietly multiplied it would be
+  // bounding one quantity with a number derived from a different one — the trap `numericFlag` documents.
+  const estimate = candidates.length * ROUTES_CALL_USD * (snap ? 1 + SNAP_PROBES : 1)
 
   console.log(
     `${rows.length} endpoint-eligible anchor(s), ${featured.length} of them featured (the probe origins).`,
@@ -262,6 +327,7 @@ async function main() {
         minutes,
         kmh,
         warnings: route.warnings,
+        polyline: route.polyline,
         // The raw warning is the evidence, so it is printed verbatim rather than summarised — a phrase
         // `RESTRICTED_ROAD_WARNINGS` does not know about has to be visible to a human here, since it is
         // invisible everywhere else by design.
@@ -285,6 +351,41 @@ async function main() {
   if (errored.length) console.log(`${errored.length} errored (listed above) — NOT audited.`)
   if (Number.isFinite(limit) && rows.length > candidates.length) {
     console.log(`${rows.length - candidates.length} anchor(s) beyond --limit were not probed.`)
+  }
+
+  // --snap: for each RESTRICTED anchor, propose the access point an operator should store against it.
+  // Read-only, like the rest of this CLI — it prints coordinates, it never writes them.
+  if (snap) {
+    const restricted = probes.filter((p) => p.verdict === 'restricted' && p.polyline && p.origin)
+    if (restricted.length === 0) {
+      console.log('\n--snap: nothing restricted to snap.')
+    } else {
+      console.log(
+        `\n--snap: searching each restricted route for the furthest point a car can still be sent to` +
+          ` (up to ${SNAP_PROBES} Routes calls each, ~$${(restricted.length * SNAP_PROBES * ROUTES_CALL_USD).toFixed(2)}).\n`,
+      )
+      for (const p of restricted) {
+        const found = await findAccessPoint(p.origin!, p.polyline!)
+        billed += found?.probes ?? 0
+        if (!found) {
+          console.log(`  ${p.anchor.name.padEnd(31)} NO CLEAN POINT — the restriction starts at the origin end`)
+          continue
+        }
+        const short = haversineMeters(found.point, [p.anchor.lng, p.anchor.lat] as LngLat)
+        console.log(
+          `  ${p.anchor.name.padEnd(31)} access ${found.point[1].toFixed(6)},${found.point[0].toFixed(6)}` +
+            `  (${Math.round(short)}m short of the pin)`,
+        )
+      }
+      // ⚠ The distance is printed for every proposal because it is the ONE number that says whether the
+      // proposal is sane. A few hundred metres is a turn-off; several kilometres means the suffix
+      // assumption in findAccessPoint did not hold for that route and the answer is arbitrary.
+      console.log(
+        `\n  Review the "short of the pin" column before storing any of these — a proposal more than a\n` +
+          `  few hundred metres out is the search landing before an unrelated restricted segment, not\n` +
+          `  the place's own turn-off.`,
+      )
+    }
   }
 
   if (flagged.length > 0) {
