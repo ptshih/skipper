@@ -56,7 +56,7 @@ import { checkSpeakableAnchor } from '@skipper/engine'
 import { groundingHash } from '@skipper/db/hash'
 import { requireAdmin, type AdminEnv } from './auth'
 import { bboxError, parseBbox, pointInBbox } from './bbox'
-import { draftCuratedPlaces, resolvePlaceInBbox, type PlaceDraft, type ResolvedPlace } from './places'
+import { draftCuratedPlaces, isAddressLike, resolvePlaceInBbox, type PlaceDraft, type ResolvedPlace } from './places'
 import { contentTypeForKey, presignGet } from './storage'
 import {
   buildJobArgs,
@@ -679,6 +679,19 @@ app.post('/admin/places/curate', async (c) => {
     }
     const endpoint = role === 'endpoint' || role === 'both'
     const brk = role === 'break' || role === 'both'
+    // ⚠ ENDPOINTS ONLY. A street resolve is a rider destination we would speak aloud and route to, so it
+    // must be a real place; a BREAK is a pull-off and a `route` is a legitimate answer there (Luther Pass
+    // Road). Rejecting outright rather than silently downgrading to break-only: the substitution means we
+    // resolved something the operator never asked for, and quietly re-filing it hides that.
+    if (endpoint && isAddressLike(place.types)) {
+      results.push({
+        name: d.name,
+        status: 'dropped',
+        resolvedName: place.name,
+        message: `resolved to a street address (“${place.name}”) — Google substituted an in-box name-alike, so this is not a real endpoint`,
+      })
+      continue
+    }
     const prev = byId.get(place.placeId)
     byId.set(place.placeId, {
       place,

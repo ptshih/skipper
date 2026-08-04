@@ -34,7 +34,7 @@ import { announce, maxCostFlag, parseFlags } from './pipeline/ops'
 import { resolveRegion, requireRegionBbox, type RegionBbox } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'
 import { withRetry, sleep } from './pipeline/http'
-import { resolveCuratedPlace, type CuratedPlace, type PlacesBbox } from './pipeline/places'
+import { isAddressLike, resolveCuratedPlace, type CuratedPlace, type PlacesBbox } from './pipeline/places'
 import { ENRICH_MODELS, getAnthropic, type EnrichModelChoice } from './models'
 import { llmSpendLines, llmSpentUsd, recordModelUsage, usageUsd } from '@skipper/shared'
 import { ANTHROPIC_READY, DEFAULT_REGION_SLUG, GOOGLE_READY, requireEnv } from './config'
@@ -290,6 +290,13 @@ async function main(): Promise<void> {
       continue
     }
     const rf = roleFlags(d.role)
+    // ⚠ ENDPOINTS ONLY — see isAddressLike. A street resolve is a rider destination we would route to,
+    // so it must be a real place; a BREAK is a pull-off, where a `route` is a legitimate answer.
+    if (rf.endpoint && isAddressLike(place.types)) {
+      console.log(`  ·  ${d.name}: resolved to a street address ("${place.name}") — skipped, not a real endpoint.`)
+      unresolved++
+      continue
+    }
     const prev = byId.get(place.placeId)
     byId.set(place.placeId, {
       place,

@@ -186,6 +186,9 @@ export interface CuratedPlace {
   lat: number
   lng: number
   primaryType?: string
+  /** Google's full type list. NOT persisted (`places` stores only `primary_type`) — it exists to be
+   *  read once at curation by `isAddressLike`, the only thing that can tell a town from a street. */
+  types?: string[]
 }
 
 /** Best place_id for a query, restricted to the region bbox (so "tahoe city" can't resolve to a
@@ -229,7 +232,11 @@ async function placeDetails(placeId: string, apiKey: string): Promise<CuratedPla
       method: 'GET',
       headers: {
         'X-Goog-Api-Key': apiKey,
-        'X-Goog-FieldMask': 'id,location,displayName,primaryType',
+        // ⚠ `types` (PLURAL) is what tells an address apart from a place; `primaryType` cannot — it is
+        // null for every locality, so a town and a residential street look identical through it. Google
+        // bills `types` in the Essentials tier and `primaryType` in Pro, so adding it to a mask that
+        // already asks for primaryType costs nothing. See isAddressLike.
+        'X-Goog-FieldMask': 'id,location,displayName,primaryType,types',
       },
     },
     { timeoutMs: REQUEST_TIMEOUT_MS },
@@ -240,6 +247,7 @@ async function placeDetails(placeId: string, apiKey: string): Promise<CuratedPla
     location?: { latitude: number; longitude: number }
     displayName?: { text: string }
     primaryType?: string
+    types?: string[]
   }>('details', res)
   if (!json.id || !json.location || !json.displayName?.text) return null
   return {
@@ -248,7 +256,37 @@ async function placeDetails(placeId: string, apiKey: string): Promise<CuratedPla
     lat: json.location.latitude,
     lng: json.location.longitude,
     primaryType: json.primaryType,
+    types: json.types,
   }
+}
+
+/** Google's address-component types — a resolve that comes back as one of these is a STREET, not a place.
+ *  Exact strings from the Places "address types and address component types" table. */
+const ADDRESS_TYPES = new Set(['street_address', 'route', 'premise', 'subpremise', 'intersection', 'plus_code', 'postal_code'])
+
+/**
+ * True when a resolve is an ADDRESS rather than somewhere a rider could be sent.
+ *
+ * ⚠ WHY THIS EXISTS — a silent wrong answer, not a failed one. `autocompletePlaceId` sends a HARD
+ * bbox restriction and takes the FIRST prediction, with nothing checking that the result resembles the
+ * query. So when the draft model names a place just OUTSIDE the box, Autocomplete cannot return it and
+ * instead returns the nearest in-box name-alike — routinely a residential street. Details then confirms
+ * it IS in the box, so every existing check passes and it lands in `places` as a curated endpoint.
+ * Measured on the first bbox-scoped run (2026-08-03): Hope Valley (38.75, below the box) became "Hope
+ * Court" in Truckee and Carson Pass (38.69) became "Carson Court" — both stored ENDPOINT-eligible,
+ * meaning the planner could offer a rider a drive to a cul-de-sac. Worse than a draft that fails to pin,
+ * because that one is reported and this one was not.
+ *
+ * ⚠ TEST ON `types`, NEVER ON `primaryType` — the obvious-looking "reject a null primaryType" rule is
+ * WRONG and would gut the set: Google returns no primaryType for a locality, so Truckee, Tahoe City,
+ * South Lake Tahoe, Incline Village, Kings Beach, Stateline and Glenbrook would all be rejected. A town
+ * carries `types: ['locality', 'political']`; a street carries `route` / `street_address`.
+ *
+ * ⚠ Mirrored in apps/admin/server/places.ts (that server does not depend on @skipper/studio) — the two
+ * must move together, like the draft prompt and the resolver they sit beside.
+ */
+export function isAddressLike(types: string[] | undefined): boolean {
+  return (types ?? []).some((t) => ADDRESS_TYPES.has(t))
 }
 
 /** Resolve an LLM-drafted place NAME to a stored CuratedPlace within the region bbox, or null if it

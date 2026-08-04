@@ -31,6 +31,19 @@
 > `<display_name>`" — Truckee reads as Tahoe, Reno reads as somewhere else. The prompt was restructured
 > so the BOX is given first as the area and the name appears once, explicitly labelled a NICKNAME.
 > ⚠ **That second pass is UNMEASURED** — it needs another paid draft to confirm the east side fills in.
+>
+> ⚠ **SECOND, SEPARATE DEFECT FOUND IN THAT RUN — a silent WRONG resolve, now guarded.** Autocomplete is
+> sent a HARD bbox restriction and the resolver takes the FIRST prediction with no check that it
+> resembles the query — so a draft naming a place just OUTSIDE the box comes back as the nearest in-box
+> NAME-ALIKE, routinely a residential street. Hope Valley (38.75) → **"Hope Court"**, Carson Pass (38.69)
+> → **"Carson Court"**, both stored ENDPOINT-eligible: the planner could offer a rider a drive to a
+> cul-de-sac. Worse than the 7 that failed to pin, because those were reported. Both rows deleted by hand
+> 2026-08-03; `isAddressLike` (mirrored in `apps/admin/server/places.ts` + `packages/studio/src/pipeline/places.ts`)
+> now refuses an address-typed resolve for the ENDPOINT role, breaks left permissive.
+> ⚠ It tests Google's plural `types`, **never `primaryType`** — that obvious-looking rule is WRONG, since
+> a locality has NO primaryType (31 of 98 rows, Truckee and South Lake Tahoe among them). Pinned by
+> `apps/admin/server/places-guard.test.ts`; don't "simplify" it. ⚠ This defect is on the SOUTH edge and
+> does NOT explain the missing east — that remains the name-anchoring diagnosis above.
 > ⚠ **The draft COUNT was picker-era sizing too, and moved 30 → 100 (2026-08-03).** §Rationale below
 > argues curated-over-autocomplete partly on "a short curated list is mostly *tapping*" and "curating
 > ~30 places is trivial" — the CONCLUSION still holds, but that premise is gone: the tap-to-pick form
