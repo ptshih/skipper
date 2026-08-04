@@ -10,7 +10,9 @@
 > **17 → 12**, and the read-back STEMS are gone from that list — what remains is place-name pairs, which a
 > read-back cannot avoid. ⚠ The record-but-do-not-recite split is confirmed working: one drawn route
 > carried `target_minutes: 120` picked up from *"actually two"* and never said back.
-> ⚠ **It also surfaced a real regression elsewhere — see the last section.**
+> ⚠ **It also surfaced a real regression elsewhere, whose FIX then caused a second one — read the last
+> section before touching the read-back. Run 3 ($0.5280) is routing 0.93, and the open item is a reworded,
+> UNVERIFIED clause.**
 
 ## The call
 
@@ -162,3 +164,35 @@ stays fixed. And the draw-ask came out different again (*"Shall I set it?"*), so
 The difference is that this one is a clarification of an existing rule rather than a behavioural default, so
 it has less room to be true in one scenario and false in another — but the next full suite is what confirms
 it, not this arm.
+
+### ⛔ And the full suite immediately proved that caveat right: clause 2 broke the SPEND GATE
+
+Next full run (**$0.5280**, same 57 turns): routing **0.96 → 0.93, 4/57 flagged**, persona **0/57 → 3/57**.
+Two scenarios that PASSED the previous run — `change-it-up-shorter` and
+`duration-instead-of-a-destination` — both failed, with one shared shape:
+
+> he DREW the route on the read-back turn, and then on the rider's *"yep"* said
+> *"That one's already sitting right there in front of you"* and drew nothing.
+
+**The cause is the wording of clause 2, and it is a spend-gate regression, not a score wobble.** It read
+*"If nothing is actually missing, **the next thing out of you is the plan**."* In a prompt where emitting a
+route IS "the plan", that is authorisation to draw — so he drew BEFORE the yes, which is exactly the half of
+the spend gate D11 asks the prompt to hold. Every rider *"yep"* then landed on a drive already drawn, and
+`== Once it is drawn ==` correctly told him not to redraw it, so the yes did nothing. All three persona
+flags trace to the same root: having drawn early, his next line always had to be *"already sitting right
+there in front of you"*, which the judge called *"the run's most-repeated construction"* — a brand-new stamp
+manufactured by the bug, not by the wording.
+
+⚠ **It never reached a rider.** Caught by the suite before any push (56 commits unpushed at the time; the
+commit carrying it was on no remote).
+
+**Reworded rather than reverted**, because the clause still has a job and the previous run showed the
+either/or comes back without something in this slot: *"If nothing is actually missing, say it back -- and
+saying it back is not drawing it. Nothing gets drawn until they answer."* The last two sentences exist
+purely to foreclose the misreading. ⚠ **Unverified** — the arm that would prove it is
+`--only change-it-up-shorter` plus `--only duration-instead-of-a-destination`, 9 turns.
+
+**The reusable lesson, and it is not "write clearer prompts":** in this file, *"the plan"* is a word with two
+referents — the sentence he says and the tool call he emits. A clause that reads naturally in one sense can
+authorise the other. When editing anything near the read-back, say SAY or say DRAW; never say "the plan"
+and expect the right one to be understood.

@@ -46,6 +46,22 @@ without re-deriving the reasoning. **Delete items when done** — git history is
 > (Advice to tighten it was written here first and withdrawn on reading the definition — the same
 > read-the-definition trap this file keeps recording.)
 
+- [ ] **⛔ RUN 3 ($0.5280, routing 0.93, 4/57): THE FIX BELOW BROKE THE SPEND GATE, and the reworded clause
+      is UNVERIFIED.** `change-it-up-shorter` and `duration-instead-of-a-destination` both PASSED run 2 and
+      both failed run 3, with one shape: he DREW on the read-back turn, then answered the rider's *"yep"*
+      with *"That one's already sitting right there in front of you"* and drew nothing. Cause: the clause
+      read *"the next thing out of you is **the plan**"*, and in this prompt "the plan" means both the
+      sentence he says AND the tool call he emits — so it authorised drawing BEFORE the yes, which is the
+      half of the spend gate D11 asks the prompt to hold. All three persona flags share that root: having
+      drawn early, his next line always had to be "already sitting right there", which the judge called the
+      run's most-repeated construction — a new stamp manufactured by the bug. ⚠ Never reached a rider (56
+      commits unpushed; the commit was on no remote). Reworded, not reverted — run 2 showed the either/or
+      returns without something in this slot: *"say it back -- and saying it back is not drawing it. Nothing
+      gets drawn until they answer."*
+      **Owed: `--only change-it-up-shorter` + `--only duration-instead-of-a-destination`, 9 turns, ~$0.20,
+      needs a founder go.** ⚠ **The durable rule: near the read-back, say SAY or say DRAW — never "the
+      plan", which has two referents.** Full write-up:
+      [planner-stops-asking-how-long](docs/decisions/planner-stops-asking-how-long.md).
 - [x] **✅ FIXED + VERIFIED same day (`--only deflect-plan-draw-chat`, $0.0968 — routing 1.00, 0/4, all
       three gates PASS). THE EITHER/OR WAS BACK, IN A NEW FLAVOUR, AND A ONE-SCENARIO VERIFICATION IS WHY
       NOBODY KNEW.** Fixed by TWO CLARIFICATIONS of existing rules, not a new rule (the lesson from the last
