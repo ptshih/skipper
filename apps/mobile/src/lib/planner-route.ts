@@ -110,6 +110,40 @@ export const toCreateRequest = (
 })
 
 /* -------------------------------------------------------------------------- */
+/*  Reading a round trip's shape off the proposal                               */
+/* -------------------------------------------------------------------------- */
+
+/** One display-side midpoint, as `/drives/propose` echoed it. Derived from the DTO rather than named
+ *  again here, so a field added to the wire shape arrives for free. */
+type ResolvedVia = NonNullable<DriveProposal['viaResolved']>[number]
+
+/**
+ * Is this proposal a ROUND TRIP?
+ *
+ * ⚠ THE IDS, NEVER `via.length`. A loop echoes its start back as the end, so `startId === endId` is the
+ * honest test; keying on "it has a midpoint" told every one-way route that carried a via it was a
+ * round trip (fixed 2026-08-03). Exported so the card's pins and its route line cannot answer this
+ * differently about the same drive — they render the same route, and they used to each ask inline.
+ */
+export const isRoundTrip = (p: DriveProposal): boolean => p.startId === p.endId
+
+/**
+ * Where a round trip turns around — or undefined if it is one-way, or has nothing to turn around at.
+ *
+ * ⚠ THE LAST VIA, NEVER THE FIRST. The server appends the turnaround as the FINAL midpoint when the
+ * planner says `round_trip` (`toPlannedRoute`, apps/api/src/plan-route.ts), so `via[0]` is the
+ * turnaround only when there is exactly one — the common case, which is why reading `via[0]` looked
+ * right for so long. Ask for a round trip that ALSO passes through somewhere and `via[0]` is that
+ * pass-through: the card then names a place the drive merely goes by and presents it as the far end,
+ * on the one screen that costs a credit to act on.
+ *
+ * A round trip with no via at all is a degenerate zero-distance route; it returns undefined and the
+ * card simply says where the drive starts.
+ */
+export const turnaroundOf = (p: DriveProposal): ResolvedVia | undefined =>
+  isRoundTrip(p) ? p.viaResolved?.at(-1) : undefined
+
+/* -------------------------------------------------------------------------- */
 /*  Reconciling the rider's stated duration with the route Google returned      */
 /* -------------------------------------------------------------------------- */
 

@@ -16,6 +16,7 @@ import { useMemo, type ReactNode } from 'react'
 import { ActivityIndicator, StyleSheet, useAnimatedValue, View } from 'react-native'
 import type { DriveProposal } from '@/lib/api'
 import { cleanPlaceName } from '@/lib/labels'
+import { isRoundTrip, turnaroundOf } from '@/lib/planner-route'
 import { border, radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Badge } from './Badge'
@@ -124,7 +125,7 @@ export function PreviewCard({
   const endpoints = useMemo<DriveMapStop[]>(() => {
     if (!proposal) return []
     const viaShown = proposal.viaResolved ?? []
-    const isLoop = proposal.startId === proposal.endId
+    const isLoop = isRoundTrip(proposal)
     const pins: DriveMapStop[] = [
       {
         seq: 0,
@@ -232,8 +233,12 @@ export function PreviewCard({
   // it drew A→B with an end pin. A card disagreeing with its own map is worse than either being wrong
   // alone. Caught by two independent reviewers on 2026-08-03 after the marker fix stopped one region
   // short of this one.
-  const isLoop = proposal.startId === proposal.endId
-  const viaShown = proposal.viaResolved ?? []
+  const isLoop = isRoundTrip(proposal)
+  // ⚠ THE LAST VIA, NEVER THE FIRST — `turnaroundOf` owns that rule and the reason it bites (lib/
+  // planner-route.ts). This line asked for `via[0]` until 2026-08-03 and so named a pass-through place
+  // as the far end of a round trip; the pins above key on the same helper's `isRoundTrip`, which is
+  // what the note there means by "THE SAME TEST THE PINS USE".
+  const turnaround = turnaroundOf(proposal)
   const spent = state === 'made'
 
   return (
@@ -267,11 +272,11 @@ export function PreviewCard({
             <Text variant="title" color="ink">
               Round trip from {cleanPlaceName(proposal.start.name)}
             </Text>
-            {viaShown[0] ? (
+            {turnaround ? (
               <View style={styles.arrowRow}>
                 <Icon name="car" size={14} color="inkFaint" />
                 <Text variant="dim" color="inkFaint">
-                  via {cleanPlaceName(viaShown[0].name)}
+                  via {cleanPlaceName(turnaround.name)}
                 </Text>
               </View>
             ) : null}

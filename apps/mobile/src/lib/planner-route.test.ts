@@ -5,10 +5,12 @@ import { describe, expect, test } from 'bun:test'
 import type { DriveProposal, PlannedRoute } from '@skipper/shared'
 import {
   durationDrift,
+  isRoundTrip,
   proposeKey,
   reflowDrawnCard,
   toCreateRequest,
   toProposeRequest,
+  turnaroundOf,
 } from './planner-route'
 import { spokenDuration } from '../ui/voice'
 
@@ -258,5 +260,65 @@ describe('spokenDuration', () => {
   // fallback must not print `undefined` if that cap ever moves.
   test('beyond the spelled range falls back to a numeral, never undefined', () => {
     expect(spokenDuration(600)).toBe('10 hours')
+  })
+})
+
+/* -------------------------------------------------------------------------- */
+
+// ⚠ THE ROUND-TRIP SHAPE, WHICH NOTHING ABOUT A ONE-WAY DRIVE CAN CHECK. The server encodes "down to
+// Emerald Bay and back" as `endId === startId` with the turnaround appended as the LAST via, so both
+// helpers below are wrong in ways that are invisible until a loop carries MORE than one midpoint —
+// the case the preview card got wrong from the day it was written until 2026-08-03. Every
+// single-via assertion here would pass against `via[0]`; the multi-via ones are the whole point.
+describe('isRoundTrip', () => {
+  test('the same id at both ends is a round trip', () => {
+    expect(isRoundTrip(proposal({ endId: START }))).toBe(true)
+  })
+
+  test('distinct endpoints are one-way, midpoint or not', () => {
+    expect(isRoundTrip(proposal())).toBe(false)
+    // ⚠ The regression this replaced: keyed on `via.length`, a one-way drive through a midpoint was
+    // announced as a "Round trip from X" and its destination never named.
+    expect(
+      isRoundTrip(proposal({ via: [MID], viaResolved: [{ name: 'Sunnyside', lat: 39.13, lng: -120.16 }] })),
+    ).toBe(false)
+  })
+})
+
+describe('turnaroundOf', () => {
+  test('a one-way drive has none, even with midpoints', () => {
+    expect(turnaroundOf(proposal())).toBeUndefined()
+    expect(
+      turnaroundOf(proposal({ viaResolved: [{ name: 'Sunnyside', lat: 39.13, lng: -120.16 }] })),
+    ).toBeUndefined()
+  })
+
+  test('a round trip with one midpoint turns around there', () => {
+    const t = turnaroundOf(
+      proposal({ endId: START, viaResolved: [{ name: 'Emerald Bay State Park', lat: 38.95, lng: -120.11 }] }),
+    )
+    expect(t?.name).toBe('Emerald Bay State Park')
+  })
+
+  test('a round trip THROUGH somewhere turns around at the LAST via, not the first', () => {
+    // The bug, stated: `via[0]` here is Zephyr Cove — a place the drive passes on the way out — and
+    // naming it as the far end describes a drive the rider did not ask for, one tap from a credit.
+    const t = turnaroundOf(
+      proposal({
+        endId: START,
+        viaResolved: [
+          { name: 'Zephyr Cove', lat: 38.99, lng: -119.95 },
+          { name: 'Emerald Bay State Park', lat: 38.95, lng: -120.11 },
+        ],
+      }),
+    )
+    expect(t?.name).toBe('Emerald Bay State Park')
+    expect(t?.name).not.toBe('Zephyr Cove')
+  })
+
+  test('a degenerate round trip with nothing to turn around at has none', () => {
+    // Start == end and no midpoint is a zero-distance route; the card falls back to naming the start.
+    expect(turnaroundOf(proposal({ endId: START }))).toBeUndefined()
+    expect(turnaroundOf(proposal({ endId: START, viaResolved: [] }))).toBeUndefined()
   })
 })
