@@ -9,9 +9,10 @@
 > flag on `pois` rather than on `places`. ⚠ Touches INV-1 (the wire allowlist) and INV-11 (rider spend);
 > neither is broken by it, but both are re-founded on a different table. Carries a **concrete estimate**
 > (roughly a week; the reconciliation and the prompt are what cannot be rushed). ⚠ The **taste test it
-> said to run first HAS BEEN RUN** (2026-08-04, ~$0.14): model taste is a good first filter and NOT a
-> sufficient one, so the endpoint-worthiness column is MANDATORY and the estimate stands at its larger
-> end.
+> said to run first HAS BEEN RUN** (2026-08-04, three rounds): model taste is a good first filter and NOT
+> a sufficient one, so the endpoint-worthiness column is MANDATORY. ⚠ Round 3 fed the REAL prompt the POI
+> roster unedited and it accepted **4 of 4** bad endpoints — so the swap is not a data change with a
+> prompt follow-up; without the rewrite it is a REGRESSION.
 
 ## The flow being proposed
 
@@ -224,7 +225,55 @@ a non-refundable credit spent on a drive that ends at a dam.
 **Therefore the endpoint-worthiness column is mandatory**, the reconciliation of the 103 judgments is
 required rather than optional, and the estimate above stands at its larger end.
 
-⚠ Two caveats on the test, kept because a single measurement has been wrong five times in this entry:
+### Round 3 — the REAL prompt against the POI roster (2026-08-04). It does not survive the swap.
+
+The two rounds above used an approximation with the criterion written into it. Round 3 fed the **actual
+`PLANNER_SYSTEM_PROMPT` and `PLAN_ROUTE_TOOL`**, unedited, a roster of all 728 released pois in place of
+the 103 curated places. This is what Phase B looks like on day one if the prompt is not rewritten.
+
+**What held, and it is more than expected:**
+
+- **The out-of-country rule survives a 7× bigger roster.** *"Drive me to Yosemite Valley"* → *"Yosemite's
+  a long way outside my patch, friend — I don't run it and I won't pretend otherwise."* ⚠ My
+  approximation FAILED this one; the real prompt passes it.
+- **It disambiguates.** *"Drive me up to Palisades"* → *"I've got the Palisades Tahoe Aerial Tram —
+  that's the Palisades I can run to."* Three rows contain "Palisades"; it picked the one with a telling.
+- **The motivating case works.** *"Can we go by Sand Harbor?"* → *"Sand Harbor it is — that's one I
+  know."*
+- Voice, pacing and the ask-before-drawing shape are all intact.
+
+**What broke — every single time it was tested:**
+
+| ask | the skipper said |
+| --- | --- |
+| *"…end the drive there"* (Fannette Island) | *"Fannette Island it is for the far end."* |
+| *"Drive me to Audrey Harris Park"* | *"Audrey Harris Park it is for the far end."* |
+| *"I want to start from Boca Dam"* | *"Boca Dam it is."* |
+| *"End at Homewood Canyon"* | *"Homewood Canyon it is for the far end."* |
+
+**4 of 4 bad endpoints accepted.** The approximation caught two of these; the real prompt catches none —
+because the only difference between them is the arrivability criterion, which the real prompt has never
+needed. With a curated list, *"on the list but not somewhere to end"* was not a state that could exist.
+
+⚠ **So the roster swap is not a data change with a prompt follow-up. Without the prompt rewrite it makes
+the product WORSE than today** — today the skipper says "don't know that one" about Fannette Island;
+after the swap he cheerfully agrees to end your drive on an island in the middle of a lake.
+
+⚠ **Untested by round 3:** nothing DREW. The prompt correctly waits for both endpoints and a yes, so
+every opening ended in a question. The tool-call step — where an id is copied and a route emitted — has
+not been exercised against a 728-row roster.
+
+### Correction to the token estimate: ids are ~6× names, not 3×
+
+Measured on the real prefix: **~33k tokens per call** with `name | uuid` rows, against ~3.7k for names
+alone. A uuid is ~36 characters but tokenizes to roughly 20 tokens, so the char-count estimate earlier
+in this entry (~11k with ids) is **low by nearly 3×**. This strengthens the names-only choice
+considerably — and it means MAX_PLAN_ANCHORS' 200-row cap is not the only thing that would bind.
+
+⚠ `buildRosterBlock` TRUNCATES at `MAX_PLAN_ANCHORS` (200) and warns. Round 3 bypassed it to see the
+whole corpus; in production that cap binds first and would silently hand the planner 200 of 728.
+
+⚠ Two caveats on rounds 1–2, kept because a single measurement has been wrong five times in this entry:
 the criterion was IN the system prompt (so this measures *criterion + names*, not names alone), and this
 was single-shot rather than the multi-turn conversation the real planner has, where a rider can push
 back twice. Also unmeasured: *"Drive me to Yosemite Valley"* (out of region) was silently answered with

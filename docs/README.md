@@ -228,9 +228,11 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   point, `featured`), so the change is to move that judgment onto `pois`, not to delete it. ⚠ INV-1 moves
   rather than weakens — a name still resolves server-side or 400s before any billed call. Carries the
   build estimate (~a week; 59 of 103 judgments reconcile confidently, ~44 need a human, and the wire
-  keeps its SHAPE so mobile is untouched). ⚠ The taste test HAS been run: 22/24 sane picks, but the model
-  COMPLIES when a rider directly names a bad endpoint (ended a drive at a dam), so the endpoint-worthiness
-  column is MANDATORY. ⚠ Records five objections
+  keeps its SHAPE so mobile is untouched). ⚠ The taste test HAS been run, three rounds: the model COMPLIES
+  when a rider directly names a bad endpoint, and the REAL prompt fed the POI roster unedited accepted
+  4 of 4 (agreed to end a drive on Fannette Island) — so the endpoint-worthiness column is MANDATORY and
+  the swap without a prompt rewrite is a REGRESSION, not a step. Also measured: uuids tokenize ~6× their
+  names, so ids-in-prefix is ~33k tokens, not the ~11k first estimated. ⚠ Records five objections
   raised and then measured wrong — four of them the same mistake, a query whose shape did not match the
   question. Not greenlit (2026-08-04).
 - [planner-lookup-tools.md](designs/planner-lookup-tools.md) — 💡 IDEA: let the planner CALL for what it
