@@ -922,7 +922,9 @@ console is the codemod-shaped churn this sweep exists to avoid.
   both edited, for a guard the `satisfies` now provides at the boundary that matters.
 
 ✅ **Already resolved by earlier steps, recorded so they are not re-proposed:** §3.10 (`places.featured`
-is now fed — step 8's `exampleAnchors` orders by it) and §3.11 (the `GET /drives` credit block sits
+is now fed — step 8's `exampleAnchors` **gates its pool on it**; ⚠ it stopped ORDERING them on
+2026-08-03, see [../decisions/example-anchor-selection.md](../decisions/example-anchor-selection.md))
+and §3.11 (the `GET /drives` credit block sits
 behind `requireAccount` after 8a, and its backstop is tier-keyed).
 
 **11 — Instrumentation + remaining boundary tests** (D31/D32). ✅ **DONE 2026-08-02, in five atomic

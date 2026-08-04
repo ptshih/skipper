@@ -22,6 +22,17 @@ export interface CachedRegion {
   displayName: string
   /** Public place names for display only. Never ids, never coordinates. */
   exampleAnchors: string[]
+  /** The cold-open rotation counter — which window of `exampleAnchors` the example asks start from.
+   *
+   *  ⚠ IT LIVES HERE RATHER THAN IN ITS OWN FILE because the thing it has to survive is exactly what
+   *  this file already survives: a launch. It is also the only value here the app WRITES rather than
+   *  mirrors, so it is the one field a corrupt read can affect — hence the defensive parse below and
+   *  the guard in `rotateNames`. Absent (every install before this shipped) reads as 0, which is the
+   *  old behaviour, so no migration and no first-launch special case.
+   *
+   *  ⚠ Still no rider content, and this does not weaken that: a small integer is not a transcript.
+   *  INV-13 is untouched. */
+  rotation?: number
 }
 
 const cacheFile = (): File => new File(Paths.document, 'region-cache.json')
@@ -38,7 +49,13 @@ export function readCachedRegion(): CachedRegion | null {
     const names = Array.isArray(raw.exampleAnchors)
       ? raw.exampleAnchors.filter((n): n is string => typeof n === 'string')
       : []
-    return { regionId: raw.regionId, displayName: raw.displayName, exampleAnchors: names }
+    // Same posture as the names above: anything that is not a sane counter degrades to 0 (the first
+    // window) rather than propagating a NaN into the rotation arithmetic.
+    const rotation =
+      typeof raw.rotation === 'number' && Number.isFinite(raw.rotation) && raw.rotation >= 0
+        ? Math.floor(raw.rotation)
+        : 0
+    return { regionId: raw.regionId, displayName: raw.displayName, exampleAnchors: names, rotation }
   } catch {
     return null
   }

@@ -13,6 +13,36 @@
 
 import { cleanPlaceName } from './labels'
 
+/** How many of the region's names ONE cold open spends: the A→B start, the A→B end, and the town the
+ *  loop runs out of.
+ *
+ *  ⚠ Doubles as the rotation STRIDE, and that is what makes consecutive launches share nothing rather
+ *  than shuffle by one. Advancing by 1 would slide the window a single slot, so two launches in a row
+ *  would show two of the same three names in different roles — which reads as a glitch, not as
+ *  variety. Advancing by exactly the window width hands the next launch the next three. With the
+ *  server's eight names (coprime with 3) every name visits every slot before any pair repeats. */
+export const EXAMPLE_NAMES_PER_COLD_OPEN = 3
+
+/**
+ * The region's names, rotated left so a different window sits at the front.
+ *
+ * ⚠ THE CLIENT'S ENTIRE SHARE OF THE SELECTION, and deliberately this dumb. It is given NAMES and
+ * nothing else — no ids, no coordinates (INV-1) — so it cannot tell whether two names are 600 m or
+ * 60 km apart, and must not pretend to. Every judgement about which names may sit together was
+ * already made server-side by the farthest-point spread; this only decides which slice of that
+ * ordering is on screen today. Anything smarter here would be guessing about geography it cannot see.
+ *
+ * `rotation` is a launch counter and may be any non-negative integer; it wraps.
+ */
+export function rotateNames(names: readonly string[], rotation: number): string[] {
+  if (names.length === 0) return []
+  // Guard the modulo against a corrupt counter off disk: a negative or non-finite value would produce
+  // NaN indices and blank every chip, and the cache it comes from is explicitly "never throws,
+  // degrade quietly" territory.
+  const r = Number.isFinite(rotation) && rotation > 0 ? Math.floor(rotation) % names.length : 0
+  return [...names.slice(r), ...names.slice(0, r)]
+}
+
 /** One suggestion: how it is LABELLED, the rider's line, and the skipper's hand-authored answer.
  *
  *  ⚠ `title` and `ask` are two different registers on purpose. The title says what SHAPE of drive
@@ -90,6 +120,12 @@ export function buildExampleAsks(
 
   const a = clean[0]
   const b = clean[1]
+  // ⚠ THE LOOP GETS ITS OWN TOWN — the third name, not `a` again. Reusing `a` is what made the cold
+  // open read as one place shouting: with `Carson City` at slot 0 the A→B ask, its seeded reply, the
+  // loop ask, ITS reply and the composer placeholder all said "Carson City", which is the report this
+  // whole change came from. Three rows naming three places is the same information and none of the
+  // drone. Falls back to `a` when the region has fewer than three names, where a repeat is honest.
+  const loopName = clean[2] ?? a
   const out: ExampleAsk[] = []
   if (clean.length >= 2)
     out.push({
@@ -102,8 +138,8 @@ export function buildExampleAsks(
     out.push({
       shape: 'loop',
       title: t.loopTitle,
-      ask: fill(t.loop, a, b),
-      reply: fill(t.loopReply, a, b),
+      ask: fill(t.loop, loopName, b),
+      reply: fill(t.loopReply, loopName, b),
     })
   // Region-named when we have a region, bare when we do not. ⚠ The bare form is not a fallback for
   // tidiness — it is the one ask that survives a region that has not LOADED (a cold start before

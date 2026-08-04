@@ -1,7 +1,12 @@
 // buildExampleAsks AS TESTS — the chip set degrades by how many curated names the region has, and no
 // rider ever sees a `{a}` or a gap where a place name belongs. Runs under `bun test`.
 import { describe, expect, test } from 'bun:test'
-import { buildExampleAsks, type ExampleAskTemplates } from './planner-examples'
+import {
+  buildExampleAsks,
+  EXAMPLE_NAMES_PER_COLD_OPEN,
+  rotateNames,
+  type ExampleAskTemplates,
+} from './planner-examples'
 
 // Shaped like voice.plan's real templates (the prose lives there; these only need the placeholders).
 const T: ExampleAskTemplates = {
@@ -22,7 +27,10 @@ describe('shape degradation', () => {
     const asks = buildExampleAsks(['Tahoe City', 'Emerald Bay', 'Incline Village'], T)
     expect(asks).toHaveLength(3)
     expect(asks[0]?.ask).toBe('Tahoe City to Emerald Bay, the scenic way.')
-    expect(asks[1]?.ask).toBe('A loop out of Tahoe City, couple of hours.')
+    // ⚠ THE THIRD NAME, not the first. Three rows naming three places is the fix for the cold open
+    // reading as one town shouting — with the loop reusing `{a}`, a launch whose slot 0 was
+    // `Carson City` said it in the A→B ask, its reply, the loop ask, ITS reply and the placeholder.
+    expect(asks[1]?.ask).toBe('A loop out of Incline Village, couple of hours.')
     expect(asks[2]?.ask).toBe('Surprise me — somewhere pretty.')
     // ⚠ Titles ride through UNFILLED and stay paired with their own shape. The pairing is the thing
     // worth pinning: the list is built by three separate pushes under three different conditions, so
@@ -102,5 +110,74 @@ describe('no placeholder ever reaches a rider', () => {
     const grown = { ...T, loop: 'A loop out of {a} by way of {b}.' }
     const asks = buildExampleAsks(['Tahoe City'], grown)
     expect(asks.map((a) => a.ask)).toEqual(['Surprise me — somewhere pretty.'])
+  })
+})
+
+describe('the loop gets its own town', () => {
+  test('with only two names it falls back to the first — a repeat beats a blank', () => {
+    const asks = buildExampleAsks(['Tahoe City', 'Emerald Bay'], T)
+    expect(asks[1]?.ask).toBe('A loop out of Tahoe City, couple of hours.')
+  })
+
+  test('three names name three places across the whole cold open', () => {
+    // The regression this change exists to prevent, stated as a property rather than as three
+    // separate string assertions: no name appears in more than one ROW.
+    const asks = buildExampleAsks(['Truckee', 'Genoa', 'Virginia City'], T)
+    expect(asks[0]?.ask).toContain('Truckee')
+    expect(asks[0]?.ask).toContain('Genoa')
+    expect(asks[1]?.ask).toContain('Virginia City')
+    expect(asks[1]?.ask).not.toContain('Truckee')
+  })
+})
+
+describe('rotateNames — the client’s entire share of the selection', () => {
+  const names = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
+
+  test('rotation 0 is the server order, untouched', () => {
+    expect(rotateNames(names, 0)).toEqual(names)
+  })
+
+  test('it rotates left and wraps', () => {
+    expect(rotateNames(names, 3)).toEqual(['d', 'e', 'f', 'g', 'h', 'a', 'b', 'c'])
+    expect(rotateNames(names, 8)).toEqual(names)
+    expect(rotateNames(names, 11)).toEqual(rotateNames(names, 3))
+  })
+
+  test('consecutive cold opens share NO name at the stride the screen uses', () => {
+    // ⚠ THE WHOLE REASON THE STRIDE IS 3 RATHER THAN 1. Advancing one slot would leave two of the
+    // three names on screen, in different roles, which reads as a glitch rather than as variety.
+    // With eight names (coprime with 3) each launch gets a disjoint window.
+    const windowAt = (launch: number) =>
+      rotateNames(names, launch * EXAMPLE_NAMES_PER_COLD_OPEN).slice(0, EXAMPLE_NAMES_PER_COLD_OPEN)
+    expect(windowAt(0)).toEqual(['a', 'b', 'c'])
+    expect(windowAt(1)).toEqual(['d', 'e', 'f'])
+    expect(windowAt(2)).toEqual(['g', 'h', 'a'])
+    for (const launch of [0, 1, 3, 4]) {
+      const here = new Set(windowAt(launch))
+      expect(windowAt(launch + 1).some((n) => here.has(n))).toBe(false)
+    }
+  })
+
+  test('no name is stuck in the shop window — every one visits slot 0', () => {
+    // The literal complaint, as a test: `Carson City` led every launch because slot 0 never moved.
+    const leads = new Set(
+      Array.from({ length: names.length }, (_, i) =>
+        rotateNames(names, i * EXAMPLE_NAMES_PER_COLD_OPEN)[0],
+      ),
+    )
+    expect(leads.size).toBe(names.length)
+  })
+
+  test('a corrupt counter off disk degrades to the first window, never to NaN', () => {
+    // region-cache.ts already sanitises, so this is the second wall. A NaN index would blank every
+    // chip on the cold open — the one screen with nothing else on it.
+    for (const bad of [-1, Number.NaN, Number.POSITIVE_INFINITY, -0.5]) {
+      expect(rotateNames(names, bad)).toEqual(names)
+    }
+  })
+
+  test('an empty or single-name region is not an error', () => {
+    expect(rotateNames([], 5)).toEqual([])
+    expect(rotateNames(['only'], 5)).toEqual(['only'])
   })
 })

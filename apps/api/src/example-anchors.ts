@@ -11,14 +11,44 @@
 // ⚠ The one import, and it keeps this file's env-free property: @skipper/engine is zero-dep and
 // RN-safe by design, so importing it needs no secret, no DB and no network — which is what lets this
 // selection be tested without booting index.ts.
-import { parseRegionBbox, pointInRegionBbox } from '@skipper/engine'
+import { haversineMeters, parseRegionBbox, pointInRegionBbox } from '@skipper/engine'
 import { byAnchorRank, flatten } from './anchor-format'
 
 /** How many names a region publishes. A DISPLAY count: it prices nothing and bounds no request body,
  *  which is why it is here and not in ./limits (that file is the ONE home for rider-facing SPEND and
  *  SIZE caps — INV-11/INV-12 — and diluting it with cosmetics is how a real cap gets edited casually).
- *  Six is the top of the reviewed 3-6 range: copy can use fewer, it cannot invent more. */
-export const EXAMPLE_ANCHORS_PER_REGION = 6
+ *
+ *  ⚠ Raised 6 → 8 when the client began ROTATING (2026-08-03). It is now a rotation DEPTH, not just a
+ *  roster length: the cold open spends three names per launch (A→B start, A→B end, the loop's town),
+ *  so six gave two launches' worth before repeating. Eight with a stride of three cycles every name
+ *  through every slot before any pair comes back. The offline card renders all of them, so this is
+ *  also the chip count on `PlannerUnavailableCard` — check that card if you raise it much further. */
+export const EXAMPLE_ANCHORS_PER_REGION = 8
+
+/** The floor on how far apart two published anchors may be, in metres.
+ *
+ *  ⚠ THIS IS THE BUG THIS FILE EXISTED TO GROW. Until 2026-08-03 the published list was the
+ *  alphabetical head of the featured set, and in Tahoe that head was `Eagle Falls` then
+ *  `Emerald Bay State Park` — 600 METRES apart. The app's highest-intent tap read "Eagle Falls to
+ *  Emerald Bay State Park, the scenic way", i.e. it offered a rider a six-hundred-metre drive, and
+ *  nothing failed because nothing was measuring. A separation floor makes that unreachable by
+ *  construction rather than unlikely: the client pairs names blind (it is given no coordinates,
+ *  INV-1), so the ONLY place this can be guaranteed is here.
+ *
+ *  8 km is deliberately well below the ~12 km the live Tahoe set actually achieves at k=8 — it is a
+ *  floor against absurdity, not a target. It BINDS by publishing FEWER names, never worse ones; the
+ *  client already degrades cleanly on a short list. */
+export const MIN_ANCHOR_SEPARATION_M = 8_000
+
+/** The most rows fed to the O(n²) spread below.
+ *
+ *  Bounds a per-request path: `GET /regions` is anonymous and every app launch hits it. 64 rows is
+ *  ~2k haversines for the seed pair plus ~4k for the greedy fill — microseconds, and memoized on top.
+ *  Today's whole featured set is 16, so this binds on nothing; it exists so that a region curated to
+ *  hundreds of featured places cannot quietly turn a cosmetic field into a CPU cost. ⚠ When it DOES
+ *  bind it truncates in rank order, which reintroduces exactly the alphabetical bias the spread was
+ *  added to remove — raise it, or narrow the pool, before letting a region grow past it. */
+export const SPREAD_POOL_LIMIT = 64
 
 /** The ceiling on the ONE endpoint-eligible scan that feeds every region's examples (the handler's
  *  `.limit()`).
@@ -52,11 +82,90 @@ export interface ExampleAnchorPlace {
   featured: boolean
 }
 
-/** ⚠ Product hazard with no code fix, and the reason `byAnchorRank` is worth reading before changing:
- *  featured-then-alphabetical can return six names clustered in one corner of the region, which makes a
- *  poor "from X to Y" example. The lever is the curator's `featured` flag (an admin surface), not a
- *  heuristic here — this stays deterministic. */
+/** The TOTAL ORDER over candidates — no longer the published order.
+ *
+ *  ⚠ This used to BE the answer, and the note here used to say the clustering it causes was "a product
+ *  hazard with no code fix", lever = the curator's `featured` flag. That was wrong twice over, and both
+ *  halves were measured on 2026-08-03 (founder). The flag is not a usable lever, because flagging a
+ *  place for the picker is not the same judgement as putting it in the shop window — one `curate-places
+ *  --apply` added `Carson City` and it took slot 0 from `Eagle Falls` on the strength of C sorting
+ *  before E, with no curator intending anything. And the clustering was never merely a hazard: the
+ *  pre-existing pair was 600 m apart (see MIN_ANCHOR_SEPARATION_M).
+ *
+ *  What it is FOR now: `featured` still decides POOL MEMBERSHIP (below), and name/id still break ties
+ *  so the spread is deterministic — same rows in, same names out, on every Cloud Run instance. It just
+ *  no longer decides what a rider READS. */
 const byRank = byAnchorRank<ExampleAnchorPlace>
+
+/**
+ * Greedy farthest-point (k-center) selection: the seed is the two most distant members of `pool`,
+ * then each further pick is whichever candidate is furthest from everything already chosen.
+ *
+ * ⚠ THE STOPPING RULE IS THE POINT, not the ordering. Greedy max-min is monotonically non-increasing,
+ * so the score of the LAST pick IS the minimum pairwise separation of the whole result. Stopping when
+ * that score drops below `minSeparationM` therefore buys a guarantee about EVERY pair, not just
+ * adjacent ones — which is exactly what the client needs, because it pairs these names blind.
+ *
+ * ⚠ DETERMINISTIC BY TIE-BREAK, and it has to be: `pool` arrives in `byRank` order and every
+ * comparison here is strict `>`, so the earliest-ranked candidate wins any tie. Two co-located places
+ * therefore resolve the same way on every instance and between launches. A `>=` here would make the
+ * published chips depend on array order — the same class of instability the codepoint sort in
+ * ./anchor-format exists to prevent.
+ *
+ * ⚠ Spread is ANTI-CORRELATED WITH QUALITY, which is why the caller narrows the pool first and this
+ * function is not given the whole curated set. Maximising distance seeks the CORNERS of a bbox, and a
+ * region's corners hold its most marginal places: run over all 109 Tahoe endpoints it returns
+ * `Stampede Reservoir` and `Tahoe Meadows Ophir Creek Trailhead`, not one featured name among eight.
+ * Geometry decides the SHAPE of the set; the curator still decides who is eligible for it.
+ */
+export function spreadAnchors<T extends { lat: number; lng: number }>(
+  pool: readonly T[],
+  k: number,
+  minSeparationM: number,
+): T[] {
+  if (k <= 0 || pool.length === 0) return []
+  if (pool.length === 1) return [pool[0]!]
+
+  const metres = (a: T, b: T): number => haversineMeters([a.lng, a.lat], [b.lng, b.lat])
+
+  // Seed with the diameter of the set. Seeding from the highest-RANKED row instead would re-anchor the
+  // whole result on the alphabetical head — i.e. hand slot 0 straight back to Carson City, which is the
+  // complaint that started this.
+  let seedA = pool[0]!
+  let seedB = pool[1]!
+  let widest = -1
+  for (let i = 0; i < pool.length; i++) {
+    for (let j = i + 1; j < pool.length; j++) {
+      const d = metres(pool[i]!, pool[j]!)
+      if (d > widest) {
+        widest = d
+        seedA = pool[i]!
+        seedB = pool[j]!
+      }
+    }
+  }
+  // The pair itself must clear the floor, or there is nothing here worth publishing as two places.
+  // Returning ONE name is the honest answer, and the client degrades to the loop + open asks.
+  if (widest < minSeparationM) return [seedA]
+
+  const out: T[] = [seedA, seedB]
+  while (out.length < k) {
+    let pick: T | null = null
+    let best = -1
+    for (const cand of pool) {
+      if (out.includes(cand)) continue
+      let nearest = Infinity
+      for (const chosen of out) nearest = Math.min(nearest, metres(cand, chosen))
+      if (nearest > best) {
+        best = nearest
+        pick = cand
+      }
+    }
+    if (!pick || best < minSeparationM) break
+    out.push(pick)
+  }
+  return out
+}
 
 /** What one region publishes, and whether it can be driven at all.
  *
@@ -75,6 +184,17 @@ export interface RegionAnchors {
 
 /**
  * regionId → its display names and whether it is plannable.
+ *
+ * SELECTION, in one line: contained → eligible (`featured` if any, else all) → name-deduped →
+ * farthest-point spread with a separation floor. `featured` gates membership and geometry orders the
+ * result; NOTHING here is alphabetical any more, which is the whole point (see `byRank`).
+ *
+ * ⚠ THE RETURNED ORDER IS LOAD-BEARING AND THE CLIENT ROTATES THROUGH IT. It spends three names per
+ * cold open (A→B start, A→B end, the loop's town) at a stride of three, so which names sit ADJACENT
+ * decides which pairs a rider ever sees. Every pair is safe here only because `spreadAnchors`
+ * guarantees a minimum separation across the whole set rather than between neighbours — do not
+ * "tidy" this into a post-sort (alphabetical, by featured, anything), or the guarantee the client is
+ * leaning on quietly stops holding while every test still passes.
  *
  * Bucketing is point-in-bbox in JS from ONE scan of the curated set, not a query per region: `places`
  * carries no region_id (geometry-first, docs/decisions/geometry-first-regions.md), and a per-region
@@ -113,8 +233,11 @@ export function pickExampleAnchors(
     // anchors on the wrong side of the lake. `pointInRegionBbox` is inclusive on all four edges, which
     // is what matches the `between()` in loadRegionAnchors — a place is in exactly the same region
     // here as it is in the planner's allowlist.
-    const names: string[] = []
-    const seen = new Set<string>()
+    // ⚠ ONE FULL CONTAINMENT PASS, no early break. The old loop stopped as soon as the display list
+    // filled, which was safe when the published names WERE the first few contained rows; the spread
+    // below has to see every candidate before it can pick the widest-separated ones, so stopping early
+    // would silently narrow it to the alphabetical head again.
+    const contained: ExampleAnchorPlace[] = []
     let ready = false
     for (const p of ranked) {
       if (!pointInRegionBbox(box, p.lat, p.lng)) continue
@@ -122,19 +245,37 @@ export function pickExampleAnchors(
       // answer rather than `names.length > 0` spelled differently. A region whose only curated
       // endpoint has a blank or duplicated display NAME is still perfectly drivable; deriving this
       // from the published list would hide its composer over a cosmetic defect, which is the whole
-      // class of bug this field was added to end.
+      // class of bug this field was added to end. Now doubly worth stating: the separation floor can
+      // legitimately publish ONE name for a tightly-clustered region, and that region is still ready.
       ready = true
-      // Safe to stop once the display list is full: reaching the cap took that many contained places,
-      // so `ready` is necessarily already true and cannot be missed by breaking here.
-      if (names.length >= EXAMPLE_ANCHORS_PER_REGION) break
+      contained.push(p)
+    }
+
+    // ⚠ `featured` FILTERS HERE AND ORDERS NOWHERE — the inversion this change is really about.
+    // Curator judgement decides who is ELIGIBLE to be an example (spread alone would return a region's
+    // most obscure corners, measured); geometry decides which of the eligible actually appear. The
+    // fallback to the whole contained set is not tidiness: ./anchor-format's rule that "featured
+    // ORDERS, it never FILTERS" was protecting a real case — a region nobody has flagged yet must not
+    // lose its example asks entirely, which is what a bare `.filter(featured)` would do to the next
+    // region curated.
+    const flagged = contained.filter((p) => p.featured)
+    const eligible = flagged.length > 0 ? flagged : contained
+
+    // Name hygiene BEFORE the spread, so a blank or duplicated display name can never consume one of
+    // the k slots. Two curated rows can legitimately share a name; a duplicate chip reads as a bug and
+    // a blank one reads as a broken render.
+    const pool: ExampleAnchorPlace[] = []
+    const seen = new Set<string>()
+    for (const p of eligible) {
       const name = flatten(p.name)
-      // Two curated rows can legitimately share a display name; a duplicate chip reads as a bug, and a
-      // blank one reads as a broken render.
       if (!name || seen.has(name)) continue
       seen.add(name)
-      names.push(name)
+      pool.push({ ...p, name })
+      if (pool.length >= SPREAD_POOL_LIMIT) break
     }
-    out.set(r.id, { names, ready })
+
+    const picked = spreadAnchors(pool, EXAMPLE_ANCHORS_PER_REGION, MIN_ANCHOR_SEPARATION_M)
+    out.set(r.id, { names: picked.map((p) => p.name), ready })
   }
   return out
 }

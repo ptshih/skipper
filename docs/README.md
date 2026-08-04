@@ -77,6 +77,10 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   `DEFAULT_REGION_SLUG` + the Tahoe fallback bbox are deleted, `--region` is required (explicit-id
   runs exempt), and the admin 400s instead of defaulting. A default region billed the wrong corpus
   and settled green (2026-08-03).
+- [example-anchor-selection.md](decisions/example-anchor-selection.md) — the cold open's example asks:
+  `featured` gates the POOL and orders nothing a rider reads, a farthest-point spread with an 8 km
+  floor orders it, and the client rotates a three-name window per launch. One curation run had made
+  every chip say "Carson City"; the pair it replaced was 600 m apart (2026-08-03).
 - [credit-ledger.md](decisions/credit-ledger.md) — drive credits are a user-owned, append-only
   `credit_entries` ledger (balance = SUM), NOT a `count(drives)`; free-tier lifetime grant + per-drive
   consume live (migration `0016`), Apple IAP / Google Play purchase plumbing deferred; built 2026-06-19.

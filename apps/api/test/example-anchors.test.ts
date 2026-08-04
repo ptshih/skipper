@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test'
+import { haversineMeters } from '@skipper/engine'
 import type { Region } from '@skipper/shared'
 import {
   EXAMPLE_ANCHORS_PER_REGION,
+  MIN_ANCHOR_SEPARATION_M,
   pickExampleAnchors,
+  spreadAnchors,
   type ExampleAnchorPlace,
   type ExampleAnchorRegion,
 } from '../src/example-anchors'
@@ -14,6 +17,15 @@ import {
 // "lng_min,lat_min,lng_max,lat_max" — the axis order loadRegionAnchors parses.
 const TAHOE = '-120.2,38.8,-119.9,39.3'
 const RENO = '-119.9,39.4,-119.6,39.7'
+// A deliberately roomy box for the CAP tests. ⚠ They need more than
+// `EXAMPLE_ANCHORS_PER_REGION` places that all clear MIN_ANCHOR_SEPARATION_M, and TAHOE is not wide
+// enough to hold that many — the old versions of these tests stacked every place on one coordinate,
+// which now correctly publishes a single name and made them assert the opposite of the rule.
+const WIDE = '-121.0,38.0,-119.0,40.0'
+// A lat ladder inside WIDE at ~16.7 km spacing: every pair clears the floor, so the cap is the only
+// thing that can bound the result.
+const ladder = (n: number): ExampleAnchorPlace[] =>
+  Array.from({ length: n }, (_, i) => place(`Stop ${String(i).padStart(2, '0')}`, 38.1 + i * 0.15, -120.0))
 
 let seq = 0
 const place = (name: string, lat: number, lng: number, featured = false): ExampleAnchorPlace => ({
@@ -66,56 +78,121 @@ describe('pickExampleAnchors — geometry-first bucketing', () => {
   })
 })
 
-describe('pickExampleAnchors — deterministic order', () => {
-  test('featured floats above alphabetically-earlier un-featured names', () => {
+// ⚠ NO CODEPOINT MUTATION CHECK LIVES HERE ANY MORE, and its absence is deliberate rather than a
+// deletion. The published order stopped being alphabetical on 2026-08-03 (featured gates the pool,
+// farthest-point spread orders it), so an alphabetical assertion at THIS level would now be pinning
+// something the feature does not promise. `byAnchorRank`'s codepoint guarantee still matters — it is
+// what keeps the planner's cached prompt prefix byte-stable across Cloud Run instances — and it is
+// pinned where it is actually load-bearing, in planner-roster.test.ts, which asserts against
+// localeCompare directly. Do not re-add a copy here; it would go green on a rewrite that broke the
+// expensive one.
+describe('pickExampleAnchors — featured gates the POOL, geometry orders it', () => {
+  test('an un-featured name is not published beside a featured one, however it sorts', () => {
+    // THE INVERSION, in one assertion. `featured` used to float a row up an otherwise alphabetical
+    // list — which is how one curate-places run handed slot 0 to `Carson City` on the strength of C
+    // sorting before E, with no curator intending it. It now decides ELIGIBILITY and nothing else.
     const out = pickNames(
       [region('r1', TAHOE)],
-      [place('Aaa Bay', 39.1, -120.0), place('Zzz Cove', 39.1, -120.0, true)],
+      [place('Aaa Bay', 38.85, -120.15), place('Zzz Cove', 39.25, -120.15, true)],
     )
-    expect(out.get('r1')).toEqual(['Zzz Cove', 'Aaa Bay'])
+    expect(out.get('r1')).toEqual(['Zzz Cove'])
   })
 
-  // ⚠ THE MUTATION CHECK. Codepoint puts 'Z' (0x5A) before 'e' (0x65); localeCompare puts 'echo'
-  // first. Swapping byRank's name comparator to localeCompare must turn this red — that is the whole
-  // point of not using it (see buildRosterBlock: an ICU difference between Cloud Run instances would
-  // reshuffle the chips between launches).
-  test('name order is CODEPOINT, not locale', () => {
+  test('with NOTHING featured the whole contained set is eligible', () => {
+    // The case ./anchor-format's "featured ORDERS, it never FILTERS" rule was really protecting: a
+    // bare .filter(featured) hands the NEXT region curated an empty list and silently kills its
+    // example asks. The fallback is what lets `featured` filter safely at all.
     const out = pickNames(
       [region('r1', TAHOE)],
-      [place('echo Lake', 39.1, -120.0), place('Zephyr Cove', 39.05, -119.95)],
+      [place('Aaa Bay', 38.85, -120.15), place('Zzz Cove', 39.25, -120.15)],
     )
-    expect(out.get('r1')).toEqual(['Zephyr Cove', 'echo Lake'])
+    expect(out.get('r1')).toEqual(['Aaa Bay', 'Zzz Cove'])
   })
 
-  test('output is independent of input row order (a dropped sort survives the tests above)', () => {
+  test('two places closer than the floor publish as ONE name — the 600 m regression', () => {
+    // THE LITERAL BUG, with the real coordinates. These two were slots 0 and 1 of the live Tahoe
+    // region, so the cold open's A→B chip read "Eagle Falls to Emerald Bay State Park, the scenic
+    // way" — a six-hundred-metre drive, offered on the app's highest-intent tap. Publishing one name
+    // costs a chip; publishing both cost the rider's trust in the first thing the skipper says.
+    const out = pickNames(
+      [region('r1', TAHOE)],
+      [
+        place('Eagle Falls', 38.9505207, -120.1151632, true),
+        place('Emerald Bay State Park', 38.9499894, -120.1082038, true),
+      ],
+    )
+    expect(out.get('r1')).toEqual(['Eagle Falls'])
+  })
+
+  test('output is independent of input row order', () => {
     const rows = [
-      place('Kings Beach', 39.23, -120.02),
-      place('Emerald Bay', 38.95, -120.1, true),
-      place('Homewood', 39.08, -120.16),
-      place('Incline Village', 39.25, -119.97, true),
-      place('Camp Richardson', 38.93, -120.04),
+      place('Kings Beach', 39.23, -120.02, true),
+      place('Emerald Bay', 38.85, -120.1, true),
+      place('Homewood', 39.08, -120.18, true),
+      place('Incline Village', 39.25, -119.95, true),
+      place('Camp Richardson', 38.93, -119.93, true),
     ]
     const one = pickNames([region('r1', TAHOE)], rows)
     const shuffled = pickNames([region('r1', TAHOE)], [rows[3]!, rows[0]!, rows[4]!, rows[1]!, rows[2]!])
     const reversed = pickNames([region('r1', TAHOE)], [...rows].reverse())
     expect(shuffled.get('r1')).toEqual(one.get('r1')!)
     expect(reversed.get('r1')).toEqual(one.get('r1')!)
-    // Pinned literally so a re-order isn't just self-consistently wrong.
-    expect(one.get('r1')).toEqual(['Emerald Bay', 'Incline Village', 'Camp Richardson', 'Homewood', 'Kings Beach'])
+    // Pinned literally so a re-order isn't merely self-consistently wrong. Two things to read here:
+    // the head is the WIDEST PAIR in the set (the seed rule) rather than the alphabetical head, which
+    // would be Camp Richardson — and FIVE rows in, FOUR come out. `Kings Beach` is dropped because it
+    // sits 6.4 km from `Incline Village`, under the floor. That is the whole feature in one
+    // assertion: a fifth chip was available and publishing it would have offered a rider a six-
+    // kilometre "drive", so it was not published.
+    expect(one.get('r1')).toEqual(['Emerald Bay', 'Incline Village', 'Homewood', 'Camp Richardson'])
+  })
+})
+
+describe('spreadAnchors — the separation guarantee the client leans on', () => {
+  const at = (lat: number, lng: number, name = `${lat},${lng}`) => ({ lat, lng, name })
+
+  test('the floor holds for EVERY pair, not just adjacent ones', () => {
+    // The property that makes blind client-side pairing safe. The client is given no coordinates
+    // (INV-1), so it cannot check this — if the guarantee were only about neighbours, rotating the
+    // window would eventually put two near-neighbours in the A→B slots and nothing would notice.
+    const grid = []
+    for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) grid.push(at(38.5 + i * 0.05, -120.5 + j * 0.05))
+    const picked = spreadAnchors(grid, 8, MIN_ANCHOR_SEPARATION_M)
+    expect(picked.length).toBeGreaterThan(1)
+    for (let i = 0; i < picked.length; i++)
+      for (let j = i + 1; j < picked.length; j++)
+        expect(
+          haversineMeters([picked[i]!.lng, picked[i]!.lat], [picked[j]!.lng, picked[j]!.lat]),
+        ).toBeGreaterThanOrEqual(MIN_ANCHOR_SEPARATION_M)
+  })
+
+  test('it returns FEWER names rather than worse ones', () => {
+    // Degrading by count is what the client already handles (≥2 names → all three asks, 1 → the loop
+    // and the open one). Degrading by quality would be invisible.
+    const tight = [at(39.0, -120.0, 'A'), at(39.001, -120.001, 'B'), at(39.002, -120.002, 'C')]
+    expect(spreadAnchors(tight, 8, MIN_ANCHOR_SEPARATION_M)).toHaveLength(1)
+  })
+
+  test('an empty pool and a k of zero are not errors', () => {
+    expect(spreadAnchors([], 8, MIN_ANCHOR_SEPARATION_M)).toEqual([])
+    expect(spreadAnchors([at(39, -120)], 0, MIN_ANCHOR_SEPARATION_M)).toEqual([])
   })
 })
 
 describe('pickExampleAnchors — bounds, hygiene, and the D9 shape', () => {
   test(`caps at EXAMPLE_ANCHORS_PER_REGION (${EXAMPLE_ANCHORS_PER_REGION})`, () => {
-    const many = Array.from({ length: 20 }, (_, i) => place(`Stop ${String(i).padStart(2, '0')}`, 39.1, -120.0))
-    const out = pickNames([region('r1', TAHOE)], many)
+    const out = pickNames([region('r1', WIDE)], ladder(20))
     expect(out.get('r1')).toHaveLength(EXAMPLE_ANCHORS_PER_REGION)
   })
 
   // INV-1 in test form: a future edit that "helpfully" emits `{name, id}` or a "Name (lat, lng)" label
   // would put the billable identity of a curated endpoint on an anonymous route.
   test('emits NAMES ONLY — no ids, no coordinates', () => {
-    const rows = [place('Sand Harbor', 39.198, -119.929, true), place('Spooner Summit', 39.106, -119.895)]
+    // BOTH featured, and ~10 km apart, so two names actually publish — with only one eligible row
+    // this test would still pass while checking half as much.
+    const rows = [
+      place('Sand Harbor', 39.198, -119.929, true),
+      place('Spooner Summit', 39.106, -119.895, true),
+    ]
     const names = pickNames([region('r1', TAHOE)], rows).get('r1')!
     for (const n of names) {
       expect(typeof n).toBe('string')
@@ -176,11 +253,20 @@ describe('pickExampleAnchors — bounds, hygiene, and the D9 shape', () => {
   })
 
   test('ready survives the display cap — it is not names.length in disguise', () => {
-    const many = Array.from({ length: EXAMPLE_ANCHORS_PER_REGION + 5 }, (_, i) =>
-      place(`Stop ${String(i).padStart(2, '0')}`, 39.1, -120.0),
-    )
-    const got = pickExampleAnchors([region('r1', TAHOE)], many).get('r1')!
+    const got = pickExampleAnchors([region('r1', WIDE)], ladder(EXAMPLE_ANCHORS_PER_REGION + 5)).get('r1')!
     expect(got.names).toHaveLength(EXAMPLE_ANCHORS_PER_REGION)
+    expect(got.ready).toBe(true)
+  })
+
+  test('ready survives the SEPARATION floor too — a tight region is still drivable', () => {
+    // The floor's own version of the rule above, and the case a new gate is blindest to: a region
+    // whose curated endpoints are all within a few hundred metres publishes ONE name, which is not a
+    // reason to hide its composer. `ready` comes from containment, upstream of every name filter.
+    const got = pickExampleAnchors(
+      [region('r1', TAHOE)],
+      [place('Eagle Falls', 38.9505, -120.1152, true), place('Emerald Bay', 38.95, -120.1082, true)],
+    ).get('r1')!
+    expect(got.names).toHaveLength(1)
     expect(got.ready).toBe(true)
   })
 

@@ -42,7 +42,12 @@ import { useIsOffline } from '@/lib/connectivity'
 import { listDownloadedDrives } from '@/lib/offline'
 import { cleanPlaceName } from '@/lib/labels'
 import { isPlanAborted, planTurn } from '@/lib/planner'
-import { buildExampleAsks, type ExampleAsk } from '@/lib/planner-examples'
+import {
+  buildExampleAsks,
+  EXAMPLE_NAMES_PER_COLD_OPEN,
+  rotateNames,
+  type ExampleAsk,
+} from '@/lib/planner-examples'
 import { markListenRowSeen, shouldShowListenRow } from '@/lib/client-flags'
 import {
   buildPlaceholderExamples,
@@ -276,6 +281,21 @@ export default function HomeScreen() {
   // of only apologising — public place NAMES only, never ids and never coordinates (INV-1).
   const cachedRegion = useMemo(() => readCachedRegion(), [])
 
+  // WHICH WINDOW OF THE REGION'S NAMES THIS LAUNCH SHOWS, and the value the next launch will use.
+  //
+  // ⚠ READ ONCE AT MOUNT, ADVANCED ON WRITE — never advanced on render, and never a live read. The
+  // example asks are TAPPABLE, so unlike the composer placeholder beside them they must hold
+  // absolutely still while the rider is deciding: a chip that re-labels itself under a thumb sends a
+  // sentence the rider did not choose. Home also stays MOUNTED under a push, so this correctly
+  // survives a trip to /sample and back rather than re-rolling on return (the same reasoning
+  // `showListenRow` is built on).
+  //
+  // ⚠ `nextRotation` is written rather than incremented in place, which makes the write IDEMPOTENT:
+  // the regions load and the region picker both persist the cache, and both storing the same computed
+  // value means a rider who switches region twice does not skip two windows forward.
+  const rotation = cachedRegion?.rotation ?? 0
+  const nextRotation = rotation + 1
+
   // Navigation in-flight guard: expo-router does NOT de-dupe identical pushes, so a fast
   // double-tap would stack two identical screens. Set on the first push, cleared on refocus.
   const navigatingRef = useRef(false)
@@ -354,13 +374,19 @@ export default function HomeScreen() {
           regionId: picked.id,
           displayName: picked.displayName,
           exampleAnchors: picked.exampleAnchors,
+          // Advance the cold open's window for NEXT launch. Riding the regions load means the counter
+          // moves once per launch for free, with no second thing to persist and nothing to schedule.
+          rotation: nextRotation,
         })
       }
     } catch {
       // The message is never shown — the outage card speaks for itself, in persona.
       setRegionsFailed(true)
     }
-  }, [])
+    // `nextRotation` is derived from the mount-time cache read, so it is stable for the life of the
+    // screen and this stays a once-per-mount load — the dependency is honesty for the hooks lint,
+    // not a re-run.
+  }, [nextRotation])
 
   useEffect(() => {
     void loadRegions()
@@ -457,6 +483,17 @@ export default function HomeScreen() {
   const anchorNames = useMemo(
     () => region?.exampleAnchors ?? cachedRegion?.exampleAnchors ?? [],
     [region, cachedRegion],
+  )
+  // The same names, rotated to this launch's window. Feeds BOTH the example asks and the composer
+  // placeholder so the two agree — they sit inches apart on the cold open, and the placeholder
+  // teaching "{a} to {b}" with a different pair from the chip directly above it reads as a bug.
+  // ⚠ The degraded cards keep the UNROTATED list: they render every name as a flat roster, where
+  // order carries no meaning and rotating it would only make the same card look different each launch.
+  // ⚠ Memoised for the identity reason the array above documents — a fresh array here would restart
+  // the placeholder rotation timer on every keystroke.
+  const rotatedNames = useMemo(
+    () => rotateNames(anchorNames, rotation * EXAMPLE_NAMES_PER_COLD_OPEN),
+    [anchorNames, rotation],
   )
   // The region's own display name, on the same live-then-cached ladder as the anchors above. Feeds the
   // open-ended suggestion so all three rows name this region, and the chip so both read from one place.
@@ -915,7 +952,7 @@ export default function HomeScreen() {
 
   const exampleAsks: ExampleAsk[] = useMemo(
     () =>
-      buildExampleAsks(anchorNames, {
+      buildExampleAsks(rotatedNames, {
         aToBTitle: voice.plan.exampleAToBTitle,
         aToB: voice.plan.exampleAToB,
         aToBReply: voice.plan.exampleAToBReply,
@@ -930,7 +967,7 @@ export default function HomeScreen() {
       // ⚠ The REGION name, not an anchor — it makes the open-ended row region-specific like the other
       // two while staying the one ask that still has a form when a region has no curated anchors.
       regionLabel ?? undefined),
-    [anchorNames, regionLabel],
+    [rotatedNames, regionLabel],
   )
 
   /** A tapped example chip seeds BOTH halves of an authored exchange and makes NO model call — the
@@ -1022,11 +1059,14 @@ export default function HomeScreen() {
             regionId: chosen.id,
             displayName: chosen.displayName,
             exampleAnchors: chosen.exampleAnchors,
+            // Same value the load wrote, deliberately — see `nextRotation`. Switching region must not
+            // ALSO skip a window, or a rider comparing two regions burns through the rotation.
+            rotation: nextRotation,
           })
         }
       },
     })
-  }, [pickRegion, regions, regionId, resetConversation])
+  }, [pickRegion, regions, regionId, resetConversation, nextRotation])
 
   // ── The rotating placeholder ────────────────────────────────────────────────────────────────
   // The rows teach WHAT kinds of thing to ask for; this teaches HOW CASUALLY you may say it. Every
@@ -1046,8 +1086,8 @@ export default function HomeScreen() {
   // "this region has nothing to teach an ask WITH" is honestly a fact about the examples.
   const placeholderExamples = useMemo(
     () =>
-      uncuratedRegion ? [] : buildPlaceholderExamples(anchorNames, voice.plan.placeholderShapes),
-    [anchorNames, uncuratedRegion],
+      uncuratedRegion ? [] : buildPlaceholderExamples(rotatedNames, voice.plan.placeholderShapes),
+    [rotatedNames, uncuratedRegion],
   )
   const rotating = shouldRotatePlaceholder({
     exampleCount: placeholderExamples.length,
