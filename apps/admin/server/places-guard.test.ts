@@ -17,7 +17,7 @@
  * plural `types` separates them.
  */
 import { describe, expect, it } from 'bun:test'
-import { isAddressLike, isParkingLike } from './places'
+import { isAddressLike, isParkingLike, nameDisagrees } from './places'
 
 // Shapes as the Places API (New) returns them — address-component types vs a locality's types.
 const TOWN = ['locality', 'political']
@@ -98,5 +98,50 @@ describe('isParkingLike', () => {
   it('is empty-safe, like its sibling', () => {
     expect(isParkingLike(undefined)).toBe(false)
     expect(isParkingLike([])).toBe(false)
+  })
+})
+
+/**
+ * The NAME-AGREEMENT guard — the general case the two type guards are corners of.
+ *
+ * `isAddressLike` catches a street and `isParkingLike` catches a car park, but both are lists of shapes
+ * we happened to get burned by. The real defect is that the resolve substitutes, and it has now shipped
+ * five times. The one no type list could have caught: a draft naming `Reno` came back as **"Downtown"**
+ * and was stored under that name, so the planner carried Reno in its roster under a word no rider would
+ * ever say — and a rider asking for Reno got "not my country yet".
+ */
+describe('nameDisagrees', () => {
+  it('catches the two substitutions that actually shipped', () => {
+    expect(nameDisagrees('Reno', 'Downtown')).toBe(true)
+    expect(nameDisagrees('Heavenly Mountain Resort', 'California Main Lodge Parking')).toBe(true)
+  })
+
+  it('⚠ KEEPS a subset and a superset — neither is close by any string metric', () => {
+    // The reason this compares TOKENS rather than substrings or edit distance. Both of these are real
+    // resolves from the live curation and both must survive.
+    expect(nameDisagrees('Truckee, California', 'Truckee')).toBe(false)
+    expect(nameDisagrees('Echo Summit', 'Site of Echo Summit (California Historical Landmark No. 1048)')).toBe(false)
+    expect(nameDisagrees('Northstar Village', 'The Village At Northstar')).toBe(false)
+    expect(nameDisagrees('Mt. Rose Ski Tahoe', 'Mt. Rose - Ski Tahoe')).toBe(false)
+  })
+
+  it('⚠ DOES NOT catch a same-word substitution — that is the address guard\'s job', () => {
+    // `Hope Valley` (below the box) resolving to `Hope Court` in Truckee shares "hope", so this guard
+    // passes it. The guards are complements, not alternatives; deleting either reopens a real hole.
+    expect(nameDisagrees('Hope Valley', 'Hope Court')).toBe(false)
+    expect(isAddressLike(['route'])).toBe(true)
+  })
+
+  it('⚠ THE ACCEPTED FALSE POSITIVE: a legitimate rename is dropped', () => {
+    // Palisades Tahoe really was called Squaw Valley until 2021, so the resolve is CORRECT and this
+    // guard rejects it anyway — the two names share nothing. Documented rather than tuned around,
+    // because the skip line prints both names and an operator can add it back manually.
+    expect(nameDisagrees('Squaw Valley', 'Palisades Tahoe')).toBe(true)
+  })
+
+  it('fails OPEN when either name is all noise', () => {
+    // A name with nothing comparable left is not evidence of a substitution.
+    expect(nameDisagrees('The', 'Truckee')).toBe(false)
+    expect(nameDisagrees('', 'Truckee')).toBe(false)
   })
 })

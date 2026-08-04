@@ -34,7 +34,7 @@ import { announce, maxCostFlag, parseFlags } from './pipeline/ops'
 import { requireRegionBbox, requireRegionKey, resolveRegion, type RegionBbox } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'
 import { withRetry, sleep } from './pipeline/http'
-import { isAddressLike, isParkingLike, resolveCuratedPlace, type CuratedPlace, type PlacesBbox } from './pipeline/places'
+import { isAddressLike, isParkingLike, nameDisagrees, resolveCuratedPlace, type CuratedPlace, type PlacesBbox } from './pipeline/places'
 import { ENRICH_MODELS, getAnthropic, type EnrichModelChoice } from './models'
 import { llmSpendLines, llmSpentUsd, recordModelUsage, usageUsd } from '@skipper/shared'
 import { ANTHROPIC_READY, GOOGLE_READY, requireEnv } from './config'
@@ -303,6 +303,14 @@ async function main(): Promise<void> {
     // parking structure. See isParkingLike; no prompt can prevent this.
     if (isParkingLike(place.types)) {
       console.log(`  ·  ${d.name}: resolved to a car park ("${place.name}") — skipped, that is not the destination.`)
+      unresolved++
+      continue
+    }
+    // ⚠ The general case the two guards above are corners of — see nameDisagrees. Both names are printed
+    // because a legitimate RENAME (Squaw Valley → Palisades Tahoe) lands here too and is an operator's
+    // call to add back, not a silent loss.
+    if (nameDisagrees(d.name, place.name)) {
+      console.log(`  ·  ${d.name}: resolved to something else entirely ("${place.name}") — skipped.`)
       unresolved++
       continue
     }

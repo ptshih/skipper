@@ -62,7 +62,7 @@ import { checkAccessPoint, checkSpeakableAnchor } from '@skipper/engine'
 import { groundingHash } from '@skipper/db/hash'
 import { requireAdmin, type AdminEnv } from './auth'
 import { bboxError, bboxOverlapsRect, parseBbox, pointInBbox, type BboxCorners } from './bbox'
-import { draftCuratedPlaces, isAddressLike, isParkingLike, resolvePlaceInBbox, type PlaceDraft, type ResolvedPlace } from './places'
+import { draftCuratedPlaces, isAddressLike, isParkingLike, nameDisagrees, resolvePlaceInBbox, type PlaceDraft, type ResolvedPlace } from './places'
 import { contentTypeForKey, presignGet } from './storage'
 import {
   buildJobArgs,
@@ -765,6 +765,17 @@ app.post('/admin/places/curate', async (c) => {
         status: 'dropped',
         resolvedName: place.name,
         message: `resolved to a car park (“${place.name}”) — Google returned the lot that SERVES the place, not the place`,
+      })
+      continue
+    }
+    // ⚠ The general case — see nameDisagrees. A legitimate rename lands here too, which is why both
+    // names are reported rather than the row vanishing.
+    if (nameDisagrees(d.name, place.name)) {
+      results.push({
+        name: d.name,
+        status: 'dropped',
+        resolvedName: place.name,
+        message: `resolved to something else entirely (“${place.name}”) — no word in common with what was asked for`,
       })
       continue
     }

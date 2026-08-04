@@ -318,6 +318,54 @@ export function isParkingLike(types: string[] | undefined): boolean {
   return (types ?? []).some((t) => PARKING_TYPES.has(t))
 }
 
+/** Words that carry no identity — dropped before comparing a drafted name to what came back. Kept
+ *  deliberately SHORT: every word removed here is one fewer chance for two names to agree, and an
+ *  over-eager list turns this guard into a shredder. */
+const NAME_NOISE = new Set(['the', 'and', 'of', 'at', 'in', 'on', 'a', 'an', 'california', 'nevada', 'ca', 'nv', 'usa', 'united', 'states', 'site'])
+
+const nameTokens = (s: string): Set<string> =>
+  new Set(
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .split(' ')
+      .filter((t) => t.length > 2 && !NAME_NOISE.has(t)),
+  )
+
+/**
+ * True when what Google returned bears NO relation to what was asked for.
+ *
+ * ⚠ THE GENERAL CASE THE TYPE GUARDS ONLY COVER CORNERS OF. `isAddressLike` catches a street and
+ * `isParkingLike` catches a car park, but both are lists of shapes we happened to get burned by. The
+ * underlying defect is broader and has now shipped FIVE times: `Reno` came back as **"Downtown"** and
+ * was stored under that name, so the planner held Reno in its roster under a word no rider would ever
+ * say. `Heavenly Mountain Resort` came back as `California Main Lodge Parking`. Neither shares a single
+ * meaningful word with what was asked for, and no type list would have caught the first.
+ *
+ * ⚠ A KNOWN AND ACCEPTED FALSE POSITIVE: a legitimate RENAME. `Squaw Valley` resolves to
+ * `Palisades Tahoe` — correct, the resort was renamed in 2021 — and this guard drops it, because the
+ * two names genuinely share nothing. That is the honest cost. It is dropped LOUDLY with both names in
+ * the skip line, so an operator can add it back through the manual route, which is the same trade the
+ * address guard already makes.
+ *
+ * ⚠ Compared on TOKENS, not on substring or edit distance. `Truckee, California` → `Truckee` and
+ * `Echo Summit` → `Site of Echo Summit (California Historical Landmark No. 1048)` must both survive:
+ * one is a subset, the other a superset, and neither is close by any string metric.
+ *
+ * ⚠ Mirrored in the sibling copy (apps/admin/server/places.ts / packages/studio/src/pipeline/places.ts)
+ * — the two must move together, like the draft prompt and the resolver they sit beside.
+ */
+export function nameDisagrees(drafted: string, resolved: string): boolean {
+  const a = nameTokens(drafted)
+  const b = nameTokens(resolved)
+  // ⚠ Fails OPEN when either side has nothing comparable left. A name made entirely of noise words is
+  // not evidence of a substitution, and refusing it would drop rows for having short names.
+  if (a.size === 0 || b.size === 0) return false
+  for (const t of a) if (b.has(t)) return false
+  return true
+}
+
+
 
 /** Resolve an LLM-drafted place NAME to a stored CuratedPlace within the region bbox, or null if it
  *  can't be pinned in-region (no prediction, missing details, or — a Details-coords guard — the
