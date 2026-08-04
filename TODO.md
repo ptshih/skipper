@@ -40,26 +40,46 @@ calls `runPlannerTurn` DIRECTLY, not the HTTP handler, so it never touches `toPl
 off-roster drop, the degenerate-route refusal and the leak suppression are unmeasurable by it. If those
 ever need measuring, the panel has to go through the route, not around it.
 
-- [ ] **⚠ FINDING 1 — THE LOOP WAY-HOME BEAT BLOCKS A YES.** 2 of the 4 routing failures are the same
-      defect: the rider says yes and the skipper asks for the way home instead of drawing.
-      - `deflect-plan-draw-chat` #2 — rider: *"Yeah, do it."* → *"That 'do it' jumped my question,
-        friend. A loop needs a second place to come home by…"*
-      - `everything-in-one-breath` #1 — rider: *"that is right"* → *"That's the one bit I still need,
-        friend — a place on the other side to come home by…"*
-      **The mechanism, which is a prompt-structure bug and not a wording one:** `== Drawing it up ==`
-      states the way-home requirement and the read-back gate as two independent rules. Nothing says the
-      read-back **may not happen until a loop's way home is in hand**. So the model reads back an
-      incomplete loop, collects a yes, and only then discovers it is short an answer — producing exactly
-      the "rider says yes and watches nothing happen" symptom, one turn later than `loop_without_return`
-      catches it. ⚠ The fix is to make the way home a PRECONDITION of the read-back, not a fourth thing to
-      remember; do NOT just reword the beat.
-      ⚠ **In range historically, so do not read the FAIL as new breakage**: the spatial arms measured
-      routing failures at 2, 2, 0, 3 per ~50 turns. 4/54 is the same order. The gate has been red on this
-      beat for a while and nobody had attributed it.
-      The other two failures are separate and less clear-cut: `midpoint` #2 asked for confirmation a
-      second time after *"yes that"*, and `wrap-up-long-conversation` #7 DREW on a deliberately ambiguous
-      yes (`hold_no_repeat`) — that one is the gate wanting more caution than the prompt gives, and is
-      arguably the scenario's call rather than the model's.
+- [x] **FINDING 1 — 3 of the 4 routing failures were THE INSTRUMENT, not the model. ⚠ I FILED THIS AS A
+      PROMPT DEFECT AND WAS ABOUT TO EDIT `planner-prompt.ts`; the correction is the finding.** Fixed in
+      `74496d7` (scenarios only — the prompt was not touched and must not be).
+      **What made it obvious:** `loop-needs-a-way-home` is the control and it passes all four turns clean
+      — one question per turn, one plan read back, a draw on the yes. The beat works as written.
+      Two scenarios (`deflect-plan-draw-chat`, `everything-in-one-breath`) were loops whose way home is
+      never supplied anywhere in the transcript. Since no-same-road-loops the skipper *cannot* draw that,
+      so the scripted next line landed as a NON-ANSWER to a direct question — which the prompt is explicit
+      is not a yes — and the model correctly asked again (*"That 'do it' jumped my question, friend."*).
+      `expect: 'draw'` was unachievable by construction; demanding a route scored the model for OBEYING the
+      prompt. ⚠ **Third instance of this instrument bug in that file** — `loop-needs-a-way-home` and
+      `wrap-up-long-conversation` both carry comments fixing it on their own turns and these two were
+      missed. It also cost `deflect-plan-draw-chat` its actual subject: with no route on the board,
+      `hold_no_repeat` had nothing to not-repeat, so the re-emit defect it exists for went untested.
+      `wrap-up-long-conversation` #7 is the third: its own comment makes `hold` conditional on the skipper
+      having asked an either/or that turn, so it is a flaky expectation rather than a clean defect.
+      ⚠ **The lesson, since this file has now caused three false findings:** an eval expectation written
+      before a product rule existed reads as a MODEL failure forever. When a routing failure looks like
+      "the model refused to draw", check whether the transcript actually contains everything a draw needs
+      before reaching for the prompt.
+
+- [ ] **⚠ THE ONE GENUINE ROUTING DEFECT, AND IT IS A DIFFERENT RULE: the model offers EITHER/OR
+      questions, which the prompt forbids by name.** On `midpoint` #0 it said *"Straight run up, or did
+      you want to come back around?"* — and `== Drawing it up ==` reads: *"do not hand them a choice in
+      the same breath as the ask ('straight through, or back around?'), because there is no way to answer
+      that with a yes, and a yes is the thing you are waiting for."* Nearly the quoted sentence, verbatim.
+      **Why it matters more than it looks:** an either/or means no turn ever presents a plan a yes can
+      land on, so the rider's yes arrives against an unanswered question and the draw slips a turn — which
+      is exactly what `midpoint` #2 measured (read-back + *"Draw it up?"* on the turn that should have
+      drawn). ⚠ `wrap-up-long-conversation`'s comment already named this as the upstream cause on its own
+      turn (*"the real defect upstream is that he offers an either/or at all"*) and it was never chased.
+      So it is now measured on two independent scenarios.
+      **This is a prompt-ADHERENCE question, not a structure one** — the rule exists, is unambiguous, and
+      quotes the counter-example; it simply is not landing. Do not add a fourth rule. Options worth
+      measuring, cheapest first: strengthen where that rule sits (it is currently one clause inside a long
+      paragraph, competing with the read-back guidance around it), or give the beat its own line the way
+      the way-home beat got one — the way-home beat lands reliably and it is the one that got its own
+      paragraph, which is at least suggestive.
+      ⚠ Verifying costs one paid arm (~$0.50, founder go). Do NOT re-run the whole suite to check this
+      one beat — `--only midpoint` is three turns.
 - [ ] **FINDING 3 — the read-back turn is both the persona sag AND the duration leak, and it is one
       turn.** Persona scored 0.64 advisory (6/54 flagged) and every flagged turn is a draw/read-back:
       *"Tahoe City out to Incline Village, straight through, about an hour."* → judge *"Flat confirm, no
@@ -85,8 +105,8 @@ structured-outputs, prompt-caching) rather than against memory, per CLAUDE.md's 
 the config is right and is confirmed below so nobody re-checks it.**
 
 - [ ] **⚠ TRAP — RAISING `effort` ON THE DRAW TURN WOULD BREAK THE PROMPT CACHE. Read this BEFORE acting
-      on FINDING 1.** The obvious fix to a routing beat that needs the model to hold two constraints at
-      once is "raise effort just for that turn". It is a cost regression: *"**The resolved effort value is
+      on the either/or defect above.** The obvious fix to a routing beat the model keeps getting wrong is
+      "raise effort just for that turn". It is a cost regression: *"**The resolved effort value is
       rendered into the prompt**, so changing it between requests invalidates cache breakpoints"* — and
       the docs' own worked example shows a `high` → `medium` switch taking `cache_read` from 3546 to
       **0**. On this path that means re-billing the whole ~6.9k roster prefix at full rate on the most
@@ -101,7 +121,7 @@ the config is right and is confirmed below so nobody re-checks it.**
       to encourage it is *"This task involves multistep reasoning. Think carefully before responding."*
       ⚠ *"Steering effectiveness can be sensitive to exact wording"* — so measure, and expect to iterate
       on phrasing. A whole-run `--effort medium` arm is still the cheaper first measurement of whether
-      depth is what FINDING 1 is missing; only the PER-TURN version is the trap.
+      depth is what the either/or defect is missing; only the PER-TURN version is the trap.
 - [ ] **The `drawn` / wrap-up system blocks reset the SECOND cache breakpoint — and there is now a
       first-class API for exactly this.** `planner.ts` appends them as system blocks 3/4, after the
       breakpoint on block 2, on the reasoning that anything volatile ahead of the breakpoint re-bills the
@@ -153,8 +173,8 @@ the config is right and is confirmed below so nobody re-checks it.**
     adaptive-choosing-zero shares it. Treat it as an OPEN question, not a cause. The real explanation was
     already in the repo — `PLAN_ROUTE_TOOL`'s `say`-field-last note (leading the tool object with a long
     prose field measurably produced 2–3 leaks per replay vs 0 with ids first). ⚠ **Do NOT spend on an
-    `--effort medium` arm to chase INV-8**; that question is answered. Effort is worth measuring for
-    FINDING 1's sake only.
+    `--effort medium` arm to chase INV-8**; that question is answered. Effort is worth measuring for the
+    either/or defect's sake only.
   - `tool_choice: { type: 'auto', disable_parallel_tool_use: true }` — documented as valid together.
   - **Two cache breakpoints is legal** (max 4 per request), and the ~6.9k prefix clears Opus 5's **512**-
     token minimum with room to spare — that minimum halved from Opus 4.8's 1024, so the code comment
