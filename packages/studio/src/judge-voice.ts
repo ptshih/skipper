@@ -149,7 +149,10 @@ function buildReport(clips: Clip[], scope: string, verdict: CharmVerdict | null)
     out.push(`**Judge — the writing (Opus):** ${verdict.overall}/10 · ${RECO_LABEL[verdict.recommendation]}`)
     out.push(`> ${verdict.verdict}`)
     out.push(`- Weakest clips: ${verdict.weakestStops.length ? verdict.weakestStops.join(', ') : '—'}`)
-    out.push(`- Biggest charm risk: ${verdict.biggestRisk}`)
+    // ⚠ ABSENT is the honest answer on a clean run, not a hole to fill — the judge is now told to omit
+    // it rather than invent one (see the field's note in eval/charm.ts). Printing "undefined" here would
+    // undo that, and printing nothing would read as the judge having failed to answer.
+    out.push(`- Biggest charm risk: ${verdict.biggestRisk ?? 'none flagged'}`)
   } else {
     const est = estimateJudgeUsd(clips)
     out.push(

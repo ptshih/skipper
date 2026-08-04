@@ -45,7 +45,13 @@ const CHARM_VERDICT = z.object({
   verdict: z.string(),
   recommendation: z.enum(['ship', 'tune', 'rework']),
   weakestStops: z.array(z.number().int()),
-  biggestRisk: z.string(),
+  // ⚠ OPTIONAL ON PURPOSE (2026-08-04). A judge forced to name a top risk on a clean run INVENTS one:
+  // measured here on a two-clip run this judge itself scored 8 and 9 with recommendation "ship", where
+  // it still produced "…could tip from showman into smug op-ed". An invented finding is worse than none
+  // because it sends someone tuning the highest-leverage prose in the repo at a phantom — which happened
+  // twice in one day and both changes had to be reverted. The planner's persona judge already had this
+  // right (apps/api/eval/judge.ts); the lesson simply never crossed over.
+  biggestRisk: z.string().optional(),
 })
 
 export type StopVerdict = z.infer<typeof STOP_VERDICT>
@@ -65,7 +71,7 @@ Use the FULL 1-10 scale, anchored as follows. Do NOT default high or low — pla
 - 9: genuinely delightful — surprises you, earns a real groan or grin, nothing sags.
 - 10: reserve for a stop you'd quote to a friend. Rare.
 
-For each stop give: a charm score 1-10, the single BEST beat (quote or tight paraphrase), and where it SAGS (the weakest beat — be specific). Then for the whole tour: an overall 1-10, an honest 2-3 sentence verdict, a recommendation, the weakest stops, and the SINGLE biggest charm risk. recommendation: "ship" = overall 7 or higher with no stop below 5; "tune" = good bones but at least one stop drags it down (one or more stops at 3-4, or overall 5-6); "rework" = overall 4 or lower, reads as competent AI, not the skipper. Score what is on the page, not what you wish were there. Call the report tool.`
+For each stop give: a charm score 1-10, the single BEST beat (quote or tight paraphrase), and where it SAGS (the weakest beat — be specific). Then for the whole tour: an overall 1-10, an honest 2-3 sentence verdict, a recommendation, and the weakest stops — an EMPTY list if none of them drags. Add \`biggestRisk\` ONLY if something genuinely rises to a risk; omit it on a clean run rather than reaching for one. recommendation: "ship" = overall 7 or higher with no stop below 5; "tune" = good bones but at least one stop drags it down (one or more stops at 3-4, or overall 5-6); "rework" = overall 4 or lower, reads as competent AI, not the skipper. Score what is on the page, not what you wish were there. Call the report tool.`
 
 // ⚠ HAND-WRITTEN ON PURPOSE — do not derive this from CHARM_VERDICT. The tool schema is part of the
 // prompt, and this judge's thresholds were calibrated against Opus-tier judging (`models.ts`: "moving
@@ -79,7 +85,7 @@ const REPORT_TOOL: Anthropic.Tool = {
   input_schema: {
     type: 'object',
     additionalProperties: false,
-    required: ['stops', 'overall', 'verdict', 'recommendation', 'weakestStops', 'biggestRisk'],
+    required: ['stops', 'overall', 'verdict', 'recommendation', 'weakestStops'],
     properties: {
       stops: {
         type: 'array',
@@ -99,7 +105,10 @@ const REPORT_TOOL: Anthropic.Tool = {
       verdict: { type: 'string', description: '2-3 honest sentences on whether the persona charms' },
       recommendation: { type: 'string', enum: ['ship', 'tune', 'rework'] },
       weakestStops: { type: 'array', items: { type: 'integer' } },
-      biggestRisk: { type: 'string', description: 'the single biggest charm risk, one line' },
+      biggestRisk: {
+        type: 'string',
+        description: 'the single biggest charm risk, one line — OMIT ENTIRELY if nothing rises to a real risk',
+      },
     },
   },
 }
