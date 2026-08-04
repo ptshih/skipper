@@ -46,6 +46,19 @@ const TOP_RANK = 3
  *  unverifiable claim: rows exist in the table that no rider can reach, and nothing on the page says so. */
 const PLANNER_ROSTER_CAP = 200
 
+/** The draft-count bounds, mirroring the route's own clamp (`MIN_DRAFT_TARGET`/`MAX_DRAFT_TARGET` in
+ *  server/index.ts) — hand-copied for the same reason as the two above, and pinned by
+ *  server/planner-constants.test.ts so the field can't offer a number the server would silently reject.
+ *
+ *  ⚠ THE DEFAULT IS THE MAXIMUM ON PURPOSE (founder, 2026-08-04). This field used to size a list a human
+ *  thumb-scrolled in the rider's tap-to-pick form; that form went in 1.1, and the set is now the
+ *  planner's entire world, where every missing name is an in-persona "don't know that one". Nothing
+ *  about a normal run wants fewer, and the Places spend is decided by what gets PRUNED before
+ *  "Resolve & add" — so the field is now a RECOVERY lever (lower it when a draft truncates), not a
+ *  decision to make every time. */
+const DRAFT_MIN = 8
+const DRAFT_MAX = 120
+
 export function PlacesView() {
   // Shared ['regions'] cache — MUST store the unwrapped array (like RegionsView/PoisView), not the
   // `{ regions }` wrapper: a shape mismatch under the same key crashes whichever view reads it next.
@@ -449,7 +462,7 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
   // Held as a STRING so the field can be cleared/retyped without fighting a number cast mid-edit.
   // Never clamped here: the server owns the range (see the route's targetN) and falls back to 30 on
   // anything unparseable, so this input is an affordance and the clamp stays a single expression.
-  const [target, setTarget] = useState('100')
+  const [target, setTarget] = useState(String(DRAFT_MAX))
 
   const draftMut = useMutation({
     mutationFn: () => api.draftPlaces({ region, target: Number(target) || undefined }),
@@ -516,8 +529,8 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
                 <Input
                   id="curate-target"
                   type="number"
-                  min={8}
-                  max={120}
+                  min={DRAFT_MIN}
+                  max={DRAFT_MAX}
                   value={target}
                   onChange={(e) => setTarget(e.target.value)}
                   className="w-24"
@@ -528,11 +541,12 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
               </Button>
             </div>
             {/* The draft is scoped by the region BBOX, which is routinely WIDER than the region's name
-                suggests — so the count is a budget spread over that whole box. 30 covers a shoreline;
-                a box reaching several towns wants more, or the far ones get squeezed out. */}
+                suggests — so the count is a budget spread over that whole box: a box reaching several
+                towns needs the headroom, or the far ones get squeezed out. */}
             <p className="text-xs text-muted-foreground">
               Spread over the region’s whole bounding box, not just what its name suggests. These names are the
-              planner’s entire world — every one it lacks is a “don’t know that one” to a rider. 8–120.
+              planner’s entire world — every one it lacks is a “don’t know that one” to a rider, so this
+              starts at the maximum. {DRAFT_MIN}–{DRAFT_MAX}; lower it only if a draft comes back truncated.
             </p>
           </>
         )}

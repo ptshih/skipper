@@ -52,6 +52,30 @@ describe('console copies of the planner-facing numbers', () => {
     expect(consoleVal).toBe(apiVal!)
   })
 
+  test('the Curate field offers exactly the range the route clamps to', () => {
+    // A field that offers a number the server silently clamps is worse than no field: the operator sets
+    // 200, the route quietly drafts 120, and the count they chose is not the count they got.
+    const server = read('apps/admin/server/index.ts')
+    const serverMax = server.match(/^const MAX_DRAFT_TARGET = (\d+)$/m)?.[1]
+    const serverMin = server.match(/^const MIN_DRAFT_TARGET = (\d+)$/m)?.[1]
+    expect(serverMax).toBeDefined()
+    expect(serverMin).toBeDefined()
+    expect(placesView.match(/^const DRAFT_MAX = (\d+)$/m)?.[1]).toBe(serverMax!)
+    expect(placesView.match(/^const DRAFT_MIN = (\d+)$/m)?.[1]).toBe(serverMin!)
+  })
+
+  test('the draft count DEFAULTS TO THE MAXIMUM on both sides (founder, 2026-08-04)', () => {
+    // The posture, not just the number: asking an operator to pick was asking for a decision with one
+    // right answer. If either side drifts back to a hand-picked default, the field silently becomes a
+    // question again — and the two sides would disagree about what "leave it alone" means.
+    const server = read('apps/admin/server/index.ts')
+    expect(server).toContain('Number(body.target) || MAX_DRAFT_TARGET')
+    expect(placesView).toContain('useState(String(DRAFT_MAX))')
+    // ...and no stray literal default left behind on either side.
+    expect(server).not.toMatch(/Number\(body\.target\) \|\| \d+/)
+    expect(placesView).not.toMatch(/useState\('\d+'\)/)
+  })
+
   test('the page reads both through the const, with no bare literal beside them', () => {
     // The point of a single const is defeated the moment a second copy appears in the JSX, which is how
     // the badge and the legend drifted apart from the star in the first place.

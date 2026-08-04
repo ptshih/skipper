@@ -698,6 +698,8 @@ app.post('/admin/places', async (c) => {
 // resolve step. So: deep, store-everything runs are a CLI job; this route stays the reviewable
 // desk-sized preview it was built to be.
 const MAX_DRAFT_TARGET = 120
+/** Floor on a draft. Not a UI nicety — a request-path clamp, since the body is untrusted. */
+const MIN_DRAFT_TARGET = 8
 const MAX_CURATE_DRAFTS = 160
 
 /** How many curate drafts are resolved (and later upserted) at once.
@@ -742,7 +744,16 @@ app.post('/admin/places/draft', async (c) => {
   // was deleted end to end in 1.1 and the set's only consumer is now the PLANNER's roster, which Opus
   // reads whole from a cached prefix. Thumb-scrolling stopped binding; MAX_PLAN_ANCHORS (200) and model
   // attention are what bind, and every name added is one fewer in-persona "do not know that one".
-  const targetN = Math.max(8, Math.min(MAX_DRAFT_TARGET, Number(body.target) || 100))
+  // ⚠ DEFAULTS TO THE MAXIMUM (founder, 2026-08-04), which is a change of posture, not just a number.
+  // There is no longer a tradeoff for an operator to navigate on a normal run: the rider-facing list a
+  // human once thumb-scrolled is gone, this set is the planner's whole world, and the Places spend is
+  // decided by what they PRUNE before "Resolve & add" — not by this count. So asking them to pick was
+  // asking for a decision with one right answer.
+  // ⚠ The safety net is the TRUNCATION throw in draftCuratedPlaces: `max_tokens` is fixed, and a draft
+  // that overruns it surfaces as a 502 telling the operator to lower the count and draft again. That
+  // path is now load-bearing rather than a rare edge — do not soften it into a warning, and do not let
+  // a truncated list through as if it were a selective one.
+  const targetN = Math.max(MIN_DRAFT_TARGET, Math.min(MAX_DRAFT_TARGET, Number(body.target) || MAX_DRAFT_TARGET))
   try {
     const drafts = await draftCuratedPlaces(region.displayName, bbox, {
       targetN,
