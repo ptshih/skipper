@@ -51,7 +51,13 @@
 > resolved → **87 written, 0 errors, 22.6s**. `places` is now **138 rows / 109 endpoint-eligible** (from
 > 26 at the start of the day) and the easternmost anchor moved **−119.8966 → −119.5930**: Virginia City,
 > Gold Hill, Silver City, Dayton, Mound House, Empire, Carson City, Genoa, Minden, Gardnerville, Washoe
-> City, Bowers Mansion are all reachable endpoints. The Reno/Sparks gap stands (manual add).
+> City, Bowers Mansion are all reachable endpoints. **Reno and Sparks were then added BY HAND** (both
+> resolve clean as `locality`), closing the gap two drafts could not.
+> ✅ **THE ORPHANED-TELLING PROBLEM THAT STARTED THIS IS CLOSED.** Endpoint hull is now lat
+> 38.8002–39.5349, lng −120.3793 → −119.5930 over 111 endpoints, and **every one of the 37 released fused
+> tellings sits within 15 km of a curated endpoint — 0 beyond** (worst: Historic Ranches of South Reno,
+> 11.4 km). It was 28 unreachable at the start of the day. ⚠ "Within 15 km" means a drive CAN plausibly
+> be routed past it, not that any given drive will — selection is still `buildDrive`'s call.
 > ✅ **`isAddressLike` FIRED ON LIVE DATA** — previously recorded here as unexercised. It refused
 > "Heavenly Village" → *Heavenly Village Way* and "Secret Cove" → *Secret Harbor Drive*, both real
 > substitutions, both correctly kept out. ⚠ The pre-1.1 **`Heavenly Village Way` row still sits in the
