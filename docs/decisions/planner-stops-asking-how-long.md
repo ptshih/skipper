@@ -115,13 +115,25 @@ one?"*), and flagged persona turns went to zero. The judge's remaining complaint
 *"the sag is the sheer volume of bare readback-confirm turns… fine but flavorless, and they drag the middle
 of several chats."* That is a different problem from the stamp and wants a different fix.
 
-⚠ **BUT THE REJECTED WORDING STILL COMES OUT SOMETIMES — an open taste decision, not a bug.** On
-2026-08-04's last arm he said *"Want me to draw that one up?"*, near-verbatim the line the founder rejected.
-Removing the sample stopped it being EVERY turn, which is what the stamp complaint was; it cannot stop the
-model reaching for an ordinary English phrasing on its own. **If the founder wants that sentence never
-said, that needs an explicit ban naming it — deleting the example was never going to do it.** Recorded
-rather than acted on, because a ban on a natural phrasing narrows the variety this section just bought, and
-that trade is the founder's to make.
+⚠ **THE REJECTED WORDING STILL COMES OUT SOMETIMES, AND THAT IS NOW A DECIDED NON-PROBLEM.** On
+2026-08-04's last arm he said *"Want me to draw that one up?"*, near-verbatim the rejected line. Removing
+the sample stopped it being EVERY turn, which is what the complaint actually was; it cannot stop the model
+reaching for ordinary English on its own.
+
+✅ **Founder, 2026-08-04, asked directly: "don't explicitly ban anything the skipper can say."** So there is
+no phrase ban and there will not be one. The reasoning is worth keeping because it generalises past this
+sentence: a blacklist buys one dead phrase and pays for it in variety, and variety is the only defence
+against the failure this character actually dies of — sounding like a jukebox. **When a line grates, look
+for what is TEACHING it.** Here that was a sample line the read-back rule had already said should not exist.
+That is now recorded as doctrine in the prompt module's own header, where the next agent to reach for a ban
+will read it.
+
+⚠ It is NOT a licence to strip the behavioural rules, which are a different kind of thing — "never answer
+WHAT a place is", "never guess a distance", "no markdown", "do not hand them a choice in the same breath as
+the ask" constrain what he DOES and several are load-bearing invariants. Quoting a sentence as a
+counter-EXAMPLE to make one of those concrete stays too. What is out is a rule whose whole content is
+*"do not say &lt;string&gt;"*. Nothing existing was removed under this directive; if a sweep of current rules
+was intended, that is a separate call.
 
 ## What this change appears to have COST — found, fixed, and verified the same day
 

@@ -30,6 +30,23 @@
 // construction" is true of a model that has no gate in front of it. Grounded place answers are a
 // separate, DEFERRED feature (docs/designs/ask-the-skipper-spec.md); do not build this prompt toward it.
 //
+// == Teach him; never blacklist a sentence (founder, 2026-08-04) ==
+// "Don't explicitly ban anything the skipper can say." A wording will grate — this is the most-repeated
+// prose in the product — and the fix is never a rule naming that sentence. A blacklist buys one dead
+// phrase and pays in VARIETY, which is the only defence against what this character actually dies of:
+// sounding like a jukebox.
+// The worked case: the draw-ask *"Want me to draw that up?"* was rejected on 2026-08-04, and what fixed it
+// was deleting the sample line that TAUGHT it — the read-back rule already said that turn gets no sample
+// and the worked example contradicted it. Across the four runs after, the same turn produced "that the
+// one?", "Shall I set it?", "Say the word?", "is that our drive?". He still reaches for the rejected
+// phrasing now and then, and that is ACCEPTED: it is ordinary English, and banning it trades the variety
+// straight back. When a line grates, look for what is TEACHING it.
+// ⚠ NOT a licence to strip the behavioural rules, which are a different thing. "Never answer WHAT a place
+// is", "never guess a distance", "no markdown", "do not hand them a choice in the same breath as the ask"
+// constrain what he DOES, and several are load-bearing invariants. Quoting a sentence as a counter-EXAMPLE
+// to make one of those concrete is also fine and stays. What is out is a rule whose whole content is
+// "do not say <string>".
+//
 // == What must NOT be interpolated into this string ==
 // The prompt is the CACHED PREFIX of every planner request, and a cache miss is invisible in the response
 // body — it shows up only as a bill. So this constant is a plain literal with ZERO interpolation, and it

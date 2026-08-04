@@ -64,13 +64,16 @@ without re-deriving the reasoning. **Delete items when done** — git history is
       or say DRAW — never "the plan", which in that prompt names both the sentence he speaks and the tool
       call he emits.** Full write-up:
       [planner-stops-asking-how-long](docs/decisions/planner-stops-asking-how-long.md).
-- [ ] **The rejected draw-ask wording still surfaces — a taste call for the founder, not a bug.** The
-      founder rejected *"Want me to draw that up?"* on 2026-08-04; the last arm produced *"Want me to draw
-      that one up?"*. Deleting the sample line fixed the STAMP (it is no longer every turn — the four runs
-      also produced "that the one?", "Shall I set it?", "Say the word?", "is that our drive?") but it cannot
-      stop the model reaching for ordinary English on its own. **Wanting that sentence never said needs an
-      explicit ban naming it.** ⚠ Not done unilaterally: a ban narrows the variety the sample-line removal
-      just bought, and that trade is the founder's.
+- [x] **DECIDED, and it is doctrine now rather than a one-off: "don't explicitly ban anything the skipper
+      can say" (founder, 2026-08-04).** He still reaches for the rejected *"Want me to draw that one up?"*
+      occasionally and that is accepted — deleting the sample line fixed the STAMP (the four runs also
+      produced "that the one?", "Shall I set it?", "Say the word?", "is that our drive?"), and a phrase ban
+      would buy one dead sentence at the cost of the variety that is this character's only defence against
+      sounding like a jukebox. **When a line grates, look for what is TEACHING it** — here, a sample line the
+      read-back rule had already said should not exist. Recorded in the prompt module's own header so the
+      next agent reaching for a ban reads it first. ⚠ It does NOT touch the behavioural rules (never answer
+      WHAT, never guess a distance, no markdown, no either/or) or counter-examples that make them concrete;
+      nothing existing was removed, and a sweep of current rules would be a separate call.
 - [x] **✅ FIXED + VERIFIED same day (`--only deflect-plan-draw-chat`, $0.0968 — routing 1.00, 0/4, all
       three gates PASS). THE EITHER/OR WAS BACK, IN A NEW FLAVOUR, AND A ONE-SCENARIO VERIFICATION IS WHY
       NOBODY KNEW.** Fixed by TWO CLARIFICATIONS of existing rules, not a new rule (the lesson from the last
