@@ -56,7 +56,7 @@ const PLANNER_ROSTER_CAP = 200
  *  about a normal run wants fewer, and the Places spend is decided by what gets PRUNED before
  *  "Resolve & add" — so the field is now a RECOVERY lever (lower it when a draft truncates), not a
  *  decision to make every time. */
-const DRAFT_MIN = 8
+const DRAFT_MIN = 1
 const DRAFT_MAX = 120
 
 export function PlacesView() {

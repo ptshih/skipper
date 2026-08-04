@@ -397,17 +397,32 @@ export async function draftCuratedPlaces(
   // the Cloud Run budget — do NOT copy studio's maxRetries: 5, tuned for a batch run that already spent."
   // 90s x 2 attempts stays inside this server's 240s idleTimeout as well as Cloud Run's 300s.
   const client = new Anthropic({ maxRetries: 1, timeout: 90_000 })
-  const res = await client.messages.create({
+  // ⚠ STREAMED, and the reason is `max_tokens`, not progress reporting — nothing consumes the deltas.
+  // A NON-streaming request cannot safely ask for much more than ~16k output tokens: the SDK's own HTTP
+  // timeout is what bites, not the model, so the old ceiling here was an artifact of HOW the call was
+  // made rather than anything about drafting places. Streaming lifts that, so the ceiling below is now
+  // the model's to give.
+  // ⚠ WHAT STREAMING DOES NOT BUY IS TIME. The model is no cheaper and no faster; the bytes merely
+  // arrive incrementally. The explicit 90s client timeout above is still the real bound on this route,
+  // and MAX_DRAFT_TARGET is still pinned by that clock — see the note beside it.
+  // ⚠ Keep the explicit timeout. The TS SDK silently scales its DEFAULT timeout up (to as much as an
+  // hour) for a large `max_tokens`; an unset timeout plus the ceiling below would park a request far
+  // past the point anyone is waiting for it, billing to completion with nobody to answer.
+  const stream = client.messages.stream({
     model: opts.model,
-    // Sized for the LARGEST draft the route's clamp allows (120 places, each a name + Places query +
-    // role + rationale), not for the default 30. A ceiling is not a charge — only tokens actually
-    // emitted are billed — so headroom here is free, while too little silently truncates the list.
-    max_tokens: 16_000,
+    // Headroom, deliberately generous: the largest draft the route's clamp allows is 120 places (each a
+    // name + Places query + rationale), which fit inside the old 16k. A ceiling is not a charge — only
+    // tokens actually emitted are billed — so the cost of headroom is zero, while too little truncates
+    // the list and burns the whole call. Opus tops out far above this; 64k is simply well clear.
+    max_tokens: 64_000,
     system: draftSystem(regionName, bbox, opts.targetN),
     tools: [DRAFT_TOOL],
     tool_choice: { type: 'tool', name: DRAFT_TOOL.name },
     messages: [{ role: 'user', content: `Draft the curated places for ${regionName}.` }],
   })
+  // The assembled Message — same shape the non-streaming call returned, so every check below is
+  // unchanged. (`finalMessage()` also surfaces stream errors, so there is no separate error path.)
+  const res = await stream.finalMessage()
   // ⚠ CHECK THIS BEFORE READING THE TOOL BLOCK. The entire candidate list is ONE tool call, so a
   // max_tokens stop leaves a half-written JSON list that the SDK still surfaces as a `tool_use` block —
   // HTTP 200, no error, and a SHORTER list than asked for, which is indistinguishable from the model

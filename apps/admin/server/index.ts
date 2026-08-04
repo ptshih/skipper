@@ -691,16 +691,35 @@ app.post('/admin/places', async (c) => {
  * idleTimeout at the foot of this file — read that comment before raising it. */
 // ⚠ THIS IS DELIBERATELY LOWER THAN THE CLI's 250 (packages/studio/src/curate-places.ts), and the gap
 // is NOT drift — the two are bound by different things and must not be "unified" (founder, 2026-08-04).
-// The CLI is a batch process with no clock over it, so it streams and drafts deep. This is a REQUEST
-// PATH: the call below is non-streaming with a 90s timeout inside this server's 240s idleTimeout, and a
-// deep draft cannot return inside that budget no matter what `max_tokens` says. Streaming would not
-// rescue it either — the ROUTE still has to answer. MAX_CURATE_DRAFTS below is the same story for the
-// resolve step. So: deep, store-everything runs are a CLI job; this route stays the reviewable
-// desk-sized preview it was built to be.
+// The CLI is a batch process with no clock over it, so it drafts deep. This is a REQUEST PATH, and what
+// binds it is the CLOCK: a 90s model timeout inside this server's 240s idleTimeout, and the route still
+// has to answer inside that.
+// ⚠ IT IS NO LONGER A TOKEN BOUND (2026-08-04). This cap used to be justified partly by `max_tokens`,
+// which sat at the ~16k ceiling a NON-STREAMING call can safely ask for; the draft call now streams, so
+// the token ceiling is the model's own (128k) and no longer the thing pinning this number. What is left
+// is the clock, which streaming does NOT change — the model is not faster, the response merely arrives
+// incrementally. So this stays 120 until someone MEASURES where the wall-clock actually lands.
+// So: deep, store-everything runs are a CLI job; this route stays the reviewable desk-sized preview it
+// was built to be.
 const MAX_DRAFT_TARGET = 120
-/** Floor on a draft. Not a UI nicety — a request-path clamp, since the body is untrusted. */
-const MIN_DRAFT_TARGET = 8
-const MAX_CURATE_DRAFTS = 160
+
+/** Floor on a draft — a request-path clamp, since the body is untrusted, not a UI nicety.
+ *  ⚠ 1, and DERIVED rather than picked: it is the smallest number of places that is still a draft. It
+ *  was 8, which was the one number in this chain with no reasoning behind it at all — the clamp exists
+ *  to stop a hostile body sending `target: -5` into "Draft roughly -5 places", and 1 does that. */
+const MIN_DRAFT_TARGET = 1
+
+/** The resolve cap: the draft cap plus a third again, for the model's OVERSHOOT.
+ *  ⚠ DERIVED, not declared — that is the whole point. It was a second independent literal (160) held
+ *  in agreement with the draft cap by a comment, and the comment lost: when the draft cap moved 60 → 120
+ *  and this stayed at 60, a 103-place draft could not be resolved at all. Expressing the relationship
+ *  means raising `MAX_DRAFT_TARGET` carries this with it, and there is no second number to forget.
+ *  ⚠ Why any overshoot at all: `target` is GUIDANCE, not a limit — the prompt says "Draft roughly N",
+ *  and the model comes back over (a target of 100 returned 103 on the first real run). A resolve cap
+ *  set EQUAL to the draft cap rejects the very draft its own flow just produced.
+ *  ⚠ It is a SPEND bound as well: every accepted draft costs TWO billed Google Places calls, so this is
+ *  what stops one click from resolving whatever the client happened to post. */
+const MAX_CURATE_DRAFTS = Math.round((MAX_DRAFT_TARGET * 4) / 3)
 
 /** How many curate drafts are resolved (and later upserted) at once.
  *
