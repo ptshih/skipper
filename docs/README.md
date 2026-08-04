@@ -73,6 +73,10 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [geometry-first-regions.md](decisions/geometry-first-regions.md) — a region is a BBOX, never a
   stored FK: a POI's region = point-in-bbox; a drive stores its route bbox + derives region by
   intersect — no `region_id` FK anywhere (2026-06-19).
+- [no-default-region.md](decisions/no-default-region.md) — every corpus run NAMES its region:
+  `DEFAULT_REGION_SLUG` + the Tahoe fallback bbox are deleted, `--region` is required (explicit-id
+  runs exempt), and the admin 400s instead of defaulting. A default region billed the wrong corpus
+  and settled green (2026-08-03).
 - [credit-ledger.md](decisions/credit-ledger.md) — drive credits are a user-owned, append-only
   `credit_entries` ledger (balance = SUM), NOT a `count(drives)`; free-tier lifetime grant + per-drive
   consume live (migration `0016`), Apple IAP / Google Play purchase plumbing deferred; built 2026-06-19.
@@ -93,19 +97,44 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   call-out) out of the tree before the v2 release: built + smoke-tested but never run, so zero rows and
   no audio existed and the removal was code-only; the `'wave'` enum value stays as reserved vocabulary,
   and the two traps the build surfaced (structural monotony, name-derived claims) are recorded (2026-07-26).
+- [cut-mid-drive-concierge.md](decisions/cut-mid-drive-concierge.md) — the Skipper will not find you a
+  coffee: the break-stop volatile-data ban makes a live recommendation *permanently* worse than the phone
+  in the cupholder, and charm does not launder a utility miss the way it carries a thin story. The
+  deliberately-vague tease survives (it works BECAUSE it refuses to be useful); the "he permits" beat was
+  already 80% built and shipped as a copy edit, not a feature (2026-08-03).
+- [bside-gets-its-own-table.md](decisions/bside-gets-its-own-table.md) — the "tell me more" deeper cut
+  does NOT become a second `narrations` row: `narrations_poi_uq` stays, and one telling per place stays
+  true. Loosening it is not a schema change but an audit of every reader, whose failure mode is a rider
+  hearing the deep cut instead of the introduction on a drive they paid a non-refundable credit for. The
+  b-side gets its own table anchored to a poi XOR a cluster, following the `detours` precedent (2026-08-03).
+- [scenic-filler-and-the-empty-stretch.md](decisions/scenic-filler-and-the-empty-stretch.md) — what
+  goes in a long empty stretch, and the answer is **nothing**: `SCENIC_ANCHORS` (factless curated
+  overlooks) and `FEATURED_STOPS` were both BUILT and REVERTED 2026-06-09 — *"too neutered"*, famous
+  spots should be grounded — and candidate-less stretches **stay silent**. Backfilled 2026-08-03
+  because the call lived only in agent memory while `scenic-stops-spec.md` went on proposing the
+  rejected mechanism. ⚠ Two checks that make it STRONGER: the soundtrack predates it by two days (so
+  "silent" never meant silence), and nothing in selection measures quiet — `DRIVE_MIN_GAP_SEC` is a
+  floor, not a ceiling. REOPENED the same day, landing on a new grounded shape (*the subject is the
+  emptiness*) that needs a fact source, a third `narrations` subject kind, and 💸 a paid run — not greenlit.
+  ⚠ Its §5 measurements are PREMISE-SUPERSEDED (they predate the scenic tier existing) — see below.
 - [drive-density-and-the-return-leg.md](decisions/drive-density-and-the-return-leg.md) — why drives felt
-  thin, measured on the four saved drives: the stop CAP was innocent (removing it changed NOTHING). The
-  levers were the glance fill taking **one call-out per window however long the window**, the 180 s
-  pacing floor (→ 120), a fused telling a route cannot REACH still suppressing its own members
-  (Vikingsholm was silenced on the drive that passes Emerald Bay), and — found last, the most
-  consequential — the **trigger-reach admission filter, which modelled a pipeline we do not run**: stops
-  are served route-SNAPPED, so a POI 600 m off-road fires fine, and the filter was refusing content to
-  prevent a failure that cannot occur. Admission is now the `OFF_ROUTE_MAX_M` honesty bound alone.
-  31 → 41 stops, coverage 34% → 40%, worst silence 17:56 → 14:24 (2026-08-03). ⚠ Its §5 — a
-  there-and-back retraces 96% of its ground and 17 of 18 candidates snap to the outbound half, so the
-  return leg is structurally silent — is the measurement behind
-  [no-same-road-loops.md](decisions/no-same-road-loops.md). ⚠ `driveMaxStops` now BINDS on two of four
-  drives; it bound on none before.
+  thin, measured: the stop CAP was innocent (removing it changed nothing) and the 250 m trigger reach was
+  a thin tail (+2 stops at its widest). The levers were the glance fill taking **one call-out per window
+  however long the window** and the 180 s pacing floor; both moved, plus a fused telling a route cannot
+  REACH no longer suppresses its own members (Vikingsholm was silenced on the drive that passes Emerald
+  Bay). 31 → 41 stops across the four saved drives (2026-08-03). ⚠ §5 was a FINDING and has since been
+  ANSWERED (see below): a there-and-back retraces 96% of its ground and 17 of 18 candidates snap to the
+  outbound half, so the return leg is structurally silent.
+- [no-same-road-loops.md](decisions/no-same-road-loops.md) — a loop is a RING or it is not a loop
+  (founder, 2026-08-03). `round_trip` gained a rider-named `return_anchor_id` — the skipper asks *"which
+  way do you want to come home?"* — because D9 gives the model NO coordinates, so it structurally cannot
+  pick a circuit and the geography has to come from the rider. A prompt can't be the guard either
+  (Google may still route the return leg back down the outbound road), so `retraceFraction` measures the
+  materialized polyline and both billed sites refuse past `LOOP_MAX_RETRACE = 0.20`. Threshold measured,
+  not guessed: real distinct-road arcs score **0%**, a there-and-back **98%**, the worst partial case
+  **51%**. ⚠ The cost is real and was accepted explicitly — Tahoe's only true circuit is the lake
+  (~125 km / ~2 h), so a "quick loop" is now a one-way drive. ⚠ Loops ONLY: a one-way that doubles back
+  is honouring a rider's own "go by X on the way".
 - [sample-ride-postcard.md](decisions/sample-ride-postcard.md) — the `/sample` "postcard": one curated
   Tahoe clip anyone outside the corpus (incl. an App Review tester) can hear in one permission-free tap,
   fixing the "I don't know these roads yet" dead-end; anonymous `GET /sample` (it lost its `/roam`
@@ -193,20 +222,29 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   ANTICIPATE a moment; pick the one anonymous preview clip by ear), 11 cuts to feed D36's step-10 sweep
   (⚠ `drives.route_sig` has no reader at all), and a list of things **explicitly not worth doing**, each
   with the condition that expires it. Idea shelf, nothing greenlit; 2026-07-31.
-- [home-cold-open-declutter.md](designs/home-cold-open-declutter.md) — three founder notes on the
-  shipped 1.1 home screen (cluttered · prompts too loud · sample CTA too prominent) traced to **one
-  inversion**: the composer is the primary action and is styled as the quietest element, while the
-  asks, the sample link and the hero are all drawn at button weight. Carries the before/after, the
-  ⚠ that `ghost` is not a quiet tier (it renders Lora 700 · 17pt), the ⚠ that the 35pt chips are NOT
-  a hit-target defect (`hitSlop={12}`), and the constraint that bounds it — the sample clip stays
-  above the fold because it is the only thing an App Review tester can hear. Design pass 2026-08-03,
-  **not greenlit**, and written while another agent was mid-edit in the same files.
+- [home-cold-open-declutter.md](designs/home-cold-open-declutter.md) — ✅ **BUILT 2026-08-03**: the
+  1.1 home cold open, rebuilt. Three founder notes (cluttered · prompts too loud · sample CTA too
+  prominent) traced to **one inversion** — the composer was the primary action styled as the quietest
+  element, while the asks, the sample link and the hero were all drawn at button weight. What shipped:
+  the skipper's QUESTION as the hero (the travel-poster masthead is deleted — it was a landing page,
+  and the app already has one), suggestions as titled rows, the sample reclassified from a ghost link
+  into a playable LISTEN ROW shown once, a quiet region chip whose sheet answers *"where can I
+  actually go?"*, a rotating region-composed placeholder, and MY DRIVES moved to its own signed-in
+  screen with a **sign-out purge**. ⚠ **Read §17 FIRST — it lists six places the build reversed this
+  document and wins over the rest of it**, including that `Divider dashed` renders nothing in a row,
+  that the sunburst was CLIPPED rather than faint (so the opacity was never the bug), and that the
+  offline component split was deliberately NOT done because splitting introduces the very unmount
+  hazard it was meant to prevent.
 - [fused-cluster-generation-spec.md](designs/fused-cluster-generation-spec.md) — **phase 4** of the
   legibility layer: one fused telling per cluster, and the read-path work that makes it audible.
   **BUILT, GENERATED AND RELEASED** — 37 fused tellings, all released (counted 2026-08-02); only
   Yosemite's 30 clusters remain, behind a paid `enrich` first. ⚠ Its §10 AREA trigger was cut with
   roam, so read that section (and every `/roam` measurement) as a record; the lead is the arbiter of
-  state and the body is a build journal.
+  state and the body is a build journal. ✅ **§4.3 (2026-08-03): the last three groups are reachable** —
+  8m13s of RELEASED audio no drive could play (Downtown Reno 914 m, Reno's Historic Homes 698 m, UNR
+  campus 903 m — the last a CLUSTER, so the unit is RADIUS, not treatment). `buildDrive` now places a
+  wide group on the EARLIEST member the route reaches; fail-closed without members. $0, no generation.
+  ⚠ do NOT raise `CLUSTER_MAX_TRIGGER_RADIUS_M` — it is a live firing radius now, not a dormant floor.
 - [road-snapped-anchors-spec.md](designs/road-snapped-anchors-spec.md) — **1a** of the 2026-06-25 dogfood
   triage: a safe-by-default `snap-speakable-anchors` pass auto-populates `pois.speakable_lat/lng` from the
   nearest drivable road (Google Roads API), flagging POIs no road can reach; un-snappable centroids never
@@ -235,7 +273,16 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   cut 2026-06-19 with the `asides` table that housed them
   ([cut-intro-frame-and-persona-kit.md](decisions/cut-intro-frame-and-persona-kit.md)).
 - [downtime-callouts-spec.md](designs/downtime-callouts-spec.md) — persona-only beats in the quiet
-  stretches (the "dead air" answer); unbuilt.
+  stretches (the "dead air" answer); unbuilt, and **re-interrogated 2026-08-03 (§0)**. The idea
+  survived but changed shape: **duck-overlay is OVERTURNED — the music STEPS BACK**, because the
+  quiet stretch was never quiet (a curated track plays through every driving leg), so the bar is
+  "beats the song", not "beats silence". ⚠ Its v3 storage deferral does not hold up (storage is
+  break-freely; a scheduler-fired beat never needed the geometry placeless was denied), and
+  ✅ **Step 0 DONE (§0.6) — the quiet is MEASURED and it OVERTURNS Finding 1.** The planned-gap path
+  is abundant, not marginal: 5 of 8 windows clear the §7.1 gate at 45 mph (7 of 8 at 30), gaps run
+  3:33–6:15, and **the Skipper is silent ~75% of a drive**. Drive LENGTH gates the feature, not
+  corridor density (a 2-stop drive scores 0 of 1 at every speed). Still not greenlit: there is ROOM,
+  which is not the same as a beat being welcome — that stays an ear question.
 - [tell-me-more-spec.md](designs/tell-me-more-spec.md) — pre-generated deeper-cut B-side per story
   stop; unbuilt.
 - [replay-last-stop-spec.md](designs/replay-last-stop-spec.md) — one-tap re-hear of the last stop;
@@ -245,7 +292,9 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [drive-thesis-spec.md](designs/drive-thesis-spec.md) — the drive's through-idea (the keystone:
   plant in intro → evidence in stops → land at the payoff); unbuilt, generation-only.
 - [scenic-stops-spec.md](designs/scenic-stops-spec.md) — deliberately adding scenic stops; unblocked
-  but partially overtaken by the pacing rework — re-ground before building.
+  but partially overtaken by the pacing rework — re-ground before building. ⚠ **Its `SCENIC_ANCHORS`
+  mechanism was built and REJECTED 2026-06-09** ("too neutered") — read
+  [scenic-filler-and-the-empty-stretch.md](decisions/scenic-filler-and-the-empty-stretch.md) first.
 - [corpus-enrichment-spec.md](designs/corpus-enrichment-spec.md) — a paid `enrich` step that scouts the
   POI facts ONCE at the corpus (verbatim selection → a curated "fact well" every drive shares); the
   well becomes the narration bound, letting the raw-extract cap drop. ✅ BUILT 2026-06-15, RUN 2026-06-16.
@@ -403,3 +452,6 @@ The rest are post-MVP features, gated behind the proven phone player:
   deleted and its "roam is the only anonymous surface" precondition is now inverted. Use
   [1-1-submission-sweep.md](guides/1-1-submission-sweep.md), which carries its Acceptance list forward
   into executable steps.
+- [upstream-wikipedia-corrections.md](guides/upstream-wikipedia-corrections.md) — the three talk-page
+  posts owed for the active `poi_overrides` (agent drafts, human submits); drafted + re-verified
+  against the live articles 2026-08-03, none filed yet. Delete when all three are filed.

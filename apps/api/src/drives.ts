@@ -34,7 +34,9 @@ import {
   candidateTriggerRadiusM,
   DRIVE_MIN_GAP_SEC,
   driveMaxStops,
+  LOOP_MAX_RETRACE,
   OFF_ROUTE_MAX_M,
+  retraceFraction,
   type DriveCandidate,
   type DriveStop,
   type LngLat,
@@ -263,6 +265,71 @@ const sameSpot = (a: ResolvedEndpoint, b: ResolvedEndpoint): boolean =>
   Math.abs(a.lat - b.lat) < 1e-4 && Math.abs(a.lng - b.lng) < 1e-4
 
 /**
+ * A LOOP MUST NOT DRIVE THE SAME ROAD TWICE. The wire half of the no-same-road rule (founder,
+ * 2026-08-03) — the planner half is the way-home beat in ./planner-prompt.
+ *
+ * ⚠ THE PROMPT CANNOT BE THE GUARD, and this is not belt-and-braces. The rider names the way home, but
+ * whether that produces a RING is a fact about the road network that nobody in the conversation knows:
+ * the model is given no coordinates at all (D9, `buildRosterBlock` in ./planner), and Google is free to
+ * route the return leg straight back down the outbound road when that is shorter. So the only place
+ * this can be decided is here, on the polyline that came back.
+ *
+ * WHY IT IS WORTH REFUSING A DRIVE OVER. Measured on the one saved loop: `Stateline → Emerald Bay →
+ * Stateline` retraces itself for 94% of its 27 miles, and 17 of its 18 reachable stops snap to the
+ * outbound half — `nearestOnRoute` returns ONE along-route position per place, so a road you drive
+ * twice is told once and the way home is silent. The drive was never under-selected; it was out of
+ * things to say. See docs/decisions/no-same-road-loops.md.
+ *
+ * ⚠ LOOPS ONLY, DELIBERATELY. A ONE-WAY drive that doubles back is doing so because the rider asked to
+ * pass through somewhere on the way ("out to Incline, but go by Emerald Bay first") — that retrace is
+ * the rider's own explicit request and refusing it would be overruling them. A loop is different in
+ * kind: "bring me back around" is an ask for a ring, and nobody asked to see the same road twice.
+ *
+ * ⚠ AFTER THE BILL, NECESSARILY. The polyline IS the evidence, so the Routes call is already paid for
+ * when this runs — which is exactly why the rejection is logged (`logRouteSpend` carries the fraction)
+ * rather than being a silent 422. On the CREATE path it still lands well before the ledger batch, so a
+ * refused loop never costs a rider a credit.
+ */
+function loopShapeOf(start: ResolvedEndpoint, end: ResolvedEndpoint, polyline: LngLat[]): LoopShape {
+  const loop = sameSpot(start, end)
+  const retrace = retraceFraction(polyline)
+  return { loop, retrace, refuse: loop && retrace > LOOP_MAX_RETRACE }
+}
+
+/** What both billed paths learn about a materialized route's shape, in ONE pass.
+ *
+ *  ⚠ ONE EXPRESSION, COUNTED / LOGGED / ACTED ON — the repeated bug class in this codebase is two
+ *  copies of "the same" predicate drifting apart (`prune-corpus --restore` counted on one and UPDATEd
+ *  on another). `refuse` is the decision, `retrace` is what gets logged, and both come out of the same
+ *  call so the cost line can never describe a route the gate judged differently. */
+interface LoopShape {
+  /** start ≈ end — the rider asked to come back around. */
+  loop: boolean
+  /** Share of the route driven twice, 0–1. Recorded on the spend line whether or not it refuses. */
+  retrace: number
+  /** A loop that drives the same road twice. THE decision — never re-derive it from the two above. */
+  refuse: boolean
+}
+
+/** What a rider hears when their loop turns out to be an out-and-back. ⚠ It names the ONE thing they
+ *  can change — the way home — because a dead end they cannot route around is a real answer too, and
+ *  the planner's own way-home beat is what turns this into the next question. */
+const SAME_ROAD_LOOP = {
+  error: 'loop_retraces',
+  message:
+    "That way home puts you back on the road you rode out on. Pick a different way round, or take it straight through.",
+} as const
+
+/** What a rider hears when Google's only way to their spot is a gated track. ⚠ It points at the SPOT,
+ *  not at the way round, because that is the thing they can actually change — see the ordering note
+ *  where this fires. */
+const RESTRICTED_ROUTE = {
+  error: 'restricted_route',
+  message:
+    "The only way in there is a gated forest track — not a road I'd send you down. Pick another spot and I'll plot it.",
+} as const
+
+/**
  * A drive's title: every waypoint it was routed through, in order — `Stateline → Emerald Bay State
  * Park → Stateline` for a round trip.
  *
@@ -320,6 +387,17 @@ function logRouteSpend(spend: {
   /** The route's own magnitude. A length and a duration, never a position. */
   meters: number
   seconds: number
+  /** Share of the route driven twice, 0–1 (`retraceFraction`). A MAGNITUDE, like meters — a ratio of
+   *  a route to itself names no place and cannot be inverted into one. It is here so the no-same-road
+   *  gate is countable: a refusal still bills a Routes call, so "how many loops did we pay for and
+   *  then refuse" is a real operating question, and this is the only field that can answer it. */
+  retrace: number
+  /** Google warned the route uses restricted / private / unpaved roads (`hasRestrictedRoads`). Here for
+   *  the same reason as `retrace`: the refusal happens AFTER the bill, so this is the only field that
+   *  can answer "how many Routes calls did we pay for and then throw away". A BOOLEAN about the route,
+   *  naming no place — an operator watching this rise is watching a curated anchor go bad, which is the
+   *  signal `audit-endpoint-routability` exists to chase down by name (it can; this line may not). */
+  restricted: boolean
 }): void {
   console.info(
     JSON.stringify({
@@ -337,6 +415,9 @@ function logRouteSpend(spend: {
       // number is not worth the noise.
       meters: Math.round(spend.meters),
       seconds: Math.round(spend.seconds),
+      // Two decimals: the gate reads in whole percent, and a full float here is noise in a metric.
+      retrace: Math.round(spend.retrace * 100) / 100,
+      restricted: spend.restricted,
     }),
   )
 }
@@ -747,14 +828,29 @@ driveRoutes.post('/propose', async (c) => {
   }
   // The bill just landed — record it HERE, before the (throwable, unbilled) selection below. See
   // logRouteSpend for why this line exists and what may never ride on it.
+  const shape = loopShapeOf(startEp, endEp, route.polyline)
   logRouteSpend({
     path: 'propose',
     anchors: anchorCount,
     via: via.length,
-    loop: sameSpot(startEp, endEp),
+    loop: shape.loop,
     meters: route.distanceMeters,
     seconds: route.durationSeconds,
+    retrace: shape.retrace,
+    restricted: route.restricted,
   })
+
+  // ⚠ RESTRICTED BEFORE RETRACE, AND THE ORDER IS THE WHOLE POINT OF PUTTING THEM TOGETHER. An
+  // undrivable anchor produces BOTH conditions at once — Carson City → the Spooner Lake pin went out
+  // and back up the same forest track, so it is a 100% retrace as well — and the loop message would
+  // then tell the rider to "pick a different way round", which cannot help: there is no way round, the
+  // SPOT is the problem. The more fundamental refusal has to speak first or the advice is wrong.
+  if (route.restricted) return c.json(RESTRICTED_ROUTE, 422)
+
+  // A loop that drives the same road twice is not a loop (`loopShapeOf`). Refused HERE, on the
+  // preview, so the rider meets it on the FREE path rather than after a credit — and so the card they
+  // are offered is never one the create path would go on to reject.
+  if (shape.refuse) return c.json(SAME_ROAD_LOOP, 422)
 
   // Accurate est. stop count: run the real selection (pure, free) so the confirm screen matches.
   // An admin previews over staged clips too, so the proposed count matches what they'll build.
@@ -909,14 +1005,24 @@ driveRoutes.post('/', requireAccount, createDriveLimiter, withFreshSession, asyn
   // /propose), so it gets its own line, distinguished by `path`. Placed before the selection for the
   // same reason as /propose: below this point a corpus read, a 0-stop rejection or the ledger batch can
   // all end the request, and the Routes call is paid for either way.
+  const shape = loopShapeOf(start, end, route.polyline)
   logRouteSpend({
     path: 'create',
     anchors: anchorCount,
     via: via.length,
-    loop: sameSpot(start, end),
+    loop: shape.loop,
     meters: route.distanceMeters,
     seconds: route.durationSeconds,
+    retrace: shape.retrace,
+    restricted: route.restricted,
   })
+
+  // ⚠ BOTH GATES AS /propose, IN THE SAME ORDER, and neither is redundant: a client can reach this
+  // route without ever calling /propose, and this is the path that spends. Placed BEFORE the selection
+  // and the ledger batch, so a refused route costs a Routes call (already billed above) and never a
+  // rider's credit. The restricted-first ordering is argued at the /propose copy.
+  if (route.restricted) return c.json(RESTRICTED_ROUTE, 422)
+  if (shape.refuse) return c.json(SAME_ROAD_LOOP, 422)
 
   // Release gate: an admin builds over staged clips too; everyone else gets released-only. The frozen
   // selection then references whatever was eligible at build time (monotonic → stays valid). (region-release-gate)
@@ -929,10 +1035,9 @@ driveRoutes.post('/', requireAccount, createDriveLimiter, withFreshSession, asyn
   // a 422 BEFORE the insert + demand bump. The loop-aware log keeps that root cause visible for the
   // verification pass instead of masking it behind the generic message (runbook Finding 1/2).
   if (stops.length === 0) {
-    const loopish = sameSpot(start, end)
     console.warn(
       `[api] drive create produced 0 stops — rejecting before persist (${start.name} → ${end.name}, ` +
-        `loopish=${loopish}, candidates=${corpus.size}, durationSec=${Math.round(route.durationSeconds)})`,
+        `loopish=${shape.loop}, candidates=${corpus.size}, durationSec=${Math.round(route.durationSeconds)})`,
     )
     return c.json(
       {
