@@ -215,6 +215,12 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   the 1:1 `pois`↔`narrations` atom, no `roam_clips` table, and 1.1 then removed the mode outright.)
 
 ### designs/
+- [the-road-trip-planner.md](designs/the-road-trip-planner.md) — 💡 VISION: choose a start and an end,
+  let the model NUDGE THE ROUTING (never the stops — deterministic selection stands), spurs rather than
+  branching, saved as today's drive. ⚠ Touches NO hard invariant once read correctly, and nearly all the
+  value sits in the vocabulary change alone. ⛔ Rider-chosen stops, true branching and turn-by-turn are
+  all explicitly OUT; turn-by-turn is SIZED anyway — the geometry is already built, the exclusive audio
+  channel is the real cost, and only REROUTING breaks the frozen artifact. Not greenlit (2026-08-04).
 - [corpus-as-the-planners-world.md](designs/corpus-as-the-planners-world.md) — 💡 IDEA: remove `places`
   from the PLANNING path and let the planner work from the narration corpus — 729 released names against
   103 curated endpoints, **14 of 15 towns** present, exactly **1** duplicate name, **96%** already
