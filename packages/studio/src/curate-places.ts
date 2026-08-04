@@ -1,16 +1,20 @@
 // curate-places — build a region's CURATED set of Google Places. SPENDS $ (Anthropic draft + Google
 // Places resolve) + MUTATES DB on --apply.
 //
-// The offline, ONE-TIME-per-region step that feeds the Create-a-Drive picker (and, later, break
-// pitstops). An LLM drafts the region's popular start/end HUBS (towns, marinas, scenic lookouts,
-// trailhead gateways) + good break PITSTOPS (coffee/gas/rest/viewpoint pull-offs); each draft is
-// resolved against Google Places (Autocomplete + Details, bbox-restricted) into a canonical
-// place_id + name + coords + primaryType; the resolved rows are upserted into `places`, ROLE-tagged
-// (endpoint-eligible / break-eligible) and with a `featured` popular-subset flag. The founder then
-// reviews / prunes in the admin console.
+// The offline, per-region step that builds the PLANNER's allowlist of DESTINATIONS. An LLM drafts the
+// region's recognizable start/end places (towns, marinas, scenic lookouts, trailhead gateways), ranked
+// by how likely a visitor is to say the name out loud; each draft is resolved against Google Places
+// (Autocomplete + Details, bbox-restricted) into a canonical place_id + name + coords + primaryType;
+// the resolved rows are UPSERTED into `places`. The founder then reviews / re-ranks in the console.
 //
-// WHY curated (not open autocomplete): coords are resolved + STORED here, ONCE, so the RUNTIME picker
-// reads a stored short list with ZERO live Places calls — no proxy, no session tokens, no Details.
+// ⚠ NO ROLES, NO `featured`, NO BREAK PITSTOPS — all three were removed 2026-08-04. This list is
+// destinations only; "iconic" was never a two-valued property, so it is now the `rank` column.
+//
+// WHY curated (not open autocomplete): coords are resolved + STORED here, ONCE, so the planner's roster
+// reads a stored list with ZERO live Places calls — no proxy, no session tokens, no Details. It is also
+// what makes the allowlist enforceable AT THE WIRE (CLAUDE.md INV: the planner emits ids, never coords).
+//
+// ⚠ IT DRAFTS DEEPER THAN THE PLANNER IS SERVED, on purpose — see the `targetCount` clamp below.
 // Charm over scale: every option is an intentional, recognizable place. See
 // docs/designs/places-endpoints-spec.md.
 //
@@ -20,10 +24,10 @@
 //
 // Usage:
 //   dotenvx run -f .env.development -- bun packages/studio/src/curate-places.ts
-//   ... --apply                  run it (drafts + resolves + upserts role-tagged `places`)
+//   ... --apply                  run it (drafts + resolves + UPSERTS `places` — never deletes)
 //   ... --region <slug>          curate a region (REQUIRED — no default; resolves to its bbox)
 //   ... --model sonnet           draft with Sonnet instead of the default Opus (cheaper A/B)
-//   ... --target 100             roughly how many places to draft (guidance to the model; 8-120)
+//   ... --target 100             roughly how many places to draft (guidance to the model; 8-250)
 //   ... --max-cost 1             abort before any spend if the LLM estimate exceeds this
 
 import { sql } from 'drizzle-orm'
@@ -49,9 +53,9 @@ import { ANTHROPIC_READY, GOOGLE_READY, requireEnv } from './config'
  *  quantity is the bug this repo keeps re-paying for, so the estimate reads the same `targetN` the
  *  prompt asks for.
  *
- *  Token figures are deliberately generous — one drafted place is a name + Places query + role +
- *  featured + a short rationale, and an estimate that UNDER-promises ahead of a paid run is the failure
- *  that actually costs money. */
+ *  Token figures are deliberately generous — one drafted place is a name + Places query + rank + a
+ *  short rationale, and an estimate that UNDER-promises ahead of a paid run is the failure that actually
+ *  costs money. */
 const EST_INPUT_TOKENS = 1_400
 const EST_TOKENS_PER_PLACE = 80
 
@@ -75,20 +79,25 @@ const apply = flags.has('apply')
 const regionKey = requireRegionKey(flags.value('region'))
 const modelChoice: EnrichModelChoice = flags.value('model') === 'sonnet' ? 'sonnet' : 'opus'
 const model = ENRICH_MODELS[modelChoice]
-// ⚠ THE CEILING IS COUPLED TO TWO THINGS, so do not raise it alone.
-// (1) `max_tokens` on the draft call below — the whole candidate list is ONE forced tool call, and a
-//     truncated one is HTTP 200 carrying a half-parsed list. Raised to 120 from 60 when curation moved
-//     to bbox scoping (a box spanning Tahoe AND Reno AND the Comstock needs a bigger budget than a
-//     shoreline ring did), and max_tokens went up with it + a stop_reason guard.
-// (2) MAX_PLAN_ANCHORS (apps/api/src/limits.ts) — the curated endpoint set rides in the planner's
-//     CACHED prompt prefix on every rider turn, so the region's total must stay well under it. 120 per
-//     RUN with an OR-merge upsert keeps a couple of passes clear of that ceiling.
+// ⚠ STORE DEEP, SERVE SHALLOW (founder, 2026-08-04). This ceiling is now DELIBERATELY ABOVE the
+// planner's roster cap, which is a reversal of what this comment used to say — and the reason is that
+// the old arrangement made the draft's cut-off IRREVERSIBLE. At 120, a place the model ranked 130th was
+// simply never named, and recovering it cost another paid draft. Stored deep, that same place sits in
+// the table at rank 130, visible in the console, promotable by editing ONE FIELD. The difference is
+// between "the model never said it" and "the model ranked it low", and only the second is free to fix.
+// (1) `max_tokens` on the draft call below is still COUPLED and must rise with this — the whole
+//     candidate list is ONE forced tool call, and a truncated one is HTTP 200 carrying a half-parsed
+//     list. There is a stop_reason guard so it fails loudly rather than storing half a region.
+// (2) MAX_PLAN_ANCHORS (apps/api/src/limits.ts, 200) is now the SERVE cap rather than a total the set
+//     must stay under. Exceeding it is expected; the roster takes the top 200 by rank. ⚠ That makes the
+//     truncation an ordinary operating state rather than an alarm, which is exactly why the admin
+//     Places page now shows it — "it is in the table" is only a promise if someone can check it.
 // ⚠ THE DEFAULT WAS SIZED FOR A UI THAT NO LONGER EXISTS. 30 was right when this set fed the
 // tap-to-pick create form — a list a human THUMB-SCROLLED, where 120 is a wall. `GET /drives/anchors`
 // was deleted end to end in 1.1 and the set's only consumer is now the PLANNER's roster, which Opus
 // reads whole from a cached prefix. Thumb-scrolling stopped binding; MAX_PLAN_ANCHORS (200) and model
 // attention are what bind, and every name added is one fewer in-persona "do not know that one".
-const targetCount = Math.max(8, Math.min(120, Number(flags.value('target')) || 100))
+const targetCount = Math.max(8, Math.min(250, Number(flags.value('target')) || 100))
 const maxCostUsd = maxCostFlag(flags)
 
 announce({ tool: 'curate-places', blast: ['SPENDS $', 'MUTATES DB'], apply })
@@ -202,17 +211,26 @@ For each place give a precise Google Places \`query\` that uniquely identifies i
 
 /** One forced-tool draft call → the candidate list. Records token usage for the spend tally. */
 async function draftCuratedPlaces(regionName: string, bbox: RegionBbox, targetN: number): Promise<PlaceDraft[]> {
-  const response = await getAnthropic('curate-places needs it to draft the candidate set').messages.create({
+  // ⚠ THIS MUST STREAM, and that is a hard SDK constraint rather than a preference. For a
+  // non-streaming call the SDK computes `(60 * 60 * 1000 * max_tokens) / 128_000` and THROWS when the
+  // result exceeds its 10-minute default (`calculateNonstreamingTimeout`, verified in the installed
+  // 0.112.1 source) — so any `max_tokens` above ~21_300 fails INSTANTLY, client-side, before a request
+  // is ever sent. A 250-place draft needs more than that, which is what pushed this off `.create()`.
+  // The failure would at least have been loud and free; it is recorded here so the next raise does not
+  // have to rediscover the arithmetic. `finalMessage()` returns the same Message `.create()` did, so
+  // the truncation guard and tool-block read below are unchanged.
+  const stream = getAnthropic('curate-places needs it to draft the candidate set').messages.stream({
     model,
-    // Sized for the LARGEST draft the clamp allows (120 places, each a name + Places query + role +
-    // rationale), not for the default 30. A ceiling is not a charge — only tokens actually emitted are
+    // Sized for the LARGEST draft the clamp allows (250 places, each a name + Places query + rank +
+    // rationale), not for the default. A ceiling is not a charge — only tokens actually emitted are
     // billed — so headroom here is free, while too little silently truncates the list.
-    max_tokens: 16_000,
+    max_tokens: 48_000,
     system: draftSystem(regionName, bbox, targetN),
     tools: [DRAFT_TOOL],
     tool_choice: { type: 'tool', name: DRAFT_TOOL.name },
     messages: [{ role: 'user', content: `Draft the curated places for ${regionName}.` }],
   })
+  const response = await stream.finalMessage()
   recordModelUsage(model, response.usage)
   // ⚠ CHECK THIS BEFORE READING THE TOOL BLOCK. The entire candidate list is ONE tool call, so a
   // max_tokens stop leaves a half-written JSON list that the SDK still surfaces as a `tool_use` block —
@@ -253,9 +271,18 @@ async function main(): Promise<void> {
     console.log(
       `DRY RUN — no paid calls made. --apply will:\n` +
         `  1. draft ~${targetCount} places with ${model} (${modelChoice}) — ~$${estUsd.toFixed(2)}\n` +
-        `  2. resolve each against Google Places (Autocomplete + Details, bbox-restricted) — a few cents, one-time\n` +
-        `  3. upsert the resolved rows into \`places\`, role-tagged (endpoint/break) + featured\n` +
-        `Then review / prune in the admin console. FOUNDER-GATED — this is a paid run.`,
+        // ⚠ The resolve cost SCALES WITH THE COUNT and this line used to call it "a few cents, one-time",
+        // which was written when a draft was ~30 places and silently stopped being true at 250. A dry run
+        // that under-states the spend it is asking authorisation for is the exact failure this whole
+        // preview exists to prevent, so it now names the call volume instead of guessing at dollars.
+        `  2. resolve up to ${targetCount} against Google Places — ${targetCount} Autocomplete + Details pairs, one-time\n` +
+        // ⚠ Deliberately does NOT restate the cap's number. studio cannot import apps/api (and
+        // MAX_PLAN_ANCHORS imports nothing on purpose), so naming it here would be a FOURTH hand-kept
+        // copy of one value — the drift this repo keeps paying for. Point at its home instead.
+        `  3. UPSERT the resolved rows into \`places\` (never deletes); they land ranked, and the planner\n` +
+        `     is served only the top-ranked subset (MAX_PLAN_ANCHORS, apps/api/src/limits.ts) — the rest\n` +
+        `     are stored and promotable by re-ranking in the console\n` +
+        `Then review / re-rank in the admin console. FOUNDER-GATED — this is a paid run.`,
     )
     return
   }

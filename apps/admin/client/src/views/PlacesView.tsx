@@ -36,6 +36,14 @@ const kindLabel = (t: string | null): string => (t ? t.replace(/_/g, ' ') : '—
  *  one number, deliberately: the console cannot import from apps/api. Keep them equal. */
 const TOP_RANK = 3
 
+/** How many of this region's places the PLANNER actually sees — `MAX_PLAN_ANCHORS` (apps/api/src/limits.ts).
+ *  ⚠ A third hand-copied number, for the same reason as TOP_RANK: the console cannot import from apps/api.
+ *  Keep them equal. It is surfaced here because curation now deliberately stores MORE rows than the
+ *  planner is served ("store deep, serve shallow"), so a region sitting over this is EXPECTED — but that
+ *  only stays honest if an operator can see where the line falls. Without this badge the tail is an
+ *  unverifiable claim: rows exist in the table that no rider can reach, and nothing on the page says so. */
+const PLANNER_ROSTER_CAP = 200
+
 export function PlacesView() {
   // Shared ['regions'] cache — MUST store the unwrapped array (like RegionsView/PoisView), not the
   // `{ regions }` wrapper: a shape mismatch under the same key crashes whichever view reads it next.
@@ -265,6 +273,14 @@ export function PlacesView() {
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Badge variant="secondary">{places.length} destinations</Badge>
                 <Badge variant="outline">{topRankCount} top-ranked</Badge>
+                {/* ⚠ Deliberately NOT styled as an error — being over the cap is the intended state, not
+                    a fault to clear. It tells the operator where the planner stops reading so a place
+                    that riders cannot reach is a VISIBLE consequence of its rank, not a silent one. */}
+                {places.length > PLANNER_ROSTER_CAP && (
+                  <Badge variant="outline" title={`The planner is handed the top ${PLANNER_ROSTER_CAP} by rank; the remaining ${places.length - PLANNER_ROSTER_CAP} are stored but never offered. Re-rank one to bring it in.`}>
+                    planner sees top {PLANNER_ROSTER_CAP} · {places.length - PLANNER_ROSTER_CAP} below the line
+                  </Badge>
+                )}
               </div>
             )}
           </div>

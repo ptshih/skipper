@@ -176,16 +176,22 @@ export const PLANNER_MAX_TOKENS = 2_048
  *  to this long PER LIVE INSTANCE before the skipper can send anyone to the new one. */
 export const PLAN_ROSTER_MEMO_TTL_MS = 60_000
 
-/** Ceiling on the curated anchors handed to the planner in its system prompt.
- *  ⚠ A CEILING, NOT A PAGE SIZE — deliberately far above what any region holds, so it can never
- *  silently truncate a real region's allowlist and make a legitimate endpoint unaskable. ⚠ The margin
- *  is no longer the comfortable one this once described: bbox-scoped curation took lake-tahoe from 26
- *  endpoints to 111 in a single day (2026-08-03), so a second broad curation pass on one region could
- *  approach this. Count the DB, never a number written here.
- *  It exists because the set grows with every paid `curate-places` run and rides in a per-request
- *  prompt: unbounded list, unbounded per-request bill. If a region ever approaches this, that is a
- *  product decision (a planner cannot hold hundreds of names in useful attention anyway), not a
- *  number to quietly raise. Pair it with a stable ORDER BY — see loadRegionAnchors. */
+/** How many curated anchors the planner is handed in its system prompt.
+ *  ⚠ THIS IS NOW A SERVE CAP, NOT A CEILING THE DATA MUST STAY UNDER — read this before treating a
+ *  truncation as a bug. It was written as the latter, on the assumption that a region holding more rows
+ *  than this meant something had gone wrong. That assumption is retired: curation deliberately drafts
+ *  DEEPER than this and stores the tail (founder, 2026-08-04, "store deep, serve shallow"), because the
+ *  alternative made the draft's cut-off irreversible — a place the model left out was simply never
+ *  named, recoverable only by paying for another draft, while a place ranked past this cap sits in the
+ *  table and is promotable by editing ONE field.
+ *  So a region exceeding this is an ORDINARY operating state. What still holds is why a cap exists at
+ *  all: the roster rides in a per-request prompt on every rider turn, so an unbounded list is an
+ *  unbounded per-request bill, and a planner cannot hold hundreds of names in useful attention anyway.
+ *  ⚠ It is only a safe cap while the order is MEANINGFUL — it must be by `rank`, so what gets dropped
+ *  is the least-asked-for rather than an arbitrary tail. Pair it with a stable ORDER BY; see
+ *  loadRegionAnchors. ⚠ Truncation is now invisible to an operator unless something SHOWS it, which is
+ *  why the admin Places page surfaces the count against this number — "it is in the table" is only a
+ *  promise if someone can check it. */
 export const MAX_PLAN_ANCHORS = 200
 
 /* -------------------------------------------------------------------------- */

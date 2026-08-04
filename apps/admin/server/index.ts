@@ -654,6 +654,14 @@ app.post('/admin/places', async (c) => {
  * calls, so it is what stops one click from spending whatever the client happened to post. It is ALSO
  * bounded by the clock: the resolve loop is serial at ~0.8s/draft, so 160 is ~130s against the 240s
  * idleTimeout at the foot of this file — read that comment before raising it. */
+// ⚠ THIS IS DELIBERATELY LOWER THAN THE CLI's 250 (packages/studio/src/curate-places.ts), and the gap
+// is NOT drift — the two are bound by different things and must not be "unified" (founder, 2026-08-04).
+// The CLI is a batch process with no clock over it, so it streams and drafts deep. This is a REQUEST
+// PATH: the call below is non-streaming with a 90s timeout inside this server's 240s idleTimeout, and a
+// deep draft cannot return inside that budget no matter what `max_tokens` says. Streaming would not
+// rescue it either — the ROUTE still has to answer. MAX_CURATE_DRAFTS below is the same story for the
+// resolve step. So: deep, store-everything runs are a CLI job; this route stays the reviewable
+// desk-sized preview it was built to be.
 const MAX_DRAFT_TARGET = 120
 const MAX_CURATE_DRAFTS = 160
 
@@ -682,9 +690,10 @@ app.post('/admin/places/draft', async (c) => {
   // ⚠ THE CLAMP IS THE ONE AUTHORITY on this number — the panel's min/max are affordance, not a guard.
   // Coupled to two things, so do not raise it alone: (1) `max_tokens` on the draft call (the list is ONE
   // forced tool call; a truncated one is a 200 carrying a half-parsed list — see draftCuratedPlaces),
-  // and (2) MAX_PLAN_ANCHORS (apps/api/src/limits.ts), since the curated set rides in the planner's
-  // cached prompt prefix on every rider turn. Raised 60 -> 120 with bbox scoping: a box spanning Tahoe
-  // AND Reno AND the Comstock needs a bigger budget than a shoreline ring did.
+  // and (2) this route's own CLOCK, which is what actually binds it — see MAX_DRAFT_TARGET above.
+  // ⚠ MAX_PLAN_ANCHORS (apps/api/src/limits.ts, 200) is NO LONGER a total this set must stay under; it
+  // is the planner's SERVE cap and a region is now expected to hold more rows than it. Exceeding it is
+  // an ordinary state, not an alarm — the roster takes the top 200 by rank.
   // ⚠ THE DEFAULT WAS SIZED FOR A UI THAT NO LONGER EXISTS. 30 was right when this set fed the
   // tap-to-pick create form — a list a human THUMB-SCROLLED, where 120 is a wall. `GET /drives/anchors`
   // was deleted end to end in 1.1 and the set's only consumer is now the PLANNER's roster, which Opus
