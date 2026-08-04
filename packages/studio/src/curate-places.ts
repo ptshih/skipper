@@ -38,7 +38,7 @@ import { announce, maxCostFlag, parseFlags } from './pipeline/ops'
 import { requireRegionBbox, requireRegionKey, resolveRegion, type RegionBbox } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'
 import { withRetry, sleep } from './pipeline/http'
-import { isAddressLike, isParkingLike, nameDisagrees, resolveCuratedPlace, type CuratedPlace, type PlacesBbox } from './pipeline/places'
+import { isAddressLike, isBusinessLike, isParkingLike, nameDisagrees, resolveCuratedPlace, type CuratedPlace, type PlacesBbox } from './pipeline/places'
 import { ENRICH_MODELS, getAnthropic, type EnrichModelChoice } from './models'
 import { llmSpendLines, llmSpentUsd, recordModelUsage, usageUsd } from '@skipper/shared'
 import { ANTHROPIC_READY, GOOGLE_READY, requireEnv } from './config'
@@ -333,7 +333,14 @@ async function main(): Promise<void> {
       unresolved++
       continue
     }
-    // ⚠ The general case the two guards above are corners of — see nameDisagrees. Both names are printed
+    // ⚠ Not a substitution like the two above — this is the DEEP TAIL's failure: a real name that a
+    // local business also carries ("Serene Lakes" → "Serene Lakes Realty"). See isBusinessLike.
+    if (isBusinessLike(place.types)) {
+      console.log(`  ·  ${d.name}: resolved to a business ("${place.name}") — skipped, not a destination.`)
+      unresolved++
+      continue
+    }
+    // ⚠ The general case the guards above are corners of — see nameDisagrees. Both names are printed
     // because a legitimate RENAME (Squaw Valley → Palisades Tahoe) lands here too and is an operator's
     // call to add back, not a silent loss.
     if (nameDisagrees(d.name, place.name)) {

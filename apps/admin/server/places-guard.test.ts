@@ -17,7 +17,8 @@
  * plural `types` separates them.
  */
 import { describe, expect, it } from 'bun:test'
-import { isAddressLike, isParkingLike, nameDisagrees } from './places'
+import { isAddressLike, isBusinessLike, isParkingLike, nameDisagrees } from './places'
+import { isBusinessLike as isBusinessLikeStudio } from '../../../packages/studio/src/pipeline/places'
 
 // Shapes as the Places API (New) returns them — address-component types vs a locality's types.
 const TOWN = ['locality', 'political']
@@ -143,5 +144,58 @@ describe('nameDisagrees', () => {
     // A name with nothing comparable left is not evidence of a substitution.
     expect(nameDisagrees('The', 'Truckee')).toBe(false)
     expect(nameDisagrees('', 'Truckee')).toBe(false)
+  })
+})
+
+describe('isBusinessLike', () => {
+  // Types as the 2026-08-04 deep run actually returned them.
+  const PAINTER = ['painter', 'point_of_interest', 'establishment']
+  const REALTY = ['real_estate_agency', 'point_of_interest', 'establishment']
+  const COWORKING = ['coworking_space', 'point_of_interest', 'establishment']
+  const BUS_STOP = ['bus_stop', 'transit_station', 'point_of_interest', 'establishment']
+
+  it('rejects the business rows that actually landed in the allowlist', () => {
+    // `Sierra Rainbow Painting Inc` reached rank 10 — a painting contractor the planner could offer a
+    // rider as a destination. `Serene Lakes Realty` is the shape that names it: a real place ("Serene
+    // Lakes") whose name a local business also carries.
+    expect(isBusinessLike(PAINTER)).toBe(true)
+    expect(isBusinessLike(REALTY)).toBe(true)
+    expect(isBusinessLike(COWORKING)).toBe(true)
+    expect(isBusinessLike(BUS_STOP)).toBe(true)
+  })
+
+  it('ADMITS the hospitality + landmark types a broader rule would have eaten', () => {
+    // ⚠ THIS IS THE POINT OF THE GUARD'S NARROWNESS, and the reason `lodging`/`hotel`/restaurant types
+    // are absent from it. Camp Richardson, Edgewood Tahoe and Sunnyside Restaurant & Lodge are real
+    // top-of-mind Tahoe destinations; a rule broad enough to catch a motel takes them too.
+    expect(isBusinessLike(['resort_hotel', 'lodging', 'point_of_interest'])).toBe(false)
+    expect(isBusinessLike(['american_restaurant', 'bar', 'restaurant', 'food'])).toBe(false)
+    expect(isBusinessLike(['lodging', 'point_of_interest', 'establishment'])).toBe(false)
+    expect(isBusinessLike(['campground', 'lodging', 'point_of_interest'])).toBe(false)
+    expect(isBusinessLike(['museum', 'point_of_interest', 'establishment'])).toBe(false)
+    expect(isBusinessLike(['ski_resort', 'point_of_interest', 'establishment'])).toBe(false)
+  })
+
+  it('leaves a rail depot alone — a station can BE the landmark', () => {
+    // Deliberately narrower than "transit": `transit_station`/`train_station` are excluded so Truckee's
+    // depot survives. `bus_stop` alone catches the observed failure because Google tags a stop with both.
+    expect(isBusinessLike(TRANSIT)).toBe(false)
+    expect(isBusinessLike(['train_station', 'transit_station', 'point_of_interest'])).toBe(false)
+  })
+
+  it('admits towns and parks, and does not fail closed on absent types', () => {
+    expect(isBusinessLike(TOWN)).toBe(false)
+    expect(isBusinessLike(STATE_PARK)).toBe(false)
+    expect(isBusinessLike(undefined)).toBe(false)
+    expect(isBusinessLike([])).toBe(false)
+  })
+
+  it('the two mirrored copies agree — they are hand-kept and drift silently', () => {
+    // ⚠ There is no shared module: apps/admin cannot depend on @skipper/studio, so this guard exists
+    // TWICE, byte-identical by hand. Nothing but this test notices when one is edited and the other is
+    // not, and a divergence means the console and the CLI would curate different sets from one draft.
+    for (const types of [PAINTER, REALTY, COWORKING, BUS_STOP, TOWN, STATE_PARK, TRANSIT, undefined]) {
+      expect(isBusinessLikeStudio(types)).toBe(isBusinessLike(types))
+    }
   })
 })

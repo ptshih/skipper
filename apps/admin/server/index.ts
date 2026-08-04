@@ -62,7 +62,7 @@ import { checkAccessPoint, checkSpeakableAnchor } from '@skipper/engine'
 import { groundingHash } from '@skipper/db/hash'
 import { requireAdmin, type AdminEnv } from './auth'
 import { bboxError, bboxOverlapsRect, parseBbox, pointInBbox, type BboxCorners } from './bbox'
-import { draftCuratedPlaces, isAddressLike, isParkingLike, nameDisagrees, resolvePlaceInBbox, type PlaceDraft, type ResolvedPlace } from './places'
+import { draftCuratedPlaces, isAddressLike, isBusinessLike, isParkingLike, nameDisagrees, resolvePlaceInBbox, type PlaceDraft, type ResolvedPlace } from './places'
 import { contentTypeForKey, presignGet } from './storage'
 import {
   buildJobArgs,
@@ -774,6 +774,17 @@ app.post('/admin/places/curate', async (c) => {
         status: 'dropped',
         resolvedName: place.name,
         message: `resolved to a car park (“${place.name}”) — Google returned the lot that SERVES the place, not the place`,
+      })
+      continue
+    }
+    // ⚠ Not a substitution like the two above — the DEEP TAIL's failure: a real name a local business
+    // also carries ("Serene Lakes" → "Serene Lakes Realty"). See isBusinessLike.
+    if (isBusinessLike(place.types)) {
+      results.push({
+        name: d.name,
+        status: 'dropped',
+        resolvedName: place.name,
+        message: `resolved to a business (“${place.name}”) — a transaction, not a destination`,
       })
       continue
     }

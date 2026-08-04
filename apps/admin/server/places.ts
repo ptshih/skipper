@@ -148,6 +148,56 @@ export function isParkingLike(types: string[] | undefined): boolean {
   return (types ?? []).some((t) => PARKING_TYPES.has(t))
 }
 
+/** Types whose purpose is a TRANSACTION or a TRANSFER rather than a visit.
+ *  ⚠ TWO FAMILIES, ONE IDEA, and the idea is what keeps this list from growing into a shredder: a place
+ *  you go to in order to DO BUSINESS (a contractor, an agency, a bank) and a place you go to in order to
+ *  LEAVE (a bus stop, a transit platform). Neither is somewhere a rider asks to be driven for its own
+ *  sake, which is the only question this set answers.
+ *  ⚠ WHAT IS DELIBERATELY ABSENT MATTERS MORE THAN WHAT IS HERE. `lodging`, `hotel`, `resort_hotel`,
+ *  `inn`, restaurants, museums, campgrounds and golf courses are all EXCLUDED on purpose — Camp
+ *  Richardson, Edgewood Tahoe and Sunnyside Restaurant & Lodge are real, top-of-mind Tahoe destinations,
+ *  and a rule broad enough to catch a motel would take them with it. The two junk rows those families
+ *  contain (`Paradise Tahoe`, `The Y`) are an OPERATOR's prune, not a guard's call. Every type added here
+ *  must be one that could never, under any phrasing, be a place someone wants to drive to. */
+const BUSINESS_TYPES = new Set([
+  // Trades + professional services. Observed live: `Sierra Rainbow Painting Inc` [painter] landed as a
+  // curated destination at rank 10 in the 2026-08-04 deep run — a painting contractor in the planner's
+  // allowlist, offerable to a rider as somewhere to drive.
+  'painter', 'plumber', 'electrician', 'roofing_contractor', 'general_contractor', 'moving_company',
+  'storage', 'real_estate_agency', 'insurance_agency', 'lawyer', 'accounting', 'dentist', 'doctor',
+  'veterinary_care', 'coworking_space', 'corporate_office',
+  // Vehicle + money errands.
+  'car_repair', 'car_dealer', 'car_wash', 'bank', 'atm',
+  // Transit — but ONLY the unambiguous kind. Same shape as isParkingLike: somewhere you get OUT of the
+  // car, not somewhere you arrive. Observed live: `The Y`, a real South Lake Tahoe junction, resolved to
+  // its bus stop.
+  // ⚠ `transit_station` and `train_station` are DELIBERATELY EXCLUDED. places-guard.test.ts already
+  // treats a transit fixture as an ordinary admissible establishment, and it is right to: a depot can be
+  // the landmark itself (Truckee's is). Catching `bus_stop` is enough for the observed failure, because
+  // Google tags a stop with both — so the narrow type does the work without taking depots with it.
+  'bus_stop', 'taxi_stand',
+])
+
+/**
+ * True when a resolve came back as a BUSINESS or a transit stop rather than a destination.
+ *
+ * ⚠ THE THIRD GUARD OF THE SAME SHAPE, and it exists because the first deep draft made the failure
+ * visible at scale. `isAddressLike` catches a street, `isParkingLike` catches a car park; both are cases
+ * where the draft was RIGHT and the resolve substituted. This one catches a different cause: a draft that
+ * was WRONG, or right about a name that a local business also happens to carry. Drafting deeper means
+ * reaching further down the model's confidence, and the tail is where "Serene Lakes" (a real place) comes
+ * back as "Serene Lakes Realty".
+ *
+ * ⚠ PRUNING WITHOUT THIS IS TEMPORARY. Deleting the rows fixes today's allowlist and the next
+ * `curate-places` run puts them straight back, which is why the prune and this guard belong together.
+ *
+ * ⚠ Mirrored in the sibling copy (apps/admin/server/places.ts / packages/studio/src/pipeline/places.ts)
+ * — the two must move together, like the draft prompt and the resolver they sit beside.
+ */
+export function isBusinessLike(types: string[] | undefined): boolean {
+  return (types ?? []).some((t) => BUSINESS_TYPES.has(t))
+}
+
 /** Words that carry no identity — dropped before comparing a drafted name to what came back. Kept
  *  deliberately SHORT: every word removed here is one fewer chance for two names to agree, and an
  *  over-eager list turns this guard into a shredder. */
