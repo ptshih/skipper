@@ -13,7 +13,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { PRE_START_STALL_MS } from '@skipper/engine'
 import { loadPlayback, resignPlayback } from './offline'
-import { applyPreviewAudioMode, releasePreviewAudioSession, useStartWatchdog } from './preview-audio'
+import { applyPreviewAudioMode, releaseAudioSession } from './audio-session'
+import { useStartWatchdog } from './preview-audio'
 import { decideFail, decideToggle, sawFreshAudio } from './preview-util'
 
 export interface StopPreview {
@@ -81,7 +82,7 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
         setActiveSeq((s) => (s === seq ? null : s))
         activeSeqRef.current = null
       }
-      if (act.releaseSession) releasePreviewAudioSession()
+      if (act.releaseSession) releaseAudioSession()
       setUnplayableSeq(seq)
     },
     [clearStartWatchdog],
@@ -212,7 +213,7 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
   // reading the drive — the one that left their podcast dead until they navigated away.
   useEffect(() => {
     if (!status.didJustFinish) return
-    releasePreviewAudioSession()
+    releaseAudioSession()
   }, [status.didJustFinish])
 
   // A screen unmounting mid-load must not leave a timer that fires into a dead component.
@@ -241,7 +242,7 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
     // `doNotMix` it INTERRUPTS the rider's own music, and iOS only resumes theirs once the session is
     // deactivated. Without this, previewing one stop stops their podcast permanently. `useDrive` pays
     // the same cost at the end of a drive and its comment there records why it is not optional.
-    releasePreviewAudioSession()
+    releaseAudioSession()
     activeSeqRef.current = null
     setActiveSeq(null)
     setUnplayableSeq(null)

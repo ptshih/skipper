@@ -15,11 +15,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, AppState, Image, Linking, useAnimatedValue } from 'react-native'
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake'
 import {
-  setAudioModeAsync,
-  setIsAudioActiveAsync,
   useAudioPlayer,
   useAudioPlayerStatus,
 } from 'expo-audio'
+import { applyDriveAudioMode, releaseAudioSession } from './audio-session'
 import {
   clampSeekSec,
   cumulativeMeters,
@@ -63,12 +62,6 @@ const SIM_MPH = 60
 // a couple minutes on the couch (the fix DATA — speeds, headings — is unchanged).
 const SIM_FAST_SCALE = 8
 
-// The audio interruption mode for the drive. 'doNotMix' BY DESIGN (founder-decided 2026-06-19) — the
-// drive takes EXCLUSIVE focus: it IS the audio experience (the Skipper's curated soundtrack owns the
-// drive, the voice owns the stops — see driveMusic.ts), NOT a narration that ducks the rider's own music.
-// Do NOT "flip" this to 'duckOthers' — ducking leaves the rider's playlist competing under the Skipper
-// (it was tried and rejected) and breaks lock-screen Now Playing. See docs/decisions/drive-audio-exclusive-focus.md.
-const DRIVE_INTERRUPTION_MODE = 'doNotMix' as const
 
 // Keep-awake lock tag — the foreground GPS watch dies on screen-lock, so hold the screen on
 // while actively driving (scoped to `driving`, not the whole screen). (spec §5)
@@ -458,11 +451,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       setError(null)
       setNeedsAccount(false)
       try {
-        await setAudioModeAsync({
-          playsInSilentMode: true,
-          shouldPlayInBackground: true,
-          interruptionMode: DRIVE_INTERRUPTION_MODE,
-        }).catch(() => {})
+        await applyDriveAudioMode()
         // OFFLINE-FIRST: a downloaded drive loads its manifest + local file:// clips with zero
         // network; otherwise this fetches the manifest (clips pre-signed inline) and streams. The
         // url map keys place narrations by seq.
@@ -534,14 +523,9 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     try {
       player.setActiveForLockScreen(false)
     } catch {}
-    // Hand the audio session BACK at the end of the drive. A drive holds an EXCLUSIVE `doNotMix`
-    // session for its whole length (by design — the drive IS the audio, not a voice-over), and pausing
-    // the player does not release it: iOS resumes the rider's own music/podcast only once the session
-    // is deactivated. Without this the car stays silent after "you've arrived" until something else
-    // happens to grab focus. `setIsAudioActiveAsync` is a real expo-audio export (native on iOS and
-    // Android) and is what its own docs point at for this; fire-and-forget, since a failure here must
-    // never block finishing the drive.
-    void setIsAudioActiveAsync(false).catch(() => {})
+    // Hand the session back at the end of the drive — the obligation that pairs with holding an
+    // exclusive one for its whole length (./audio-session states it once, for every surface).
+    releaseAudioSession()
     setActiveSeq(null)
     setDriving(false)
     setDone(true)

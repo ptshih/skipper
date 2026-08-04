@@ -25,7 +25,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { PRE_START_STALL_MS } from '@skipper/engine'
 import { track } from './analytics'
-import { applyPreviewAudioMode, releasePreviewAudioSession, useStartWatchdog } from './preview-audio'
+import { applyPreviewAudioMode, releaseAudioSession } from './audio-session'
+import { useStartWatchdog } from './preview-audio'
 import { decideFail, decideToggle, PREVIEW_END_EPS_SEC, sawFreshAudio } from './preview-util'
 
 export interface RoutePreview {
@@ -101,7 +102,7 @@ export function useRoutePreview(): RoutePreview {
         setActiveCardId((c) => (c === cardId ? null : c))
         activeCardIdRef.current = null
       }
-      if (act.releaseSession) releasePreviewAudioSession()
+      if (act.releaseSession) releaseAudioSession()
       setFailedCardId(cardId)
     },
     [clearStartWatchdog],
@@ -220,7 +221,7 @@ export function useRoutePreview(): RoutePreview {
     // nothing was ever interrupted, so nothing needed handing back. `useDrive` already paid to learn
     // this at the end of a drive; the same rule applies to every surface that takes exclusive focus.
     // Fire-and-forget — a failure here must never block stopping the clip.
-    releasePreviewAudioSession()
+    releaseAudioSession()
     activeCardIdRef.current = null
     setActiveCardId(null)
     // ⚠ `failedCardId` SURVIVES a stop, deliberately — clearing it here handed the rider back a play
@@ -237,7 +238,7 @@ export function useRoutePreview(): RoutePreview {
   // the one that strands their music.
   useEffect(() => {
     if (!status.didJustFinish) return
-    releasePreviewAudioSession()
+    releaseAudioSession()
   }, [status.didJustFinish])
 
   // ── preview_clip_played: COMPLETION — the other half of the pair emitted in play().
