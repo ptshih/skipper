@@ -235,6 +235,19 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   that the sunburst was CLIPPED rather than faint (so the opacity was never the bug), and that the
   offline component split was deliberately NOT done because splitting introduces the very unmount
   hazard it was meant to prevent.
+- [chat-render-performance.md](designs/chat-render-performance.md) — ✅ **BUILT 2026-08-03**: the chat
+  screen bogging down as the conversation grows, traced and fixed. `app/index.tsx` held the composer
+  draft, the stream, the 2 Hz audio status AND the transcript in one component with no memoized rows
+  beneath it, so every keystroke and every audio tick reconciled the whole conversation — cost growing
+  with length, exactly the reported symptom. Steps 1–6 landed and were **measured on the simulator**
+  (per-keystroke screen renders 1 → 0; per-tick cards ~50 → 1, composer ~50 → 0), and the same header
+  re-commit bug was then swept onto every other ticking screen. ⚠ **Step 7 (moving the audio
+  subscription off the screen root) is DECLINED, not deferred** — its entry records the numbers that
+  killed it; reopen only on real-device jank. Step 8 (virtualization) is a founder decision left
+  deliberately UNMADE, and the evidence it needs is a REAL DEVICE on a LONG conversation — everything
+  here is simulator-only, nothing past ~8 turns. ⚠ The memo-silent-no-op trap (a memoized child whose
+  caller rebuilds a prop every render, so the memo does nothing and fails silently) appeared THREE
+  times in this work — assume it rather than rediscovering it.
 - [fused-cluster-generation-spec.md](designs/fused-cluster-generation-spec.md) — **phase 4** of the
   legibility layer: one fused telling per cluster, and the read-path work that makes it audible.
   **BUILT, GENERATED AND RELEASED** — 37 fused tellings, all released (counted 2026-08-02); only
