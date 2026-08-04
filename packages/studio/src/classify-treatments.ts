@@ -51,6 +51,7 @@ import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { leaderGroups, mergeDuplicateGroups, metersBetween, pickSubject, type ClassifiedGroup } from './pipeline/clustering'
 import { isContainer } from './pipeline/containment'
 import { getAnthropic, JUDGMENT_MODEL } from './models'
+import { llmSpendLines, llmSpentUsd, recordModelUsage } from '@skipper/shared'
 import { NARRATION_CONCURRENCY } from './config'
 
 /** Default grouping radius. ⚠ NOT derived — 600 m produces sane group diameters (leader grouping bounds
@@ -161,6 +162,12 @@ async function classify(group: Row[]): Promise<Verdict | null> {
       }),
     { label: `classify(${group[0]!.name})` },
   )
+  // ⚠ RECORD BEFORE the parse below can return null: the tokens are billed the moment the call
+  // returns, and a missing verdict must not also lose the charge. This is the ordering eval/charm.ts
+  // learned on 2026-08-02 — and this CLI is where the SAME defect survived, so until now a run that
+  // classified 64 groups reported nothing about what it billed. `--clear` makes no model calls, which
+  // is why the reporter at the bottom is conditional rather than unconditional.
+  recordModelUsage(JUDGMENT_MODEL, res.usage)
   const call = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
   return (call?.input as Verdict | undefined) ?? null
 }
@@ -426,7 +433,22 @@ async function main(): Promise<void> {
   console.log(`\n✓ ${n} cluster(s) written, ${memberCount} membership(s) set. Undo: --apply --clear`)
 }
 
+/** Report what this run actually BILLED — doctrine is "a paid one reports what it BILLED, not what it
+ *  planned", and the header's ~$0.82-per-64-groups figure is a planning estimate, not a receipt.
+ *  ⚠ Hung off `finally` rather than called at each exit for two reasons: `main` returns from FOUR places
+ *  (nothing-to-classify, both previews, the apply) and only some of them have spent, so a print per exit
+ *  would be four copies of one decision — the drift this repo keeps paying for. And a run that THROWS
+ *  mid-classification has already spent, so it owes the same receipt a clean one does.
+ *  Conditional because `--clear` makes no model calls: a $0.00 line there would read as a bill, not a
+ *  no-op. `llmSpentUsd()` is the single expression that answers "did we bill anything". */
+function reportLlmSpend(): void {
+  if (llmSpentUsd() <= 0) return
+  for (const line of llmSpendLines()) console.log(line)
+  console.log(`LLM spend this run: ~$${llmSpentUsd().toFixed(2)}.`)
+}
+
 main()
+  .finally(reportLlmSpend)
   .then(() => process.exit(0))
   .catch((e) => {
     console.error(e)

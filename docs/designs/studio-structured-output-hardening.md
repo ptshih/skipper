@@ -1,8 +1,11 @@
 # Studio's structured-output layer — harden it in-repo, do NOT adopt the AI SDK
 
-> **Status:** 💡 **ASSESSED 2026-08-04, recommendation is NO on the framework and YES on a ~40-line
-> in-repo helper.** Not scheduled; stages 0–2 below are free and independently shippable, and none of
-> them needs a founder go (no paid run). This answers the open half of
+> **Status:** 🔨 **IN PROGRESS (founder go 2026-08-04, "go for all of them")** — recommendation was NO on
+> the framework and YES on a ~40-line in-repo helper, and the build is now running the stages below.
+> **Stage 0 (the paid CLI's missing receipt) is LANDED.** No stage spends, so none needed a paid-run go.
+> ⚠ Stage 3's one real decision — advisory judges DEGRADE rather than throw — was taken as recommended
+> under the blanket go; it is flagged here because it is reversible and the founder may want the other
+> policy. This answers the open half of
 > [planner-directions-not-taken.md](../decisions/planner-directions-not-taken.md) §2, which closed the
 > question for the LIVE PLANNER and left `packages/studio` named as "the first target if ever
 > revisited" — that pointer was written from the shape of the code, before anyone counted what studio's
