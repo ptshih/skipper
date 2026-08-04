@@ -137,6 +137,27 @@ export async function judgePersona(outcomes: readonly TurnOutcome[]): Promise<Pe
     messages: [{ role: 'user', content: `Every turn of the run, in order:\n\n${body}` }],
   })
   recordModelUsage(JUDGE_MODEL, res.usage)
+  // ⚠ A TRUNCATED verdict must never read as a scored one, and this was the ONE model call in the repo
+  // that did not check. Its four siblings all branch on stop_reason (studio's narrate.ts, scout.ts,
+  // veracity.ts and grounding.ts, whose comment names the others); this judge never got the lesson, and
+  // CLAUDE.md lists the outcome in its own doctrine: "a judge that never ran, and a truncated verdict
+  // scoring 1.0". `max_tokens` cuts the forced tool call off mid-JSON, so `turns` arrives absent or
+  // half-written — and a SHORT turns array scores the run on the turns that survived, which reads as a
+  // better run rather than an incomplete one.
+  //
+  // Throwing is the right shape here even though the replay has already billed ~$0.55: run.ts wraps this
+  // call and prints "persona is UNJUDGED" loudly, precisely because "the rollup treats an unevaluated
+  // dimension as passing, which is only honest alongside this line". So one truncation costs the
+  // advisory dimension and nothing else — every gate still reports.
+  //
+  // ⚠ Not urgent, deliberately recorded as such: ~2,200 of 8,000 tokens are used at 57 turns. It becomes
+  // live by growing the suite, which is exactly what keeps happening (54 → 57 in one day).
+  if (res.stop_reason === 'max_tokens') {
+    throw new Error(
+      `persona judge response truncated at max_tokens (8000) across ${outcomes.length} turns — ` +
+        'the verdict is incomplete; refusing to score it.',
+    )
+  }
   const call = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
   if (!call) throw new Error('persona judge returned no structured report')
   const verdict = call.input as PersonaVerdict
