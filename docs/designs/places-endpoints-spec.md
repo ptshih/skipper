@@ -47,6 +47,19 @@
 > cannot place it confidently" clause did NOT help — the model has no map and cannot self-check
 > containment. Prune them before resolving; `isAddressLike` catches only the endpoint-role ones.
 >
+> ✅ **RESOLVED AND WRITTEN 2026-08-03** (founder go): 107 drafted → 15 out-of-box pruned by hand → 92
+> resolved → **87 written, 0 errors, 22.6s**. `places` is now **138 rows / 109 endpoint-eligible** (from
+> 26 at the start of the day) and the easternmost anchor moved **−119.8966 → −119.5930**: Virginia City,
+> Gold Hill, Silver City, Dayton, Mound House, Empire, Carson City, Genoa, Minden, Gardnerville, Washoe
+> City, Bowers Mansion are all reachable endpoints. The Reno/Sparks gap stands (manual add).
+> ✅ **`isAddressLike` FIRED ON LIVE DATA** — previously recorded here as unexercised. It refused
+> "Heavenly Village" → *Heavenly Village Way* and "Secret Cove" → *Secret Harbor Drive*, both real
+> substitutions, both correctly kept out. ⚠ The pre-1.1 **`Heavenly Village Way` row still sits in the
+> table, ENDPOINT + featured** — the guard only screens new curations, and this one predates it. Its
+> COORDS are right (the street runs through the village), so it routes correctly and is a NAMING wart,
+> not the Hope Court failure; left in place deliberately, and `PATCH /admin/places/:id` sends booleans
+> only, so a rename is a DB edit.
+>
 > ⚠ **SECOND, SEPARATE DEFECT FOUND IN THAT RUN — a silent WRONG resolve, now guarded.** Autocomplete is
 > sent a HARD bbox restriction and the resolver takes the FIRST prediction with no check that it
 > resembles the query — so a draft naming a place just OUTSIDE the box comes back as the nearest in-box
