@@ -4,7 +4,7 @@
 // rider's picker. Coords are resolved + STORED at curation, so the runtime picker makes zero live
 // Places calls. This page is the review/prune/promote + manual-add surface; the bulk seed is the
 // interactive Curate button (Opus draft → prune → Places resolve). See docs/designs/places-endpoints-spec.md.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Loader2, MapPin, Navigation, Plus, Search, Sparkles, Star, Trash2 } from 'lucide-react'
 import { api, type CurateResult, type PlaceDraft, type PlaceRow, type ResolvedPlace } from '@/lib/api'
@@ -97,6 +97,32 @@ export function PlacesView() {
   /** The place whose access point is being edited, or null. */
   const [accessFor, setAccessFor] = useState<PlaceRow | null>(null)
 
+  // ── Row ⇄ pin focus ────────────────────────────────────────────────────────
+  // A row carries every field a place HAS (the table is the detail view), so a row click has nothing to
+  // open. What it can answer is the one question the table can't: WHERE is this. Clicking a row centers
+  // the map on that pin and opens its name bubble; clicking a pin lights up its row.
+  //
+  // ⚠ The NONCE is what makes clicking the same row twice work — see FocusPin in google-map.tsx. Only a
+  // ROW click bumps it, so clicking a pin never moves the camera under the operator's own cursor.
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [focusNonce, setFocusNonce] = useState(0)
+  const mapRef = useRef<HTMLDivElement>(null)
+  const focusPlace = (id: string) => {
+    setSelectedId(id)
+    setFocusNonce((n) => n + 1)
+    // Panning a map that has scrolled off the top of a 100-row table is an invisible no-op. `nearest`
+    // scrolls the minimum needed and does nothing at all when the map is already fully on screen.
+    // ⚠ NO `behavior: 'smooth'`. Written that way first, it silently did NOTHING — measured in the
+    // browser, the smooth call settled back at the scroll position it started from while the default
+    // landed the map on screen every time, with reduced-motion off and `scroll-behavior` already
+    // `auto`, so there was no setting to blame. The row highlighted and the map never came back. The
+    // instant jump isn't the compromise here, it's the only version that runs.
+    mapRef.current?.scrollIntoView({ block: 'nearest' })
+  }
+  // A selection belongs to the region it was made in — carrying an id across a region switch would
+  // highlight nothing and leave a stale pin id pointed at another region's list.
+  useEffect(() => setSelectedId(null), [region])
+
   const confirm = useConfirm()
   const deleteMut = useMutation({
     // Same reasoning as above: invalidate the list this delete actually came from.
@@ -113,6 +139,7 @@ export function PlacesView() {
   const pins = useMemo(
     () =>
       places.map((p) => ({
+        id: p.id,
         lat: p.lat,
         lng: p.lng,
         name: p.name,
@@ -120,6 +147,7 @@ export function PlacesView() {
         endpointEligible: true,
         breakEligible: false,
         kind: p.primaryType ? kindLabel(p.primaryType) : null,
+        rank: p.rank,
       })),
     [places],
   )
@@ -154,6 +182,9 @@ export function PlacesView() {
       header: 'Rank',
       headClassName: 'text-center w-24',
       cellClassName: 'text-center',
+      // The row itself focuses the map, so this cell keeps its clicks: focusing the field to retype a
+      // rank must not also fling the camera somewhere.
+      cellStopPropagation: true,
       // ⚠ 1 = most likely to be NAMED, not "best". A blank clears it, which sorts the place LAST rather
       // than first — the same rule the roster and the cold open apply (`NULLS LAST`).
       cell: (p) => (
@@ -176,6 +207,9 @@ export function PlacesView() {
     {
       header: '',
       headClassName: 'w-20',
+      // Same reason as Rank — and it matters more here, where the neighbouring button DELETES a row
+      // from the planner's endpoint allowlist.
+      cellStopPropagation: true,
       cell: (p) => (
         <div className="flex items-center justify-end">
           <Button variant="ghost" size="icon" aria-label={`Access point for ${p.name}`} onClick={() => setAccessFor(p)}>
@@ -247,11 +281,19 @@ export function PlacesView() {
           )}
 
           {region && pins.length > 0 && (
-            <div className="mb-5">
-              <PlacesMap places={pins} bbox={bbox} className="h-72" />
+            <div className="mb-5" ref={mapRef}>
+              <PlacesMap
+                places={pins}
+                bbox={bbox}
+                className="h-72"
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                focusNonce={focusNonce}
+              />
               <p className="mt-1.5 text-xs text-muted-foreground">
                 <span style={{ color: PLACE_PIN_COLORS.featured }}>●</span> rank 1–{TOP_RANK} ·{' '}
-                <span style={{ color: PLACE_PIN_COLORS.endpoint }}>●</span> the rest
+                <span style={{ color: PLACE_PIN_COLORS.endpoint }}>●</span> the rest · click a row to find
+                it here
               </p>
             </div>
           )}
@@ -260,6 +302,8 @@ export function PlacesView() {
             columns={columns}
             rows={places}
             rowKey={(p) => p.id}
+            onRowClick={(p) => focusPlace(p.id)}
+            rowClassName={(p) => (p.id === selectedId ? 'bg-muted hover:bg-muted' : undefined)}
             loading={isPending && !!region}
             skeletonRows={5}
             empty={

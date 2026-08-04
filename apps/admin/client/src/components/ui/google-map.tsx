@@ -68,6 +68,8 @@ const MARKER_SHADOW = { filter: 'drop-shadow(0 1px 2px rgba(0,0,0,.45))' }
 export const PLACE_PIN_COLORS = { featured: '#d97706', endpoint: '#0f766e', break: '#64748b' } as const
 
 interface PlacePin {
+  /** The place row's id — the handle the /places TABLE uses to open this pin's window from a row click. */
+  id: string
   lat: number
   lng: number
   name: string
@@ -76,6 +78,8 @@ interface PlacePin {
   breakEligible?: boolean
   /** Humanized place kind for the click popup (e.g. "scenic spot"); null when unknown. */
   kind?: string | null
+  /** How likely a visitor is to NAME this place, 1 = most; null = unranked. Shown in the popup. */
+  rank: number | null
 }
 
 function placePinFill(p: PlacePin): string {
@@ -269,12 +273,20 @@ function PlaceMarker({
         // outside the app's CSS scope.
         <InfoWindow anchor={marker} onClose={onClose}>
           <div style={{ minWidth: 132, lineHeight: 1.35 }}>
-            <div style={{ fontWeight: 600 }}>{pin.name}</div>
+            {/* ⚠ The name MUST name its own color. The bubble is portaled into Google's always-WHITE
+                InfoWindow, but `color` still inherits down the DOM — so under the console's dark theme
+                the title rendered near-white on white and the one word identifying the pin was the one
+                word you couldn't read. Every other line here already sets a color, which is why only
+                this one was invisible. */}
+            <div style={{ fontWeight: 600, color: '#0f172a' }}>{pin.name}</div>
             {pin.kind && <div style={{ fontSize: 12, color: '#64748b' }}>{pin.kind}</div>}
-            <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 11 }}>
-              {pin.featured && <span style={{ color: PLACE_PIN_COLORS.featured }}>★ featured</span>}
-              {pin.endpointEligible && <span style={{ color: PLACE_PIN_COLORS.endpoint }}>● endpoint</span>}
-              {pin.breakEligible && <span style={{ color: PLACE_PIN_COLORS.break }}>● break</span>}
+            {/* RANK, not roles. This line used to read "● endpoint" on every pin — true of every row
+                since roles were deleted (2026-08-04), so it identified nothing. Rank is the one thing
+                that still separates two pins, and this bubble is now what a table row click opens. */}
+            <div
+              style={{ marginTop: 4, fontSize: 11, color: pin.featured ? PLACE_PIN_COLORS.featured : '#64748b' }}
+            >
+              {pin.rank != null ? `${pin.featured ? '★ ' : ''}rank ${pin.rank}` : 'unranked'}
             </div>
           </div>
         </InfoWindow>
@@ -283,36 +295,89 @@ function PlaceMarker({
   )
 }
 
-/** The clickable place-pin layer — holds the single open-InfoWindow selection. */
-function PlaceMarkerLayer({ places }: { places: PlacePin[] }) {
-  const [selected, setSelected] = useState<number | null>(null)
+/** The clickable place-pin layer. Selection is CONTROLLED by the page, so one id drives both the open
+ *  InfoWindow and the highlighted table row — a pin and its row can never disagree about what's picked. */
+function PlaceMarkerLayer({
+  places,
+  selectedId,
+  onSelect,
+}: {
+  places: PlacePin[]
+  selectedId: string | null
+  onSelect: (id: string | null) => void
+}) {
   return (
     <>
-      {places.map((p, i) => (
+      {places.map((p) => (
         <PlaceMarker
-          key={`${p.lat},${p.lng},${i}`}
+          key={p.id}
           pin={p}
-          selected={selected === i}
-          onSelect={() => setSelected(i)}
-          onClose={() => setSelected(null)}
+          selected={selectedId === p.id}
+          onSelect={() => onSelect(p.id)}
+          onClose={() => onSelect(null)}
         />
       ))}
     </>
   )
 }
 
-/** A multi-pin map of a region's CURATED places, fit to the region bbox. Pins are color-coded by role
- *  (amber=featured, teal=endpoint, slate=break); CLICK a pin for an InfoWindow with its name/kind/roles.
- *  Empty `places` just shows the bboxed region. */
-export function PlacesMap({ places, bbox, className }: { places: PlacePin[]; bbox: string | null; className?: string }) {
+/**
+ * Center the camera on a pin when the PAGE asks (a table row click), never when the operator clicks the
+ * pin itself — that pin is already under their cursor and yanking the map out from under it is hostile.
+ *
+ * ⚠ Both halves of the signature are load-bearing:
+ *  - It keys on a NONCE, not on the position, for two reasons. A pin click changes the position without
+ *    meaning "move the camera", and clicking the SAME row twice (to come back after panning away) does
+ *    not change the position at all — an effect watching lat/lng would fire on the first and sit still
+ *    on the second, which is exactly backwards. The position rides a ref for the same reason.
+ *  - It PANS and does not zoom. The map is fit to the region bbox, and that overview is the operator's
+ *    working context; a pin centered under an open name bubble already answers "which one is it"
+ *    without spending their zoom level, which nothing here could restore.
+ */
+function FocusPin({ pos, nonce }: { pos: google.maps.LatLngLiteral | null; nonce: number }) {
+  const map = useMap()
+  const posRef = useRef(pos)
+  posRef.current = pos
+  useEffect(() => {
+    // nonce 0 = nobody has asked yet; don't hijack the initial bbox fit on mount.
+    if (!map || nonce === 0) return
+    const p = posRef.current
+    if (p) map.panTo(p)
+  }, [map, nonce])
+  return null
+}
+
+/** A multi-pin map of a region's CURATED places, fit to the region bbox. Amber = top-ranked, teal = the
+ *  rest; CLICK a pin (or its table row) for an InfoWindow with its name/kind/rank. Empty `places` just
+ *  shows the bboxed region. Selection is controlled — see PlaceMarkerLayer and FocusPin. */
+export function PlacesMap({
+  places,
+  bbox,
+  className,
+  selectedId,
+  onSelect,
+  focusNonce,
+}: {
+  places: PlacePin[]
+  bbox: string | null
+  className?: string
+  /** Which pin's InfoWindow is open (null = none). */
+  selectedId: string | null
+  /** A pin was clicked, or its window closed (null). */
+  onSelect: (id: string | null) => void
+  /** Bump to re-center on `selectedId`. A counter, not a boolean — see FocusPin. */
+  focusNonce: number
+}) {
   if (!BROWSER_KEY) return <MapUnavailable className={className} />
+  const focused = places.find((p) => p.id === selectedId) ?? null
   return (
     <div className={`relative w-full overflow-hidden rounded-lg border ${className ?? 'h-72'}`}>
       <APIProvider apiKey={BROWSER_KEY}>
         <Map {...MAP_OPTIONS} defaultCenter={centerOfBbox(bbox)} defaultZoom={bbox && bboxCorners(bbox) ? 9 : 8}>
           <FitBounds bbox={bbox} />
           <BboxOutline bbox={bbox} />
-          <PlaceMarkerLayer places={places} />
+          <PlaceMarkerLayer places={places} selectedId={selectedId} onSelect={onSelect} />
+          <FocusPin pos={focused ? { lat: focused.lat, lng: focused.lng } : null} nonce={focusNonce} />
         </Map>
       </APIProvider>
     </div>
