@@ -131,6 +131,13 @@
 > **Go-sequence — EXECUTED for Lake Tahoe; keep it as the recipe for the NEXT region:** open admin
 > `/places` → **Curate** → Draft (Opus) → prune → Resolve & add (or `curate-places --apply` from the
 > terminal) → review/promote → deploy.
+>
+> ⚠ **SUPERSEDED IN PART, 2026-08-04.** The ROLE MODEL this spec describes is gone: `endpoint_eligible`,
+> `break_eligible` and `featured` were dropped (migrations `0045`/`0046`) and `places` is now one thing —
+> the region's DESTINATIONS, carrying a `rank` (1 = most likely to be named, null last). Break pitstops
+> left with the flag; they return with live Places data in M3. The RESOLVE + STORE architecture this spec
+> established is unchanged and still correct. See
+> [what-is-a-drive-endpoint.md](what-is-a-drive-endpoint.md).
 
 ## Why
 

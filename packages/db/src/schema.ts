@@ -481,13 +481,17 @@ export const places = pgTable(
     primaryType: text('primary_type'),
     lat: doublePrecision('lat').notNull(),
     lng: doublePrecision('lng').notNull(),
-    // ROLE markers — two INDEPENDENT eligibility flags rather than one tri-value, so a place can be
-    // BOTH (a marina that's a start hub AND a pitstop) and the admin can prune one role without
-    // touching the other. `endpoint_eligible` = pickable as a drive START/END/MIDPOINT; `break_eligible`
-    // = a curated break/pitstop anchor (deferred consumer). The `curate-places` step sets these; a
-    // freshly-resolved row defaults to neither until the curator tags it.
-    endpointEligible: boolean('endpoint_eligible').notNull().default(false),
-    breakEligible: boolean('break_eligible').notNull().default(false),
+    // ⚠ THE ROLE FLAGS ARE GONE (2026-08-04, founder). `places` is now ONE thing — the region's
+    // DESTINATIONS, somewhere a driver would name as a start or a finish — so membership IS the
+    // eligibility and a boolean saying "yes, really" was a second copy of the same fact.
+    //   - `break_eligible` was read by NOTHING outside the admin console. `detours` (break audio) is
+    //     still stubbed, so 85 rows carried a role no code consulted. Breaks return with live Places
+    //     data in M3, by which point curation runs again anyway.
+    //   - `endpoint_eligible` was redundant the moment break left: every row is an endpoint. INV-1 is
+    //     unweakened — the wire allowlist becomes "this row exists", which is the same guarantee with
+    //     one fewer thing to keep true. Pruning is a DELETE now, which is what an operator meant anyway
+    //     (clearing the flag never stuck: the upsert OR-merged it back).
+    // docs/designs/what-is-a-drive-endpoint.md
     // WHERE A CAR IS ACTUALLY SENT, when the place's own pin is not somewhere a car can go. Google
     // Places answers with the FEATURE's location — for a lake, the water; for a beach, the sand — and
     // Routes then snaps that to whatever it can find, which for `Spooner Lake` was a gated forest track
@@ -508,9 +512,20 @@ export const places = pgTable(
     // docs/decisions/undrivable-endpoint-anchors.md
     accessLat: doublePrecision('access_lat'),
     accessLng: doublePrecision('access_lng'),
-    // The popular subset floated to the TOP of the (short) curated picker — a curator judgment today
-    // (usage-derived "most-picked floats up" is deferred; see the spec). Surfaced on the anchor DTO.
-    featured: boolean('featured').notNull().default(false),
+    // HOW LIKELY A VISITOR IS TO NAME THIS PLACE OUT LOUD — 1 is the most, ties allowed. Replaces the
+    // `featured` boolean (2026-08-04): the same judgment at finer grain, which the boolean could not
+    // express because "iconic" is not a two-valued property.
+    //
+    // ⚠ WRITTEN BY THE LLM DRAFT, NOT BY GOOGLE, AND THAT IS DELIBERATE. Review count was the obvious
+    // signal and was rejected: Places policy exempts ONLY `place_id` from its caching restrictions, the
+    // resolve's field mask deliberately omits rating/price ("so nothing volatile is stored"), and
+    // CLAUDE.md names popularity as volatile data. The draft model already knows what a visitor would
+    // say — it ranked `Sand Harbor` 2nd, a place with NO Wikipedia article that the corpus tier system
+    // is structurally blind to. Same signal, no vendor dependency, no policy question.
+    //
+    // ⚠ NULLABLE, and null sorts LAST. A hand-added place has no drafted rank, and inventing one would
+    // put an operator's manual entry ahead of the model's considered order.
+    rank: integer('rank'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .defaultNow()
@@ -522,11 +537,8 @@ export const places = pgTable(
     uniqueIndex('places_place_id_uq').on(t.placeId),
     // Bounding-box prefilter for along-route break search.
     index('places_lat_lng_idx').on(t.lat, t.lng),
-    // PARTIAL bbox index over endpoint-eligible rows — the GET /drives/anchors query (endpoint picker
-    // in a region bbox). Mirrors the partial-index idiom used on studio_jobs.
-    index('places_endpoint_idx')
-      .on(t.lat, t.lng)
-      .where(sql`${t.endpointEligible}`),
+    // ⚠ The PARTIAL index over endpoint-eligible rows is gone with the flag: every row is a
+    // destination now, so `places_lat_lng_idx` above already covers the region-bbox lookup it served.
   ],
 )
 

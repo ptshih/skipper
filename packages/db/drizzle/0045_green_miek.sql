@@ -1,0 +1,1 @@
+ALTER TABLE "places" ADD COLUMN "rank" integer;

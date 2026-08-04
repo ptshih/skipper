@@ -18,12 +18,12 @@
  *  simply renders as a broken two-line chip. Same transform, two very different worst cases. */
 export const flatten = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
-/** The shape both readers order by. `featured` is OPTIONAL because `PlannerAnchor` declares it that
+/** The shape both readers order by. `rank` is OPTIONAL because `PlannerAnchor` declares it that
  *  way; see the comparator for why that difference is preserved rather than normalized. */
 export interface RankableAnchor {
   id: string
   name: string
-  featured?: boolean
+  rank?: number | null
 }
 
 /**
@@ -36,19 +36,22 @@ export interface RankableAnchor {
  * chips from reshuffling between app launches or between instances. "Tidying" this to `localeCompare`
  * breaks the expensive one invisibly.
  *
- * `featured` ORDERS, it never FILTERS: filtering would hand a region with nothing flagged an empty list
- * and kill the example asks for the launch region. It is never a printed field either — on the planner
- * side that would be a place FACT, which D9 gives the model none of.
+ * `rank` ORDERS, it never FILTERS: filtering would hand a region whose draft carried no ranks an empty
+ * list and kill the example asks for the launch region. It is never a printed field either — on the
+ * planner side that would be a place FACT, which D9 gives the model none of.
  *
  * `id` is a TIEBREAK ONLY (it makes the order total) and is never emitted.
  *
- * ⚠ Compares `featured` RAW rather than coercing to boolean. `PlannerAnchor.featured` is optional and
- * `ExampleAnchorPlace.featured` is required, so a `!!` here would change how an undefined sorts against
- * an explicit `false` on the planner side. Preserving the raw comparison keeps both call sites ordering
- * exactly as they did before this function existed.
+ * ⚠ NULL AND UNDEFINED SORT LAST, TOGETHER. A rank is the LLM draft's judgement of how likely a visitor
+ * is to say the name; a row without one is a hand-add, and putting an operator's manual entry ahead of
+ * the model's considered order is the opposite of what either of them meant. Ascending otherwise — 1 is
+ * the most-named, which is the reverse of the `featured` boolean this replaced, so read the comparison
+ * rather than assuming it kept its sign.
  */
 export function byAnchorRank<T extends RankableAnchor>(a: T, b: T): number {
-  if (a.featured !== b.featured) return a.featured ? -1 : 1
+  const ar = a.rank ?? Number.POSITIVE_INFINITY
+  const br = b.rank ?? Number.POSITIVE_INFINITY
+  if (ar !== br) return ar - br
   if (a.name !== b.name) return a.name < b.name ? -1 : 1
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }

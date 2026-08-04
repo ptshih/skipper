@@ -21,7 +21,7 @@
 
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { and, asc, desc, eq, isNotNull } from 'drizzle-orm'
+import { and, asc, eq, isNotNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, places, pois, regions } from '@skipper/db/schema'
 import { isAdmin, type AttributionList, type Region } from '@skipper/shared'
@@ -183,11 +183,11 @@ app.get('/regions', async (c) => {
             name: places.name,
             lat: places.lat,
             lng: places.lng,
-            featured: places.featured,
+            rank: places.rank,
           })
           .from(places)
-          .where(eq(places.endpointEligible, true))
-          .orderBy(desc(places.featured), asc(places.name), asc(places.id))
+          // No role filter: `places` is destinations only since 2026-08-04, so membership IS eligibility.
+          .orderBy(sql`${places.rank} ASC NULLS LAST`, asc(places.name), asc(places.id))
           .limit(EXAMPLE_ANCHOR_SCAN_LIMIT),
       { label: 'regions.exampleAnchors' },
     ),

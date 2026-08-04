@@ -31,7 +31,7 @@ const REGION = 'Lake Tahoe'
  *  projects a NOT NULL column through `regionAnchor`'s `.default(false)`, so every real row carries a
  *  real boolean. Do not "simplify" a fixture by omitting it — see the note under the permutation tests
  *  for what a MIXED undefined/false list does to this comparator. */
-const anchor = (name: string, id: string, featured = false): PlannerAnchor => ({ id, name, featured })
+const anchor = (name: string, id: string, rank: number | null = null): PlannerAnchor => ({ id, name, rank })
 
 /** The row format, spelled out on the READING side on purpose. It is the one thing this file duplicates
  *  from ../src/planner, and duplicating it is the point: changing the separator changes the cached
@@ -50,9 +50,9 @@ describe('the roster is BYTE-IDENTICAL however the rows arrive', () => {
    *  deleted, a pre-sorted fixture leaves that test green. */
   const ROWS: PlannerAnchor[] = [
     anchor('Kings Beach', 'a5'),
-    anchor('Emerald Bay', 'a1', true),
+    anchor('Emerald Bay', 'a1', 1),
     anchor('Homewood', 'a4'),
-    anchor('Incline Village', 'a2', true),
+    anchor('Incline Village', 'a2', 1),
     anchor('Camp Richardson', 'a3'),
     anchor('Zephyr Cove', 'a6'),
   ]
@@ -98,7 +98,7 @@ describe('the roster is BYTE-IDENTICAL however the rows arrive', () => {
 
 describe('featured first, then name, and the name compare is CODEPOINT', () => {
   test('featured floats above an alphabetically earlier un-featured name', () => {
-    const block = buildRosterBlock(REGION, [anchor('Aaa Bay', 'a1'), anchor('Zzz Cove', 'a2', true)])
+    const block = buildRosterBlock(REGION, [anchor('Aaa Bay', 'a1'), anchor('Zzz Cove', 'a2', 1)])
     expect(namesOf(block)).toEqual(['Zzz Cove', 'Aaa Bay'])
   })
 
@@ -195,8 +195,8 @@ describe('the block carries names and ids and nothing else (D9)', () => {
   }
 
   const wide: WideAnchor[] = [
-    { id: 'a1', name: 'Sand Harbor', featured: true, lat: 39.198, lng: -119.929, kind: 'scenic spot' },
-    { id: 'a2', name: 'Spooner Summit', featured: false, lat: 39.106, lng: -119.895, kind: 'marina' },
+    { id: 'a1', name: 'Sand Harbor', rank: 1, lat: 39.198, lng: -119.929, kind: 'scenic spot' },
+    { id: 'a2', name: 'Spooner Summit', rank: 2, lat: 39.106, lng: -119.895, kind: 'marina' },
   ]
   const block = buildRosterBlock(REGION, wide)
 

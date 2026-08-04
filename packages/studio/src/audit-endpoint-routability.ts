@@ -32,7 +32,7 @@
 //   ... --apply --snap                                ALSO propose an access point per flagged anchor
 //                                                     (a few more Routes calls each; still writes nothing)
 
-import { and, between, eq } from 'drizzle-orm'
+import { and, between } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { places } from '@skipper/db/schema'
 import { haversineMeters, type LngLat } from '@skipper/engine'
@@ -81,13 +81,17 @@ const MIN_AVG_KMH = 20
  */
 const MIN_SPEED_ROUTE_METERS = 800
 
+/** How far down the draft's ranking a place may sit and still be trusted as a PROBE ORIGIN. The probe
+ *  has to hold one end known-good (see `originFor`), and the top band is where the towns are. */
+const ORIGIN_MAX_RANK = 3
+
 interface Anchor {
   id: string
   name: string
   primaryType: string | null
   lat: number
   lng: number
-  featured: boolean
+  rank: number | null
   accessLat: number | null
   accessLng: number | null
 }
@@ -240,14 +244,13 @@ async function main() {
           primaryType: places.primaryType,
           lat: places.lat,
           lng: places.lng,
-          featured: places.featured,
+          rank: places.rank,
           accessLat: places.accessLat,
           accessLng: places.accessLng,
         })
         .from(places)
         .where(
           and(
-            eq(places.endpointEligible, true),
             // Inclusive on all four edges, matching `pointInRegionBbox` and the API's own anchor query
             // — a region's membership rule decided differently here would audit a different set than
             // the picker offers.
@@ -260,11 +263,14 @@ async function main() {
   )
 
   if (rows.length === 0) {
-    console.log('No endpoint-eligible anchors in this region. Nothing to audit.')
+    console.log('No curated destinations in this region. Nothing to audit.')
     return
   }
 
-  const featured = rows.filter((r) => r.featured)
+  // ⚠ The probe origins are the TOP-RANKED destinations — the towns and resorts a visitor names without
+  // thinking, which resolve to street addresses on public roads essentially by construction. It read
+  // `featured` until 2026-08-04; a rank band says the same thing at a grain the boolean could not.
+  const featured = rows.filter((r) => r.rank != null && r.rank <= ORIGIN_MAX_RANK)
   const candidates = rows.slice(0, Number.isFinite(limit) ? limit : rows.length)
   // ⚠ WORST CASE WHEN --snap IS ON, deliberately. How many anchors get snapped is not knowable until the
   // sweep has run, so the bound assumes EVERY candidate is flagged. `--max-cost` exists to stop a run

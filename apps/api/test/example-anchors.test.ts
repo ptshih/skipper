@@ -28,12 +28,12 @@ const ladder = (n: number): ExampleAnchorPlace[] =>
   Array.from({ length: n }, (_, i) => place(`Stop ${String(i).padStart(2, '0')}`, 38.1 + i * 0.15, -120.0))
 
 let seq = 0
-const place = (name: string, lat: number, lng: number, featured = false): ExampleAnchorPlace => ({
+const place = (name: string, lat: number, lng: number, rank: number | null = null): ExampleAnchorPlace => ({
   id: `p${String(seq++).padStart(4, '0')}`,
   name,
   lat,
   lng,
-  featured,
+  rank,
 })
 
 const region = (id: string, bbox: string | null): ExampleAnchorRegion => ({ id, bbox })
@@ -79,21 +79,21 @@ describe('pickExampleAnchors — geometry-first bucketing', () => {
 })
 
 // ⚠ NO CODEPOINT MUTATION CHECK LIVES HERE ANY MORE, and its absence is deliberate rather than a
-// deletion. The published order stopped being alphabetical on 2026-08-03 (featured gates the pool,
+// deletion. The published order stopped being alphabetical on 2026-08-03 (rank gates the pool,
 // farthest-point spread orders it), so an alphabetical assertion at THIS level would now be pinning
 // something the feature does not promise. `byAnchorRank`'s codepoint guarantee still matters — it is
 // what keeps the planner's cached prompt prefix byte-stable across Cloud Run instances — and it is
 // pinned where it is actually load-bearing, in planner-roster.test.ts, which asserts against
 // localeCompare directly. Do not re-add a copy here; it would go green on a rewrite that broke the
 // expensive one.
-describe('pickExampleAnchors — featured gates the POOL, geometry orders it', () => {
-  test('an un-featured name is not published beside a featured one, however it sorts', () => {
+describe('pickExampleAnchors — rank gates the POOL, geometry orders it', () => {
+  test('an unranked name is not published beside a top-ranked one, however it sorts', () => {
     // THE INVERSION, in one assertion. `featured` used to float a row up an otherwise alphabetical
     // list — which is how one curate-places run handed slot 0 to `Carson City` on the strength of C
     // sorting before E, with no curator intending it. It now decides ELIGIBILITY and nothing else.
     const out = pickNames(
       [region('r1', TAHOE)],
-      [place('Aaa Bay', 38.85, -120.15), place('Zzz Cove', 39.25, -120.15, true)],
+      [place('Aaa Bay', 38.85, -120.15), place('Zzz Cove', 39.25, -120.15, 1)],
     )
     expect(out.get('r1')).toEqual(['Zzz Cove'])
   })
@@ -117,8 +117,8 @@ describe('pickExampleAnchors — featured gates the POOL, geometry orders it', (
     const out = pickNames(
       [region('r1', TAHOE)],
       [
-        place('Eagle Falls', 38.9505207, -120.1151632, true),
-        place('Emerald Bay State Park', 38.9499894, -120.1082038, true),
+        place('Eagle Falls', 38.9505207, -120.1151632, 1),
+        place('Emerald Bay State Park', 38.9499894, -120.1082038, 1),
       ],
     )
     expect(out.get('r1')).toEqual(['Eagle Falls'])
@@ -126,11 +126,11 @@ describe('pickExampleAnchors — featured gates the POOL, geometry orders it', (
 
   test('output is independent of input row order', () => {
     const rows = [
-      place('Kings Beach', 39.23, -120.02, true),
-      place('Emerald Bay', 38.85, -120.1, true),
-      place('Homewood', 39.08, -120.18, true),
-      place('Incline Village', 39.25, -119.95, true),
-      place('Camp Richardson', 38.93, -119.93, true),
+      place('Kings Beach', 39.23, -120.02, 1),
+      place('Emerald Bay', 38.85, -120.1, 1),
+      place('Homewood', 39.08, -120.18, 1),
+      place('Incline Village', 39.25, -119.95, 1),
+      place('Camp Richardson', 38.93, -119.93, 1),
     ]
     const one = pickNames([region('r1', TAHOE)], rows)
     const shuffled = pickNames([region('r1', TAHOE)], [rows[3]!, rows[0]!, rows[4]!, rows[1]!, rows[2]!])
@@ -190,8 +190,8 @@ describe('pickExampleAnchors — bounds, hygiene, and the D9 shape', () => {
     // BOTH featured, and ~10 km apart, so two names actually publish — with only one eligible row
     // this test would still pass while checking half as much.
     const rows = [
-      place('Sand Harbor', 39.198, -119.929, true),
-      place('Spooner Summit', 39.106, -119.895, true),
+      place('Sand Harbor', 39.198, -119.929, 1),
+      place('Spooner Summit', 39.106, -119.895, 1),
     ]
     const names = pickNames([region('r1', TAHOE)], rows).get('r1')!
     for (const n of names) {
@@ -264,7 +264,7 @@ describe('pickExampleAnchors — bounds, hygiene, and the D9 shape', () => {
     // reason to hide its composer. `ready` comes from containment, upstream of every name filter.
     const got = pickExampleAnchors(
       [region('r1', TAHOE)],
-      [place('Eagle Falls', 38.9505, -120.1152, true), place('Emerald Bay', 38.95, -120.1082, true)],
+      [place('Eagle Falls', 38.9505, -120.1152, 1), place('Emerald Bay', 38.95, -120.1082, 1)],
     ).get('r1')!
     expect(got.names).toHaveLength(1)
     expect(got.ready).toBe(true)

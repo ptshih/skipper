@@ -440,9 +440,7 @@ const placeCols = {
   primaryType: places.primaryType,
   lat: places.lat,
   lng: places.lng,
-  endpointEligible: places.endpointEligible,
-  breakEligible: places.breakEligible,
-  featured: places.featured,
+  rank: places.rank,
   // Where a car is actually sent when the pin is not drivable — null for almost every place. Surfaced
   // so the console can SHOW which endpoints carry a correction; it is the operator's only view of it.
   accessLat: places.accessLat,
@@ -459,9 +457,7 @@ function upsertCuratedPlace(row: {
   primaryType: string | null
   lat: number
   lng: number
-  endpointEligible: boolean
-  breakEligible: boolean
-  featured: boolean
+  rank: number
 }) {
   return db
     .insert(places)
@@ -473,15 +469,11 @@ function upsertCuratedPlace(row: {
         primaryType: sql`excluded.primary_type`,
         lat: sql`excluded.lat`,
         lng: sql`excluded.lng`,
-        endpointEligible: sql`${places.endpointEligible} OR excluded.endpoint_eligible`,
-        breakEligible: sql`${places.breakEligible} OR excluded.break_eligible`,
-        // ⚠ OR-merged like the roles, not last-write-wins. `featured` is a CURATOR judgement — the
-        // /places promote loop is literally PATCH { featured: true } — and this upsert is reached by
-        // both a whole-region re-curate and the manual Add-a-place dialog, whose form resets featured
-        // to false every time it opens. As `excluded.featured` it silently demoted hand-promoted
-        // places on a path that advertises itself as additive (the two roles right above cannot be
-        // dropped this way). Demotion stays possible, but only through an explicit PATCH.
-        featured: sql`${places.featured} OR excluded.featured`,
+        // ⚠ THE BEST (LOWEST) RANK WINS, not last-write-wins, and it is the same argument the old
+        // `featured` OR-merge made: this upsert is reached by BOTH a whole-region re-curate and the
+        // manual Add-a-place dialog, and a manual add that carried no rank would otherwise demote a
+        // place the draft had ranked 1. Demotion stays possible, through an explicit PATCH.
+        rank: sql`LEAST(COALESCE(${places.rank}, 2147483647), COALESCE(excluded.rank, 2147483647))`,
         // ⚠ `accessLat`/`accessLng` ARE DELIBERATELY ABSENT FROM THIS SET, and their absence is the
         // whole mechanism — an access point is OPERATOR-OWNED, like `pois.speakable_lat/lng`. Adding
         // them here (or to the `values` above) would let a re-curate revert a human's correction and
@@ -509,29 +501,26 @@ app.get('/admin/places', async (c) => {
     .select(placeCols)
     .from(places)
     .where(and(between(places.lat, box.swLat, box.neLat), between(places.lng, box.swLng, box.neLng)))
-    .orderBy(desc(places.featured), asc(places.name))
+    .orderBy(sql`${places.rank} ASC NULLS LAST`, asc(places.name))
   return c.json({ places: rows, bbox: region.bbox })
 })
 
-// PATCH /admin/places/:id — toggle a role / featured (the prune+promote loop). Only the booleans sent
-// are changed; an empty body is a 400. Independent flags so a place can be pruned from one role only.
+// PATCH /admin/places/:id — set a place's RANK or its access point. ⚠ The role/featured toggles are gone
+// (2026-08-04): `places` is destinations only, so pruning is DELETE and promotion is a rank.
 app.patch('/admin/places/:id', async (c) => {
   const id = c.req.param('id')
   if (!UUID_RE.test(id)) return c.json({ error: 'bad_request' }, 400)
   const body = await c.req
     .json<{
-      endpointEligible?: boolean
-      breakEligible?: boolean
-      featured?: boolean
+      /** 1 = most likely to be named. Null clears it, sorting the place last. */
+      rank?: number | null
       /** Both together, or both null to clear. See the access-point block below. */
       accessLat?: number | null
       accessLng?: number | null
     }>()
     .catch(() => ({}) as Record<string, never>)
   const update: Record<string, unknown> = {}
-  if (typeof body.endpointEligible === 'boolean') update.endpointEligible = body.endpointEligible
-  if (typeof body.breakEligible === 'boolean') update.breakEligible = body.breakEligible
-  if (typeof body.featured === 'boolean') update.featured = body.featured
+  if ('rank' in body && (typeof body.rank === 'number' || body.rank === null)) update.rank = body.rank
 
   // THE ACCESS POINT — where a car is sent when the place's own pin is not drivable.
   //
@@ -618,8 +607,8 @@ app.post('/admin/places/resolve', async (c) => {
   }
 })
 
-// POST /admin/places — add a manually-resolved place (upsert by place_id). OR-merges role flags so a
-// re-add never clears a role the curate job set; name/coords/primaryType/featured are last-write-wins.
+// POST /admin/places — add a manually-resolved place (upsert by place_id). name/coords/primaryType are
+// last-write-wins; `rank` takes the BEST of old and new so a re-add never demotes a drafted place.
 app.post('/admin/places', async (c) => {
   const body = await c.req
     .json<{
@@ -628,9 +617,7 @@ app.post('/admin/places', async (c) => {
       lat?: number
       lng?: number
       primaryType?: string | null
-      endpointEligible?: boolean
-      breakEligible?: boolean
-      featured?: boolean
+      rank?: number
     }>()
     .catch(() => ({}) as Record<string, never>)
   const placeId = (body.placeId ?? '').trim()
@@ -638,20 +625,17 @@ app.post('/admin/places', async (c) => {
   if (!placeId || !name || typeof body.lat !== 'number' || typeof body.lng !== 'number') {
     return c.json({ error: 'placeId, name, lat, lng are required' }, 400)
   }
-  const endpointEligible = body.endpointEligible === true
-  const breakEligible = body.breakEligible === true
-  if (!endpointEligible && !breakEligible) {
-    return c.json({ error: 'pick at least one role (endpoint or break)' }, 400)
-  }
+  // ⚠ There is no role to pick any more — adding a place to `places` IS declaring it a destination.
   const [row] = await upsertCuratedPlace({
     placeId,
     name,
     primaryType: body.primaryType ?? null,
     lat: body.lat,
     lng: body.lng,
-    endpointEligible,
-    breakEligible,
-    featured: body.featured === true,
+    // ⚠ A hand-add carries no drafted rank, so it sorts LAST rather than jumping the model's order.
+    // `rank` is nullable in the schema for exactly this; the upsert's LEAST() keeps a later curate run
+    // free to promote it.
+    rank: typeof body.rank === 'number' ? body.rank : (null as unknown as number),
   })
   return c.json({ place: row }, 201)
 })
@@ -740,14 +724,14 @@ app.post('/admin/places/curate', async (c) => {
   if (!apiKey) return c.json({ error: 'places_unconfigured', message: 'GOOGLE_MAPS_API_KEY is not set.' }, 503)
 
   // Resolve sequentially (one-time, ~30 places) and merge by place_id — two drafts can pin the same
-  // canonical place (OR the roles, keep featured if either says so). Mirrors curate-places.ts.
-  const byId = new Map<string, { place: ResolvedPlace; endpointEligible: boolean; breakEligible: boolean; featured: boolean }>()
+  // canonical place, and the BEST rank wins. Mirrors curate-places.ts.
+  const byId = new Map<string, { place: ResolvedPlace; rank: number }>()
   const results: { name: string; status: 'resolved' | 'dropped' | 'error'; resolvedName?: string; message?: string }[] = []
   for (const d of drafts) {
     const query = (d?.query ?? '').trim()
-    const role = d?.role
-    if (!query || (role !== 'endpoint' && role !== 'break' && role !== 'both')) {
-      results.push({ name: d?.name ?? '?', status: 'error', message: 'invalid draft (missing query/role)' })
+    const rank = d?.rank
+    if (!query || typeof rank !== 'number') {
+      results.push({ name: d?.name ?? '?', status: 'error', message: 'invalid draft (missing query/rank)' })
       continue
     }
     let place: ResolvedPlace | null
@@ -761,13 +745,11 @@ app.post('/admin/places/curate', async (c) => {
       results.push({ name: d.name, status: 'dropped' })
       continue
     }
-    const endpoint = role === 'endpoint' || role === 'both'
-    const brk = role === 'break' || role === 'both'
-    // ⚠ ENDPOINTS ONLY. A street resolve is a rider destination we would speak aloud and route to, so it
-    // must be a real place; a BREAK is a pull-off and a `route` is a legitimate answer there (Luther Pass
-    // Road). Rejecting outright rather than silently downgrading to break-only: the substitution means we
+    // ⚠ A street resolve is a rider destination we would speak aloud and route to, so it must be a real
+    // place. ⚠ This used to spare BREAK rows, where a `route` was a legitimate answer (Luther Pass
+    // Road); with the break role gone there is nothing to spare. Rejecting outright: the substitution means we
     // resolved something the operator never asked for, and quietly re-filing it hides that.
-    if (endpoint && isAddressLike(place.types)) {
+    if (isAddressLike(place.types)) {
       results.push({
         name: d.name,
         status: 'dropped',
@@ -779,9 +761,9 @@ app.post('/admin/places/curate', async (c) => {
     const prev = byId.get(place.placeId)
     byId.set(place.placeId, {
       place,
-      endpointEligible: (prev?.endpointEligible ?? false) || endpoint,
-      breakEligible: (prev?.breakEligible ?? false) || brk,
-      featured: (prev?.featured ?? false) || d.featured === true,
+      // ⚠ Lowest rank wins on a duplicate — two drafts naming one place disagree about how famous it
+      // is, and taking the later one would let a passing mention demote the model's own headline.
+      rank: Math.min(prev?.rank ?? Number.POSITIVE_INFINITY, rank),
     })
     results.push({ name: d.name, status: 'resolved', resolvedName: place.name })
   }
@@ -801,9 +783,7 @@ app.post('/admin/places/curate', async (c) => {
         primaryType: r.place.primaryType ?? null,
         lat: r.place.lat,
         lng: r.place.lng,
-        endpointEligible: r.endpointEligible,
-        breakEligible: r.breakEligible,
-        featured: r.featured,
+        rank: r.rank,
       })
       added += 1
     } catch (e) {

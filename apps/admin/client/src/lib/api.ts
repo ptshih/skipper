@@ -384,7 +384,7 @@ export interface HealthStatus {
 /* ------------------------------- client ------------------------------ */
 
 // One curated place row from GET /admin/places — the /places curation table + map. Role flags are
-// independent (a place can be both an endpoint hub and a break pitstop); `featured` floats it to the
+// ⚠ The role flags are gone (2026-08-04) — `places` is destinations only. `rank` orders it; it floats to the
 // top of the rider's picker.
 export interface PlaceRow {
   id: string
@@ -393,9 +393,8 @@ export interface PlaceRow {
   primaryType: string | null
   lat: number
   lng: number
-  endpointEligible: boolean
-  breakEligible: boolean
-  featured: boolean
+  /** How likely a visitor is to NAME this place, 1 = most. Null for a hand-add; sorts last. */
+  rank: number | null
   /** Where a car is routed when this place's own pin is not drivable — null for almost every place.
    *  Display keeps `lat`/`lng`; only the Google Routes request reads these. */
   accessLat: number | null
@@ -417,7 +416,7 @@ export interface PlaceDraft {
   name: string
   query: string
   role: 'endpoint' | 'break' | 'both'
-  featured: boolean
+  rank: number
   rationale?: string
 }
 
@@ -471,9 +470,8 @@ export const api = {
   patchPlace: (
     id: string,
     body: {
-      endpointEligible?: boolean
-      breakEligible?: boolean
-      featured?: boolean
+      /** 1 = most likely to be named; null clears it. */
+      rank?: number | null
       /** Both numbers to set an access point, both null to clear it. The server rejects a lone one —
        *  half a coordinate is a point that was never anywhere. */
       accessLat?: number | null
@@ -490,9 +488,7 @@ export const api = {
     lat: number
     lng: number
     primaryType?: string | null
-    endpointEligible?: boolean
-    breakEligible?: boolean
-    featured?: boolean
+    rank?: number
   }) => req<{ place: PlaceRow }>('/admin/places', { method: 'POST', body: JSON.stringify(body) }),
   // Curate (interactive): draft the region's set (Opus, no writes), then resolve the pruned keepers.
   draftPlaces: (body: { region: string; target?: number }) =>

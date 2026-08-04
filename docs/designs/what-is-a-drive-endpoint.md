@@ -1,6 +1,8 @@
 # What is a drive endpoint?
 
-> **Status:** 💡 **IDEA for the role split; PARTLY ACTED ON 2026-08-04** — five rows lost the endpoint
+> **Status:** ✅ **ACTED ON AND SUPERSEDED 2026-08-04** — the role split this entry proposed was overtaken
+> by removing roles entirely (see *What I would do*). Kept for the reasoning and the measurements.
+> Originally: 💡 IDEA for the role split; partly acted on 2026-08-04 — five rows lost the endpoint
 > role, and the arrivability criterion is now IN both draft prompts (see *What I would do*, which records
 > both reversals: the "defer the prompt change" call, and the claim that the tail was mostly bad). The
 > destination/waypoint split remains unbuilt. Written from a founder observation
@@ -181,12 +183,30 @@ before applying it.
 ⚠ Both copies must change together and are byte-identical BY HAND (`packages/studio/src/curate-places.ts`
 + `apps/admin/server/places.ts`), since the admin deliberately does not depend on `@skipper/studio`.
 
-**Deferred, deliberately:**
+**SUPERSEDED 2026-08-04 — the founder took a bigger hammer than this entry proposed, and it went further
+in a better direction.** `places` is now ONE thing: the region's DESTINATIONS, ranked.
+
+- `break_eligible` **deleted**, not deferred. It was read by nothing outside the admin console.
+- `endpoint_eligible` **deleted** with it — once break left, every row is an endpoint, so the flag was a
+  second copy of "the row exists". INV-1 became `inArray(places.id, …)`: same guarantee, one fewer
+  predicate. Pruning is a DELETE now, which is what an operator always meant (the OR-merge made
+  clearing the flag impossible to make stick).
+- `featured` **became `rank`** — how likely a visitor is to name the place, 1 = most, null sorts last.
+  ⚠ NOT a Google review count: Places policy exempts only `place_id` from its caching rules and the
+  resolve deliberately fetches no rating. The draft model's own world knowledge is the signal, and it
+  ranked **Sand Harbor 2nd** — a place with no Wikipedia article that the corpus tier system is
+  structurally blind to (see [corpus-as-the-planners-world.md](corpus-as-the-planners-world.md)).
+- The **draft prompt** now asks for destinations only, with the arrivability test and the ranking.
+  Validated before anything was deleted: Sand Harbor in at rank 2; Fannette Island, Audrey Harris Park,
+  Bridgetender Tavern and Boca Dam all absent.
+
+Migrations `0045` (add `rank`) + `0046` (drop the three). ⚠ Split in two DELIBERATELY: one migration
+would have made drizzle-kit ask whether `featured` was renamed to `rank`, and that prompt needs a TTY.
+
+**Still deferred:**
 - **The destination/waypoint split** — same trigger, same reason. `Echo Summit`, `Donner Pass`,
   `Mount Rose Summit` and `Cave Rock` are the standing evidence for it: perfect to route PAST, odd to
   end at. Four rows is not enough to justify a migration; a second region probably is.
-- **Retiring `break_eligible`** — until `detours` is genuinely being built. Doing it now is honesty with
-  no payoff, and re-deriving 85 curated judgements later costs more than the tidiness is worth.
 
 **Left alone on purpose:** `Secret Cove Nude Beach` is arrivable and real; whether the Skipper should
 offer it unprompted is taste, not correctness, and it is the founder's call rather than a cleanup.

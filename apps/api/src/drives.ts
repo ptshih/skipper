@@ -131,9 +131,12 @@ export async function loadRegionAnchors(bbox: string | null): Promise<RegionAnch
   const rows = await withRetry(
     () =>
       db
-        .select({ id: places.id, name: places.name, lat: places.lat, lng: places.lng, primaryType: places.primaryType, featured: places.featured })
+        .select({ id: places.id, name: places.name, lat: places.lat, lng: places.lng, primaryType: places.primaryType, rank: places.rank })
         .from(places)
-        .where(and(eq(places.endpointEligible, true), between(places.lat, latMin, latMax), between(places.lng, lngMin, lngMax)))
+        // ⚠ NO ROLE FILTER ANY MORE, and its absence IS the allowlist: `places` holds destinations and
+        // nothing else since 2026-08-04, so membership is eligibility. INV-1 is unchanged in strength —
+        // one fewer predicate to keep true, and pruning is a DELETE rather than a flag that never stuck.
+        .where(and(between(places.lat, latMin, latMax), between(places.lng, lngMin, lngMax)))
         // ⚠ ORDER BY IS NOT COSMETIC HERE, AND IT IS NOT ABOUT THE PICKER.
         // From 1.1 this set IS the planner's allowlist, and it rides inside the CACHED system-prompt
         // prefix on EVERY rider turn. Postgres guarantees no row order without an ORDER BY, so an
@@ -149,7 +152,10 @@ export async function loadRegionAnchors(bbox: string | null): Promise<RegionAnch
         // cap this changes nothing observable — the planner re-sorts the same SET either way, so the
         // cached prefix is byte-identical — which is exactly why it went unnoticed.
         // (`places.featured` is NOT NULL, so DESC has no NULLS-first hazard here.)
-        .orderBy(desc(places.featured), asc(places.name), asc(places.id))
+        // ⚠ RANK LEADS, NULLS LAST, and the cap below is what makes that load-bearing rather than
+        // cosmetic — whichever rows this query DROPS are gone before `byAnchorRank` is ever applied. A
+        // hand-added row carries no rank and must not displace a drafted one.
+        .orderBy(sql`${places.rank} ASC NULLS LAST`, asc(places.name), asc(places.id))
         // ⚠ And BOUND it. The set grows with every paid `curate-places` run, and an unbounded list
         // in a per-request prompt is an unbounded per-request bill. The cap is a ceiling, not a page
         // size — see MAX_PLAN_ANCHORS, whose "comfortable margin" is gone (26 → 109 in one day).
@@ -183,7 +189,7 @@ export async function loadRegionAnchors(bbox: string | null): Promise<RegionAnch
     lng: r.lng,
     // Humanize the raw Google primaryType for the picker subtitle (e.g. 'scenic_spot' → 'scenic spot'); null when absent.
     kind: r.primaryType ? r.primaryType.replace(/_/g, ' ') : null,
-    featured: r.featured,
+    rank: r.rank,
   }))
 }
 
@@ -231,7 +237,11 @@ async function hydrateAnchors(ids: string[]): Promise<ResolvedEndpoint[] | null>
           accessLng: places.accessLng,
         })
         .from(places)
-        .where(and(inArray(places.id, unique), eq(places.endpointEligible, true))),
+        // ⚠ THE WIRE ALLOWLIST (INV-1). It is now "this row exists in `places`" — the role flag it used
+        // to also assert went away with the break role, because every row is a destination. A row that
+        // was pruned is DELETED, so an unknown id and a de-curated one remain indistinguishable, which
+        // is what keeps the 400 from being an oracle for the curated set.
+        .where(inArray(places.id, unique)),
     { label: 'drive.hydrateAnchors' },
   )
   const byId = new Map(

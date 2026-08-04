@@ -50,7 +50,18 @@ export const MIN_ANCHOR_SEPARATION_M = 8_000
  *  added to remove — raise it, or narrow the pool, before letting a region grow past it. */
 export const SPREAD_POOL_LIMIT = 64
 
-/** The ceiling on the ONE endpoint-eligible scan that feeds every region's examples (the handler's
+/**
+ * How far down the draft's ranking a place may sit and still be offered as a COLD-OPEN EXAMPLE.
+ *
+ * ⚠ A POOL GATE, NOT AN ORDERING — geometry decides which of the eligible actually appear
+ * (`spreadAnchors`), and this only decides who is eligible. It replaces the `featured` boolean
+ * (2026-08-04) and is set where that boolean sat: the draft ranks "what anyone who has been here would
+ * say without thinking" in its first band, which on the Tahoe draft was 13 places across ranks 1–2.
+ * ⚠ Raising it does not add variety, it adds MARGINAL names to the first thing a rider ever reads.
+ */
+const EXAMPLE_ANCHOR_MAX_RANK = 3
+
+/** The ceiling on the ONE scan that feeds every region's examples (the handler's
  *  `.limit()`).
  *
  *  ⚠ Deliberately NOT `MAX_PLAN_ANCHORS`. That constant is a per-region ceiling on the planner's
@@ -79,7 +90,7 @@ export interface ExampleAnchorPlace {
   name: string
   lat: number
   lng: number
-  featured: boolean
+  rank: number | null
 }
 
 /** The TOTAL ORDER over candidates — no longer the published order.
@@ -251,14 +262,15 @@ export function pickExampleAnchors(
       contained.push(p)
     }
 
-    // ⚠ `featured` FILTERS HERE AND ORDERS NOWHERE — the inversion this change is really about.
+    // ⚠ `rank` FILTERS HERE AND ORDERS NOWHERE — the inversion this change is really about. It read
+    // `featured` until 2026-08-04; a rank says the same thing at a grain a boolean could not.
     // Curator judgement decides who is ELIGIBLE to be an example (spread alone would return a region's
     // most obscure corners, measured); geometry decides which of the eligible actually appear. The
     // fallback to the whole contained set is not tidiness: ./anchor-format's rule that "featured
     // ORDERS, it never FILTERS" was protecting a real case — a region nobody has flagged yet must not
     // lose its example asks entirely, which is what a bare `.filter(featured)` would do to the next
     // region curated.
-    const flagged = contained.filter((p) => p.featured)
+    const flagged = contained.filter((p) => p.rank != null && p.rank <= EXAMPLE_ANCHOR_MAX_RANK)
     const eligible = flagged.length > 0 ? flagged : contained
 
     // Name hygiene BEFORE the spread, so a blank or duplicated display name can never consume one of

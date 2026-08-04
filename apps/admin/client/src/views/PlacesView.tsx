@@ -31,6 +31,11 @@ import { FormDialog } from '@/components/ui/form-dialog'
 /** Humanize a raw Google primaryType for display ('scenic_spot' → 'scenic spot'). */
 const kindLabel = (t: string | null): string => (t ? t.replace(/_/g, ' ') : '—')
 
+/** The rank band the map and the counts treat as "the ones anyone would name" — the same band
+ *  `EXAMPLE_ANCHOR_MAX_RANK` gates the cold open on (apps/api/src/example-anchors.ts). ⚠ Two copies of
+ *  one number, deliberately: the console cannot import from apps/api. Keep them equal. */
+const TOP_RANK = 3
+
 export function PlacesView() {
   // Shared ['regions'] cache — MUST store the unwrapped array (like RegionsView/PoisView), not the
   // `{ regions }` wrapper: a shape mismatch under the same key crashes whichever view reads it next.
@@ -72,8 +77,8 @@ export function PlacesView() {
   // operator then saw Tahoe's curated places, Tahoe's bbox and Tahoe's counts while the page said
   // Yosemite — and Remove would delete a Tahoe row under a Yosemite label. The curated `places` set IS
   // the planner's endpoint allowlist (INV-2), so that is a rider-facing deletion of the wrong place.
-  const toggleMut = useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<Pick<PlaceRow, 'endpointEligible' | 'breakEligible' | 'featured'>>; key: readonly unknown[] }) =>
+  const rankMut = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: { rank: number | null }; key: readonly unknown[] }) =>
       api.patchPlace(id, patch),
     onMutate: async ({ id, patch, key }) => {
       await qc.cancelQueries({ queryKey: key })
@@ -103,22 +108,22 @@ export function PlacesView() {
     deleteMut.mutate({ id: p.id, key: queryKey })
   }
 
-  // Pin set for the map (endpoints + breaks; color-coded by role; click → InfoWindow with name/kind/roles).
+  // Pin set for the map. ⚠ Roles are gone (2026-08-04): every row is a destination, so the only
+  // distinction left is how asked-for it is — top-ranked pins read as `featured` did.
   const pins = useMemo(
     () =>
       places.map((p) => ({
         lat: p.lat,
         lng: p.lng,
         name: p.name,
-        featured: p.featured,
-        endpointEligible: p.endpointEligible,
-        breakEligible: p.breakEligible,
+        featured: p.rank != null && p.rank <= TOP_RANK,
+        endpointEligible: true,
+        breakEligible: false,
         kind: p.primaryType ? kindLabel(p.primaryType) : null,
       })),
     [places],
   )
-  const endpointCount = places.filter((p) => p.endpointEligible).length
-  const breakCount = places.filter((p) => p.breakEligible).length
+  const topRankCount = places.filter((p) => p.rank != null && p.rank <= TOP_RANK).length
 
   const columns: Column<PlaceRow>[] = [
     {
@@ -127,7 +132,9 @@ export function PlacesView() {
       cell: (p) => (
         <>
           <div className="flex items-center gap-2">
-            {p.featured && <Star className="h-3.5 w-3.5" style={{ color: PLACE_PIN_COLORS.featured, fill: PLACE_PIN_COLORS.featured }} />}
+            {p.rank != null && p.rank <= TOP_RANK && (
+              <Star className="h-3.5 w-3.5" style={{ color: PLACE_PIN_COLORS.featured, fill: PLACE_PIN_COLORS.featured }} />
+            )}
             {p.name}
           </div>
           <div className="text-xs text-muted-foreground">{p.lat.toFixed(4)}, {p.lng.toFixed(4)}</div>
@@ -144,38 +151,25 @@ export function PlacesView() {
     },
     { header: 'Kind', cellClassName: 'text-muted-foreground', cell: (p) => kindLabel(p.primaryType) },
     {
-      header: 'Endpoint',
-      headClassName: 'text-center',
+      header: 'Rank',
+      headClassName: 'text-center w-24',
       cellClassName: 'text-center',
+      // ⚠ 1 = most likely to be NAMED, not "best". A blank clears it, which sorts the place LAST rather
+      // than first — the same rule the roster and the cold open apply (`NULLS LAST`).
       cell: (p) => (
-        <Checkbox
-          checked={p.endpointEligible}
-          onCheckedChange={(v) => toggleMut.mutate({ id: p.id, patch: { endpointEligible: v === true }, key: queryKey })}
-          aria-label={`${p.name} endpoint-eligible`}
-        />
-      ),
-    },
-    {
-      header: 'Break',
-      headClassName: 'text-center',
-      cellClassName: 'text-center',
-      cell: (p) => (
-        <Checkbox
-          checked={p.breakEligible}
-          onCheckedChange={(v) => toggleMut.mutate({ id: p.id, patch: { breakEligible: v === true }, key: queryKey })}
-          aria-label={`${p.name} break-eligible`}
-        />
-      ),
-    },
-    {
-      header: 'Featured',
-      headClassName: 'text-center',
-      cellClassName: 'text-center',
-      cell: (p) => (
-        <Checkbox
-          checked={p.featured}
-          onCheckedChange={(v) => toggleMut.mutate({ id: p.id, patch: { featured: v === true }, key: queryKey })}
-          aria-label={`${p.name} featured`}
+        <Input
+          type="number"
+          min={1}
+          className="h-8 w-16 text-center"
+          defaultValue={p.rank ?? ''}
+          aria-label={`${p.name} rank`}
+          onBlur={(e) => {
+            const raw = e.target.value.trim()
+            const next = raw === '' ? null : Number(raw)
+            if (next !== null && !Number.isFinite(next)) return
+            if (next === (p.rank ?? null)) return
+            rankMut.mutate({ id: p.id, patch: { rank: next }, key: queryKey })
+          }}
         />
       ),
     },
@@ -184,21 +178,12 @@ export function PlacesView() {
       headClassName: 'w-20',
       cell: (p) => (
         <div className="flex items-center justify-end">
-          {/* Only offered on ENDPOINTS. An access point is where a DRIVE is routed; a break pitstop is
-              not an endpoint and giving it one would imply a routing rule that does not exist. */}
-          {p.endpointEligible && (
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={`Access point for ${p.name}`}
-              onClick={() => setAccessFor(p)}
-            >
-              <Navigation
-                className="h-4 w-4"
-                style={{ color: p.accessLat != null ? PLACE_PIN_COLORS.featured : undefined }}
-              />
-            </Button>
-          )}
+          <Button variant="ghost" size="icon" aria-label={`Access point for ${p.name}`} onClick={() => setAccessFor(p)}>
+            <Navigation
+              className="h-4 w-4"
+              style={{ color: p.accessLat != null ? PLACE_PIN_COLORS.featured : undefined }}
+            />
+          </Button>
           <Button variant="ghost" size="icon" aria-label={`Remove ${p.name}`} onClick={() => void onDelete(p)}>
             <Trash2 className="h-4 w-4 text-muted-foreground" />
           </Button>
@@ -244,20 +229,20 @@ export function PlacesView() {
             </Select>
             {region && !isPending && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Badge variant="secondary">{endpointCount} endpoint</Badge>
-                <Badge variant="outline">{breakCount} break</Badge>
+                <Badge variant="secondary">{places.length} destinations</Badge>
+                <Badge variant="outline">{topRankCount} top-ranked</Badge>
               </div>
             )}
           </div>
 
           {/* ⚠ The LIST error is not the only one that matters. Until 2026-08-02 this was the page's
-              only error surface, so a failed role toggle just snapped the checkbox back with no
+              only error surface, so a failed rank edit just snapped the field back with no
               message (reads as a mis-click) and a failed delete left the row sitting there — on the
               table that IS the planner's wire-level endpoint allowlist. Every other view in the
               console surfaces its mutation errors; this one didn't. */}
-          {(error || toggleMut.error || deleteMut.error) && (
+          {(error || rankMut.error || deleteMut.error) && (
             <Callout variant="error" className="mb-4 rounded-lg px-3 py-2">
-              {errMsg(error ?? toggleMut.error ?? deleteMut.error)}
+              {errMsg(error ?? rankMut.error ?? deleteMut.error)}
             </Callout>
           )}
 
@@ -265,9 +250,8 @@ export function PlacesView() {
             <div className="mb-5">
               <PlacesMap places={pins} bbox={bbox} className="h-72" />
               <p className="mt-1.5 text-xs text-muted-foreground">
-                <span style={{ color: PLACE_PIN_COLORS.featured }}>●</span> featured ·{' '}
-                <span style={{ color: PLACE_PIN_COLORS.endpoint }}>●</span> endpoint ·{' '}
-                <span style={{ color: PLACE_PIN_COLORS.break }}>●</span> break
+                <span style={{ color: PLACE_PIN_COLORS.featured }}>●</span> rank 1–{TOP_RANK} ·{' '}
+                <span style={{ color: PLACE_PIN_COLORS.endpoint }}>●</span> the rest
               </p>
             </div>
           )}
@@ -377,9 +361,6 @@ function AccessPointDialog({ place, onClose, onSaved }: {
 }
 
 /* ── CURATE (interactive: Opus draft → operator prunes → Places resolve → upsert) ── */
-
-/** A drafted role → a short human label for the review list. */
-const roleLabel = (r: PlaceDraft['role']): string => (r === 'both' ? 'endpoint + break' : r)
 
 // Two-step curate so the operator REVIEWS the LLM's picks before paying to resolve them:
 //  1. Draft  — one Opus call names the region's hubs + pitstops (a few cents; writes nothing).
@@ -568,15 +549,15 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 text-sm font-medium">
-                      {d.featured && (
+                      {d.rank <= TOP_RANK && (
                         <Star
                           className="h-3 w-3 shrink-0"
                           style={{ color: PLACE_PIN_COLORS.featured, fill: PLACE_PIN_COLORS.featured }}
                         />
                       )}
                       <span className="truncate">{d.name}</span>
-                      <Badge variant="secondary" className="ml-auto shrink-0 text-[10px] capitalize">
-                        {roleLabel(d.role)}
+                      <Badge variant="secondary" className="ml-auto shrink-0 text-[10px]">
+                        rank {d.rank}
                       </Badge>
                     </div>
                     {d.rationale && <div className="truncate text-xs text-muted-foreground">{d.rationale}</div>}
@@ -621,14 +602,11 @@ function AddPlaceDialog({ open, onOpenChange, region, onAdded }: {
   const [query, setQuery] = useState('')
   const [candidate, setCandidate] = useState<ResolvedPlace | null>(null)
   const [noMatch, setNoMatch] = useState(false)
-  const [endpoint, setEndpoint] = useState(true)
-  const [brk, setBrk] = useState(false)
-  const [featured, setFeatured] = useState(false)
 
   // Reset the dialog each time it opens.
   useEffect(() => {
     if (open) {
-      setQuery(''); setCandidate(null); setNoMatch(false); setEndpoint(true); setBrk(false); setFeatured(false)
+      setQuery(''); setCandidate(null); setNoMatch(false)
     }
   }, [open])
 
@@ -644,16 +622,12 @@ function AddPlaceDialog({ open, onOpenChange, region, onAdded }: {
         lat: candidate!.lat,
         lng: candidate!.lng,
         primaryType: candidate!.primaryType ?? null,
-        endpointEligible: endpoint,
-        breakEligible: brk,
-        featured,
       }),
     onSuccess: onAdded,
   })
 
   const resolveError = resolveMut.error
   const addError = addMut.error
-  const roleMissing = !endpoint && !brk
 
   return (
     <FormDialog
@@ -666,7 +640,7 @@ function AddPlaceDialog({ open, onOpenChange, region, onAdded }: {
       submitIcon={Plus}
       submitLabel="Add place"
       submitPendingLabel="Adding…"
-      submitDisabled={!candidate || roleMissing}
+      submitDisabled={!candidate}
       pending={addMut.isPending}
     >
       <form
@@ -709,21 +683,11 @@ function AddPlaceDialog({ open, onOpenChange, region, onAdded }: {
               {kindLabel(candidate.primaryType ?? null)} · {candidate.lat.toFixed(4)}, {candidate.lng.toFixed(4)}
             </div>
           </div>
-          <div className="flex flex-wrap gap-4">
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <Checkbox checked={endpoint} onCheckedChange={(v) => setEndpoint(v === true)} aria-label="Endpoint-eligible" />
-              <span>Endpoint (start / end / midpoint)</span>
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <Checkbox checked={brk} onCheckedChange={(v) => setBrk(v === true)} aria-label="Break-eligible" />
-              <span>Break (pitstop)</span>
-            </label>
-            <label className="flex cursor-pointer items-center gap-2 text-sm">
-              <Checkbox checked={featured} onCheckedChange={(v) => setFeatured(v === true)} aria-label="Featured" />
-              <span>Featured</span>
-            </label>
-          </div>
-          {roleMissing && <p className="text-xs text-muted-foreground">Pick at least one role.</p>}
+          {/* ⚠ No role to pick: adding a place to `places` IS declaring it a destination (2026-08-04).
+              It lands UNRANKED and therefore last — set a rank in the table if it deserves one. */}
+          <p className="text-xs text-muted-foreground">
+            Added unranked, so it sorts last. Give it a rank in the table if riders would name it.
+          </p>
         </div>
       )}
 

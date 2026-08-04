@@ -63,12 +63,12 @@ export interface PlannerTurnInput {
 
 /** One curated endpoint, as the planner is allowed to know it.
  *  ⚠ NAME AND ID ONLY. `lat`/`lng` would hand the model a coordinate to emit (INV-1) and `kind`
- *  ("scenic spot", "marina") is a place FACT — D9 gives the planner none. `featured` is ORDERING, never
- *  a printed field. A `RegionAnchor` row is assignable here; the extra columns are simply not read. */
+ *  ("scenic spot", "marina") is a place FACT — D9 gives the planner none. `rank` is ORDERING, never a
+ *  printed field. A `RegionAnchor` row is assignable here; the extra columns are simply not read. */
 export interface PlannerAnchor {
   id: string
   name: string
-  featured?: boolean
+  rank?: number | null
 }
 
 export interface PlannerModelArgs {
@@ -297,7 +297,7 @@ export function buildRosterBlock(regionName: string, anchors: PlannerAnchor[]): 
     '',
     '== The places you can start or end a drive at ==',
     '',
-    // ⚠ THE SECOND SENTENCE IS A GUARD, NOT A COURTESY. `byAnchorRank` puts `featured` rows first and
+    // ⚠ THE SECOND SENTENCE IS A GUARD, NOT A COURTESY. `byAnchorRank` puts low-`rank` rows first and
     // then sorts alphabetically, and D9 gives the model no coordinates at all — so a model handed a
     // ranked list with no explanation of the ranking will read list POSITION as proximity ("these two
     // are next to each other") or as quality ("the top one is the good one") and route on it. ~20

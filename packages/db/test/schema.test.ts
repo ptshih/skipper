@@ -147,26 +147,37 @@ describe('credit_entries — the money / double-charge invariants', () => {
   })
 })
 
-describe('places — curated break/endpoint anchor structural invariants', () => {
+describe('places — curated DESTINATION structural invariants', () => {
   it('a place dedupes by a UNIQUE place_id, with place_id/name/lat/lng NOT NULL', () => {
     expect(uniqueIndexNames(places)).toContain('places_place_id_uq')
     for (const col of ['place_id', 'name', 'lat', 'lng']) {
       expect(columnByDbName(places, col).notNull).toBe(true)
     }
   })
-  it('a place carries independent role flags (endpoint/break) + featured, all NOT NULL default false', () => {
-    // Two INDEPENDENT booleans (not a tri-value enum) so a place can be BOTH and the admin can prune
-    // one role without touching the other. NOT NULL + a default keeps the curate upsert + the picker
-    // query total (no null-role rows). See docs/designs/places-endpoints-spec.md.
+  it('THE ROLE FLAGS ARE GONE — membership in `places` IS the eligibility', () => {
+    // ⚠ 2026-08-04. `break_eligible` was read by nothing outside the admin console (`detours` is still
+    // stubbed), and `endpoint_eligible` was redundant the moment it left: every row is a destination.
+    // A flag that is true for every row is not a guard, it is a second copy of "the row exists" — and
+    // one the upsert's OR-merge made impossible to clear anyway. Pruning is a DELETE now.
+    // ⚠ INV-1 is unweakened: the wire allowlist became `inArray(places.id, …)`, same guarantee, one
+    // fewer predicate to keep true. Asserted NEGATIVELY so re-adding either silently fails here.
     for (const col of ['endpoint_eligible', 'break_eligible', 'featured']) {
-      const c = columnByDbName(places, col)
-      expect(c.notNull).toBe(true)
-      expect(c.hasDefault).toBe(true)
-      expect((c as { default?: unknown }).default).toBe(false)
+      expect(columnNames(places)).not.toContain(col)
     }
   })
-  it('the endpoint picker has a partial bbox index (places_endpoint_idx) for GET /drives/anchors', () => {
-    expect(indexNames(places)).toContain('places_endpoint_idx')
+  it('`rank` is NULLABLE — an unranked hand-add sorts LAST, it is not rank zero', () => {
+    // ⚠ The whole reason it is nullable. A NOT NULL default of 0 would put every manual add ahead of
+    // the draft's own rank 1, and `ORDER BY rank` would need a NULLS LAST that nobody would think to
+    // write. Both readers (the planner roster, the cold-open pool) depend on this.
+    const c = columnByDbName(places, 'rank')
+    expect(c.notNull).toBe(false)
+    expect(c.hasDefault).toBe(false)
+  })
+  it('the partial endpoint index is gone with the flag it indexed', () => {
+    // `places_endpoint_idx` was `(lat, lng) WHERE endpoint_eligible`. With no flag there is nothing
+    // partial to index and `places_lat_lng_idx` already covers the region-bbox lookup it served.
+    expect(indexNames(places)).not.toContain('places_endpoint_idx')
+    expect(indexNames(places)).toContain('places_lat_lng_idx')
   })
   // ⚠ Three `detours` structural assertions lived here until the 1.1 sweep (D27). The table has ZERO
   // WRITERS — break audio is stubbed and nothing generates it — so they pinned the shape of something

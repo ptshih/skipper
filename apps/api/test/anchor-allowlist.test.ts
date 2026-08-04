@@ -71,7 +71,6 @@ interface PlaceFixture {
   name: string
   lat: number
   lng: number
-  endpointEligible: boolean
 }
 
 const START = '00000000-0000-4000-8000-000000000501'
@@ -89,11 +88,15 @@ const UNKNOWN = '00000000-0000-4000-8000-0000000000ff'
  *  silently buys a DIFFERENT (still billed) route. A fixture listed in request order would let a
  *  `rows.map(...)` mutant pass, which is the whole reason this array is shuffled. */
 const PLACES: PlaceFixture[] = [
-  { id: END, name: 'End Marina', lat: 39.0, lng: -120.0, endpointEligible: true },
-  { id: MID_2, name: 'Second Mid', lat: 39.2, lng: -120.2, endpointEligible: true },
-  { id: START, name: 'Start Pier', lat: 39.3, lng: -120.3, endpointEligible: true },
-  { id: MID_1, name: 'Mid Lookout', lat: 39.1, lng: -120.1, endpointEligible: true },
-  { id: DE_CURATED, name: 'De-curated Overlook', lat: 39.4, lng: -120.4, endpointEligible: false },
+  { id: END, name: 'End Marina', lat: 39.0, lng: -120.0 },
+  { id: MID_2, name: 'Second Mid', lat: 39.2, lng: -120.2 },
+  { id: START, name: 'Start Pier', lat: 39.3, lng: -120.3 },
+  { id: MID_1, name: 'Mid Lookout', lat: 39.1, lng: -120.1 },
+  // ⚠ DE_CURATED IS DELIBERATELY ABSENT FROM THIS FIXTURE. Since 2026-08-04 there is no
+  // "exists but ineligible" state: `places` holds destinations only, so PRUNING IS A DELETE. The id
+  // below is therefore just a row that is not there, and the test named for it now asserts the same
+  // thing the UNKNOWN case does — by construction rather than by matching error copy, which is
+  // stronger than what it replaced.
 ]
 
 /* ---------------------------------- the db --------------------------------- */
@@ -106,25 +109,19 @@ let dbQueries = 0
 /**
  * Answer `hydrateAnchors`'s query from the fixture, HONOURING THE PREDICATES THE QUERY ACTUALLY RENDERS.
  *
- * ⚠ THIS IS WHAT GIVES THE DE-CURATED TEST ITS TEETH, and it is why the where-clause is rendered instead
- * of ignored. A fixture that simply returned "the eligible rows" would answer identically whether or not
- * `hydrateAnchors` still asks for `endpoint_eligible = true` — i.e. it would stay green through the exact
- * production regression the test exists to catch. Rendering the SQL means the fixture stops filtering the
- * moment the query stops asking, and the de-curated row leaks into a billed route.
+ * ⚠ IT RENDERS THE SQL rather than ignoring it, so "the right rows were requested" is OBSERVED rather
+ * than assumed — the fixture answers only what the query actually asked for.
  *
- * Rendering also recovers the ids the query asked for, so "the right rows were requested" is observed
- * rather than assumed.
+ * ⚠ The eligibility-predicate machinery that used to live here is gone with the flag (2026-08-04). It
+ * existed to fail if `hydrateAnchors` stopped asserting `endpoint_eligible = true`; there is no such
+ * predicate now, because `places` holds destinations only and membership IS eligibility. The regression
+ * it guarded cannot occur, and a check for a column that does not exist would be theatre.
  */
 function answerPlacesQuery(where: unknown): Pick<PlaceFixture, 'id' | 'name' | 'lat' | 'lng'>[] {
   dbQueries++
-  const { sql, params } = dialect.sqlToQuery(where as SQL)
+  const { params } = dialect.sqlToQuery(where as SQL)
   const asked = new Set(params.filter((p): p is string => typeof p === 'string'))
-  // The rendered predicate carries a $n placeholder; the truth of it lives in the params array.
-  const eligibility = sql.match(/"endpoint_eligible"\s*=\s*\$(\d+)/)
-  const assertsEligibility = eligibility ? params[Number(eligibility[1]) - 1] === true : false
-  return PLACES.filter((r) => asked.has(r.id) && (assertsEligibility ? r.endpointEligible : true)).map(
-    ({ id, name, lat, lng }) => ({ id, name, lat, lng }),
-  )
+  return PLACES.filter((r) => asked.has(r.id)).map(({ id, name, lat, lng }) => ({ id, name, lat, lng }))
 }
 
 const fakeDb: Record<string, unknown> = {
@@ -259,10 +256,10 @@ describe('INV-1: an off-list endpoint is refused BEFORE any billed Routes call',
       expect(routeCalls).toEqual([])
     })
 
-    test(`${name} — a DE-CURATED row (endpoint_eligible = false) is a 400, and Routes is never called`, async () => {
-      // ⚠ Eligibility is re-asserted PER REQUEST, never trusted from whenever the client last saw the
-      // list: a place can be de-curated between a planner turn and the rider's confirm. The row EXISTS
-      // here and only the flag differs, so this is the one case a "does the id resolve?" check misses.
+    test(`${name} — a PRUNED row is a 400, and Routes is never called`, async () => {
+      // ⚠ Membership is re-asserted PER REQUEST, never trusted from whenever the client last saw the
+      // list: a place can be pruned between a planner turn and the rider's confirm. Pruning is a DELETE
+      // now, so the row is simply gone — which is why this and the UNKNOWN case are the same shape.
       session = who
       const res = await call('POST', path, { start: DE_CURATED, end: END })
       expect(res.status).toBe(400)

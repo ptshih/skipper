@@ -27,33 +27,43 @@ import { byAnchorRank, type RankableAnchor } from '../src/anchor-format'
 import { MAX_PLAN_ANCHORS } from '../src/limits'
 
 /* -------------------------------------------------------------------------- */
-/* The RULE: truncating a roster must never drop a featured row for a plain one. */
+/* The RULE: truncating a roster must never drop a TOP-RANKED row for an unranked one. */
 /* -------------------------------------------------------------------------- */
 
 describe('roster truncation is RANK-aware, not alphabetical', () => {
-  /** A featured place whose name sorts LAST — the row the old alphabetical LIMIT threw away. */
-  const ZEBRA_FEATURED: RankableAnchor = { id: 'aaaaaaaa-0000-4000-8000-00000000000f', name: 'Zebra Cove', featured: true }
+  /** A top-ranked place whose name sorts LAST — the row the old alphabetical LIMIT threw away. */
+  const ZEBRA_RANKED: RankableAnchor = { id: 'aaaaaaaa-0000-4000-8000-00000000000f', name: 'Zebra Cove', rank: 1 }
+  /** ⚠ `rank: null` is the UNRANKED case, not "ranked zero" — a hand-added row. It must sort LAST, and
+   *  a naive `a.rank - b.rank` on null would coerce it to 0 and sort it FIRST, ahead of rank 1. */
   const plain = (i: number): RankableAnchor => ({
     id: `bbbbbbbb-0000-4000-8000-${String(i).padStart(12, '0')}`,
     name: `Anchor ${String(i).padStart(4, '0')}`,
-    featured: false,
+    rank: null,
   })
 
-  test('sorting by byAnchorRank BEFORE trimming keeps the featured row', () => {
-    const rows = [...Array.from({ length: 20 }, (_, i) => plain(i)), ZEBRA_FEATURED]
+  test('sorting by byAnchorRank BEFORE trimming keeps the ranked row', () => {
+    const rows = [...Array.from({ length: 20 }, (_, i) => plain(i)), ZEBRA_RANKED]
     const kept = [...rows].sort(byAnchorRank).slice(0, 5)
-    expect(kept.map((a) => a.id)).toContain(ZEBRA_FEATURED.id)
-    // And it is FIRST, not merely present — `featured` is the primary key of the comparator.
-    expect(kept[0]!.id).toBe(ZEBRA_FEATURED.id)
+    expect(kept.map((a) => a.id)).toContain(ZEBRA_RANKED.id)
+    // And it is FIRST, not merely present — `rank` is the primary key of the comparator.
+    expect(kept[0]!.id).toBe(ZEBRA_RANKED.id)
+  })
+
+  test('a LOWER rank number wins, and null loses to every number', () => {
+    // The sign flipped when `featured` became `rank` (true-first → 1-first). A test that only checked
+    // "the special row comes first" would pass under either, so pin the direction explicitly.
+    const r = (n: number | null, id: string): RankableAnchor => ({ id, name: 'Same Name', rank: n })
+    const sorted = [r(5, 'c'), r(null, 'd'), r(1, 'a'), r(3, 'b')].sort(byAnchorRank)
+    expect(sorted.map((x) => x.id)).toEqual(['a', 'b', 'c', 'd'])
   })
 
   // ⚠ THE MUTATION CHECK, and the reason the test above is not enough on its own: trimming on the
   // ALPHABETICAL order — which is exactly what the SQL used to hand over — silently loses it. This is the
   // production bug, reproduced as an assertion so nobody can reintroduce the old order and stay green.
   test('trimming on NAME order loses it — the defect, pinned', () => {
-    const rows = [...Array.from({ length: 20 }, (_, i) => plain(i)), ZEBRA_FEATURED]
+    const rows = [...Array.from({ length: 20 }, (_, i) => plain(i)), ZEBRA_RANKED]
     const byName = [...rows].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)).slice(0, 5)
-    expect(byName.map((a) => a.id)).not.toContain(ZEBRA_FEATURED.id)
+    expect(byName.map((a) => a.id)).not.toContain(ZEBRA_RANKED.id)
   })
 })
 
@@ -72,19 +82,23 @@ const anchorQuery = driveSource.slice(
 
 describe('loadRegionAnchors implements that rule, and reports when it truncates', () => {
   test('the slice under test really is loadRegionAnchors', () => {
-    expect(anchorQuery).toContain('endpointEligible')
+    // ⚠ The role filter is GONE (2026-08-04): `places` is destinations only, so membership IS
+    // eligibility and the query must NOT carry an extra predicate that could drift from that.
+    expect(anchorQuery).not.toContain('endpointEligible')
     expect(anchorQuery.length).toBeGreaterThan(200)
   })
 
-  // ⚠ `featured` MUST COME FIRST IN THE ORDER BY. Whatever rows this query drops are gone before
+  // ⚠ `rank` MUST COME FIRST IN THE ORDER BY. Whatever rows this query drops are gone before
   // `byAnchorRank` is ever applied, so the SQL order has to AGREE with it — see the rule block above.
-  test('the ORDER BY leads with featured, matching byAnchorRank', () => {
-    const orderBy = anchorQuery.match(/\.orderBy\(([^)]*\)[^)]*)\)/)?.[1] ?? ''
-    expect(orderBy).toContain('featured')
+  test('the ORDER BY leads with rank ASC NULLS LAST, matching byAnchorRank', () => {
+    const orderBy = anchorQuery.match(/\.orderBy\(([\s\S]*?)\)\s*$/m)?.[1] ?? anchorQuery
+    expect(orderBy).toContain('rank')
     expect(orderBy).toContain('name')
-    expect(orderBy.indexOf('featured')).toBeLessThan(orderBy.indexOf('name'))
-    // DESC on featured — true first. `places.featured` is NOT NULL, so there is no NULLS-first hazard.
-    expect(orderBy).toMatch(/desc\(\s*places\.featured\s*\)/)
+    expect(orderBy.indexOf('rank')).toBeLessThan(orderBy.indexOf('name'))
+    // ⚠ NULLS LAST IS THE WHOLE POINT AND IS NOT THE DEFAULT. Postgres sorts NULLs FIRST on ASC, so
+    // without this an unranked hand-add would lead the roster and, past the cap, DELETE the drafted
+    // rows it displaced. `places.rank` is nullable, unlike the NOT NULL boolean it replaced.
+    expect(orderBy).toMatch(/NULLS LAST/i)
   })
 
   // ⚠ CAP + 1 IS WHAT MAKES TRUNCATION OBSERVABLE AT ALL. Fetching exactly the cap makes a truncated

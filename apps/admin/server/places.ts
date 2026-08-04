@@ -153,15 +153,14 @@ export async function resolvePlaceInBbox(
 export interface PlaceDraft {
   name: string
   query: string
-  role: 'endpoint' | 'break' | 'both'
-  featured: boolean
+  rank: number
   rationale?: string
 }
 
 const DRAFT_TOOL: Anthropic.Tool = {
   name: 'draft_curated_places',
   description:
-    'Return the curated set of real, recognizable places for this region: drive START/END/MIDPOINT hubs and good break pitstops.',
+    'Return the curated set of real, recognizable DESTINATIONS for this region — places a drive can start at or finish at.',
   input_schema: {
     type: 'object',
     properties: {
@@ -176,19 +175,14 @@ const DRAFT_TOOL: Anthropic.Tool = {
               description:
                 'A precise Google Places search string that uniquely pins THIS place — include the locality/state when the bare name is ambiguous (e.g. "Emerald Bay State Park, California").',
             },
-            role: {
-              type: 'string',
-              enum: ['endpoint', 'break', 'both'],
+            rank: {
+              type: 'integer',
               description:
-                'endpoint = a place a rider would START or END a drive at (town, marina, scenic lookout, trailhead gateway). break = a pitstop along the way (coffee, gas, rest area, viewpoint pull-off). both = a hub that is also a natural pitstop.',
-            },
-            featured: {
-              type: 'boolean',
-              description: 'true for the handful of most iconic, popular start points — floated to the top of the picker.',
+                'How likely a visitor is to NAME this place out loud, 1 being the most. Ties are fine. A low rank is not a criticism — it means real, but less asked-for.',
             },
             rationale: { type: 'string', description: 'One short phrase on why this place earns a spot.' },
           },
-          required: ['name', 'query', 'role', 'featured'],
+          required: ['name', 'query', 'rank'],
         },
       },
     },
@@ -239,13 +233,19 @@ A place just OUTSIDE the box is the one thing that cannot be used at all, so nev
 
 == What to draft ==
 
-Draft roughly ${targetN} places:
-- ENDPOINT hubs (most of the list): towns, villages and CITIES — a city's downtown, a historic district, a main street or a landmark quarter is a destination exactly as much as a lake is — plus marinas and boat launches, famous scenic lookouts, state-park gateways and major trailheads. TWO tests, and a hub needs BOTH. First: somebody says "let's drive from ___ to ___". That is not about whether the place is scenic or outdoorsy — if the box contains a city, a county seat or an old mining town, it belongs on this list. Second: a car can actually stop there, and the rider's drive is over when it does. This one rules out the famous things you reach on foot or by boat however recognizable they are — an island, a summit with no road to it, a mansion a mile down a trail, a beach you scramble to. ⚠ A mountain PASS or a summit the ROAD ITSELF crosses is the opposite case and belongs on this list: the highway goes over the top and you can pull over there, so it is a place a drive can genuinely end. Name the place a car arrives AT — the park, the marina, the town, the pass — never the thing you walk to from it.
-- BREAK pitstops (a smaller share): well-known coffee spots, gas stations at natural stopping points, rest areas, and viewpoint pull-offs along the main routes.
-- Mark role="both" for a hub that is also a natural pitstop.
-- Mark featured=true for ONLY the few most iconic, popular start points (think 4–8).
+Draft roughly ${targetN} places. Every one is somewhere a driver could START a drive or FINISH one. There is no other category here -- no pitstops, no coffee stops, no gas stations, no rest areas.
 
-Optimize for CHARM: every place must be intentional, recognizable, and a real place a visitor would actually name — never a gazetteer of everything with a signpost. Length is not the virtue here; being real and recognizable is. But never pad to reach the number: if the box honestly holds fewer good ones, return fewer.
+TWO tests, and a place needs BOTH.
+
+FIRST: would somebody actually SAY it? "Let's drive from ___ to ___." Towns, villages and cities count -- a city's downtown, a historic district or a main street is a destination exactly as much as a lake is -- and so do the famous beaches, state-park gateways, marinas, ski resorts, mountain passes and lookouts a visitor names by heart. If the box holds a city, a county seat or an old mining town, it belongs here. This is not about whether a place is scenic or outdoorsy; it is about whether its name is on a visitor's lips.
+
+SECOND: can a car actually stop there, with the drive over? This rules out the famous things you reach on foot or by boat, however recognizable -- an island, a summit with no road, a mansion a mile down a trail, a beach you scramble down to. A mountain PASS, or a summit the ROAD ITSELF crosses, is the opposite case and belongs here: the highway goes over the top and you can pull over. Name the place a car arrives AT -- the town, the park, the marina, the pass -- never the thing you walk to from it.
+
+== Ranking ==
+
+Rank every place by how likely a visitor is to name it out loud, 1 being the most. The first handful should be what anyone who has been here would say without thinking. Ties are fine. A low rank is not a criticism -- it means real, but less asked-for.
+
+Optimize for CHARM: every place intentional, recognizable, a real place a visitor would actually name -- never a gazetteer of everything with a signpost. Length is not the virtue here. Never pad to reach the number: if the box honestly holds fewer good ones, return fewer.
 
 For each place give a precise Google Places \`query\` that uniquely identifies it (add the town/state when the name alone is ambiguous), so it resolves to the right pin. Do NOT invent coordinates — name the place, never a latitude or longitude; resolution happens separately.`
 }
@@ -291,5 +291,5 @@ export async function draftCuratedPlaces(
   const toolUse = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
   if (!toolUse) throw new Error('the draft model returned no tool call')
   const out = toolUse.input as { places?: PlaceDraft[] }
-  return (out.places ?? []).filter((p) => p && p.name && p.query && p.role)
+  return (out.places ?? []).filter((p) => p && p.name && p.query && typeof p.rank === 'number')
 }

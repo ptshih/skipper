@@ -174,7 +174,7 @@ const resolvedEndpoint = z.object({
  *  of recognizable Google Places (towns, marinas, lookouts) with coords RESOLVED + STORED at curation,
  *  so the rider picks FROM / TO from a stored short list — no free text, no live geocoding/Places call,
  *  endpoints grounded by construction. `kind` is the humanized Google `primary_type` (display only);
- *  `featured` floats the popular subset to the top of the (short) picker. */
+ *  `rank` orders them by how likely a visitor is to name the place out loud. */
 export const regionAnchor = z.object({
   /** The `places` row id — the ONLY thing a request may name an endpoint by (see `anchorId`). Already
    *  existed in the DB; it simply was never projected to the wire, which is what let requests carry
@@ -184,9 +184,12 @@ export const regionAnchor = z.object({
   lat: z.number(),
   lng: z.number(),
   kind: z.string().nullable(),
-  /** The curator-flagged popular subset, sorted to the top of the picker. `.default(false)` so an
-   *  older server (pre-curated-Places) still parses — the client just renders no featured section. */
-  featured: z.boolean().default(false),
+  /** How likely a visitor is to NAME this place, 1 = most, ties allowed. Replaces the `featured`
+   *  boolean (2026-08-04) — the same judgment at a grain a two-valued field could not express.
+   *  ⚠ NULLABLE with null sorting LAST: a hand-added place carries no drafted rank, and inventing one
+   *  would put an operator's manual entry ahead of the model's considered order. `.nullish()` so an
+   *  older server that still sends nothing parses rather than 400ing a rider mid-conversation. */
+  rank: z.number().int().nullish(),
 })
 export type RegionAnchor = z.infer<typeof regionAnchor>
 
