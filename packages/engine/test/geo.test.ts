@@ -9,7 +9,9 @@ import {
   cumulativeMeters,
   haversineMeters,
   interpolate,
+  LOOP_MAX_RETRACE,
   radiusForKind,
+  retraceFraction,
   SPEAKABLE_ANCHOR_RADIUS_MULT,
   speakableAnchorMaxM,
   triggerRadiusForKind,
@@ -146,6 +148,79 @@ describe('speakable anchor sanity', () => {
     const r = checkSpeakableAnchor([-120.1, 39.05], [-120.1, 40.05], 'mountain peak')
     expect(r.distanceM).toBeGreaterThan(110_000)
     expect(r.ok).toBe(false)
+  })
+})
+
+describe('retraceFraction — how much of a route is driven twice', () => {
+  /** A straight west→east line of `km` kilometres at ~39°N, sampled every ~50 m. */
+  const line = (km: number): LngLat[] => {
+    const degPerKm = 1 / (111.32 * Math.cos((39 * Math.PI) / 180))
+    const steps = km * 20
+    return Array.from({ length: steps + 1 }, (_, i): LngLat => [-120 + (i / 20) * degPerKm, 39])
+  }
+
+  test('a one-way road is never retraced', () => {
+    expect(retraceFraction(line(20))).toBe(0)
+  })
+
+  test('a road followed by its own reverse is almost entirely retraced', () => {
+    // The defining case: an out-and-back. Measured at 98% on the real stitched Tahoe polylines.
+    const out = line(20)
+    const there = [...out, ...[...out].reverse()]
+    expect(retraceFraction(there)).toBeGreaterThan(0.9)
+  })
+
+  test('a CLOSED RING does not convict itself for closing', () => {
+    // ⚠ The reason RETRACE_MIN_ALONG_M exists. A ring's last point sits on its first; without the
+    // along-route gate every honest loop would score as a retrace and the feature would refuse the
+    // only shape it is meant to allow.
+    const r = 0.15 // ~16 km radius in degrees of latitude
+    const ring: LngLat[] = Array.from({ length: 721 }, (_, i): LngLat => {
+      const a = (i / 720) * 2 * Math.PI
+      return [-120 + r * Math.cos(a) * 1.3, 39 + r * Math.sin(a)]
+    })
+    expect(retraceFraction(ring)).toBeLessThan(LOOP_MAX_RETRACE)
+  })
+
+  test('a ring reached down a shared spur stays under the gate; a there-and-back does not', () => {
+    // The shape the threshold is actually chosen for: leave home down one access road, go round, come
+    // back up the same access road. That spur IS driven twice and honestly scores — it just must not
+    // condemn the ring it serves.
+    const spur = line(4)
+    const r = 0.15
+    const ring: LngLat[] = Array.from({ length: 721 }, (_, i): LngLat => {
+      const a = (i / 720) * 2 * Math.PI
+      return [spur[spur.length - 1]![0] + r * (Math.cos(a) - 1) * 1.3, 39 + r * Math.sin(a)]
+    })
+    const withSpur = [...spur, ...ring, ...[...spur].reverse()]
+    expect(retraceFraction(withSpur)).toBeLessThan(LOOP_MAX_RETRACE)
+  })
+
+  test('the gate separates a real ring from a half-retraced route by a wide margin', () => {
+    // Calibration held that a partial retrace scores ~50% — far above the 20% gate, far below a pure
+    // there-and-back's 98%. A threshold in that gap is not a knife edge.
+    const out = line(20)
+    const backAndOn = [...out, ...[...out].reverse(), ...line(20).map(([x, y]): LngLat => [x, y + 0.3])]
+    const f = retraceFraction(backAndOn)
+    expect(f).toBeGreaterThan(LOOP_MAX_RETRACE)
+    expect(f).toBeLessThan(0.9)
+  })
+
+  test('a degenerate route has nothing to drive twice', () => {
+    expect(retraceFraction([])).toBe(0)
+    expect(retraceFraction([[-120, 39]])).toBe(0)
+    expect(retraceFraction([[-120, 39], [-120, 39]])).toBe(0)
+  })
+
+  test('the verdict is stable across the calibrated proximity band', () => {
+    // 35 m and 60 m gave identical verdicts on every real polyline, which is what makes RETRACE_NEAR_M
+    // a band rather than a tuned edge — pin that, so a later "tighten it a little" has to argue.
+    const out = line(20)
+    const there = [...out, ...[...out].reverse()]
+    for (const near of [35, 50, 60]) {
+      expect(retraceFraction(there, near)).toBeGreaterThan(0.9)
+      expect(retraceFraction(line(20), near)).toBe(0)
+    }
   })
 })
 

@@ -16,7 +16,7 @@ import { useMemo, type ReactNode } from 'react'
 import { ActivityIndicator, StyleSheet, useAnimatedValue, View } from 'react-native'
 import type { DriveProposal } from '@/lib/api'
 import { cleanPlaceName } from '@/lib/labels'
-import { isRoundTrip, turnaroundOf } from '@/lib/planner-route'
+import { isRoundTrip, returnLegOf, turnaroundOf } from '@/lib/planner-route'
 import { border, radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { Badge } from './Badge'
@@ -140,8 +140,9 @@ export function PreviewCard({
         lat: v.lat,
         lng: v.lng,
         // A midpoint is a waypoint, not a destination — it stays quiet so the one amber pin means
-        // exactly one thing. (On a LOOP the last via IS the turnaround, and it stays quiet too: a
-        // round trip's one landmark is where it starts, which is already pinned pine.)
+        // exactly one thing. (On a LOOP the last two vias are the turnaround and the way home, and
+        // they stay quiet too: a round trip's one landmark is where it starts, which is already
+        // pinned pine.)
         state: 'upcoming' as const,
       })),
     ]
@@ -234,11 +235,16 @@ export function PreviewCard({
   // alone. Caught by two independent reviewers on 2026-08-03 after the marker fix stopped one region
   // short of this one.
   const isLoop = isRoundTrip(proposal)
-  // ⚠ THE LAST VIA, NEVER THE FIRST — `turnaroundOf` owns that rule and the reason it bites (lib/
-  // planner-route.ts). This line asked for `via[0]` until 2026-08-03 and so named a pass-through place
-  // as the far end of a round trip; the pins above key on the same helper's `isRoundTrip`, which is
-  // what the note there means by "THE SAME TEST THE PINS USE".
+  // ⚠ POSITION IS EVERYTHING HERE AND `turnaroundOf` OWNS IT — read the rule there (lib/planner-route.ts)
+  // rather than counting off the end of `viaResolved` in this file. This line asked for `via[0]` until
+  // 2026-08-03 and named a pass-through place as the far end; the same line reading `.at(-1)` would now
+  // name the WAY HOME as the far end, because a loop appends both. The pins above key on the same
+  // helper's `isRoundTrip`, which is what the note there means by "THE SAME TEST THE PINS USE".
   const turnaround = turnaroundOf(proposal)
+  // A loop's second named place. Present on every loop a current server drew — it refuses to draw one
+  // without a way home — so the fallback below is for a degenerate or older-shaped proposal, not a case
+  // the rider is meant to reach.
+  const returnLeg = returnLegOf(proposal)
   const spent = state === 'made'
 
   return (
@@ -276,7 +282,13 @@ export function PreviewCard({
               <View style={styles.arrowRow}>
                 <Icon name="car" size={14} color="inkFaint" />
                 <Text variant="dim" color="inkFaint">
-                  via {cleanPlaceName(turnaround.name)}
+                  {/* BOTH places, because a loop now has two and they are not interchangeable: one is
+                      how far out they go, the other is why the drive is a ring instead of the same
+                      road twice. Naming only the far end would hide the half of the plan the rider
+                      was asked for by name. */}
+                  {returnLeg
+                    ? `out by ${cleanPlaceName(turnaround.name)}, home by ${cleanPlaceName(returnLeg.name)}`
+                    : `via ${cleanPlaceName(turnaround.name)}`}
                 </Text>
               </View>
             ) : null}

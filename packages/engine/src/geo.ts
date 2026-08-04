@@ -251,6 +251,160 @@ export function checkSpeakableAnchor(pin: LngLat, anchor: LngLat, kind: string |
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Retrace — how much of a route is driven TWICE                               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How close two points must be to count as "the same road" (m).
+ *
+ * Wide enough to match the opposing carriageway of a divided highway and the vertex jitter between
+ * two independently-returned polylines; far narrower than the gap to any parallel road that would be
+ * a genuinely different drive. The calibration below is flat from 35 m to 60 m, so this is not a
+ * tuned edge — anywhere in that band gives the same verdict.
+ */
+export const RETRACE_NEAR_M = 35
+
+/**
+ * How far apart two samples must be ALONG the route before their proximity means anything (m).
+ *
+ * ⚠ THIS IS WHAT KEEPS AN HONEST LOOP FROM CONVICTING ITSELF. A ring ENDS where it began, so its
+ * first and last samples sit on top of each other — without an along-route gate every closed loop
+ * would score as retraced simply for closing. It also absorbs the ordinary switchback, where a road
+ * doubles back on itself within a few hundred metres and is still one road driven once.
+ */
+export const RETRACE_MIN_ALONG_M = 1_500
+
+/** Sample spacing (m) for the sweep. Finer than any road feature it must resolve, coarse enough that
+ *  a 125 km ring is ~5k samples. */
+export const RETRACE_SAMPLE_M = 25
+
+/**
+ * The share of a route (0–1) that is driven twice.
+ *
+ * A sample counts as RETRACED when some other sample lies within `RETRACE_NEAR_M` of it in space
+ * while sitting more than `RETRACE_MIN_ALONG_M` away along the route. Direction is deliberately NOT
+ * considered: a rider who drives the same road northbound and then southbound has seen it twice, and
+ * so has one who loops a one-way street back onto itself.
+ *
+ * ⚠ MEASURED, NOT GUESSED. Calibrated 2026-08-03 against the frozen polylines of the four saved
+ * Tahoe drives, including two stitched into synthetic routes of known shape:
+ *
+ * | route                                            | retrace |
+ * | ------------------------------------------------ | ------- |
+ * | west shore + east shore (91 km, distinct roads)  |    0%   |
+ * | any single one-way drive                          |    0%   |
+ * | half-retrace + a distinct arc                     |   50%   |
+ * | the saved Stateline → Emerald Bay → Stateline     |   94%   |
+ * | a polyline followed by its own reverse            |   98%   |
+ *
+ * The distribution is bimodal with an enormous gap and barely moves across the sweep settings, which
+ * is why `LOOP_MAX_RETRACE` can sit at 0.20 without being a knife edge.
+ *
+ * Returns 0 for a degenerate route (fewer than 3 samples) — nothing to drive twice.
+ */
+export function retraceFraction(
+  polyline: readonly LngLat[],
+  nearM: number = RETRACE_NEAR_M,
+  minAlongM: number = RETRACE_MIN_ALONG_M,
+  stepM: number = RETRACE_SAMPLE_M,
+): number {
+  const samples = resampleAlong(polyline, stepM)
+  if (samples.length < 3) return 0
+
+  // A hash grid at the proximity radius keeps this near-linear: without it a 125 km ring is 25M
+  // pairwise haversines on a BILLED request path, which is the kind of cost that gets a correct guard
+  // deleted later for being slow.
+  const cellDeg = nearM / 111_000
+  const grid = new Map<string, number[]>()
+  const cellKey = (x: number, y: number): string => `${x}:${y}`
+  const cellOf = (p: LngLat): [number, number] => [
+    Math.floor(p[0] / cellDeg),
+    Math.floor(p[1] / cellDeg),
+  ]
+  samples.forEach((s, i) => {
+    const [x, y] = cellOf(s.pt)
+    const k = cellKey(x, y)
+    const bucket = grid.get(k)
+    if (bucket) bucket.push(i)
+    else grid.set(k, [i])
+  })
+
+  let retraced = 0
+  for (let i = 0; i < samples.length; i++) {
+    const here = samples[i]!
+    const [cx, cy] = cellOf(here.pt)
+    let found = false
+    for (let dx = -1; dx <= 1 && !found; dx++) {
+      for (let dy = -1; dy <= 1 && !found; dy++) {
+        for (const j of grid.get(cellKey(cx + dx, cy + dy)) ?? []) {
+          if (j === i) continue
+          const other = samples[j]!
+          if (Math.abs(other.alongM - here.alongM) < minAlongM) continue
+          if (haversineMeters(here.pt, other.pt) <= nearM) {
+            found = true
+            break
+          }
+        }
+      }
+    }
+    if (found) retraced++
+  }
+  return retraced / samples.length
+}
+
+/** A route sample: a point and how far along the route it sits. */
+interface RouteSample {
+  pt: LngLat
+  alongM: number
+}
+
+/**
+ * Resample a polyline to even `stepM` spacing.
+ *
+ * ⚠ EVEN SPACING IS WHAT MAKES THE FRACTION HONEST. Routes API vertices are dense in towns and sparse
+ * on open highway, so counting raw VERTICES would weight a retraced mile through a village many times
+ * a retraced mile of highway — and report a number that moves with the scenery rather than with the
+ * road. Every sample here represents the same `stepM` of driving.
+ */
+function resampleAlong(polyline: readonly LngLat[], stepM: number): RouteSample[] {
+  const out: RouteSample[] = []
+  if (polyline.length === 0 || stepM <= 0) return out
+  out.push({ pt: polyline[0]!, alongM: 0 })
+  let travelled = 0
+  // Distance from the last emitted sample to the start of the current segment.
+  let carry = 0
+  for (let i = 1; i < polyline.length; i++) {
+    const a = polyline[i - 1]!
+    const b = polyline[i]!
+    const segM = haversineMeters(a, b)
+    if (segM === 0) continue
+    let t = stepM - carry
+    while (t <= segM) {
+      out.push({ pt: interpolate(a, b, t / segM), alongM: travelled + t })
+      t += stepM
+    }
+    carry = (carry + segM) % stepM
+    travelled += segM
+  }
+  return out
+}
+
+/**
+ * The most of itself a LOOP may retrace before it is not a loop at all.
+ *
+ * A real ring measures 0 and the worst partial-retrace case measured 50 (see `retraceFraction`), so
+ * this sits clear of both while still tolerating a shared spur — the access road a drive leaves on
+ * and comes home by. On a 100 km ring that is 20 km of shared road before the gate fires, which is
+ * generous for a spur and nowhere near a there-and-back.
+ *
+ * ⚠ ONE HOME, read by BOTH billed call sites (`POST /drives/propose` and `POST /drives`). They must
+ * never disagree about whether a route is a loop the rider may buy: propose is what draws the card,
+ * create is what spends the credit, and a create that is stricter than propose sells a rider a drive
+ * and then refuses it at the till.
+ */
+export const LOOP_MAX_RETRACE = 0.2
+
+/* -------------------------------------------------------------------------- */
 /*  Region bbox — ONE parser (1.1 sweep)                                        */
 /* -------------------------------------------------------------------------- */
 

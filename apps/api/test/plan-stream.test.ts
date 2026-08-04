@@ -480,16 +480,24 @@ describe('POST /drives/plan — SSE frames', () => {
   })
 
   // The tool→wire translation is now visible on the wire, so pin it here too: `round_trip` is NOT the
-  // wire's loop shape (end === start, turnaround as the LAST via midpoint).
+  // wire's loop shape (end === start, then the turnaround and the way home as the LAST TWO via
+  // midpoints).
   test('a route rides the terminal frame only, already translated', async () => {
     const start = crypto.randomUUID()
     const far = crypto.randomUUID()
+    const back = crypto.randomUUID()
     impl = async (a) => {
       a.onSay?.('Drawing that up.')
       return {
         outcome: 'route',
         say: 'Drawing that up.',
-        rawRoute: { start_anchor_id: start, end_anchor_id: far, round_trip: true, target_minutes: 90 },
+        rawRoute: {
+          start_anchor_id: start,
+          end_anchor_id: far,
+          return_anchor_id: back,
+          round_trip: true,
+          target_minutes: 90,
+        },
       }
     }
     const body = await (await post(OK, SSE)).text()
@@ -500,8 +508,74 @@ describe('POST /drives/plan — SSE frames', () => {
     const route = plannedRoute.parse(terminal.route)
     expect(route.start).toBe(start)
     expect(route.end).toBe(start)
-    expect(route.via?.[route.via.length - 1]).toBe(far)
+    // ORDER IS THE CONTRACT: the far end, then the way home. The client reads the far end at `.at(-2)`
+    // (turnaroundOf), so swapping these two silently prints the return leg as the destination.
+    expect(route.via?.at(-2)).toBe(far)
+    expect(route.via?.at(-1)).toBe(back)
     expect(route.targetMinutes).toBe(90)
+  })
+
+  // The no-same-road rule at the PLANNER layer: a loop with no way home is not drawn at all, and the
+  // rider is asked which way they want to come back rather than handed a retrace or an apology.
+  test('a loop with no way home is not drawn — the rider is asked for one', async () => {
+    const PROMISED = 'CONSIDER-IT-DRAWN-SENTINEL'
+    impl = async () => ({
+      outcome: 'route',
+      say: PROMISED,
+      rawRoute: { start_anchor_id: crypto.randomUUID(), end_anchor_id: crypto.randomUUID(), round_trip: true },
+    })
+    const body = await (await post(OK, SSE)).text()
+    const terminal = drivePlanResponse.parse(JSON.parse(frames(body).find((f) => f.event === 'turn')!.data))
+    expect(terminal.route).toBeFalsy()
+    // REPLACED, not appended: the model's line already promised a drive that is not coming, so leaving
+    // it in front of the question reads as "here it is — now, where to?".
+    expect(terminal.say).not.toContain(PROMISED)
+    expect(terminal.say.toLowerCase()).toContain('come home')
+    expect(terminal.done).toBe(false)
+  })
+
+  // A "way home" that IS the turnaround describes no return leg at all — Google collapses
+  // `start → X → X → start` to the same out-and-back — so it must be treated as the missing answer it
+  // is rather than billed and then refused a step later.
+  test('a way home that repeats the turnaround or the start is treated as no way home', async () => {
+    // Both spellings of "no return leg", refused before any Routes call — the wire gate downstream
+    // could only catch these AFTER paying to discover them.
+    for (const naming of ['end', 'start'] as const) {
+      const start = crypto.randomUUID()
+      const far = crypto.randomUUID()
+      impl = async () => ({
+        outcome: 'route',
+        say: 'Drawing that up.',
+        rawRoute: {
+          start_anchor_id: start,
+          end_anchor_id: far,
+          return_anchor_id: naming === 'end' ? far : start,
+          round_trip: true,
+        },
+      })
+      const body = await (await post(OK, SSE)).text()
+      const terminal = drivePlanResponse.parse(JSON.parse(frames(body).find((f) => f.event === 'turn')!.data))
+      expect(terminal.route).toBeFalsy()
+      expect(terminal.say.toLowerCase()).toContain('come home')
+    }
+  })
+
+  // A ONE-WAY route is untouched by any of this — the rule is about loops, and a rider who asked to
+  // pass through somewhere on the way is not being overruled.
+  test('a one-way route needs no way home', async () => {
+    const start = crypto.randomUUID()
+    const end = crypto.randomUUID()
+    impl = async () => ({
+      outcome: 'route',
+      say: 'Drawing that up.',
+      rawRoute: { start_anchor_id: start, end_anchor_id: end },
+    })
+    const body = await (await post(OK, SSE)).text()
+    const terminal = drivePlanResponse.parse(JSON.parse(frames(body).find((f) => f.event === 'turn')!.data))
+    const route = plannedRoute.parse(terminal.route)
+    expect(route.start).toBe(start)
+    expect(route.end).toBe(end)
+    expect(route.via ?? []).toEqual([])
   })
 })
 

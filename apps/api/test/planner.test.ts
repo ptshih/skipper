@@ -149,7 +149,15 @@ describe('plan_route tool', () => {
     // (./plan-route) reads exactly these keys, so a rename here is a silently dropped route.
     const props = PLAN_ROUTE_TOOL.input_schema.properties as Record<string, unknown>
     expect(Object.keys(props).sort()).toEqual(
-      ['end_anchor_id', 'round_trip', 'say', 'start_anchor_id', 'target_minutes', 'via_anchor_ids'].sort(),
+      [
+        'end_anchor_id',
+        'return_anchor_id',
+        'round_trip',
+        'say',
+        'start_anchor_id',
+        'target_minutes',
+        'via_anchor_ids',
+      ].sort(),
     )
     // Requiring round_trip or target_minutes would push the model to assert an intent the rider never
     // expressed just to satisfy the schema. `say` is different in kind — there is no honest default
@@ -157,12 +165,14 @@ describe('plan_route tool', () => {
     expect(PLAN_ROUTE_TOOL.input_schema.required).toEqual(['say', 'start_anchor_id', 'end_anchor_id'])
   })
 
-  test('the via cap leaves room for the turnaround the server APPENDS', () => {
-    // A round trip maps to `{ start, end: start, via: [...via, end] }`, so a model that filled `via` to
-    // this tool's brim must still clear the shared wire cap — otherwise toPlannedRoute drops the whole
-    // route and the rider hears the retry line for a drive that was fine.
+  test('the via cap leaves room for the TWO waypoints the server APPENDS', () => {
+    // A round trip maps to `{ start, end: start, via: [...via, end, return] }` — the turnaround AND the
+    // way home (2026-08-03, no-same-road loops) — so a model that filled `via` to this tool's brim must
+    // still clear the shared wire cap. Otherwise toPlannedRoute drops the whole route and the rider
+    // hears the retry line for a drive that was fine. It was `+ 1` while a loop appended only the
+    // turnaround; the append grew and this bound has to grow with it.
     const via = PLAN_ROUTE_TOOL.input_schema.properties as { via_anchor_ids: { maxItems: number } }
-    expect(via.via_anchor_ids.maxItems + 1).toBeLessThanOrEqual(MAX_ROUTE_VIA)
+    expect(via.via_anchor_ids.maxItems + 2).toBeLessThanOrEqual(MAX_ROUTE_VIA)
   })
 
   // The founder's 2026-08-03 report, from the tool's side. The description must define drive IDENTITY

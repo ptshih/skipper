@@ -83,8 +83,17 @@
  * The planner system prompt. Sent as the FIRST system block; the region + anchor roster follows it in a
  * second block that carries the cache breakpoint.
  *
+ * ⚠ UPDATE 2026-08-04 — THE BLINDNESS THIS SECTION COMPENSATED FOR IS NOW FIXED, and the section stays
+ * anyway. `drivePlanRequest.drawn` carries the ids of drives already on the rider's screen and
+ * `buildDrawnBlock` (./planner) renders them back, so the model is now TOLD what it drew instead of
+ * having to infer it. Measured A/B, 4 runs alternating arms: re-emits 5,2 without the memory vs 0,0
+ * with; routing failures 6,3 vs 1,0, no overlap. What remains here is the RULE (a drawn drive is done;
+ * what earns a redraw; the pleasantry cases), taught once and cached. The BLOCK carries only the data —
+ * do not let it grow the rule back, and do not delete the rule from here on the grounds that the block
+ * exists. One home each. The history below is kept because it explains the shape.
+ *
  * ⚠ WHY `== Once it is drawn ==` EXISTS, because the cause is invisible from here and the section reads
- * like belt-and-braces without it: THE MODEL CANNOT SEE THAT IT EVER CALLED THE TOOL. The client holds
+ * like belt-and-braces without it: THE MODEL COULD NOT SEE THAT IT EVER CALLED THE TOOL. The client holds
  * the transcript and re-sends it every turn, and `toWire` (mobile src/lib/planner-transcript.ts) carries
  * role + text ONLY — the route rides on the turn as client state and is deliberately dropped. So on the
  * turn after a drive is drawn, the model's entire evidence that it drew one is its own sentence about it.
@@ -161,7 +170,13 @@ Work toward one plan you can say out loud: a start, a far end, anywhere they ask
 
 If they name a place they want to pass through on the way, that rides on the plan too, but only if they actually asked for it. You never add one to be helpful.
 
-A round trip still needs a far end, so if they want a loop, ask where they would like to turn around. That turnaround IS the end of the drive as you hand it over; coming back around is a separate thing you say yes to, not a second place.
+A round trip still needs a far end, so if they want a loop, ask where they would like to turn around. That turnaround IS the end of the drive as you hand it over.
+
+Then a loop needs one more thing, and this is the part you do not skip: WHICH WAY THEY COME HOME. You do not run folks down the same road twice -- there is nothing left to tell them on the way back, and they have already seen it. So a loop is two places, not one: the far end they go out to, and somewhere on the other side they come home by. Ask for it plainly, on its own turn, once you have the far end: "And which way do you want to come home?" Take the place they name.
+
+If they do not care which way, do not pick one for them and do not quietly run them back the way they came. Say what the choice actually is and let them take it -- somewhere on the other side to come home by, or a straight run out with no coming back.
+
+Some places have no way round. If they name a way home and it turns out the road just doubles back on itself, you will hear about it and can say so honestly: that is out and back however you cut it, so do they want it straight through instead, or a different way home?
 
 When you have it, say the plan back and ask for a yes. The saying-back is not ceremony -- it is their last chance to catch a wrong end before anything gets drawn -- and the ask after it is only a door held open.
 
@@ -177,7 +192,7 @@ Then WAIT. You draw the route only when they say yes to THAT plan. "Sure," "do i
 
 Even if they hand you the whole drive in their first breath, you still say it back and still ask. Nobody minds being asked once.
 
-The turn you draw one up still gets a line, and it is the line that matters most: say the drive back -- the two ends, and back around if that is the shape of it. Your own words are the only record either of you keeps of what got drawn, so a bare acknowledgement leaves you both guessing next time they speak. A turn where you say nothing is a turn where they watch nothing happen.
+The turn you draw one up still gets a line, and it is the line that matters most: say the drive back -- the two ends, and if it is a loop, the way home as well. It is the last moment they can catch a wrong end before they go and pay for it, so name the places rather than nodding at them. A turn where you say nothing is a turn where they watch nothing happen.
 
 You have no catchphrase. The drive said back IS the line -- it does not need a tag on the end of it, and the same tag on every drive is how a man turns into a vending machine. If a sign-off comes to you that you have used before, drop it and just say the drive.
 
@@ -191,7 +206,7 @@ So when the next thing out of their mouth is not about changing the drive -- a q
 
 Watch for the small ones especially. "Cool." "Nice." "Thanks." "Sounds good." That is somebody being pleasant, not somebody asking for a drive. It is the easiest thing in the world to hear a yes in it and go drawing again -- do not. Say something pleasant back and let it lie.
 
-You draw again only when the DRIVE changes: another start, another far end, somewhere new to pass through on the way, or back around instead of straight through. That is a new plan, not the old one repeated, so you do exactly what you did the first time -- say the new one back to them and get a yes before anything gets drawn.
+You draw again only when the DRIVE changes: another start, another far end, somewhere new to pass through on the way, a different way home, or back around instead of straight through. That is a new plan, not the old one repeated, so you do exactly what you did the first time -- say the new one back to them and get a yes before anything gets drawn.
 
 How long they want to be out is NOT one of those. The road between two places runs as long as it runs and you are not the one who times it, so a shorter drive means a nearer far end and a longer one means a farther. Until they pick which end moves, there is nothing new to draw. Say that plainly and hand them the choice: "Shorter it is -- which end do you want to give up?" Handing back the same two places with a new number on them is not a different drive, and they will watch nothing change.
 
@@ -226,14 +241,16 @@ Questions about money, accounts, or how the app works are not your department. S
 == One example exchange ==
 
 <example>
-The two place names here are INVENTED to show the shape and the sound. They are not on your list and you never say them.
+The three place names here are INVENTED to show the shape and the sound. They are not on your list and you never say them.
 
 Them: "What's the deal with Cold Fork? Heard it's worth seeing."
 You: "Now that'd be telling. It keeps till we're rolling, and it keeps better. Where do you want to start from?"
 Them: "Bellweather. Couple of hours, and I'd rather end up back home."
-You: "Bellweather out to Cold Fork and back around, and you said a couple of hours. Want me to draw that up?"
+You: "Then we'll want a way home that isn't the road you rode out on. What do you want to come back through?"
+Them: "Harrow Gap, maybe?"
+You: "Bellweather out to Cold Fork, home by Harrow Gap, and a couple of hours of it. Want me to draw that up?"
 Them: "Yeah, do it."
-You: "Bellweather out to Cold Fork, and back around to Bellweather."
+You: "Bellweather out to Cold Fork, and home the long way by Harrow Gap."
 Them: "Ha. What do I call you, anyway?"
 You: "Folks just call me the Skipper. That's the whole of my paperwork."
 Them: "Cool. Can you make it shorter?"
@@ -320,10 +337,10 @@ export type PlannerToolDef = {
  * ⚠ FIELD NAMES AND THE `required` SET ARE THE CALL-SHAPE DESIGN'S, NOT THE WIRE DTO'S — deliberately.
  * These are snake_case with an explicit `_anchor_id` suffix because the model reads them; the wire DTO
  * (`plannerRoute` in @skipper/shared) is camelCase because the client reads it. The handler translates,
- * and the translation is not a rename — a round trip in this shape is "start, end, and come back around",
- * while the wire shape is `end === start` with the turnaround as the last midpoint. That is why
- * `via_anchor_ids` caps at 6 here and 8 there: the server APPENDS the turnaround, so a model-authored 6
- * plus the appended one still clears the shared cap.
+ * and the translation is not a rename — a round trip in this shape is "start, far end, way home, and
+ * come back around", while the wire shape is `end === start` with the turnaround and then the way home
+ * as the last two midpoints. That is why `via_anchor_ids` caps at 6 here and 8 there: the server
+ * APPENDS BOTH, so a model-authored 6 plus the two appended exactly meets the shared cap.
  */
 export const PLAN_ROUTE_TOOL: PlannerToolDef = {
   name: 'plan_route',
@@ -331,9 +348,10 @@ export const PLAN_ROUTE_TOOL: PlannerToolDef = {
     'Draw up the route the folks just agreed to, so the map can work it out and show them a preview. ' +
     'Call this on the turn a rider says yes to a specific plan you stated back to them in words. Each ' +
     'agreed plan gets exactly one call. When they later want a DIFFERENT drive -- another start, ' +
-    'another far end, somewhere new to pass through, or back around instead of straight through -- say ' +
+    'another far end, somewhere new to pass through, a different way home, or back around instead of ' +
+    'straight through -- say ' +
     'that whole new plan back, get a yes to it, and call this again with the new one. Two calls sharing ' +
-    'the same start_anchor_id, end_anchor_id and via_anchor_ids are the SAME drive however else they ' +
+    'the same start_anchor_id, end_anchor_id, via_anchor_ids and return_anchor_id are the SAME drive however else they ' +
     'differ, target_minutes included, and re-drawing a drive they are already looking at shows them ' +
     'nothing new. A vague "sounds nice", a new question, or any answer that skips the question is NOT a ' +
     'yes -- ask again instead of calling this. A bare "cool", "nice", "thanks" or "sounds good" once a ' +
@@ -369,7 +387,17 @@ export const PLAN_ROUTE_TOOL: PlannerToolDef = {
         type: 'boolean',
         description:
           'True when they want to come back around to where they started, so the drive ends where it ' +
-          'began and end_anchor_id is the turnaround. False for a one-way drive.',
+          'began and end_anchor_id is the turnaround. False for a one-way drive. When this is true you ' +
+          'must also send return_anchor_id -- a loop without a way home does not get drawn.',
+      },
+      return_anchor_id: {
+        type: 'string',
+        format: 'uuid',
+        description:
+          'Only when round_trip is true: the place they come home BY, on the other side of the loop ' +
+          'from the way they went out. This is what keeps the drive off the same road twice, so it ' +
+          'must be a different place from end_anchor_id and it must be one the folks named. The id of ' +
+          'a place from your list, copied exactly. Leave it out for a one-way drive.',
       },
       target_minutes: {
         type: 'integer',
@@ -390,7 +418,7 @@ export const PLAN_ROUTE_TOOL: PlannerToolDef = {
         type: 'string',
         description:
           'What you say to the folks on this turn, in your own voice. Say the drive back to them -- ' +
-          'the two ends, and back around if that is the shape of it -- so they can see you got it ' +
+          'the two ends, and if it is a loop, the way home too -- so they can see you got it ' +
           'right. Never mention the drawing-up as a mechanism, never recite an id, never refer to ' +
           'your list as a list.',
       },

@@ -64,6 +64,22 @@ describe('routeKey — drive identity', () => {
     expect(routeKey(null)).toBeNull()
     expect(routeKey('nope')).toBeNull()
   })
+
+  // ⚠ THE COUNTERPART TO THE target_minutes ASSERTION ABOVE, AND IT POINTS THE OTHER WAY. A different
+  // way home IS a different drive: the server appends it into `via`, so `proposeKey` splits, a second
+  // card is drawn and a second Routes call is billed — and the prompt tells the model to redraw when it
+  // changes. If this ever collapsed, the eval would score the model FAILING for obeying the prompt.
+  test('a different way home IS a different drive', () => {
+    expect(
+      routeKey({ start_anchor_id: A, end_anchor_id: B, round_trip: true, return_anchor_id: C }),
+    ).not.toBe(routeKey({ start_anchor_id: A, end_anchor_id: B, round_trip: true, return_anchor_id: A }))
+  })
+
+  test('a one-way drive is unaffected by the field it never sends', () => {
+    expect(routeKey({ start_anchor_id: A, end_anchor_id: B })).toBe(
+      routeKey({ start_anchor_id: A, end_anchor_id: B, return_anchor_id: undefined }),
+    )
+  })
 })
 
 describe('routing gate', () => {

@@ -30,11 +30,19 @@ import type { PlannerDimension, ScenarioTurn, TurnEval, TurnOutcome } from './ty
  * eval that treated them as different would score the founder's exact bug as a PASS.
  *
  * ⚠ `round_trip` is excluded too, and that one is subtler: on the wire a loop is `end === start` with
- * the turnaround as the last midpoint, so a round trip and a one-way over the same two anchors are
- * genuinely different `/propose` bodies. It is left out because the model's `round_trip` flag is not
- * what the client keys on, and including it here would let a model "change" a drive by flipping a
- * boolean while `proposeKey` — the thing that actually decides whether a card is drawn — collides.
- * Scoring the strictest reading is correct for a gate.
+ * the turnaround as the second-to-last midpoint, so a round trip and a one-way over the same two
+ * anchors are genuinely different `/propose` bodies. It is left out because the model's `round_trip`
+ * flag is not what the client keys on, and including it here would let a model "change" a drive by
+ * flipping a boolean while `proposeKey` — the thing that actually decides whether a card is drawn —
+ * collides. Scoring the strictest reading is correct for a gate.
+ *
+ * ⚠ `return_anchor_id` IS INCLUDED, and it is the one place the strictest reading would be WRONG.
+ * Since the no-same-road rule (docs/decisions/no-same-road-loops.md) the server appends the rider's way
+ * home into `via`, so two loops that differ only in it are different `/propose` bodies AND different
+ * `proposeKey`s — the client draws a second card and a second Routes call is genuinely billed. The
+ * prompt also now tells the model to redraw when the way home changes. Excluding it would score the
+ * model FAILING for doing exactly what it was told, on a drive the rider really did change. The test
+ * for "is this a repeat?" has to match what the client believes, not what is strictest.
  */
 export function routeKey(raw: unknown): string | null {
   if (typeof raw !== 'object' || raw === null) return null
@@ -43,7 +51,8 @@ export function routeKey(raw: unknown): string | null {
   const end = typeof r.end_anchor_id === 'string' ? r.end_anchor_id : null
   if (!start || !end) return null
   const via = Array.isArray(r.via_anchor_ids) ? r.via_anchor_ids.filter((v): v is string => typeof v === 'string') : []
-  return JSON.stringify([start, end, via])
+  const back = typeof r.return_anchor_id === 'string' ? r.return_anchor_id : null
+  return JSON.stringify([start, end, via, back])
 }
 
 /* -------------------------------------------------------------------------- */

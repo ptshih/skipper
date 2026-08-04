@@ -8,7 +8,11 @@
 > Measured on the four saved Tahoe drives: **31 → 41 stops**, avg coverage 34% → **40%**, worst silence
 > 17:56 → **14:24**, and the flagship corridor's worst silence 8:49 → **3:54**.
 > Updates the premise of [scenic-filler-and-the-empty-stretch.md](scenic-filler-and-the-empty-stretch.md)
-> §(b) — see §4. **§5 (the return leg) is a FINDING, not a decision: nothing is greenlit there.**
+> §(b) — see §4. **§5 (the return leg) was a FINDING with nothing greenlit; it has since been ANSWERED
+> — a loop now needs a rider-named way home and a retracing one is refused at the wire
+> ([no-same-road-loops.md](no-same-road-loops.md), founder 2026-08-03). §5 stands as the measurement
+> that made that call; its "whether the return leg should re-tell anything" question is what got
+> retired, because a ring passes nothing twice.**
 > ⚠ `driveMaxStops` now BINDS on two of the four drives; it bound on none before today.
 
 ## 0. The question
@@ -100,7 +104,12 @@ never a ceiling; no code path treats a long silence as a defect; the soundtrack 
 meant silence. The grounded *subject-is-the-emptiness* shape from that entry's §3 remains not
 greenlit.
 
-## 5. FINDING (not a decision): a there-and-back is structurally silent on the way home
+## 5. FINDING: a there-and-back is structurally silent on the way home
+
+> **ANSWERED 2026-08-03** — this section was a finding with nothing greenlit; the founder call it
+> produced is [no-same-road-loops.md](no-same-road-loops.md). The measurements below are why: a loop
+> now carries a rider-named way home, and one that retraces past `LOOP_MAX_RETRACE` is refused at the
+> wire. Read this for the evidence and that record for the decision.
 
 The Stateline loop stayed at 7 stops and 16% coverage under **every** setting swept — floor, cap and
 reach alike. It is not an empty corridor. Measured:
@@ -119,13 +128,14 @@ holds the same content.** The drive is not under-selected; it is told out and si
 ⚠ The two sides already disagree about this, in the usual way. `trigger.ts` retires a passed stop and
 *"re-arm[s] only when it's well out of range again (a later there-and-back)"* — the PLAYER anticipates
 firing again on the return. `buildDrive` never places a second stop for it, so the re-arm is
-unreachable in practice.
+unreachable in practice. That disagreement is now moot rather than fixed: a ring passes nothing twice,
+so the shape the re-arm was written for can no longer be built.
 
-Whether the return leg should re-tell anything is a **charm call, not a bug fix**, and it is open:
-a repeat could read as a warm bookend or as the app running out of things to say. The nearest existing
-shape is a b-side ([tell-me-more-spec.md](../designs/tell-me-more-spec.md)) — different words about a
-place you now recognise — but that spec's own measurement found only 1 of 8 stops on the flagship
-drive carries leftover material, so it does not cover a return leg on its own. Not scheduled.
+Whether the return leg should re-tell anything was a **charm call, not a bug fix**, and it was open:
+a repeat could read as a warm bookend or as the app running out of things to say. **It was answered by
+removing the question** — a loop is a ring now, so there is no second pass to fill. The b-side
+([tell-me-more-spec.md](../designs/tell-me-more-spec.md)) stays not scheduled, and its own measurement
+(1 of 8 stops on the flagship drive carry leftover material) is why it was never the answer here.
 
 ## 6. The reach filter was answering a question about a pipeline we don't run
 

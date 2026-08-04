@@ -64,6 +64,12 @@ const VOICE = {
    *  announce the drawing either (the prompt bans narrating the mechanism), which is why it points at
    *  the drive without claiming to have just made it. */
   drawnWordless: 'There she is. Have a look and see what you think.',
+  /** A loop with no way home. ⚠ NOT AN APOLOGY AND NOT `retry` — nothing failed and the rider said
+   *  nothing wrong; the plan is genuinely short one piece. It asks the ONE question the skipper should
+   *  have asked before drawing (see the loop beat in ./planner-prompt), which is why it REPLACES the
+   *  model's line rather than following it: that line has already promised a drive that is about to
+   *  not appear. */
+  needReturnLeg: "I'll bring you back around, but not down the same road twice. Which way do you want to come home?",
 } as const
 
 /** Does this caller want the turn FRAMED, or the single JSON body 1.0 clients already read?
@@ -84,33 +90,59 @@ const wantsStream = (accept: string | undefined): boolean => (accept ?? '').incl
  *  resets its idle timer on every CHUNK rather than on every frame. */
 const SSE_HEARTBEAT_MS = 10_000
 
+/** Why a tool call did not become a route. `loop_without_return` is NOT a malformed call — it is a
+ *  complete, well-formed loop that has no way home, and it gets its own answer (see VOICE). */
+type RouteTranslation =
+  | { ok: true; route: PlannedRoute }
+  | { ok: false; reason: 'untranslatable' | 'loop_without_return' }
+
+const UNTRANSLATABLE = { ok: false, reason: 'untranslatable' } as const
+
 /** The model's tool vocabulary → the wire shape. ⚠ THREE TRANSLATIONS, all load-bearing — see the
  *  `rawRoute` doc in ./planner. The one that bites: `round_trip` is NOT the wire's loop shape. Here it
- *  means "come back around"; on the wire a loop is `end === start` with the turnaround as the LAST
- *  `via` midpoint, because `start === end` alone materializes as a degenerate zero-distance route.
- *  Returns null on anything malformed — model output is untrusted, and a half-parsed route must read
- *  as "no route" rather than as a route to somewhere nobody asked for. */
-function toPlannedRoute(raw: unknown): PlannedRoute | null {
-  if (typeof raw !== 'object' || raw === null) return null
+ *  means "come back around"; on the wire a loop is `end === start` with the turnaround and then the
+ *  return leg as the LAST TWO `via` midpoints, because `start === end` alone materializes as a
+ *  degenerate zero-distance route.
+ *
+ *  ⚠ A LOOP CARRIES A RETURN LEG OR IT IS NOT DRAWN — the whole of the no-same-road rule at this
+ *  layer. `start → far end → start` is the shape Google answers with the SAME ROAD TWICE: measured at
+ *  94% retraced on the one saved loop, which is why 17 of its 18 reachable stops landed on the
+ *  outbound half and the way home was silent (docs/decisions/no-same-road-loops.md). The rider names
+ *  the way back, so the geography comes from them rather than from a model that has no coordinates
+ *  (D9) and could only guess at which roads connect.
+ *
+ *  Returns `untranslatable` on anything malformed — model output is untrusted, and a half-parsed route
+ *  must read as "no route" rather than as a route to somewhere nobody asked for. */
+function toPlannedRoute(raw: unknown): RouteTranslation {
+  if (typeof raw !== 'object' || raw === null) return UNTRANSLATABLE
   const r = raw as Record<string, unknown>
   const start = typeof r.start_anchor_id === 'string' ? r.start_anchor_id : null
   const end = typeof r.end_anchor_id === 'string' ? r.end_anchor_id : null
-  if (!start || !end) return null
+  if (!start || !end) return UNTRANSLATABLE
   const via = Array.isArray(r.via_anchor_ids) ? r.via_anchor_ids.filter((v): v is string => typeof v === 'string') : []
   const minutes = typeof r.target_minutes === 'number' && Number.isFinite(r.target_minutes) ? Math.round(r.target_minutes) : null
+  const back = typeof r.return_anchor_id === 'string' ? r.return_anchor_id : null
 
   // The round-trip mapping. A loop ends where it started and needs a real far end to turn around at,
-  // so the model's `end` becomes the midpoint and `start` becomes both ends.
+  // so the model's `end` becomes a midpoint and `start` becomes both ends — then the rider's way home
+  // rides after it, which is what makes the drive a ring instead of an out-and-back.
   const roundTrip = r.round_trip === true
+  if (roundTrip && !back) return { ok: false, reason: 'loop_without_return' }
+  // Two ways to name a way home that is not one, both describing the same out-and-back with a
+  // redundant waypoint Google collapses on sight: coming home BY the turnaround (`start → X → X →
+  // start`), or BY the start itself (`start → X → start → start`). Treated as the missing answer they
+  // are, so the rider is asked rather than sold a retrace — and asked BEFORE a Routes call, which is
+  // the one thing the wire gate downstream cannot do.
+  if (roundTrip && (back === end || back === start)) return { ok: false, reason: 'loop_without_return' }
   const wire: PlannedRoute = roundTrip
-    ? { start, end: start, via: [...via, end], ...(minutes != null ? { targetMinutes: minutes } : {}) }
+    ? { start, end: start, via: [...via, end, back!], ...(minutes != null ? { targetMinutes: minutes } : {}) }
     : { start, end, ...(via.length ? { via } : {}), ...(minutes != null ? { targetMinutes: minutes } : {}) }
 
-  // ⚠ The wire caps `via` to bound the single billed Routes call. A round trip appends one, so a
+  // ⚠ The wire caps `via` to bound the single billed Routes call. A round trip appends TWO, so a
   // model that filled `via` to the brim would push it over — drop the route rather than ship a request
   // the next endpoint will reject anyway.
-  if ((wire.via?.length ?? 0) > MAX_ROUTE_VIA) return null
-  return wire
+  if ((wire.via?.length ?? 0) > MAX_ROUTE_VIA) return UNTRANSLATABLE
+  return { ok: true, route: wire }
 }
 
 /** Why a paid turn produced nothing the rider can use. A CLOSED SET OF LITERALS CHOSEN IN THIS FILE —
@@ -126,6 +158,10 @@ type DegradedReason =
   | 'refused'
   | 'route_untranslatable'
   | 'route_wordless'
+  /** The model asked for a loop and named no way home. A PROMPT signal, not an outage: the turn cost
+   *  money, the rider got a question instead of a drive, and a rise here means the loop beat in
+   *  ./planner-prompt has stopped landing. */
+  | 'loop_without_return'
   /** The model serialized a TOOL CALL into rider-visible prose instead of emitting a tool_use block —
    *  INV-8's documented failure mode. Observed on the live model 2026-08-03 during an eval replay. */
   | 'say_leaked_tool_call'
@@ -209,7 +245,16 @@ function toResponse(turn: PlannerTurn): DrivePlanResponse {
 
   switch (turn.outcome) {
     case 'route': {
-      const route = toPlannedRoute(turn.rawRoute)
+      const translated = toPlannedRoute(turn.rawRoute)
+      // A loop with no way home is the one "no route" outcome that is not a failure — the plan is one
+      // answer short, so the rider gets that question instead of an apology, and the model's own line
+      // is REPLACED because it has already promised a drive that is not coming. Kept ahead of the
+      // untranslatable branch so it can never be reported as a broken turn.
+      if (!translated.ok && translated.reason === 'loop_without_return') {
+        noteDegraded('loop_without_return')
+        return { say: VOICE.needReturnLeg, done: false }
+      }
+      const route = translated.ok ? translated.route : null
       // A route we cannot translate is not a route. The rider still hears what the skipper said; they
       // simply are not handed a drive to confirm — which is why this, uniquely, is a degradation the
       // vendor's own stop_reason calls a success.

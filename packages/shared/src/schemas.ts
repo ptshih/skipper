@@ -213,9 +213,11 @@ const anchorId = z.uuid()
 export const MAX_ROUTE_VIA = 8
 
 /** Ordered intermediate waypoints between start and end — the route is materialized as
- *  [start, ...via, end]. A LOOP is `end === start` with one `via` midpoint (a turnaround), so a
- *  round trip is a real out-and-back (start==end alone is a degenerate zero-distance route). Capped
- *  to bound the single Routes call.
+ *  [start, ...via, end]. A LOOP is `end === start` whose LAST TWO midpoints are the turnaround and
+ *  then the way home (start==end alone is a degenerate zero-distance route). Both are appended
+ *  server-side from the planner's call; the way home is what keeps a loop off the road it rode out on
+ *  (`retraceFraction` refuses one that fails), and the client reads the far end at `via.at(-2)`.
+ *  Capped to bound the single Routes call.
  *  ⚠ `via` GOES THROUGH THE ALLOWLIST TOO. It was `z.array(resolvedEndpoint)` while start/end were
  *  being hardened, which satisfied "reject a non-anchor ENDPOINT" exactly while still shipping 8
  *  arbitrary billable coordinates. Guarding both ends of a route and leaving the middle open is not a

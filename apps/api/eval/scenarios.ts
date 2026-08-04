@@ -220,6 +220,34 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    id: 'loop-needs-a-way-home',
+    about:
+      'THE NO-SAME-ROAD BEAT (docs/decisions/no-same-road-loops.md). A loop is a RING or it is not a ' +
+      'loop, and the model cannot work that out for itself — D9 hands it no coordinates — so the way ' +
+      'home has to come from the rider, by being ASKED for. The defect this guards is the model drawing ' +
+      'a round trip off a far end alone: `toPlannedRoute` refuses it, so the rider gets a question ' +
+      'instead of the drive they just said yes to, and the paid turn bought nothing. The second failure ' +
+      'it guards is the opposite one — asking for the way home and then asking AGAIN after being told.',
+    turns: [
+      { rider: 'I want to start at South Lake Tahoe and end up back there', expect: 'hold' },
+      {
+        rider: 'out to Emerald Bay',
+        expect: 'hold',
+        note: 'far end named, way home still missing — asking for it is the whole point',
+      },
+      // ⚠ `hold`, NOT `draw`, and the distinction has bitten this suite before (see the note in
+      // wrap-up-long-conversation). Naming the way home completes the PLAN; the prompt is explicit that
+      // the plan is then said back and waited on. Demanding a route here would score the model failing
+      // for obeying the prompt — the instrument's fault, not the model's.
+      {
+        rider: 'come back through Tahoe City',
+        expect: 'hold',
+        note: 'plan complete — say it back and wait for the yes',
+      },
+      { rider: 'yes, draw that up', expect: 'draw' },
+    ],
+  },
+  {
     id: 'wrap-up-long-conversation',
     about:
       'Trips PLAN_WRAP_UP_AFTER_MESSAGES (16 messages = 9 rider turns here). The notice rides EVERY ' +

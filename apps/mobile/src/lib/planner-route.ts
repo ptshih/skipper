@@ -130,17 +130,30 @@ export const isRoundTrip = (p: DriveProposal): boolean => p.startId === p.endId
 /**
  * Where a round trip turns around — or undefined if it is one-way, or has nothing to turn around at.
  *
- * ⚠ THE LAST VIA, NEVER THE FIRST. The server appends the turnaround as the FINAL midpoint when the
- * planner says `round_trip` (`toPlannedRoute`, apps/api/src/plan-route.ts), so `via[0]` is the
- * turnaround only when there is exactly one — the common case, which is why reading `via[0]` looked
- * right for so long. Ask for a round trip that ALSO passes through somewhere and `via[0]` is that
- * pass-through: the card then names a place the drive merely goes by and presents it as the far end,
- * on the one screen that costs a credit to act on.
+ * ⚠ THE SECOND-TO-LAST VIA, AND THE POSITION IS THE WHOLE OF THIS FUNCTION. The server builds a loop
+ * as `start → …asked-for midpoints… → TURNAROUND → WAY HOME → start` (`toPlannedRoute`,
+ * apps/api/src/plan-route.ts): it appends the far end and then the rider's way home, so the LAST via
+ * is the way home and the one before it is the far end. It read `.at(-1)` while a loop appended only
+ * the turnaround, and that was right then; since the no-same-road rule (2026-08-03) `.at(-1)` is the
+ * place they come HOME by, so leaving it would print the return leg where the far end belongs — on the
+ * one screen that costs a credit to act on. The older bug was the same bug one position over: `via[0]`
+ * is the turnaround only when a loop carries no asked-for midpoints.
  *
- * A round trip with no via at all is a degenerate zero-distance route; it returns undefined and the
- * card simply says where the drive starts.
+ * A round trip always carries BOTH (the server refuses to draw a loop without a way home), so `.at(-2)`
+ * is present whenever `isRoundTrip` holds and the route came from a current server. It returns
+ * undefined on a degenerate or older-shaped proposal rather than guessing, and the card then simply
+ * says where the drive starts.
  */
 export const turnaroundOf = (p: DriveProposal): ResolvedVia | undefined =>
+  isRoundTrip(p) ? p.viaResolved?.at(-2) : undefined
+
+/**
+ * The place a round trip comes HOME by — the far side of the loop, or undefined if it is one-way.
+ *
+ * The counterpart to `turnaroundOf`, and here for the same reason: the two positions are read off ONE
+ * documented shape rather than each caller counting from the end of the array itself.
+ */
+export const returnLegOf = (p: DriveProposal): ResolvedVia | undefined =>
   isRoundTrip(p) ? p.viaResolved?.at(-1) : undefined
 
 /* -------------------------------------------------------------------------- */

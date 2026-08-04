@@ -6,6 +6,7 @@ import type { DriveProposal, PlannedRoute } from '@skipper/shared'
 import {
   durationDrift,
   isRoundTrip,
+  returnLegOf,
   proposeKey,
   reflowDrawnCard,
   toCreateRequest,
@@ -293,32 +294,54 @@ describe('turnaroundOf', () => {
     ).toBeUndefined()
   })
 
-  test('a round trip with one midpoint turns around there', () => {
-    const t = turnaroundOf(
-      proposal({ endId: START, viaResolved: [{ name: 'Emerald Bay State Park', lat: 38.95, lng: -120.11 }] }),
-    )
-    expect(t?.name).toBe('Emerald Bay State Park')
+  test('a plain loop turns around at the SECOND-TO-LAST via — the last one is the way home', () => {
+    // The loop shape since the no-same-road rule (2026-08-03): the server appends the far end and THEN
+    // the rider's way home, so `.at(-1)` is Incline Village and naming it as the far end would describe
+    // a drive the rider did not ask for, one tap from a credit.
+    const p = proposal({
+      endId: START,
+      viaResolved: [
+        { name: 'Emerald Bay State Park', lat: 38.95, lng: -120.11 },
+        { name: 'Incline Village', lat: 39.25, lng: -119.97 },
+      ],
+    })
+    expect(turnaroundOf(p)?.name).toBe('Emerald Bay State Park')
+    expect(returnLegOf(p)?.name).toBe('Incline Village')
   })
 
-  test('a round trip THROUGH somewhere turns around at the LAST via, not the first', () => {
-    // The bug, stated: `via[0]` here is Zephyr Cove — a place the drive passes on the way out — and
-    // naming it as the far end describes a drive the rider did not ask for, one tap from a credit.
-    const t = turnaroundOf(
-      proposal({
-        endId: START,
-        viaResolved: [
-          { name: 'Zephyr Cove', lat: 38.99, lng: -119.95 },
-          { name: 'Emerald Bay State Park', lat: 38.95, lng: -120.11 },
-        ],
-      }),
-    )
-    expect(t?.name).toBe('Emerald Bay State Park')
-    expect(t?.name).not.toBe('Zephyr Cove')
+  test('a round trip THROUGH somewhere still reads the far end off the END of the list', () => {
+    // The older bug, one position over: `via[0]` here is Zephyr Cove — a place the drive passes on the
+    // way out — and the asked-for midpoints always precede the two the server appends.
+    const p = proposal({
+      endId: START,
+      viaResolved: [
+        { name: 'Zephyr Cove', lat: 38.99, lng: -119.95 },
+        { name: 'Emerald Bay State Park', lat: 38.95, lng: -120.11 },
+        { name: 'Incline Village', lat: 39.25, lng: -119.97 },
+      ],
+    })
+    expect(turnaroundOf(p)?.name).toBe('Emerald Bay State Park')
+    expect(turnaroundOf(p)?.name).not.toBe('Zephyr Cove')
+    expect(returnLegOf(p)?.name).toBe('Incline Village')
   })
 
   test('a degenerate round trip with nothing to turn around at has none', () => {
     // Start == end and no midpoint is a zero-distance route; the card falls back to naming the start.
     expect(turnaroundOf(proposal({ endId: START }))).toBeUndefined()
     expect(turnaroundOf(proposal({ endId: START, viaResolved: [] }))).toBeUndefined()
+    // One lone via cannot be a current loop (the server appends two), so there is no far end to name
+    // rather than a wrong one — the card says where the drive starts.
+    expect(
+      turnaroundOf(proposal({ endId: START, viaResolved: [{ name: 'Somewhere', lat: 39, lng: -120 }] })),
+    ).toBeUndefined()
+  })
+})
+
+describe('returnLegOf', () => {
+  test('a one-way drive has no way home, even with midpoints', () => {
+    expect(returnLegOf(proposal())).toBeUndefined()
+    expect(
+      returnLegOf(proposal({ viaResolved: [{ name: 'Sunnyside', lat: 39.13, lng: -120.16 }] })),
+    ).toBeUndefined()
   })
 })
