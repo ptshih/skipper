@@ -7,6 +7,7 @@ import { ReferenceView } from './views/ReferenceView'
 import { PoisView } from './views/PoisView'
 import { PlacesView } from './views/PlacesView'
 import { UsersView } from './views/UsersView'
+import { DrivesView } from './views/DrivesView'
 
 // Code-based route tree (no file-based codegen) — the admin has a flat, fixed set of routes.
 const rootRoute = createRootRoute({ component: Layout })
@@ -38,6 +39,17 @@ const evalsRoute = createRoute({
 const regionsRoute = createRoute({ getParentRoute: () => rootRoute, path: '/regions', component: RegionsView })
 const placesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/places', component: PlacesView })
 const usersRoute = createRoute({ getParentRoute: () => rootRoute, path: '/users', component: UsersView })
+export interface DrivesSearch {
+  /** Deep-link (one-shot, stripped after consuming): open this drive's detail sheet on mount. */
+  drive?: string
+}
+const drivesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/drives',
+  component: DrivesView,
+  validateSearch: (search: Record<string, unknown>): DrivesSearch =>
+    typeof search.drive === 'string' && search.drive ? { drive: search.drive } : {},
+})
 const referenceRoute = createRoute({ getParentRoute: () => rootRoute, path: '/reference', component: ReferenceView })
 export interface PoisSearch {
   /** Deep-link (one-shot, stripped after consuming): open this POI's detail sheet on mount. */
@@ -61,6 +73,7 @@ const routeTree = rootRoute.addChildren([
   regionsRoute,
   placesRoute,
   usersRoute,
+  drivesRoute,
   referenceRoute,
   poisRoute,
 ])

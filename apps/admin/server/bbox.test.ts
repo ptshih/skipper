@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { bboxError, MAX_BBOX_SPAN_DEG } from './bbox'
+import { bboxError, bboxOverlapsRect, MAX_BBOX_SPAN_DEG, parseBbox } from './bbox'
 
 describe('bboxError (region bbox validation at the write boundary — audit #5)', () => {
   test('accepts a well-formed bbox (lake-tahoe-ish)', () => {
@@ -36,5 +36,31 @@ describe('bboxError (region bbox validation at the write boundary — audit #5)'
 
   test('tolerates surrounding whitespace in each number', () => {
     expect(bboxError(' -120.25 , 38.85 , -119.90 , 39.28 ')).toBeNull()
+  })
+})
+
+describe('bboxOverlapsRect (a DRIVE’s derived region — geometry-first, one dimension up)', () => {
+  // The Tahoe basin, as the region rows carry it: "swLng,swLat,neLng,neLat".
+  const tahoe = parseBbox('-120.25,38.85,-119.90,39.28')!
+
+  test('a route rectangle inside the region overlaps it', () => {
+    expect(bboxOverlapsRect(tahoe, { minLat: 39.0, minLng: -120.1, maxLat: 39.2, maxLng: -120.0 })).toBe(true)
+  })
+
+  test('a route that only CROSSES the region overlaps it (neither contains the other)', () => {
+    // A long east-west corridor straddling the basin — no corner of either box is inside the other,
+    // which is exactly the case a naive "is a corner contained?" test gets wrong.
+    expect(bboxOverlapsRect(tahoe, { minLat: 39.0, minLng: -121.5, maxLat: 39.1, maxLng: -119.0 })).toBe(true)
+  })
+
+  test('a route entirely outside overlaps nothing', () => {
+    // Yosemite-ish: south and west of the basin.
+    expect(bboxOverlapsRect(tahoe, { minLat: 37.6, minLng: -119.7, maxLat: 37.9, maxLng: -119.4 })).toBe(false)
+    // Due east, past the eastern edge.
+    expect(bboxOverlapsRect(tahoe, { minLat: 39.0, minLng: -119.5, maxLat: 39.2, maxLng: -119.3 })).toBe(false)
+  })
+
+  test('a touching edge counts as overlapping', () => {
+    expect(bboxOverlapsRect(tahoe, { minLat: 39.0, minLng: -119.90, maxLat: 39.2, maxLng: -119.5 })).toBe(true)
   })
 })

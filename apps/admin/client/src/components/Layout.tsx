@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, Outlet, useNavigate } from '@tanstack/react-router'
 import { useAdminList } from '@/lib/useAdminList'
-import { Activity, Anchor, BookOpen, Compass, Gauge, Layers, MapPin, Menu, Moon, Search, Sun, Users } from 'lucide-react'
+import { Activity, Anchor, BookOpen, Compass, Gauge, Layers, MapPin, Menu, Moon, Route, Search, Sun, Users } from 'lucide-react'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { HealthBanner } from '@/components/HealthBanner'
 import { api } from '@/lib/api'
 import { qk } from '@/lib/queryKeys'
 import { cn } from '@/lib/utils'
 
-type AppPath = '/jobs' | '/evals' | '/regions' | '/pois' | '/places' | '/users' | '/reference'
+type AppPath = '/jobs' | '/evals' | '/regions' | '/pois' | '/places' | '/drives' | '/users' | '/reference'
 
 const NAV: { to: AppPath; label: string; icon: React.ElementType }[] = [
   { to: '/jobs', label: 'Jobs', icon: Activity },
@@ -16,6 +16,8 @@ const NAV: { to: AppPath; label: string; icon: React.ElementType }[] = [
   { to: '/regions', label: 'Regions', icon: Layers },
   { to: '/pois', label: 'POIs', icon: MapPin },
   { to: '/places', label: 'Places', icon: Anchor },
+  // The corpus pages above build what a drive is made OF; Drives + Users are the rider-owned side.
+  { to: '/drives', label: 'Drives', icon: Route },
   { to: '/users', label: 'Users', icon: Users },
 ]
 

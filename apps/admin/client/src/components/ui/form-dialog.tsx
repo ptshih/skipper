@@ -30,6 +30,7 @@ export function FormDialog({
   submitIcon: SubmitIcon,
   submitDisabled = false,
   pending = false,
+  tone = 'default',
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -49,6 +50,10 @@ export function FormDialog({
   submitDisabled?: boolean
   /** The submit mutation is in flight — disables Cancel + the primary and swaps the primary label. */
   pending?: boolean
+  /** `destructive` paints the primary button red, matching `useConfirm`'s tone — for a form dialog that
+   *  DELETES (the typed-confirmation drive delete). A red primary is the last visual difference between
+   *  this and an ordinary save, so it is not decoration. */
+  tone?: 'default' | 'destructive'
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -66,7 +71,11 @@ export function FormDialog({
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button onClick={onSubmit} disabled={submitDisabled || pending}>
+          <Button
+            variant={tone === 'destructive' ? 'destructive' : 'default'}
+            onClick={onSubmit}
+            disabled={submitDisabled || pending}
+          >
             {SubmitIcon && <SubmitIcon className="h-4 w-4" />} {pending ? submitPendingLabel : submitLabel}
           </Button>
         </DialogFooter>

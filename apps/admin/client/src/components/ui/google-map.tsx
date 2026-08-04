@@ -319,6 +319,93 @@ export function PlacesMap({ places, bbox, className }: { places: PlacePin[]; bbo
   )
 }
 
+/* ── Route map (a DRIVE's frozen geometry) ─────────────────────────────────── */
+
+// The drive route line. Amber so it reads over both hybrid imagery and the roadmap basemap, and so it
+// can't be mistaken for the green region bbox.
+const ROUTE_LINE = '#f59e0b'
+// Stop pins: a released stop is teal (same teal as a curated endpoint — "this is live"), a stop whose
+// telling is missing or staged is slate, so a silent drive is legible at a glance without a legend.
+const STOP_LIVE = '#0f766e'
+const STOP_DIM = '#64748b'
+
+/** One frozen stop, as the map needs it. */
+export interface RouteStopPin {
+  lat: number
+  lng: number
+  label: string
+  /** Renders the pin live-teal vs dim-slate. False for a missing OR staged telling. */
+  live: boolean
+}
+
+/** The route line, drawn imperatively (same reason as BboxOutline — no dependency on a React wrapper
+ *  being exported). `path` is [lng, lat] pairs, the order a drive's polyline is stored in. */
+function RouteLine({ path }: { path: [number, number][] }) {
+  const map = useMap()
+  useEffect(() => {
+    if (!map || path.length < 2) return
+    const line = new google.maps.Polyline({
+      map,
+      path: path.map(([lng, lat]) => ({ lat, lng })),
+      clickable: false,
+      strokeColor: ROUTE_LINE,
+      strokeOpacity: 0.95,
+      strokeWeight: 4,
+    })
+    return () => line.setMap(null)
+  }, [map, path])
+  return null
+}
+
+/**
+ * A DRIVE's frozen route: the polyline plus a pin per stop, fit to the drive's own bbox.
+ *
+ * ⚠ Fits to the DRIVE's stored bbox, not to the region's — a drive is the thing being inspected here,
+ * and its route rectangle is frozen alongside the polyline, so the camera always frames exactly the
+ * geometry the rider bought. No bbox outline is drawn: the region is derived context on this page, not
+ * the subject.
+ */
+export function RouteMap({
+  polyline,
+  stops,
+  className,
+}: {
+  polyline: [number, number][]
+  stops: RouteStopPin[]
+  className?: string
+}) {
+  if (!BROWSER_KEY) return <MapUnavailable className={className} />
+  // Reuse the bbox contract ("swLng,swLat,neLng,neLat") for the camera fit rather than inventing a
+  // second fitting path — FitBounds already handles it. Derived from the polyline so the frame matches
+  // what is actually drawn even if a stop pin sits slightly off the line.
+  const lngs = polyline.map(([lng]) => lng)
+  const lats = polyline.map(([, lat]) => lat)
+  const bbox =
+    polyline.length > 0
+      ? `${Math.min(...lngs)},${Math.min(...lats)},${Math.max(...lngs)},${Math.max(...lats)}`
+      : null
+  return (
+    <div className={`relative w-full overflow-hidden rounded-lg border ${className ?? 'h-72'}`}>
+      <APIProvider apiKey={BROWSER_KEY}>
+        <Map {...MAP_OPTIONS} defaultCenter={centerOfBbox(bbox)} defaultZoom={bbox ? 10 : 8}>
+          <FitBounds bbox={bbox} />
+          <RouteLine path={polyline} />
+          {stops.map((s, i) => (
+            <AdvancedMarker
+              key={`${s.lat},${s.lng},${i}`}
+              position={{ lat: s.lat, lng: s.lng }}
+              title={s.label}
+              anchorPoint={AdvancedMarkerAnchorPoint.BOTTOM_CENTER}
+            >
+              <img src={dataUri(pinSvg(s.live ? STOP_LIVE : STOP_DIM))} width={20} height={25} alt="" style={MARKER_SHADOW} />
+            </AdvancedMarker>
+          ))}
+        </Map>
+      </APIProvider>
+    </div>
+  )
+}
+
 /** POI pin (fixed) + a draggable speakable anchor. Dragging the anchor calls onAnchor with its coords;
  *  if no anchor yet, the draggable marker starts on the pin so dragging it off creates one. */
 export function AnchorMap({

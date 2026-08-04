@@ -293,6 +293,86 @@ export interface UserRow {
   remaining: number
 }
 
+/** The account that owns a drive. Null on a drive row means the `user` row is GONE while its drives
+ *  survived — `drives.user_id` is a soft ref with no FK, so that combination is possible and means
+ *  `purgeUserData` did not run for that account. */
+export interface DriveOwner {
+  id: string
+  name: string
+  email: string
+  isAnonymous: boolean
+}
+
+// One drive from GET /admin/drives — the rider-owned artifact, listed for diagnosis only.
+export interface DriveRow {
+  id: string
+  label: string | null
+  startName: string | null
+  endName: string | null
+  distanceMeters: number | null
+  durationSeconds: number | null
+  /** Stops frozen into the drive's `selection` at create — NOT how many still resolve to audio today
+   *  (open the drive to see that; a stop whose telling vanished is still counted here). */
+  stopCount: number
+  /** The route's endpoints were LLM-proposed (Create-a-Drive) rather than picked outright. */
+  authored: boolean
+  createdAt: string
+  /** Non-null ⇒ the RIDER removed it from their list (a soft delete). The row and its credit stay. */
+  deletedAt: string | null
+  owner: DriveOwner | null
+  /** EVERY region whose bbox the drive's route rectangle overlaps — regions are boxes and boxes may
+   *  overlap, so a drive can be in several, and in none (a route outside every configured region). */
+  regionSlugs: string[]
+  regionNames: string[]
+}
+
+/** One stop of a frozen selection, resolved against the LIVE corpus. `narration` is null when nothing
+ *  resolves for the subject any more — the player DROPS that stop. */
+export interface DriveStop {
+  seq: number
+  /** null ⇒ an UNREADABLE frozen item (neither subjectId nor the legacy poiId) — unplayable. */
+  subjectId: string | null
+  subjectKind: 'poi' | 'cluster' | null
+  /** null ⇒ the subject id resolves to no poi/cluster row: the place itself was deleted. */
+  name: string | null
+  /** The poi's `kind`, or the cluster's treatment — whichever names what this subject is. */
+  detail: string | null
+  frozenNarrationId: string | null
+  alongSec: number | null
+  triggerLat: number | null
+  triggerLng: number | null
+  narration: {
+    id: string
+    form: string
+    /** null = STAGED. Not a defect on a saved drive — the owner replay path skips the release filter. */
+    releasedAt: string | null
+    durationMs: number
+  } | null
+}
+
+export interface DriveDetail {
+  drive: DriveRow & {
+    updatedAt: string
+    routeSig: string
+    bbox: { minLat: number; minLng: number; maxLat: number; maxLng: number }
+    /** [lng, lat] pairs — the order apps/api's polylineBbox reads. */
+    polyline: [number, number][]
+    routeProvenance: {
+      source: string
+      waypoints: { label: string; lat: number; lng: number }[]
+      distanceMeters: number
+      durationSeconds: number
+      materializedAt: string
+      authoring?: {
+        model: string
+        prompt: { regionSlug: string; roughStart: string; roughEnd: string; loopOrDirection: string; vibe?: string }
+        proposed: { label: string; lat: number; lng: number; rationale?: string }[]
+      }
+    } | null
+  }
+  stops: DriveStop[]
+}
+
 // Readiness probe result (GET /health?deep=1). `db === false` = api up but the DB is unreachable
 // (e.g. DATABASE_URL unset); a request rejection/502 instead means the api itself is down.
 export interface HealthStatus {
@@ -413,4 +493,16 @@ export const api = {
       `/admin/users/${id}/credits`,
       { method: 'POST', body: JSON.stringify(body) },
     ),
+  // Rider-owned drives. Read-only apart from the delete below — the console never authors a drive.
+  drives: () => req<{ drives: DriveRow[] }>('/admin/drives'),
+  drive: (id: string) => req<DriveDetail>(`/admin/drives/${id}`),
+  // ⚠ IRREVERSIBLE HARD DELETE of a rider's drive. `confirm` MUST equal the id in the path — the
+  // server refuses the request otherwise, so a bare `curl -X DELETE` on the URL alone can't fire. The
+  // typed-confirmation dialog is the operator-facing half of that same gate. Never touches the shared
+  // audio, and never refunds the credit (the ledger is append-only — grant on Users to make it good).
+  deleteDrive: (id: string) =>
+    req<{ ok: true; id: string }>(`/admin/drives/${id}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ confirm: id }),
+    }),
 }

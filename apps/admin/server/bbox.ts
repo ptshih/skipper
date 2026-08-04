@@ -49,3 +49,29 @@ export type BboxCorners = RegionBbox
 export const parseBbox = parseRegionBbox
 export const pointInBbox = (box: BboxCorners, lat: number, lng: number): boolean =>
   pointInRegionBbox(box, lat, lng)
+
+/** A route's bounding rectangle, as a drive stores it (`drives.bbox_*`). */
+export interface Rect {
+  minLat: number
+  minLng: number
+  maxLat: number
+  maxLng: number
+}
+
+/**
+ * Do a region bbox and a route rectangle OVERLAP? The RECTANGLE counterpart of `pointInBbox`, and the
+ * same geometry-first rule one dimension up: a POI's region is point-in-bbox, a DRIVE's region(s) are
+ * the regions its frozen route bbox intersects — neither is ever stored as an FK
+ * (docs/decisions/geometry-first-regions.md). Touching edges count as overlapping: a route that grazes
+ * a region's boundary is in it, and the alternative is a drive that belongs to nothing by a rounding
+ * error. Regions may overlap, so a drive can legitimately match several — and matching NONE is a real
+ * answer (a route outside every configured region), not missing data.
+ */
+export function bboxOverlapsRect(box: BboxCorners, rect: Rect): boolean {
+  return !(
+    rect.maxLng < box.swLng ||
+    rect.minLng > box.neLng ||
+    rect.maxLat < box.swLat ||
+    rect.minLat > box.neLat
+  )
+}

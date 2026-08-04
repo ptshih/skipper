@@ -25,6 +25,9 @@
 //   DELETE /admin/pois/:id        -> hard-delete an orphaned POI (no narration)
 //   GET  /admin/users             -> account list with per-user credit ledger summary (granted/used/remaining)
 //   POST /admin/users/:id/credits -> grant credits to a user (an admin_grant ledger entry)
+//   GET  /admin/drives            -> rider-owned drives: owner, route shape, stop count, derived region(s)
+//   GET  /admin/drives/:id        -> one drive: frozen route + provenance + each stop resolved against the LIVE corpus
+//   DELETE /admin/drives/:id      -> HARD-delete a drive (double-confirmed; never touches audio or the credit ledger)
 //   GET  /admin/places            -> a region's curated places (point-in-bbox) for the /places curation surface
 //   PATCH  /admin/places/:id      -> toggle a place's role (endpoint/break) or featured flag (prune+promote)
 //   DELETE /admin/places/:id      -> remove a curated place
@@ -40,6 +43,7 @@ import { and, asc, between, count, desc, eq, inArray, isNotNull, isNull, sql } f
 import { db } from '@skipper/db'
 import {
   creditEntries,
+  drives,
   evalRuns,
   evalScores,
   studioJobs,
@@ -49,13 +53,15 @@ import {
   poiClusters,
   pois,
   regions,
+  selectionSubject,
+  type DriveSelection,
 } from '@skipper/db/schema'
 import { user } from '@skipper/db/auth-schema'
 import { CLAUDE_MODELS, classifyStoryEligibility } from '@skipper/shared'
 import { checkSpeakableAnchor } from '@skipper/engine'
 import { groundingHash } from '@skipper/db/hash'
 import { requireAdmin, type AdminEnv } from './auth'
-import { bboxError, parseBbox, pointInBbox } from './bbox'
+import { bboxError, bboxOverlapsRect, parseBbox, pointInBbox, type BboxCorners } from './bbox'
 import { draftCuratedPlaces, isAddressLike, resolvePlaceInBbox, type PlaceDraft, type ResolvedPlace } from './places'
 import { contentTypeForKey, presignGet } from './storage'
 import {
@@ -93,6 +99,20 @@ function isUniqueViolation(e: unknown): boolean {
 // real correction is a phrase or sentence — these caps are generous but catch a paste/fat-finger.
 const MAX_OVERRIDE_LEN = 2000
 const MAX_REASON_LEN = 1000
+/** A region row's raw shape for {@link regionBoxesOf} — whatever the caller selected, as long as it
+ *  carries the three fields region-derivation needs. */
+type RegionBoxRow = { slug: string; displayName: string; bbox: string | null }
+/** Region rows → PARSED boxes, the lookup table every geometry-first region derivation reads. A region
+ *  with no/invalid bbox claims nothing (set one in the Regions view to light up coverage). Shared by
+ *  the two derivations so they can't disagree about which regions are even eligible: a POI resolves by
+ *  point-in-bbox, a DRIVE by rectangle-overlap, but both must start from the same parse. */
+function regionBoxesOf(rows: RegionBoxRow[]): { slug: string; name: string; box: BboxCorners }[] {
+  return rows.flatMap((r) => {
+    const box = parseBbox(r.bbox)
+    return box ? [{ slug: r.slug, name: r.displayName, box }] : []
+  })
+}
+
 /** A valid, length-bounded http(s) URL — the override's sourceUrl is operator-supplied provenance. */
 function isHttpUrl(s: string): boolean {
   if (s.length > 2048) return false
@@ -1260,13 +1280,8 @@ app.get('/admin/pois', async (c) => {
     const attributed = s.form !== 'story' || (Array.isArray(s.attribution) && s.attribution.length > 0)
     return [s.poiId, { hasClip: true, suspiciousDuration: wpm !== null && wpm < WPM_FLOOR, factsHash: s.factsHash, attributed, released: s.releasedAt != null }]
   }))
-  // Parse each region's "swLng,swLat,neLng,neLat" box once; a poi belongs to the FIRST region
-  // (deterministic by displayName) whose box contains its coords. A region with no/invalid bbox
-  // claims nothing — set one in the admin Regions view to light up coverage.
-  const regionBoxes = regionRows.flatMap((r) => {
-    const box = parseBbox(r.bbox)
-    return box ? [{ slug: r.slug, name: r.displayName, box }] : []
-  })
+  // Parse each region's "swLng,swLat,neLng,neLat" box once, then match a poi by point-in-bbox.
+  const regionBoxes = regionBoxesOf(regionRows)
   // ⚠ EVERY containing region, not the first. A POI can belong to more than one region — regions are
   // BBOXES and boxes are free to overlap (founder, 2026-08-02), and `lake-tahoe`'s seeded box is the
   // whole Tahoe–Reno corridor, so a future `reno` sits entirely inside it. This used to be `.find()`,
@@ -2072,13 +2087,293 @@ app.post('/admin/users/:id/credits', async (c) => {
   })
 })
 
+/* -------------------------------------------------------------------------- */
+/*  drives — the rider-owned artifact. Read-only, plus ONE hard delete.          */
+/* -------------------------------------------------------------------------- */
+
+// ⚠ THE CONSOLE DOES NOT AUTHOR DRIVES, and these routes deliberately offer no create/edit. A drive is
+// minted by the rider at POST /drives against a credit they spent, and its `selection` is FROZEN at
+// that moment; editing one here would rewrite something a rider paid for and already downloaded. What
+// an operator actually needs is DIAGNOSIS — "what did the planner build, and does it still play?" — so
+// the list carries the shape of each route and the detail resolves every frozen stop against the LIVE
+// corpus (content resolves by subject id, so a regenerated telling silently changes what a saved drive
+// says; that is by design, and this is where you can see it).
+
+/** The drive-list projection. `stopCount`/`authored` are computed in SQL so the list never ships the
+ *  heavy `selection` + `route_provenance` jsonb — a drive's polyline and manifest are detail-only. */
+const driveListCols = {
+  id: drives.id,
+  userId: drives.userId,
+  label: drives.label,
+  startName: drives.startName,
+  endName: drives.endName,
+  distanceMeters: drives.distanceMeters,
+  durationSeconds: drives.durationSeconds,
+  bboxMinLat: drives.bboxMinLat,
+  bboxMinLng: drives.bboxMinLng,
+  bboxMaxLat: drives.bboxMaxLat,
+  bboxMaxLng: drives.bboxMaxLng,
+  // Frozen stop count. CASE-guarded like the POI fact-sheet counts: `selection` is NOT NULL and always
+  // an array today, but jsonb_array_length ERRORS (not nulls) on a non-array, which would 500 the whole
+  // page over one malformed row.
+  stopCount: sql<number>`case when jsonb_typeof(${drives.selection}) = 'array' then jsonb_array_length(${drives.selection}) else 0 end`,
+  // Was the route LLM-proposed (Create-a-Drive) rather than picked outright? `routeProvenance.authoring`
+  // is present only when the planner resolved the endpoints — the "why this route exists" trail.
+  authored: sql<boolean>`(${drives.routeProvenance} -> 'authoring') is not null`,
+  createdAt: drives.createdAt,
+  deletedAt: drives.deletedAt,
+}
+
+/** Owner lookup for a set of drives. `drives.user_id` is a SOFT ref across the auth-pool boundary (no
+ *  FK — see the schema), so a miss is possible and MEANINGFUL: it means the account is gone but its
+ *  drives outlived it, i.e. `purgeUserData` did not run. Reported as a null owner, never hidden. */
+async function ownersByIdFor(userIds: string[]) {
+  const ids = [...new Set(userIds)]
+  if (ids.length === 0) return new Map<string, { id: string; name: string; email: string; isAnonymous: boolean }>()
+  const rows = await db
+    .select({ id: user.id, name: user.name, email: user.email, isAnonymous: user.isAnonymous })
+    .from(user)
+    .where(inArray(user.id, ids))
+  return new Map(rows.map((u) => [u.id, { ...u, isAnonymous: u.isAnonymous ?? false }]))
+}
+
+// Every rider drive, newest first — INCLUDING soft-deleted ones (a rider's "remove from my list" is
+// itself something an operator wants to see; the row carries `deletedAt` and the client badges it).
+//
+// Region is DERIVED, never stored (geometry-first-regions): a drive freezes its route's bounding
+// rectangle, so its region(s) are the regions whose bbox that rectangle OVERLAPS. Boxes may overlap, so
+// a drive can belong to several — and to NONE, which is a real answer (a route outside every configured
+// region), not missing data.
+app.get('/admin/drives', async (c) => {
+  const [rows, regionRows] = await Promise.all([
+    db.select(driveListCols).from(drives).orderBy(desc(drives.createdAt)),
+    db.select({ slug: regions.slug, displayName: regions.displayName, bbox: regions.bbox }).from(regions),
+  ])
+  const regionBoxes = regionBoxesOf(regionRows)
+  const owners = await ownersByIdFor(rows.map((r) => r.userId))
+
+  const result = rows.map((d) => {
+    const rect = { minLat: d.bboxMinLat, minLng: d.bboxMinLng, maxLat: d.bboxMaxLat, maxLng: d.bboxMaxLng }
+    const inRegions = regionBoxes.filter((b) => bboxOverlapsRect(b.box, rect))
+    return {
+      id: d.id,
+      label: d.label,
+      startName: d.startName,
+      endName: d.endName,
+      distanceMeters: d.distanceMeters,
+      durationSeconds: d.durationSeconds,
+      stopCount: Number(d.stopCount ?? 0),
+      authored: d.authored,
+      createdAt: d.createdAt,
+      deletedAt: d.deletedAt,
+      owner: owners.get(d.userId) ?? null,
+      // ⚠ ARRAYS, same as a POI's — a drive crossing two overlapping regions belongs to both.
+      regionSlugs: inRegions.map((r) => r.slug),
+      regionNames: inRegions.map((r) => r.name),
+    }
+  })
+  return c.json({ drives: result })
+})
+
+// One drive, with its frozen route + the manifest resolved against the LIVE corpus.
+//
+// Each stop names a SUBJECT (a poi, or a poi_clusters row for a fused telling) — the same
+// `selectionSubject` coalesce the API replay path uses, so the console and the player can never
+// disagree about which stops a saved drive still has. Three states are worth an operator's attention
+// and none of them are visible from the drives row alone:
+//   • silent    — nothing resolves for the subject any more, so the player DROPS this stop.
+//   • staged    — the clip exists but isn't released. Not a defect on a saved drive: the owner replay
+//                 path deliberately skips the release filter (a frozen selection was paid for).
+//   • replaced  — the live narration id differs from the one frozen here. Also not a defect — content
+//                 resolves live by subject on purpose — but it means this drive now says something
+//                 different from what it said when the rider bought it.
+app.get('/admin/drives/:id', async (c) => {
+  const id = c.req.param('id')
+  if (!UUID_RE.test(id)) return c.json({ error: 'not_found' }, 404)
+
+  const [drive] = await db
+    .select({
+      ...driveListCols,
+      polyline: drives.polyline,
+      routeSig: drives.routeSig,
+      routeProvenance: drives.routeProvenance,
+      selection: drives.selection,
+      updatedAt: drives.updatedAt,
+    })
+    .from(drives)
+    .where(eq(drives.id, id))
+    .limit(1)
+  if (!drive) return c.json({ error: 'not_found' }, 404)
+
+  const selection: DriveSelection = Array.isArray(drive.selection) ? drive.selection : []
+  const subjects = selection.map((item) => selectionSubject(item))
+  const poiIds = [...new Set(subjects.flatMap((s) => (s?.kind === 'poi' ? [s.id] : [])))]
+  const clusterIds = [...new Set(subjects.flatMap((s) => (s?.kind === 'cluster' ? [s.id] : [])))]
+
+  // The live state of each subject's telling. Narrations are keyed by subject via the XOR'd
+  // poi_id/cluster_id columns, so the two sides are separate reads — a fused telling is NOT reachable
+  // through a member's poi_id, which is the bug the schema comment warns about.
+  const [poiRows, clusterRows, poiNarrations, clusterNarrations, regionRows] = await Promise.all([
+    poiIds.length
+      ? db.select({ id: pois.id, name: pois.name, kind: pois.kind }).from(pois).where(inArray(pois.id, poiIds))
+      : [],
+    clusterIds.length
+      ? db.select({ id: poiClusters.id, title: poiClusters.title, treatment: poiClusters.treatment })
+          .from(poiClusters)
+          .where(inArray(poiClusters.id, clusterIds))
+      : [],
+    poiIds.length
+      ? db
+          .select({
+            id: narrations.id,
+            subjectId: narrations.poiId,
+            form: narrations.form,
+            releasedAt: narrations.releasedAt,
+            durationMs: narrations.audioDurationMs,
+          })
+          .from(narrations)
+          .where(inArray(narrations.poiId, poiIds))
+      : [],
+    clusterIds.length
+      ? db
+          .select({
+            id: narrations.id,
+            subjectId: narrations.clusterId,
+            form: narrations.form,
+            releasedAt: narrations.releasedAt,
+            durationMs: narrations.audioDurationMs,
+          })
+          .from(narrations)
+          .where(inArray(narrations.clusterId, clusterIds))
+      : [],
+    db.select({ slug: regions.slug, displayName: regions.displayName, bbox: regions.bbox }).from(regions),
+  ])
+
+  const nameById = new Map<string, { name: string; detail: string | null }>([
+    ...poiRows.map((p) => [p.id, { name: p.name, detail: p.kind }] as const),
+    ...clusterRows.map((cl) => [cl.id, { name: cl.title, detail: cl.treatment }] as const),
+  ])
+  const narrationBySubject = new Map(
+    [...poiNarrations, ...clusterNarrations].flatMap((n) => (n.subjectId ? [[n.subjectId, n] as const] : [])),
+  )
+
+  const stops = selection.map((item, i) => {
+    const subject = subjects[i]
+    const live = subject ? narrationBySubject.get(subject.id) : undefined
+    const named = subject ? nameById.get(subject.id) : undefined
+    return {
+      // The frozen `seq` is what the player orders by; fall back to the array index for a legacy item
+      // that predates it rather than reporting a misleading 0.
+      seq: typeof item.seq === 'number' ? item.seq : i,
+      // null ⇒ an UNREADABLE item: neither subjectId nor the legacy poiId is present, so nothing can
+      // resolve it. The API drops such a stop; say so instead of rendering a blank row.
+      subjectId: subject?.id ?? null,
+      subjectKind: subject?.kind ?? null,
+      // null when the subject id resolves to no poi/cluster row — the place itself was deleted.
+      name: named?.name ?? null,
+      detail: named?.detail ?? null,
+      frozenNarrationId: item.narrationId ?? null,
+      alongSec: item.alongSec ?? null,
+      triggerLat: item.triggerLat ?? null,
+      triggerLng: item.triggerLng ?? null,
+      narration: live
+        ? { id: live.id, form: live.form, releasedAt: live.releasedAt, durationMs: live.durationMs }
+        : null,
+    }
+  })
+
+  const rect = {
+    minLat: drive.bboxMinLat,
+    minLng: drive.bboxMinLng,
+    maxLat: drive.bboxMaxLat,
+    maxLng: drive.bboxMaxLng,
+  }
+  const inRegions = regionBoxesOf(regionRows).filter((b) => bboxOverlapsRect(b.box, rect))
+  const owners = await ownersByIdFor([drive.userId])
+
+  return c.json({
+    drive: {
+      id: drive.id,
+      label: drive.label,
+      startName: drive.startName,
+      endName: drive.endName,
+      distanceMeters: drive.distanceMeters,
+      durationSeconds: drive.durationSeconds,
+      stopCount: Number(drive.stopCount ?? 0),
+      authored: drive.authored,
+      createdAt: drive.createdAt,
+      updatedAt: drive.updatedAt,
+      deletedAt: drive.deletedAt,
+      owner: owners.get(drive.userId) ?? null,
+      regionSlugs: inRegions.map((r) => r.slug),
+      regionNames: inRegions.map((r) => r.name),
+      routeSig: drive.routeSig,
+      bbox: rect,
+      // [lng, lat] pairs — the order polylineBbox reads (apps/api/src/drive-geometry.ts).
+      polyline: drive.polyline ?? [],
+      routeProvenance: drive.routeProvenance,
+    },
+    stops,
+  })
+})
+
+// HARD-DELETE one drive. The only destructive action this console has over RIDER-OWNED data, so it is
+// gated twice: the client makes the operator type the drive's id, and the request must carry that same
+// id back in `{ confirm }`. That second gate is not ceremony — it is what stops a bare
+// `curl -X DELETE /admin/drives/<id>` (or a mis-wired client) from deleting on the strength of a URL
+// alone, and it is the "count, authorise and ACT from ONE expression" rule: the id the dialog NAMES is
+// the id the body carries and the id the DELETE runs on.
+//
+// What it does NOT touch, deliberately:
+//   • AUDIO / narrations — shared corpus rows a drive only references. Deleting a drive must never
+//     remove a telling other drives (and other riders) still play.
+//   • The CREDIT — the ledger is append-only and a delete emits no `reverse` entry, exactly as the
+//     rider's own delete doesn't (docs/decisions/credit-ledger.md). If the intent is to make the rider
+//     whole, grant credits on the Users page; that is a separate, visible act.
+// A hard delete (not a `deleted_at` stamp) because the soft delete is the RIDER's own gesture — an
+// operator setting it would be indistinguishable from the rider hiding the drive themselves.
+app.delete('/admin/drives/:id', async (c) => {
+  const id = c.req.param('id')
+  if (!UUID_RE.test(id)) return c.json({ error: 'not_found' }, 404)
+
+  let body: Record<string, unknown>
+  try {
+    body = (await c.req.json()) as Record<string, unknown>
+  } catch {
+    return c.json({ error: 'bad_request', message: 'a JSON body is required' }, 400)
+  }
+  if (body.confirm !== id) {
+    return c.json(
+      {
+        error: 'confirm_required',
+        message: 'Deleting a drive requires `confirm` to equal the drive id being deleted.',
+      },
+      400,
+    )
+  }
+
+  const [drive] = await db
+    .select({ id: drives.id, userId: drives.userId, label: drives.label })
+    .from(drives)
+    .where(eq(drives.id, id))
+    .limit(1)
+  if (!drive) return c.json({ error: 'not_found' }, 404)
+
+  const operator = c.get('adminEmail')
+  console.log(`[admin] ${operator} hard-deleted drive ${id} (owner ${drive.userId}, label ${drive.label ?? '—'})`)
+  await db.delete(drives).where(eq(drives.id, id))
+
+  return c.json({ ok: true, id })
+})
+
 // Serve the built SPA. In prod the Hono service serves it (one Cloud Run service behind IAP);
 // in local dev vite serves the UI and proxies /admin + /health here, so this dir is absent and
 // these 404 harmlessly. IAP gates the whole service at ingress, so the static assets need no
 // in-app gate (only /health is intentionally open, for Cloud Run probes that bypass IAP).
 const WEB_ROOT = process.env.ADMIN_WEB_ROOT ?? './public'
 app.use('/*', serveStatic({ root: WEB_ROOT }))
-// SPA fallback — client-side routes (/jobs, /evals, /pois, /regions, /reference) return index.html.
+// SPA fallback — every client-side route returns index.html (the route table lives in client/router.tsx;
+// enumerating it here only ever drifted).
 app.get('*', serveStatic({ path: `${WEB_ROOT}/index.html` }))
 
 const port = Number(process.env.PORT ?? 8788)

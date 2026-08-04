@@ -20,5 +20,7 @@ export const qk = {
   // disabled while null, so the null-keyed cache entry is never fetched.
   places: (region: string | null) => ['places', region] as const,
   users: () => ['users'] as const,
+  drives: () => ['drives'] as const,
+  drive: (id: string) => ['drive', id] as const,
   health: () => ['health'] as const,
 }
