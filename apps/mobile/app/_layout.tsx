@@ -10,7 +10,7 @@ import { sweepOrphanClips } from '@/lib/offline'
 import { SimModeProvider, readStoredSimMode } from '@/lib/sim-mode'
 import { ThemeProvider, readStoredThemeMode, useAppFonts, useTheme, type ThemeMode } from '@/theme'
 import { fonts } from '@/theme/tokens'
-import { HeaderIconButton, StateView, VersionGate, voice } from '@/ui'
+import { HEADER_FLOATS, HeaderIconButton, StateView, VersionGate, voice } from '@/ui'
 
 // Anchor the stack at the home route so any COLD deep link keeps `index` underneath it —
 // otherwise the linked screen is the bottom of the stack, the back chevron hides, and the
@@ -143,7 +143,27 @@ function ThemedStack() {
       <StatusBar style={theme.statusBar} />
       <Stack
         screenOptions={{
-          headerStyle: { backgroundColor: colors.surface },
+          // THE BAR ITSELF. Transparent where the OS draws its own scroll-edge fade under it (the
+          // content dissolves as it passes beneath), our own paper bar everywhere else — the whole
+          // rule, and why it is only some platforms, lives in `src/ui/screenInsets.ts`.
+          // ⚠ THESE TWO ARE MUTUALLY EXCLUSIVE, not merely alternatives: `headerTransparent` turns
+          // the background transparent "unless specified in headerStyle" (react-navigation
+          // native-stack docs), so passing both would silently re-paint the opaque bar and the fade
+          // would never appear — with nothing failing anywhere.
+          // ⚠ NO `headerBlurEffect`, AND THAT IS A TESTED CHOICE, not an omission (2026-08-04).
+          // UIKit's iOS 26 scroll-edge effect is not a standalone fade: it MODULATES the bar's
+          // material, and react-native-screens can only build one of two bars — transparent
+          // (`configureWithTransparentBackground`, no material at all) or opaque/blurred
+          // (`configureWithOpaqueBackground` + `appearance.backgroundEffect`). It never calls
+          // `configureWithDefaultBackground`, so the system Liquid Glass is simply not reachable
+          // (software-mansion/react-native-screens#4021). Both were tried on device: a
+          // `systemChromeMaterial` bar is cool grey chrome with a HARD cut, foreign against paper;
+          // a transparent bar with `scrollEdgeEffects: {top:'soft'}` dims almost nothing, because
+          // there is no material to dim into. Hence the transparent bar plus our OWN paper gradient
+          // (src/ui/EdgeFade `underHeader`) — the only way to dissolve content into THIS palette.
+          ...(HEADER_FLOATS
+            ? { headerTransparent: true }
+            : { headerStyle: { backgroundColor: colors.surface } }),
           headerTintColor: colors.ink,
           headerTitleStyle: { fontFamily: fonts.bodyBold, color: colors.ink },
           headerShadowVisible: false,

@@ -88,6 +88,7 @@ import {
   DriveList,
   HeaderIconButton,
   Icon,
+  useFloatingHeaderInset,
   PlannerUnavailableCard,
   SkeletonGroup,
   RegionChip,
@@ -116,6 +117,11 @@ const EXAMPLE_ICONS: Record<ExampleAsk['shape'], IconName> = {
  *  SAY_MAX_HOLD_MS. Six ticks per hold is plenty; a faster interval would re-render for nothing. */
 const HOLD_TICK_MS = 100
 
+/** The ridge's resting offset inside the content box. NAMED because the element adds the floating
+ *  bar's height to it at the call site, and a style object cannot be read back for that arithmetic
+ *  without lying about the type of `top` (a DimensionValue, not a number). */
+const WATERMARK_TOP = 4
+
 // ⚠ `PreviewItem` MOVED to `src/ui/TranscriptCard.tsx` and is imported from `@/ui` — the card owns
 // its own contract, and `src/ui` may not import from `app/`.
 
@@ -130,6 +136,8 @@ export default function HomeScreen() {
   // screen owns the audio; PreviewCard stays pure presentation, same rule as everything else here
   // that spends or holds state.
   const preview = useRoutePreview()
+  // Only the watermark needs this, and only because it is absolutely positioned — see its comment.
+  const headerInset = useFloatingHeaderInset()
   // Drives the offline INVERSION below (MY DRIVES first, no composer) and the reconnect self-heal.
   // Fails OPEN — an unknown verdict means online — so the degraded layout only ever appears on a
   // DEFINITE offline (see connectivity.ts).
@@ -1211,8 +1219,13 @@ export default function HomeScreen() {
   // test able to see it. It was moved out in its own commit FIRST, for exactly that reason.
   // ⚠ It also stopped being CLIPPED: the old `hero` style carried `overflow: 'hidden'`, so most of
   // the burst was cropped to that box. That — not the opacity — is why it read as invisible.
+  // ⚠ THE INSET IS PAID HERE AND NOWHERE ELSE. This is ABSOLUTELY positioned, and Yoga measures an
+  // absolute child's `top` from the parent's border box — the content padding that moves every other
+  // block clear of the floating bar does not move this one. Without it the ridge climbs up behind the
+  // status bar and dissolves under the bar's own fade, which is not a subtle regression: it is the
+  // last WPA poster reference on the screen.
   const watermark = (
-    <View style={styles.watermark} pointerEvents="none">
+    <View style={[styles.watermark, { top: WATERMARK_TOP + headerInset }]} pointerEvents="none">
       <Ridgeline width={472} height={56} />
     </View>
   )
@@ -1640,7 +1653,7 @@ const styles = StyleSheet.create({
   // ⚠ Higher and shorter than the first cut, and NEGATIVE horizontal insets on purpose: the ridge
   // must run OFF both screen edges. A horizon that stops short of the sides reads as a picture of a
   // mountain rather than the land the screen is sitting on.
-  watermark: { position: 'absolute', top: 4, left: -16, right: -16 },
+  watermark: { position: 'absolute', top: WATERMARK_TOP, left: -16, right: -16 },
   // The cold open is prose on the paper, like every other skipper turn — but it carries no speaker
   // rule: nothing has been said yet for it to be answering.
   opening: { marginTop: space.sm },

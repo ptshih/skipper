@@ -8,10 +8,9 @@
 // What it must reproduce, because these are Screen's rules and a list that quietly loses one looks
 // broken rather than different:
 //
-//   · THE BOTTOM SAFE-AREA INSET RIDES THE CONTENT, NEVER THE FRAME. A frame `paddingBottom` turns the
-//     home-indicator strip into an opaque dead band the content cannot scroll under, which CLIPS the
-//     last row at that line. So the list fills to the physical bottom edge and the inset becomes
-//     content padding, added to the base pad so it never shrinks it.
+//   · THE CHROME'S INSETS, from the shared `useScreenPadding` — the home-indicator rule and the
+//     floating-bar rule both live in ./screenInsets.ts, which is where they were consolidated once
+//     this shell, Screen and ConversationScreen were each carrying their own copy of the first one.
 //   · The standard gutter when `padded`.
 //   · Overflow-aware edge fades from the SHARED `useScrollEdgeFades` — the same hook Screen and
 //     ConversationScreen use, so a slack or throttle fix still lands in exactly one place.
@@ -21,10 +20,11 @@
 // a second surface needs it, not before.
 import type { ReactElement } from 'react'
 import { FlatList, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { EdgeFade } from './EdgeFade'
+import { useScreenPadding } from './screenInsets'
 import { useScrollEdgeFades } from './useScrollEdgeFades'
 
 export interface ScreenListProps<T> {
@@ -50,12 +50,12 @@ export function ScreenList<T>({
   contentContainerStyle,
 }: ScreenListProps<T>) {
   const theme = useTheme()
-  const insets = useSafeAreaInsets()
   const bg = { backgroundColor: theme.colors.surface }
   const { showTopFade, showBottomFade, onScroll, onLayout, onContentSizeChange } =
     useScrollEdgeFades()
 
-  const baseBottom = padded ? space.gutter : 0
+  const basePad = padded ? space.gutter : 0
+  const contentPadding = useScreenPadding({ top: basePad, bottom: basePad })
 
   return (
     <SafeAreaView edges={SIDE_EDGES} style={[styles.flex, bg]}>
@@ -67,8 +67,12 @@ export function ScreenList<T>({
           keyExtractor={keyExtractor}
           ListHeaderComponent={ListHeaderComponent}
           contentContainerStyle={[
+            // Fills the viewport even with two rows in the list, so the scrollable area is the whole
+            // usable height (founder, 2026-08-04 — every scrolling shell). Rows still stack from the
+            // top; the blank space below them simply belongs to the list now.
+            styles.grow,
             padded && styles.padded,
-            { paddingBottom: baseBottom + insets.bottom },
+            contentPadding,
             contentContainerStyle,
           ]}
           onLayout={onLayout}
@@ -83,9 +87,7 @@ export function ScreenList<T>({
           removeClippedSubviews={false}
         />
         {/* Each fade mounts only when its edge is genuinely clipped, so a short list shows none. */}
-        {showTopFade || showBottomFade ? (
-          <EdgeFade top={showTopFade} bottom={showBottomFade} />
-        ) : null}
+        <EdgeFade top={showTopFade} bottom={showBottomFade} underHeader />
       </View>
     </SafeAreaView>
   )
@@ -96,5 +98,8 @@ const SIDE_EDGES = ['left', 'right'] as const
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  // flexGrow, never flex:1 — inside a list the latter caps the content at one viewport and a long
+  // list stops scrolling entirely.
+  grow: { flexGrow: 1 },
   padded: { padding: space.gutter },
 })

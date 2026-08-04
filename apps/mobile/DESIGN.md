@@ -222,6 +222,16 @@ All token-driven and theme-aware. Compose these; don't restyle from scratch.
   the pair: the hook decides whether an edge is *genuinely* overflowing, and a fade shown over a short
   screen dissolves real content at rest, which reads as a rendering bug. `on="raised"` for a list that
   scrolls INSIDE a card (the itinerary) — a fade must dissolve into the paper actually behind it.
+  `underHeader` for a SCREEN's top edge: where the nav bar floats (iOS 26 — `src/ui/screenInsets.ts`)
+  the strip spans the bar plus a tail past it, so the dissolve happens ACROSS the nav bar and finishes
+  below it. ⚠ That strip is **static — never gated on a scroll position**, and that is the whole
+  design: paper over paper is invisible at rest and dissolves whatever passes under it, so it cannot
+  be wrong about where the scroll is. Gating it on scroll state is what made it fail under
+  auto-scroll, over-scroll and keyboard resize. ⚠ Do NOT reach for `headerBlurEffect` or
+  `scrollEdgeEffects` instead — both were tried on device and rejected; `screenInsets.ts` records why.
+- **`useScreenPadding`** (`src/ui/screenInsets.ts`) — what the chrome costs the content, at BOTH edges,
+  for all three shells. ⚠ Do not re-derive either inset in a shell: the home-indicator rule was already
+  written out three times before the floating bar threatened to make a fourth copy of the top one.
 - **`useThemedActionSheet`** — the app's ONE native action sheet: the region picker ("Roads I know")
   and the drive ⋯ menu. Callers pass only what differs (title, options, which index is destructive);
   the theme is applied once here. ⚠ Do NOT hand-build a Modal sheet for a short list of choices, and
@@ -279,8 +289,11 @@ does. That split is what keeps a non-refundable credit out of a view component.
 
 - **`ConversationScreen`** — the planner's shell: a scroll region with a pinned, keyboard-aware footer
   and an auto-scroll state machine. Deliberately **not** a flag on `Screen` (thirteen call sites want
-  none of it), but it shares the same `useScrollEdgeFades`/`EdgeFade` pair. ⚠ Must render inside a Stack
-  screen — `useHeaderHeight()` throws without a header context.
+  none of it), but it shares the same `useScrollEdgeFades`/`EdgeFade` pair and the same
+  `useScreenPadding`. ⚠ Must render inside a Stack screen — `useHeaderHeight()` throws without a header
+  context. ⚠ Its `keyboardVerticalOffset` is a function of where the shell STARTS, so it is 0 under a
+  floating bar and the header height under an opaque one — the wrong one floats the composer clear of
+  the keys, and no typecheck can see it.
 - **`TurnBubble`** — one turn. The asymmetry carries the speaker: skipper = full-width prose behind a
   2pt pine rule (no card — he *is* the page); rider = right-aligned, pressed into `surfaceSunken`.
   ⚠ It renders what it's handed and never buffers; the streaming say-buffer is `src/lib/say-buffer.ts`.

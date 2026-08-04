@@ -14,6 +14,9 @@ export {
 // Screen's ScrollView, so the two shells are separate by construction rather than by taste.
 export { ScreenList, type ScreenListProps } from './ScreenList'
 export { EdgeFade, type EdgeFadeProps } from './EdgeFade'
+// What the chrome costs the content: the transparent-bar switch, its inset, and the one padding rule
+// all three shells resolve through. Screens need only the inset, and only if they position absolutely.
+export { HEADER_FLOATS, useFloatingHeaderInset } from './screenInsets'
 export { Button, type ButtonProps } from './Button'
 export { Input } from './Input'
 export { Card, type CardProps } from './Card'

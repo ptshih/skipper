@@ -106,9 +106,11 @@ export interface Theme {
 // The same color at ZERO alpha — the fade-OUT stop for scroll-edge gradients (EdgeFade). A
 // CSS `transparent` stop would interpolate RGB toward black and tint the dissolve; matching
 // `surface`'s own 0-alpha keeps it clean. Derived from palette so it can't drift from surface.
-const fade = (hex: string): string => {
+const fade = (hex: string): string => alpha(hex, 0)
+
+const alpha = (hex: string, a: number): string => {
   const h = hex.replace('#', '')
-  return `rgba(${parseInt(h.slice(0, 2), 16)},${parseInt(h.slice(2, 4), 16)},${parseInt(h.slice(4, 6), 16)},0)`
+  return `rgba(${parseInt(h.slice(0, 2), 16)},${parseInt(h.slice(2, 4), 16)},${parseInt(h.slice(4, 6), 16)},${a})`
 }
 
 export const lightTheme: Theme = {

@@ -183,7 +183,10 @@ const styles = StyleSheet.create({
   // Relatively-positioned so the EdgeFade strips overlay the scroll viewport's own edges.
   scrollWrap: { flex: 1 },
   scroll: { flex: 1 },
-  scrollContent: { paddingVertical: space.sm },
+  // flexGrow so the rows own the card's full height even when there are only two of them — the same
+  // rule the screen shells follow (founder, 2026-08-04: every scrollable view). Never flex:1, which
+  // would cap the content at one viewport and stop a long itinerary scrolling.
+  scrollContent: { flexGrow: 1, paddingVertical: space.sm },
   // Aligned to the ROWS (STOP_ROW_INSET / STOP_ROW_EDGE), not to the card — see the header comment.
   head: {
     flexDirection: 'row',

@@ -32,6 +32,7 @@ import { useHeaderHeight } from 'expo-router/react-navigation'
 import { space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
 import { EdgeFade } from './EdgeFade'
+import { HEADER_FLOATS, useScreenPadding } from './screenInsets'
 import { useScrollEdgeFades } from './useScrollEdgeFades'
 
 /**
@@ -111,11 +112,14 @@ export function ConversationScreen({
     scrollRef.current?.scrollToEnd({ animated: true })
   }, [scrollSignal])
 
-  // With no footer (the offline home drops the composer entirely) nothing else pays the home
-  // indicator, so the inset rides the scroll CONTENT — never the SafeAreaView frame, whose
-  // paddingBottom would turn the strip into an opaque dead band that clips the last row
-  // (Screen.tsx:72-78 records the full autopsy).
-  const contentBottom = space.gutter + (footer ? 0 : insets.bottom)
+  // The chrome's insets, from the shared rule (./screenInsets.ts). `homeIndicator` is FALSE whenever
+  // there is a footer: the composer already sits on that strip, so the content must not pay for it
+  // twice — with no footer (the offline home drops the composer entirely) nothing else does.
+  const contentPadding = useScreenPadding({
+    top: space.gutter,
+    bottom: space.gutter,
+    homeIndicator: !footer,
+  })
 
   return (
     // 'top' belongs to the Stack header; 'bottom' belongs to the footer below.
@@ -123,17 +127,22 @@ export function ConversationScreen({
       edges={['left', 'right']}
       style={[styles.flex, { backgroundColor: colors.surface }]}
     >
-      {/* ⚠ ASSUMED, not device-verified: `keyboardVerticalOffset={headerHeight}`. Derived from the
-          installed KeyboardAvoidingView.js, which computes its inset from a PARENT-RELATIVE layout
-          frame against a SCREEN-coordinate keyboard frame — the constant difference is the header +
-          status bar, i.e. exactly `useHeaderHeight()`. THE ON-DEVICE CHECK, do it first: raise the
-          keyboard and look at the composer's top edge. Flush on the keyboard = correct. Floating
-          ~100pt high = the offset is double-counted, use 0. Buried ~100pt under the keyboard = the
-          offset isn't reaching the KAV. It is a one-token fix and a typecheck can never see it. */}
+      {/* ⚠ THE OFFSET IS A FUNCTION OF WHERE THIS VIEW STARTS — which is why it is no longer one
+          value. The installed KeyboardAvoidingView.js computes its inset from a PARENT-RELATIVE
+          layout frame against a SCREEN-coordinate keyboard frame, so the offset owed is the gap
+          between those two origins. Under an OPAQUE bar the navigator insets the screen below it and
+          that gap is the header + status bar, i.e. exactly `useHeaderHeight()` (the shipped value,
+          unchanged). Under a FLOATING one this view already starts at the physical top, the origins
+          coincide, and passing the header height would lift the composer clear of the keys.
+          VERIFIED on the simulator for the floating case (2026-08-04, iOS 26.5): keyboard up, the
+          composer sits flush on the keys. The opaque case is the shipped value, unchanged.
+          THE CHECK, and a typecheck can never see it: raise the keyboard and look at the composer's
+          top edge. Flush on the keyboard = correct. Floating ~100pt high = the offset is
+          double-counted. Buried ~100pt under the keyboard = it isn't reaching the KAV. */}
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={headerHeight}
+        keyboardVerticalOffset={HEADER_FLOATS ? 0 : headerHeight}
       >
         {/* Relative wrapper so the EdgeFade strips overlay the scroll viewport's edges. */}
         <View style={styles.flex}>
@@ -149,7 +158,13 @@ export function ConversationScreen({
             // same keyboard the KAV is already padding for. ⚠ Do NOT add
             // `maintainVisibleContentPosition` — it anchors on PREPEND; a conversation appends.
             contentContainerStyle={[
-              { padding: space.gutter, paddingBottom: contentBottom },
+              // The scroll CONTENT fills the viewport even when the conversation is two lines long,
+              // so the "scrollable area" is the whole usable height rather than a short box with
+              // dead paper under it (founder, 2026-08-04). It changes no layout — the turns still
+              // stack from the top — but blank space below them now belongs to the scroll content.
+              styles.grow,
+              { paddingHorizontal: space.gutter },
+              contentPadding,
               contentContainerStyle,
             ]}
             onLayout={onLayout}
@@ -159,9 +174,7 @@ export function ConversationScreen({
           >
             {children}
           </ScrollView>
-          {showTopFade || showBottomFade ? (
-            <EdgeFade top={showTopFade} bottom={showBottomFade} />
-          ) : null}
+          <EdgeFade top={showTopFade} bottom={showBottomFade} underHeader />
         </View>
         {footer ? (
           <View
@@ -205,5 +218,8 @@ function useKeyboardVisible(): boolean {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
+  // flexGrow, never flex:1 — inside a ScrollView the latter would CAP the content at one viewport
+  // and stop a long transcript from scrolling at all.
+  grow: { flexGrow: 1 },
   footer: { paddingHorizontal: space.gutter, paddingTop: space.sm },
 })
