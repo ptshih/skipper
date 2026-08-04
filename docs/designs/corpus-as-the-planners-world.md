@@ -14,7 +14,9 @@
 > roster unedited and it accepted **4 of 4** bad endpoints — so the swap is not a data change with a
 > prompt follow-up; without the rewrite it is a REGRESSION. ⚠ **Round 4 then fixed 3 of those 4 with five
 > sentences of prompt** and drew a route with names only, 0 off-list — which SPLITS the verdict:
-> arrivability is a prompt problem, notability is the only thing left needing a column.
+> arrivability is a prompt problem, notability is the only thing left needing a column. ⚠ Round 5 then
+> tried the obvious notability filter (drop scenic / no-fact-sheet) and it **took Sand Harbor with it** —
+> `form` records what we PAID TO ENRICH, not what is a destination. The notability signal is still open.
 
 ## The flow being proposed
 
@@ -307,6 +309,41 @@ has nothing to catch. It is a **notability** failure: an obscure real park the m
 wanted, but for a smaller and better-understood job: notability, which is what `featured` already
 encodes for the 14 curated hubs and what `pois` has no signal for. The arrivability half — the part that
 looked like it needed a curator — is carried by prose.
+
+### Round 5 — filtering out scenic / no-fact-sheet places. It trades the wrong two.
+
+The notability gap in round 4 suggested an obvious filter: a place with no fact sheet, whose telling is
+scenic-tier filler, is by construction not a destination. It is also free — the corpus already knows.
+
+The split is exact: **`form='story'` ⟺ has a fact sheet** (420 of 420 story rows have one; 0 of 309
+scenic rows do). So it is one criterion, and it leaves **420 of 729** names.
+
+Run against the live model, it does what the table predicted:
+
+| place | filter | the skipper said |
+| --- | --- | --- |
+| `Audrey Harris Park` | dropped ✅ | *"Don't know an Audrey Harris Park, and I'm not going to pretend otherwise."* |
+| **`Sand Harbor`** | **dropped ❌** | *"Sand Harbor's not one I can route you through, and I won't fake it."* |
+| `Fannette Island` | KEPT ❌ | still redirected — but by the arrivability prose, never by the filter |
+
+⚠ **It breaks the case this entire line of work started from.** Sand Harbor is the motivating example:
+a famous beach with a released telling that the planner could not name. The filter takes it away again.
+
+**The diagnosis, and it generalises.** `fact_sheet` / `form` record whether we **PAID TO ENRICH** a
+place, not whether it is a destination. Sand Harbor is scenic-tier because `enrich` never covered it —
+an enrichment gap wearing the costume of a quality signal. Fannette Island has a sheet and sails
+through, and it is an island. **The story/scenic split does not align with destination-worthiness in
+either direction.**
+
+**So the notability signal has to come from somewhere else.** Three candidates, none tested:
+
+1. **Enrich the gap.** Sand Harbor deserves a story on its own merits; if its class were enriched the
+   filter would start working. 💸 A paid corpus run, and it fixes the symptom by moving the boundary
+   rather than by measuring the right thing.
+2. **A real notability signal** — Wikipedia article length, pageviews, sitelink count. Free from data
+   already fetched, and it measures fame rather than spend.
+3. **Two lists in one prompt** — everything for RECOGNITION, a subset for DESTINATION. Clean, but it
+   still needs a correct subset, so it is a presentation choice rather than an answer.
 
 ### Correction to the token estimate: ids are ~6× names, not 3×
 

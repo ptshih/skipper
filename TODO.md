@@ -747,3 +747,21 @@ Owed, in dependency order — **nothing below is started**:
       retake counts drive it, and the `--max-cost` tally has historically under-counted because synthesis
       re-rolls retakes. ⚠ Do the prompt tweak and the source widening FIRST; regenerating into a known
       defect buys the same defect at full price.
+
+- [ ] **Two released clips about the SAME park, 200 m apart.** `Audrey Harris Park` exists twice in `pois`
+      under two Wikidata QIDs — **Q49473201** (39.466388, -119.805833) and **Q107614151** (39.464735,
+      -119.804440). Both narrated, both RELEASED, both road-snapped, both scenic-tier filler that says out
+      loud it has nothing to say (*"A park. That's all I've got for you, folks"*). Found while testing the
+      planner against the corpus; it is the only duplicated name among the 729 released tellings, which is
+      how it surfaced.
+      ⚠ **The existing colocation detector cannot see it.** `pipeline/colocation.ts` flags two QIDs on a
+      **byte-identical** coordinate — deliberately, because a radius rule floods on genuinely adjacent
+      places (Harold's Club and Harrah's Reno are 60 m apart). These differ by ~200 m, so they slip
+      through. Do NOT "fix" that by loosening it to a radius without re-reading why it is exact.
+      ⚠ A park's trigger radius is 1000 m (`radiusForKind`), so both sit in range of the same pass. Whether
+      a rider would actually hear both depends on drive-select's spatial dedup + variety rules — **check
+      that before deciding how urgent this is**; if dedup already suppresses one, this is corpus hygiene
+      rather than a rider-facing defect.
+      Fix is a judgement call between: prune one QID (`prune-corpus`), or detect the class first — a sweep
+      for same-NAME pois within a few hundred metres would find siblings this one implies exist. Start with
+      the count.
