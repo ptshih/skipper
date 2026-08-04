@@ -215,6 +215,13 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   the 1:1 `pois`↔`narrations` atom, no `roam_clips` table, and 1.1 then removed the mode outright.)
 
 ### designs/
+- [corpus-as-the-planners-world.md](designs/corpus-as-the-planners-world.md) — 💡 IDEA: remove `places`
+  from the PLANNING path and let the planner work from the narration corpus — 729 released names against
+  103 curated endpoints, **14 of 15 towns** present, exactly **1** duplicate name, **96%** already
+  road-snapped. Vocabulary is not what `places` provides; JUDGMENT is (endpoint-worthiness, the access
+  point, `featured`), so the change is to move that judgment onto `pois`, not to delete it. ⚠ INV-1 moves
+  rather than weakens — a name still resolves server-side or 400s before any billed call. ⚠ Records four
+  objections I raised and then measured wrong. Not greenlit (2026-08-04).
 - [planner-lookup-tools.md](designs/planner-lookup-tools.md) — 💡 IDEA: let the planner CALL for what it
   does not know instead of carrying it — `find_place` turns "don't know that one" into a redirect to the
   nearest routable anchor, for ~2¢/turn against $0.11 a conversation for the fat-prefix alternative.
