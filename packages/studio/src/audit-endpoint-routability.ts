@@ -81,8 +81,7 @@ const MIN_AVG_KMH = 20
  */
 const MIN_SPEED_ROUTE_METERS = 800
 
-/** How far down the draft's ranking a place may sit and still be trusted as a PROBE ORIGIN. The probe
- *  has to hold one end known-good (see `originFor`), and the top band is where the towns are. */
+/** How far down the draft's ranking a place may sit and still be trusted as a PROBE ORIGIN. */
 const ORIGIN_MAX_RANK = 3
 
 interface Anchor {
@@ -267,10 +266,14 @@ async function main() {
     return
   }
 
-  // ⚠ The probe origins are the TOP-RANKED destinations — the towns and resorts a visitor names without
-  // thinking, which resolve to street addresses on public roads essentially by construction. It read
-  // `featured` until 2026-08-04; a rank band says the same thing at a grain the boolean could not.
-  const featured = rows.filter((r) => r.rank != null && r.rank <= ORIGIN_MAX_RANK)
+  // ⚠ A PROBE ORIGIN MUST BE A TOWN, and rank alone is not enough — this cost a whole sweep. Google
+  // returns NO `primaryType` for a locality, so `primaryType == null` IS "this is a town": somewhere
+  // with streets, addresses and public roads by construction. Rank was tried alone (2026-08-04) and the
+  // first ranked curation put `California Main Lodge Parking` — a ski resort's PRIVATE parking structure
+  // — at rank 2. Every probe from it came back "restricted usage or private roads", so the sweep flagged
+  // South Lake Tahoe, Stateline, Gardnerville and Downtown as undrivable and proposed access points up
+  // to 25 KM from the pin. The origin has to be known-good or the sweep measures the origin.
+  const featured = rows.filter((r) => r.primaryType == null && r.rank != null && r.rank <= ORIGIN_MAX_RANK)
   const candidates = rows.slice(0, Number.isFinite(limit) ? limit : rows.length)
   // ⚠ WORST CASE WHEN --snap IS ON, deliberately. How many anchors get snapped is not knowable until the
   // sweep has run, so the bound assumes EVERY candidate is flagged. `--max-cost` exists to stop a run
@@ -279,14 +282,14 @@ async function main() {
   const estimate = candidates.length * ROUTES_CALL_USD * (snap ? 1 + SNAP_PROBES : 1)
 
   console.log(
-    `${rows.length} endpoint-eligible anchor(s), ${featured.length} of them featured (the probe origins).`,
+    `${rows.length} curated destination(s), ${featured.length} of them towns at rank <= ${ORIGIN_MAX_RANK} (the probe origins).`,
   )
   if (featured.length === 0) {
     // ⚠ Not a crash, but not a quiet degradation either: with no known-good origin the sweep cannot
     // hold one end fixed, and saying so is the difference between "clean" and "did not measure".
     console.log(
-      '⚠ NO FEATURED ANCHORS — every probe would need an unvetted origin, so nothing can be measured.\n' +
-        '  Mark the region\'s obvious hubs (its towns) as featured in the admin Places view first.',
+      '⚠ NO TOWN-TYPED, TOP-RANKED ANCHORS — every probe would need an unvetted origin, so nothing can\n' +
+        '  be measured. Curate the region\'s towns (a locality has no Google primaryType) and rank them first.',
     )
     process.exitCode = 1
     return
@@ -416,7 +419,7 @@ async function main() {
 
   if (flagged.length > 0) {
     console.log(
-      `\n${flagged.length} of ${billed} probed anchor(s) are not drivable as curated. Each is a pin Places put on\n` +
+      `\n${flagged.length} of ${probes.length} probed anchor(s) are not drivable as curated. Each is a pin Places put on\n` +
         `the FEATURE rather than on a road — re-point it at the place a car can actually stop (a visitor\n` +
         `centre, a trailhead lot, a marina gate) in the admin Places view, or clear its endpoint role there.\n` +
         `⚠ curate-places upserts lat/lng last-write-wins, so a re-curation of this region will restore the\n` +
@@ -424,7 +427,7 @@ async function main() {
     )
     process.exitCode = 1
   } else if (billed > 0) {
-    console.log(`\nAll ${billed} probed anchor(s) are reachable on public roads.`)
+    console.log(`\nAll ${probes.length} probed anchor(s) are reachable on public roads.`)
   }
 }
 
