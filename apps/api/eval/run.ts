@@ -181,7 +181,7 @@ async function main(): Promise<void> {
   }
   if (verdict) {
     console.log(`\n  persona verdict: ${verdict.verdict}`)
-    console.log(`  biggest risk   : ${verdict.biggestRisk}`)
+    if (verdict.biggestRisk) console.log(`  biggest risk   : ${verdict.biggestRisk}`)
     const canned = verdict.turns.filter((t) => t.canned)
     if (canned.length) console.log(`  ⚠ ${canned.length} turn(s) read as CANNED — the jukebox failure mode`)
   }
@@ -191,12 +191,22 @@ async function main(): Promise<void> {
   // next. These are computed from the transcript with no model in the loop, so a difference between
   // two arms is a difference in the prompt, not in the weather.
   const says = outcomes.map((o) => o.say)
-  const repeats = repeatedPhrases(says)
+  // ⚠ WITHIN one conversation is the ONLY number that describes a rider's experience, and pooling the
+  // two was this panel's biggest measurement error. A rider sees exactly one conversation — the
+  // transcript "dies with the screen, on purpose" (mobile planner-transcript.ts) — and plans one to
+  // three drives ever. A phrase used once in scenario A and once in scenario B is something NOBODY can
+  // observe, yet the pooled count weighted it identically to the same line twice in one chat. Every
+  // jukebox figure reported before 2026-08-04 was the pooled one.
+  const within = suite.flatMap((s) =>
+    repeatedPhrases(outcomes.filter((o) => o.scenarioId === s.id).map((o) => o.say)),
+  )
+  const pooled = repeatedPhrases(says)
   const durations = outcomes.flatMap((o) => assertedDurations(o.say))
 
   console.log(`\n${line(78)}\nMEASURED (no judge — compare these across arms)\n${line(78)}`)
-  console.log(`  repeated phrases (${PHRASE_LABEL}, across turns): ${repeats.length}`)
-  for (const r of repeats.slice(0, 6)) console.log(`    x${r.count}  ${JSON.stringify(r.phrase)}`)
+  console.log(`  repeated WITHIN one conversation (a rider can see this): ${within.length}`)
+  for (const r of within.slice(0, 6)) console.log(`    x${r.count}  ${JSON.stringify(r.phrase)}`)
+  console.log(`  repeated across the whole run  (no rider sees this):    ${pooled.length}`)
   console.log(`  durations asserted as road fact:                 ${durations.length}`)
   for (const d of durations.slice(0, 6)) console.log(`    ${JSON.stringify(d.slice(0, 72))}`)
   if (SPATIAL) console.log(`  ⚠ --spatial ARM: a hand-written drive-time table was in context this run.`)

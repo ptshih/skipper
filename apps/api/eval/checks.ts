@@ -243,10 +243,23 @@ const PHRASE_WORDS = 6
 export function repeatedPhrases(says: readonly string[]): { phrase: string; count: number }[] {
   const seen = new Map<string, number>()
   for (const say of says) {
-    const words = say.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean)
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean)
+    const words = norm(say)
     // A turn contributes each distinct phrase ONCE, so an intra-turn repeat cannot inflate the count.
     const here = new Set<string>()
     for (let i = 0; i + PHRASE_WORDS <= words.length; i++) here.add(words.slice(i, i + PHRASE_WORDS).join(' '))
+
+    // ⚠ WHOLE SENTENCES TOO, AND WITHOUT THE WORD FLOOR — because the floor made this metric blind to
+    // the exact thing it was built for. Every catchphrase this prompt has actually produced is SHORT:
+    // "Consider it drawn." (3 words), "there she is" (3), "Shall I draw it?" (4). At a 6-word window
+    // all three score ZERO, and only the long readback template registered. A repeated fragment needs a
+    // floor because short fragments collide on ordinary English — but a repeated COMPLETE SENTENCE does
+    // not: nobody says the same whole sentence twice by accident, at any length.
+    for (const raw of say.split(/(?<=[.!?])\s+/)) {
+      const s = norm(raw).join(' ')
+      if (s.split(' ').filter(Boolean).length >= 2) here.add(s)
+    }
+
     for (const p of here) seen.set(p, (seen.get(p) ?? 0) + 1)
   }
   return [...seen.entries()]

@@ -47,7 +47,8 @@ export interface PersonaVerdict {
   overall: number
   verdict: string
   recommendation: 'ship' | 'tune' | 'rework'
-  biggestRisk: string
+  /** ⚠ Optional: a judge forced to name a top risk on a clean run invents one. */
+  biggestRisk?: string
 }
 
 const PERSONA_SYSTEM = `You are a tough, tasteful editor judging a live text conversation for ONE thing: does the character come through?
@@ -66,9 +67,13 @@ Use the FULL 1-10 scale, anchored:
 - 9: genuinely delightful — earns a grin or a fond eye-roll.
 - 10: reserve for a line you would quote to a friend. Rare.
 
-THE MOST IMPORTANT THING YOU DO is set \`canned\`. This character speaks to every rider from the same instructions, so his failure mode is not being wrong — it is being a jukebox. Mark \`canned: true\` when a line reads like a stock phrase rather than something said just now: a deflection recycled almost word-for-word from an earlier turn in the SAME conversation, a catchphrase deployed on reflex, or a sentence that has the cadence of a script. Repetition ACROSS turns is the thing to hunt. Be harsh here; a warm line that a rider has already heard twice is worse than a plain one.
+⚠ WHAT YOU ARE READING. The blocks below are SEVERAL SEPARATE conversations with DIFFERENT riders, labelled [scenario #turn]. No rider ever sees more than one of them — a transcript dies with the screen, and a rider plans one to three drives in their life. So judge each conversation as its own encounter.
 
-For each turn give: a 1-10, the best beat, where it sags, and \`canned\`. Then for the whole run: an overall 1-10, an honest 2-3 sentence verdict, a recommendation, and the single biggest risk to the character. recommendation: "ship" = overall 7+ with nothing below 5 and no canned turns; "tune" = good bones, something drags; "rework" = reads as a generic assistant wearing a hat. Score what is on the page. Call the report tool.`
+Set \`canned: true\` only for a line that reads like a stock phrase WITHIN ITS OWN CONVERSATION: a deflection recycled almost word-for-word from an earlier turn of the same chat, or a sentence with the cadence of a script rather than of an answer. A phrase that recurs between two DIFFERENT riders' conversations is not something anybody experiences — mention it in \`verdict\` if you find it interesting, but do not set \`canned\` for it, and do not treat it as a risk.
+
+Judge what is on the page. Do not go looking for a particular failure; if the conversations read well, say so plainly.
+
+For each turn give: a 1-10, the best beat, where it sags, and \`canned\`. Then for the whole run: an overall 1-10, an honest 2-3 sentence verdict, and a recommendation. Add \`biggestRisk\` ONLY if something genuinely rises to a risk — omit it on a clean run rather than reaching for one. recommendation: "ship" = overall 7+ with nothing below 5; "tune" = good bones, something drags; "rework" = reads as a generic assistant wearing a hat. Score what is on the page. Call the report tool.`
 
 const REPORT_TOOL: Anthropic.Tool = {
   name: 'report',
@@ -76,7 +81,6 @@ const REPORT_TOOL: Anthropic.Tool = {
   input_schema: {
     type: 'object',
     additionalProperties: false,
-    required: ['turns', 'overall', 'verdict', 'recommendation', 'biggestRisk'],
     properties: {
       turns: {
         type: 'array',
@@ -97,8 +101,12 @@ const REPORT_TOOL: Anthropic.Tool = {
       overall: { type: 'integer', minimum: 1, maximum: 10 },
       verdict: { type: 'string', description: '2-3 honest sentences' },
       recommendation: { type: 'string', enum: ['ship', 'tune', 'rework'] },
-      biggestRisk: { type: 'string' },
+      // ⚠ OPTIONAL, AND IT USED TO BE REQUIRED — which meant the judge had to name a top risk even on
+      // a clean run, and the system prompt had already told it which one to name. A required field
+      // that manufactures its own finding is not a measurement.
+      biggestRisk: { type: 'string', description: 'Omit entirely if nothing rises to a real risk.' },
     },
+    required: ['turns', 'overall', 'verdict', 'recommendation'],
   },
 }
 
