@@ -138,6 +138,16 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   clears every hard requirement and is still declined for `planner.ts` — no capability gain, a multi-step
   agent loop beside an INV-11 one-call-per-request path, and `display:'omitted'` unverified. ⚠ If either
   is ever revisited, `packages/studio` is the first target and the planner is the last.
+- [planner-stops-asking-how-long.md](decisions/planner-stops-asking-how-long.md) — the duration ask is
+  GONE (founder, 2026-08-04), prompt-only. It was never actionable: D9 gives the model no coordinates and
+  the prompt forbids it any distance "not even as a guess", so a duration cannot tell it which place is
+  near — the repo found this twice (the redraw dead end; slate §1.5) and stopped short of the conclusion.
+  It cost a whole turn plus the measured `durations asserted as road fact` leak (10/54), which lived in the
+  read-back that also carries the persona sag. ⚠ `target_minutes` SURVIVES and is still recorded when
+  volunteered, because `durationDrift` needs it — what he SAYS and what he RECORDS are deliberately
+  different. ⚠ Do not re-propose "ask only when they haven't named a far end": that branch needs a
+  capability the prompt denies. Same commit fixed the draw-ask jukebox, which was a self-contradiction (the
+  rule says no sample line for that turn; the example gave one).
 - [no-same-road-loops.md](decisions/no-same-road-loops.md) — a loop is a RING or it is not a loop
   (founder, 2026-08-03). `round_trip` gained a rider-named `return_anchor_id` — the skipper asks *"which
   way do you want to come home?"* — because D9 gives the model NO coordinates, so it structurally cannot

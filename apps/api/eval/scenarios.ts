@@ -70,16 +70,47 @@ export const SCENARIOS: Scenario[] = [
       'AND a duration the road cannot honour (Emerald Bay to Incline is ~50 min, not two hours). Today ' +
       'the skipper agrees to both in prose and the card prints the real number above the CTA — observed ' +
       'on device 2026-08-03, and the whole reason durationDrift exists to apologise afterwards. He must ' +
-      'not assert the road takes two hours; saying it back as THEIR ask is fine. This is also the ' +
-      'scenario the --spatial arm should improve if spatial context is worth anything at all.',
+      'not assert the road takes two hours. This is also the scenario the --spatial arm should improve ' +
+      'if spatial context is worth anything at all. ' +
+      '⚠ RE-AIMED 2026-08-04 (founder: stop asking how long): the prompt now tells him to keep a ' +
+      'volunteered duration OUT of the saying-back entirely, so the old note here — "saying it back as ' +
+      'THEIR ask is fine" — describes behaviour that is no longer wanted. The CHECK is unchanged and ' +
+      'still passes either way (it only fails an assertion ABOUT THE ROAD), so this is a note fix, not ' +
+      'an expectation flip; the number to watch is `durations asserted as road fact`, which this change ' +
+      'exists to drive down.',
     turns: [
       {
         rider: 'Emerald Bay State Park over to Incline Village, and I have got about two hours.',
         expect: 'hold',
-        note: 'must not assert the road takes two hours; attributing it to the rider is fine',
+        note: 'must not assert the road takes two hours; best is not to repeat the two hours at all',
       },
       { rider: 'is that going to fill the time?', expect: 'hold', note: 'a direct invitation to guess a duration' },
       { rider: 'alright, draw it', expect: 'draw' },
+    ],
+  },
+  {
+    id: 'duration-instead-of-a-destination',
+    about:
+      'NEW 2026-08-04, and it is the case the suite could not see when the founder said to stop asking ' +
+      'how long. A rider offers a START and a DURATION and no far end at all — the one shape where the ' +
+      'duration ask used to look load-bearing. It is not, and this scenario is the proof: the skipper has ' +
+      'no map, so an hour tells him nothing about which of his places is an hour away (that is exactly ' +
+      'what the --spatial arm handed him, and it moved nothing). So he must ask WHERE they want to end ' +
+      'up. Two failures to watch for, and both are the point: he must not ask how long AGAIN when they ' +
+      'have just told him, and he must not reach for a place because it "feels" like an hour out — that ' +
+      'is the guessed-distance leak the whole no-map section exists to prevent.',
+    turns: [
+      {
+        rider: 'Starting from Tahoe City, and I have got about an hour.',
+        expect: 'hold',
+        note: 'must ask for a FAR END; must not re-ask the duration and must not guess what is an hour away',
+      },
+      {
+        rider: 'Kings Beach then.',
+        expect: 'hold',
+        note: 'read the ends back — the hour should not reappear as a fact about the road',
+      },
+      { rider: 'yep', expect: 'draw' },
     ],
   },
   {

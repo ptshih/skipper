@@ -40,7 +40,11 @@ renders as a blank list, not an error. Add a readiness projection (pois / enrich
 / endpoint-eligible places) and make release refuse or hard-confirm at zero.
 `effort M — ReferenceView rides along in the same commit · downside: ceremony on an endpoint one operator uses, and it can't check the thing that matters most (are the clips any good)`
 
-**1.5 — A free distance oracle for the planner.** Nothing downstream consumes a duration target:
+**1.5 — A free distance oracle for the planner.** ⚠ **ITS HEADLINE JUSTIFICATION IS GONE (founder,
+2026-08-04): the planner no longer ASKS how long, so there is no ninety-minute ask waiting for
+arithmetic** — see [planner-stops-asking-how-long.md](../decisions/planner-stops-asking-how-long.md).
+The observation below is what made that call obvious and still stands. If this is ever built, justify it
+by what it lets him ANSWER, not by a question he is no longer asked. Nothing downstream consumes a duration target:
 `driveProposeRequest` has no duration field, and the real number only exists **after** the billed Routes
 call. Precompute a pairwise minutes table over featured anchors at prefix-build time (verified sizing: 6
 featured → 15 pairs; all 26 eligible → 325) and put it in the cached prefix. *"I've got about ninety
