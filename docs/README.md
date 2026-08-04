@@ -228,8 +228,10 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   `audit-corpus.ts`'s try/catch. ⚠ Surviving trap: a DERIVED schema is not byte-identical — zod emits
   safe-integer bounds where the CALIBRATED judges carry a bare `{type:'integer'}` and no zod spelling
   avoids it, so charm keeps its hand-written schema on the wire. Also fixed: a paid CLI that billed and
-  reported nothing, a regex JSON scraper, and a second Anthropic client. ⚠ Nothing exercised against a
-  live model yet (both paths spend).
+  reported nothing, a regex JSON scraper, and a second Anthropic client. **Proven live for $0.0305** — the
+  charm verdict passed its schema on the first real reply and the job summarizer's metrics came back richer
+  than the regex could carry; ⚠ `classify-treatments` stays unproven because `--region` is its narrowest
+  scope (~$0.82 minimum, preview included).
 - [the-road-trip-planner.md](designs/the-road-trip-planner.md) — 💡 VISION: choose a start and an end,
   let the model NUDGE THE ROUTING (never the stops — deterministic selection stands), spurs rather than
   branching, saved as today's drive. ⚠ Touches NO hard invariant once read correctly, and nearly all the

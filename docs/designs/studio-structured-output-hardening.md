@@ -162,8 +162,16 @@ tool-call-as-text leak, which is not a studio failure mode.
   would have caught it.
 - `classify-treatments`'s gap was a **reporting** defect, not a spend defect. The money was always really
   spent; the operator just never learned how much.
-- Nothing here has been exercised against a live model. Every change is covered by tests with an injected
-  client, and `bun run check` is green, but the first real `classify-treatments` or `audit-corpus --charm`
-  run is what proves the schemas match what the models actually return. ⚠ Both cost money, so neither was
-  run — the validation is deliberately lenient where the consuming code already defaults a field, exactly
-  so a first live run degrades rather than fails.
+- **Two of the three changed paths ARE proven against live models** (founder go, 2026-08-04, billed
+  **$0.0305** total — Haiku $0.00 / Opus $0.03, one call each, no database touched):
+  - `synthesizeJobOutput` returned a valid report through the forced tool, and its `data` came back
+    materially richer than the regex path could carry — nested `groundingScores`, a typed `warnings`
+    array, correct number/bool types. The free-form `z.record` renders as a schema the model fills happily.
+  - `judgeCharm` returned a verdict that passed `CHARM_VERDICT` on the first try: all six required fields,
+    two stops scored, integers inside 1–10, `recommendation` inside the enum. That is the real proof — the
+    schema matches what the model actually emits, with its hand-written schema on the wire.
+- ⚠ **`classify-treatments` is still unproven live, and it cannot be made cheap.** It takes `--region` and
+  nothing narrower, so its smallest possible run is a full-region preview at ~$0.82 (and a preview spends).
+  Deliberately left for a separate decision rather than folded into a smoke test. Its validation is the
+  lenient kind — `highlights`/`drop`/`confidence` optional because every consumer already defaults them —
+  so the expected failure mode on a first run is one skipped group with a warning, not a dead run.
