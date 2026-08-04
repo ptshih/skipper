@@ -6,7 +6,7 @@
 // drive-detail page now; see docs/decisions/detail-page-mini-preview.md.) Reuses the @/ui
 // player primitives; the clock + fire-queue + source swap live in `useDrive`.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Animated, PixelRatio, Pressable, ScrollView, StyleSheet, View } from 'react-native'
+import { ActivityIndicator, Alert, Animated, Pressable, StyleSheet, View } from 'react-native'
 import { Stack, useLocalSearchParams, useNavigation, useRouter } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
 import { useDrive } from '@/lib/useDrive'
@@ -31,7 +31,6 @@ import {
   Scrubber,
   StateView,
   StopList,
-  STOP_ROW_HEIGHT,
   Text,
   TransportBar,
   stopIcon,
@@ -102,7 +101,6 @@ export default function DriveScreen() {
   // (ready) and arrival (done) force the full card — there's nothing to peek past.
   const [expanded, setExpanded] = useState(false)
 
-  const listRef = useRef<ScrollView | null>(null)
   const navigation = useNavigation()
   const router = useRouter()
   const { data: session } = useSession()
@@ -160,9 +158,9 @@ export default function DriveScreen() {
     ])
   }, [d.end])
 
-  // Auto-scroll the stop list to the active (or next) stop as the drive progresses.
-  // Scale the row height by the user's font scale — rows are minHeight + grow with
-  // Dynamic Type, so a fixed STOP_ROW_HEIGHT would undershoot the target at large text.
+  // WHICH stop the itinerary should keep in view as the drive progresses — the active clip, else
+  // the next one. HOW it gets there (the row-height maths, the browsing suppression, the scroll
+  // itself) belongs to `StopList`'s `followRow`, which owns the fades that must agree with it.
   const focusSeq = d.activeSeq ?? d.nextSeq
   // Row index of the focused stop (the active clip, else the next one) — the auto-scroll target.
   const focusRow = focusSeq != null ? d.stops.findIndex((s) => s.seq === focusSeq) : -1
@@ -274,35 +272,9 @@ export default function DriveScreen() {
     }),
     [d.phase, viewToggle],
   )
-  // Don't yank the list back while the rider is browsing the itinerary: mark a drag live on
-  // begin, and keep it "browsing" for a grace window after they let go so a stop transition
-  // mid-browse doesn't snatch the list — auto-scroll resumes on the next transition at rest.
-  const userBrowsing = useRef(false)
-  const browseGrace = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const onScrollBeginDrag = useCallback(() => {
-    userBrowsing.current = true
-    if (browseGrace.current) clearTimeout(browseGrace.current)
-  }, [])
-  const onScrollSettled = useCallback(() => {
-    if (browseGrace.current) clearTimeout(browseGrace.current)
-    browseGrace.current = setTimeout(() => {
-      userBrowsing.current = false
-    }, 5000)
-  }, [])
-  useEffect(
-    () => () => {
-      if (browseGrace.current) clearTimeout(browseGrace.current)
-    },
-    [],
-  )
-  // Keyed on focusRow (a NUMBER) — NOT d.stops, which rebuilt every audio tick and re-fired
-  // this scroll several times a second, pinning the list. Now it moves only when the focused
-  // stop actually changes, and never while the rider is browsing.
-  useEffect(() => {
-    if (focusRow < 0 || userBrowsing.current) return
-    const rowH = STOP_ROW_HEIGHT * PixelRatio.getFontScale()
-    listRef.current?.scrollTo({ y: Math.max(0, (focusRow - 1) * rowH), animated: true })
-  }, [focusRow])
+  // (The itinerary follows the drive on its own — `StopList`'s `followRow`, which also owns the
+  // browsing suppression and the row-height maths that used to live here. It scrolls the list it
+  // measures, so its edge fades cannot go stale behind a scroll this screen performed.)
 
   // Drive-complete beat: on arrival, ease the rig in to the end of the trail — "pulled into
   // the driveway". Reduce Motion jumps straight to 100%. (The stamp cascade rides StopRow.)
@@ -683,10 +655,7 @@ export default function DriveScreen() {
         // punctuation) — the same string does both jobs, which beats a second spoken-only prop.
         title={`${d.playedCount} of ${d.totalStops} stops`}
         titleRight={driveMode === 'sim' ? voice.drive.simTag : undefined}
-        scrollRef={listRef}
-        onScrollBeginDrag={onScrollBeginDrag}
-        onScrollEndDrag={onScrollSettled}
-        onMomentumScrollEnd={onScrollSettled}
+        followRow={focusRow}
         style={styles.listCard}
         enterStamp={d.phase === 'done' && !reduce}
         items={stopListItems}

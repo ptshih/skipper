@@ -257,6 +257,11 @@ All token-driven and theme-aware. Compose these; don't restyle from scratch.
 - **`StopList`** — the route itinerary: one card of `StopRow`s, hairline-ruled, shared by
   drive detail (`app/drives/[id]`) and the player. A `scroll` mode makes it a fixed shell
   (rows scroll inside, the player) vs content-sized (the host page scrolls, drive detail).
+  ⚠ In `scroll` mode it also FOLLOWS the drive itself (`followRow`) — the caller says which row, not
+  how. The player used to hold a ref and scroll this list from outside, which split one behaviour in
+  two: the screen moved the list, the list measured it, and a programmatic scroll delivers no
+  `onScroll` — so its edge fades froze at the last drag and lied for the rest of the drive. The
+  browsing suppression (don't yank the list out from under a rider reading ahead) travels with it.
 - **`NowCard`** — the now-playing placard. Holds a kicker + title (+ optional mono timer/badge), a
   state-dependent middle, and the transport. It **takes** the amber glow when it's lit, but it is one
   of five surfaces that can (§4's `glow` row) — §8's rule is one glowing amber **at a time**, not one

@@ -9,22 +9,14 @@
 //   • scroll  — the card is a FIXED shell (the caller gives it flex:1); only the rows scroll,
 //               inside it, clipped to the rounded corners. The in-drive player, so all four
 //               corners stay put while the itinerary scrolls.
-import { Fragment, memo, useRef, type Ref } from 'react'
-import {
-  ScrollView,
-  StyleSheet,
-  View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native'
+import { Fragment, memo, useCallback, useEffect, useRef } from 'react'
+import { PixelRatio, ScrollView, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import { space } from '../theme/tokens'
 import { Card } from './Card'
 import { Divider } from './Divider'
 import { EdgeFade } from './EdgeFade'
 import type { IconName } from './Icon'
-import { STOP_ROW_EDGE, STOP_ROW_INSET, StopRow, type StopState } from './StopRow'
+import { STOP_ROW_EDGE, STOP_ROW_HEIGHT, STOP_ROW_INSET, StopRow, type StopState } from './StopRow'
 import { Text } from './Text'
 import { useScrollEdgeFades } from './useScrollEdgeFades'
 
@@ -39,7 +31,8 @@ export interface StopListItem {
   state?: StopState
 }
 
-type ScrollHandler = (e: NativeSyntheticEvent<NativeScrollEvent>) => void
+/** How long after a rider's drag the list still counts as "being browsed" and refuses to follow. */
+const BROWSE_GRACE_MS = 5000
 
 export interface StopListProps {
   items: StopListItem[]
@@ -54,10 +47,18 @@ export interface StopListProps {
   enterStamp?: boolean
   /** Fixed-shell mode: rows scroll inside the card (caller gives the card flex:1). */
   scroll?: boolean
-  scrollRef?: Ref<ScrollView>
-  onScrollBeginDrag?: ScrollHandler
-  onScrollEndDrag?: ScrollHandler
-  onMomentumScrollEnd?: ScrollHandler
+  /**
+   * Keep this row in view as the drive moves down the itinerary (`scroll` mode; -1 to follow
+   * nothing). The list scrolls ITSELF for it.
+   *
+   * ⚠ THE SCROLL LIVES HERE BECAUSE THE FADES DO. The player used to hold a ref into this
+   * ScrollView and scroll it from outside, which split one behaviour across two components: the
+   * screen moved the list, this component measured it, and a programmatic scroll delivers no
+   * `onScroll` — so the edge fades froze at the last DRAG and lied about the clipping for the rest
+   * of the drive. One owner, one expression (`noteScrollTo` returns the offset it records), and the
+   * browsing suppression below travels with it because it is the same behaviour.
+   */
+  followRow?: number
   style?: StyleProp<ViewStyle>
 }
 
@@ -68,10 +69,7 @@ function StopListBase({
   onPressItem,
   enterStamp,
   scroll,
-  scrollRef,
-  onScrollBeginDrag,
-  onScrollEndDrag,
-  onMomentumScrollEnd,
+  followRow = -1,
   style,
 }: StopListProps) {
   // Stable per-seq onPress so the memoized StopRow only re-renders rows whose props actually change
@@ -80,6 +78,45 @@ function StopListBase({
   // Measured unconditionally (the hook is cheap and gating STATE on a prop would report a stale
   // geometry on the first frame after a flip) but only consumed in `scroll` mode.
   const fades = useScrollEdgeFades(scroll)
+  const scrollRef = useRef<ScrollView | null>(null)
+
+  // ── Follow the drive, without fighting the rider ────────────────────────────────────────────
+  // Don't yank the list back while the rider is browsing the itinerary: a drag marks browsing live,
+  // and it stays live for a grace window after they let go, so a stop transition mid-browse cannot
+  // snatch the list away. Following resumes at the next transition once they have settled.
+  const userBrowsing = useRef(false)
+  const browseGrace = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const onScrollBeginDrag = useCallback(() => {
+    userBrowsing.current = true
+    if (browseGrace.current) clearTimeout(browseGrace.current)
+  }, [])
+  const onScrollSettled = useCallback(() => {
+    if (browseGrace.current) clearTimeout(browseGrace.current)
+    browseGrace.current = setTimeout(() => {
+      userBrowsing.current = false
+    }, BROWSE_GRACE_MS)
+  }, [])
+  useEffect(
+    () => () => {
+      if (browseGrace.current) clearTimeout(browseGrace.current)
+    },
+    [],
+  )
+
+  // ⚠ Keyed on the ROW NUMBER, never on the items array: that array is rebuilt on every audio tick
+  // (twice a second for a whole drive) and re-firing this scroll pinned the list to the car. It
+  // moves only when the focused stop actually changes.
+  // `PixelRatio.getFontScale()` because STOP_ROW_HEIGHT is a minHeight that grows with Dynamic Type,
+  // so a fixed row height would undershoot the target for a rider on large text.
+  const { noteScrollTo } = fades
+  useEffect(() => {
+    if (!scroll || followRow < 0 || userBrowsing.current) return
+    const rowH = STOP_ROW_HEIGHT * PixelRatio.getFontScale()
+    // One expression decides where this lands AND tells the fades — the split that broke it.
+    const y = noteScrollTo(Math.max(0, (followRow - 1) * rowH))
+    scrollRef.current?.scrollTo({ y, animated: true })
+  }, [followRow, noteScrollTo, scroll])
+
   const onPressRef = useRef(onPressItem)
   // The mirror IS the point (see above). An effect would land after paint, so a row tapped in that
   // window would call the previous render's onPressItem.
@@ -152,8 +189,8 @@ function StopListBase({
             showsVerticalScrollIndicator={false}
             {...fades.scrollProps}
             onScrollBeginDrag={onScrollBeginDrag}
-            onScrollEndDrag={onScrollEndDrag}
-            onMomentumScrollEnd={onMomentumScrollEnd}
+            onScrollEndDrag={onScrollSettled}
+            onMomentumScrollEnd={onScrollSettled}
           >
             {rows}
           </ScrollView>

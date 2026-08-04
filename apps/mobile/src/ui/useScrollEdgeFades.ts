@@ -12,7 +12,7 @@
 // unchanged value collapses that stream into at most a couple of setStates per edge crossing, which is
 // what keeps a fade from re-rendering its whole screen every frame the rider drags.
 
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent } from 'react-native'
 
 /** How often the scroll view may report an offset. See `scrollProps` for why it lives here. */
@@ -27,6 +27,19 @@ export interface ScrollEdgeFades {
   onScroll: (e: NativeSyntheticEvent<NativeScrollEvent>) => void
   onLayout: (e: LayoutChangeEvent) => void
   onContentSizeChange: (w: number, h: number) => void
+  /**
+   * Where a PROGRAMMATIC scroll should land — ask for a target, get back the offset the content can
+   * actually reach, and scroll to THAT. It is recorded here in the same breath, which is the point.
+   *
+   * ⚠ ONLY A LIST THAT SCROLLS ITSELF NEEDS THIS, and only because its fade is overflow-GATED: a
+   * card-internal list must not dissolve its first row when nothing is clipped, so the fade has to
+   * know where the scroll is. (A SCREEN's header fade needs no such thing — it is static paper over
+   * paper. Do not reach for this to fix one.) A `scrollTo` delivers no `onScroll` this hook can rely
+   * on, so without it the itinerary's fades freeze at the last DRAG while the drive auto-follows the
+   * car down the list. The clamp is the other half: `scrollTo` past the end is not corrected for you
+   * when the content is shorter than the viewport.
+   */
+  noteScrollTo: (y: number) => number
   /**
    * The whole wiring, ready to spread onto a scroll view: `<ScrollView {...fades.scrollProps}>`.
    *
@@ -55,6 +68,9 @@ export function useScrollEdgeFades(enabled = true): ScrollEdgeFades {
   const [viewportH, setViewportH] = useState(0)
   const [contentH, setContentH] = useState(0)
   const [scrollY, setScrollY] = useState(0)
+  // Ref mirrors of the two measurements, read only by `noteScrollTo` — see the ⚠ there.
+  const viewportRef = useRef(0)
+  const contentRef = useRef(0)
 
   const overflows = contentH > viewportH + 1
   // 1px slack absorbs sub-pixel rounding so the bottom fade clears cleanly at the true end.
@@ -67,12 +83,23 @@ export function useScrollEdgeFades(enabled = true): ScrollEdgeFades {
   }
   const onLayout = (e: LayoutChangeEvent) => {
     const h = Math.round(e.nativeEvent.layout.height)
+    viewportRef.current = h
     setViewportH((prev) => (prev === h ? prev : h))
   }
   const onContentSizeChange = (_w: number, h: number) => {
     const rounded = Math.round(h)
+    contentRef.current = rounded
     setContentH((prev) => (prev === rounded ? prev : rounded))
   }
+  // ⚠ Clamped against the REFS, not the state above: a follow-scroll is requested in the same tick
+  // the geometry changes, one render before it reaches state, and clamping against the previous
+  // content height would collapse every target to zero.
+  const noteScrollTo = useCallback((y: number) => {
+    const max = Math.max(0, contentRef.current - viewportRef.current)
+    const landed = Math.round(Math.min(Math.max(y, 0), max))
+    setScrollY((prev) => (prev === landed ? prev : landed))
+    return landed
+  }, [])
 
   return {
     showTopFade,
@@ -80,6 +107,7 @@ export function useScrollEdgeFades(enabled = true): ScrollEdgeFades {
     onScroll,
     onLayout,
     onContentSizeChange,
+    noteScrollTo,
     scrollProps: { onScroll, onLayout, onContentSizeChange, scrollEventThrottle: SCROLL_THROTTLE_MS },
   }
 }
