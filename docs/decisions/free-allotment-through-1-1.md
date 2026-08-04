@@ -1,8 +1,15 @@
 # The free allotment stays small, and running out is a conversation
 
-> **Status:** DECIDED + APPLIED 2026-07-31 (founder). `FREE_DRIVE_CAP` stays **10**; a rider who runs
-> out emails `hello@skipper.fm` and gets more, **free**, via an admin grant — until there is actually
-> something to sell. The credit ledger is **untouched**. The home-screen hint is gated to a low balance.
+> **Status:** DECIDED + APPLIED 2026-07-31 (founder), **AMENDED 2026-08-04 (founder): the number is
+> now 50, not 10.** The SHAPE below is unchanged and still the decision — a bounded cap plus a human,
+> never a large cap plus a paywall — but 10 put the wall inside a single trip for a rider who was
+> actually enjoying the thing, which is the worst possible moment to meet a support address. 50 keeps
+> every argument in §"The answer" true while moving the wall past the first real road trip.
+> Admin/demo/test accounts go ABOVE 50 by explicit grant, never by moving the number.
+> A rider who runs out still emails `hello@skipper.fm` and gets more, **free**, via an admin grant —
+> until there is actually something to sell. The credit ledger is **untouched** (the raise is one
+> constant + two env values; existing riders keep their frozen 10 until granted — see §"Two premises").
+> The home-screen hint is gated to a low balance.
 > Amends the blast-radius reasoning in [account-deletion-and-recovery.md](account-deletion-and-recovery.md);
 > the ledger model ([credit-ledger.md](credit-ledger.md)) and the no-tiers call
 > ([cut-tiers.md](cut-tiers.md)) stand. Evidence:
@@ -30,10 +37,12 @@ This keeps three things simultaneously true, which no single number does on its 
 
 ## Two premises that were wrong, corrected here so they aren't re-derived
 
-- ⚠ **`FREE_DRIVE_CAP` is 10, and the number that gets quoted is usually the code default.**
-  `credits.ts` reads `process.env.FREE_DRIVE_CAP ?? 100`, and the `?? 100` fallback is what gets
-  repeated in conversation — but both env files set **10**, and always have. Read the env, never the
-  fallback. (Briefly set to 100 on 2026-07-31 and reverted the same day when this decision landed.)
+- ⚠ **The code default and the deployed value must be EQUAL, and for nine days they were not.**
+  The 2026-07-31 revert put both env files back to **10** but left `credits.ts` reading
+  `process.env.FREE_DRIVE_CAP ?? 100` — the leftover of the reverted experiment. So the fallback was
+  the number that got quoted in conversation, and a deploy that ever dropped the env var would have
+  granted 100 silently. Closed 2026-08-04: the default is now **50**, the same as both env files.
+  A fallback looser than the deployed value is a silent overspend, not a convenience.
 - ⚠ **Frozen grant amounts cut BOTH ways, and only one direction was understood.** Freezing `amount`
   at signup is what makes *lowering* the cap safely prospective — the known half. It equally blocks
   *raising* it: bumping the env helps only accounts created afterwards. **Any cap change owes existing
@@ -42,9 +51,10 @@ This keeps three things simultaneously true, which no single number does on its 
 
 ## What was applied
 
-1. `FREE_DRIVE_CAP` stays **10** in `.env.development` and `.env.production` (they point at the same
-   Neon DB and R2 — there is no staging). `.env.example` carries the reasoning and the frozen-grant
-   warning instead of a bare number.
+1. `FREE_DRIVE_CAP` is **50** in `.env.development` and `.env.production` (they point at the same
+   Neon DB and R2 — there is no staging), and the `credits.ts` default matches. `.env.example` carries
+   the reasoning and the frozen-grant warning alongside the number. *(Was 10 from 2026-07-31 until the
+   2026-08-04 amendment above.)*
 2. The two pre-1.1 accounts (`ptshih@`, and `review@skipper.fm` — the App Review demo login, which must
    never hit a wall mid-review) were admin-granted to a `granted` of **100**. Left there: the ledger is
    append-only, and reducing them would mean writing a negative `reverse`, which would be dishonest
@@ -55,7 +65,14 @@ This keeps three things simultaneously true, which no single number does on its 
    differently.
 4. The home-screen hint (`apps/mobile/app/index.tsx`) renders only at or below a low absolute balance.
    It previously rendered unconditionally under a comment claiming it was "not a depleting X-left-of-N
-   toll gauge". At a cap of 10 a threshold of 5 gives a rider real runway before the ask.
+   toll gauge". ⚠ The threshold is an ABSOLUTE count, not a ratio, deliberately (the rider's grant is
+   frozen while the default moves, so a percentage would mean different things to two riders on one
+   screen) — which means the 2026-08-04 raise to 50 changed what it buys: the same threshold that was
+   half the allotment is now a tenth of it. Left as-is; the hint is meant to fire when the wall is
+   genuinely near, and a tenth is nearer than a half. ⚠ The value is DUPLICATED in
+   `app/index.tsx` and `app/drives/index.tsx` — two copies of one number, which is the drift class
+   CLAUDE.md's "ONE expression" rule exists to stop. Not fixed here; it is a mobile change, not a
+   ledger one.
 
 ## ⚠ PLANNING IS NEVER METERED. Only the artifact is. (founder, 2026-07-31)
 

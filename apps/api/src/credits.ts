@@ -4,8 +4,11 @@
 // immutable movement (+grant / −consume / ±reverse) and a user's balance is SUM(amount). This is the
 // billing source of truth, decoupled from the content table. See docs/decisions/credit-ledger.md.
 //
-// LIVE today: the lifetime free allotment (a single `grant` of FREE_DRIVE_CAP, lazily ensured on
-// first touch) + a `consume` per generated drive. DEFERRED: purchase grants (Apple IAP / Google Play,
+// LIVE today: the lifetime free allotment (a single `grant` of FREE_DRIVE_CAP, written at SIGNUP from
+// auth's `databaseHooks.user.create.after` via `shouldGrantAtSignup`, with `ensureFreeGrant` kept as a
+// LAZY BACKSTOP for accounts that predate the hook or whose create-time write lost a race — both paths
+// build the same row under the same idempotency key, so exactly-once holds across them)
+// + a `consume` per generated drive. DEFERRED: purchase grants (Apple IAP / Google Play,
 // idempotent on the provider txn id) + refund clawbacks (a `reverse`). There is NO paid tier — the
 // ledger governs EVERY account; a comp/unlimited account is just a large admin grant.
 
@@ -17,16 +20,23 @@ import { withRetry } from './retry'
 // LIFETIME free allotment: every account is granted this many credits, once, ever. A credit is spent
 // at generation (POST /drives) and never refunded on delete (no `reverse` is emitted).
 //
-// Deliberately SMALL, and running out is a CONVERSATION rather than a paywall (founder call
-// 2026-07-31): the 403 sends the rider to the support address for a free top-up, which is just an
-// admin grant. A one-time credit pack (IAP/Play) remains the eventual unlock, but nothing sells today
-// and the copy no longer promises one. Keeping the allotment small is what keeps 2.0 pricing OPEN —
-// see docs/decisions/free-allotment-through-1-1.md.
+// Running out is a CONVERSATION rather than a paywall (founder call 2026-07-31): the 403 sends the
+// rider to the support address for a free top-up, which is just an admin grant. A one-time credit
+// pack (IAP/Play) remains the eventual unlock, but nothing sells today and the copy no longer
+// promises one. Keeping the allotment BOUNDED is what keeps 2.0 pricing OPEN — see
+// docs/decisions/free-allotment-through-1-1.md.
 //
-// Admin-tunable via env. ⚠ A grant's amount is FROZEN when written (the ledger is immutable), so
-// changing this affects only users not yet granted — in BOTH directions. Any cap change owes existing
-// riders an explicit admin grant; that is also why the top-up path is a grant, not a cap raise.
-export const FREE_DRIVE_CAP = Number(process.env.FREE_DRIVE_CAP ?? 100)
+// ⚠ 50 by founder call 2026-08-04, raised from 10 and settled after repeated back-and-forth: at 10 a
+// rider who is actually enjoying the thing hits the wall inside one trip, which is the worst possible
+// moment to meet a support address. Admin/demo/test accounts are topped up ABOVE this with explicit
+// grants rather than by moving this number — the ledger already makes that the cheaper lever.
+//
+// Admin-tunable via env, and the DEFAULT must equal the deployed value: a fallback that is loosER than
+// the env is a silent overspend the first time a deploy forgets the var (it read 100 against a
+// deployed 10 until 2026-08-04). ⚠ A grant's amount is FROZEN when written (the ledger is immutable),
+// so changing this affects only users not yet granted — in BOTH directions. Any cap change owes
+// existing riders an explicit admin grant; that is also why the top-up path is a grant, not a cap raise.
+export const FREE_DRIVE_CAP = Number(process.env.FREE_DRIVE_CAP ?? 50)
 
 /** Idempotency key for a user's one free-tier grant (so the lazy grant is exactly-once). */
 const freeGrantKey = (userId: string) => `free:${userId}`
