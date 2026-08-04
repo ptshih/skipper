@@ -177,8 +177,11 @@ export const PLANNER_MAX_TOKENS = 2_048
 export const PLAN_ROSTER_MEMO_TTL_MS = 60_000
 
 /** Ceiling on the curated anchors handed to the planner in its system prompt.
- *  ⚠ A CEILING, NOT A PAGE SIZE — deliberately far above today's 26 endpoint-eligible places, so it
- *  can never silently truncate a real region's allowlist and make a legitimate endpoint unaskable.
+ *  ⚠ A CEILING, NOT A PAGE SIZE — deliberately far above what any region holds, so it can never
+ *  silently truncate a real region's allowlist and make a legitimate endpoint unaskable. ⚠ The margin
+ *  is no longer the comfortable one this once described: bbox-scoped curation took lake-tahoe from 26
+ *  endpoints to 111 in a single day (2026-08-03), so a second broad curation pass on one region could
+ *  approach this. Count the DB, never a number written here.
  *  It exists because the set grows with every paid `curate-places` run and rides in a per-request
  *  prompt: unbounded list, unbounded per-request bill. If a region ever approaches this, that is a
  *  product decision (a planner cannot hold hundreds of names in useful attention anyway), not a
