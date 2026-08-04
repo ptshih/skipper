@@ -44,7 +44,7 @@ import { cleanPlaceName } from '@/lib/labels'
 import { isPlanAborted, planTurn } from '@/lib/planner'
 import {
   buildExampleAsks,
-  EXAMPLE_NAMES_PER_COLD_OPEN,
+  EXAMPLE_ROTATION_STRIDE,
   rotateNames,
   type ExampleAsk,
 } from '@/lib/planner-examples'
@@ -113,7 +113,6 @@ import {
 // degrades in regions with fewer than two curated names and position stops identifying a shape there.
 const EXAMPLE_ICONS: Record<ExampleAsk['shape'], IconName> = {
   aToB: 'trailSign', // a routed signpost: somewhere to somewhere
-  loop: 'loop', // a circuit with arrowheads — out, and back another way
   open: 'scenic', // the skipper's own eye picks it
 }
 
@@ -492,7 +491,7 @@ export default function HomeScreen() {
   // ⚠ Memoised for the identity reason the array above documents — a fresh array here would restart
   // the placeholder rotation timer on every keystroke.
   const rotatedNames = useMemo(
-    () => rotateNames(anchorNames, rotation * EXAMPLE_NAMES_PER_COLD_OPEN),
+    () => rotateNames(anchorNames, rotation * EXAMPLE_ROTATION_STRIDE),
     [anchorNames, rotation],
   )
   // The region's own display name, on the same live-then-cached ladder as the anchors above. Feeds the
@@ -956,9 +955,6 @@ export default function HomeScreen() {
         aToBTitle: voice.plan.exampleAToBTitle,
         aToB: voice.plan.exampleAToB,
         aToBReply: voice.plan.exampleAToBReply,
-        loopTitle: voice.plan.exampleLoopTitle,
-        loop: voice.plan.exampleLoop,
-        loopReply: voice.plan.exampleLoopReply,
         openTitle: voice.plan.exampleOpenTitle,
         open: voice.plan.exampleOpen,
         openRegion: voice.plan.exampleOpenRegion,

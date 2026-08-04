@@ -107,7 +107,10 @@ export const voice = {
     // this one spends its whole budget on the names and stays reachable wherever they are short.
     placeholderShapes: [
       '{a} to {b}',
-      'loop out of {a}',
+      // ⚠ 'loop out of {a}' was REMOVED 2026-08-03 and must not come back: a loop is an EXPLICIT-ASK
+      // exception now (docs/decisions/no-same-road-loops.md §8), so a placeholder teaching one is the
+      // app doing precisely what the skipper was just stopped from doing — offering a shape it cannot
+      // know the roads support.
       'somewhere pretty, back by 5',
       'kill an hour before dinner',
       '2 hours, no highways',
@@ -122,8 +125,15 @@ export const voice = {
     // Static, and it must STAY static: it labels the animated dots for a screen reader, and a label
     // that changes while a turn streams re-announces on every flush (the NowCard live-region lesson).
     thinkingA11y: 'The skipper is thinking',
-    // The tappable example asks (D17). Each demonstrates a DIFFERENT ask shape — not three
+    // The tappable example asks (D17). Each demonstrates a DIFFERENT ask shape — not a set of
     // destinations, which would just rebuild the picker D7 deleted.
+    // ⚠ THERE IS NO LOOP CHIP, and adding one back is a product decision, not a copy decision. It was
+    // removed 2026-08-03 when a loop became an EXPLICIT-ASK exception
+    // (docs/decisions/no-same-road-loops.md §8): the skipper may not offer a shape he cannot know the
+    // roads support, and a chip we authored is the app making that same offer with his voice. Its
+    // seeded reply was the sharper problem — "Out of {a} and back around. Where do you want to turn
+    // around?" put a loop the skipper had already agreed to into the transcript AND skipped the
+    // way-home beat, i.e. in-context precedent teaching the model a flow the wire now refuses.
     // ⚠ Each `…Reply` is a hand-authored skipper turn seeded WITHOUT a model call: the highest-traffic
     // turn in the app costs zero dollars and is founder-quality prose. It ships INTO the transcript, so
     // the model sees what it "already said" — which is why every reply ends by asking for the one thing
@@ -136,24 +146,19 @@ export const voice = {
     // "Let me pick": the rows sit next to two imperatives the rider issues, so a title that switches
     // speaker reads as the opposite of what it does.
     exampleAToBTitle: 'Drive somewhere',
-    exampleLoopTitle: 'Take a loop',
     exampleOpenTitle: 'Let the skipper pick',
     exampleAToB: '{a} to {b}, the scenic way.',
     // ⚠ EVERY `wire: true` SKIPPER LINE BELOW IS PROMPT SURFACE. These are seeded into the transcript
     // and re-sent to the model as its OWN prior sentences, so a line the prompt forbids becomes
     // in-context precedent that contradicts the instructions before the rider has typed anything —
-    // and these three chips are the app's highest-traffic entry points. They change under
+    // and these chips are the app's highest-traffic entry points. They change under
     // apps/api/src/planner-prompt.ts's review, not the design system's. The set is:
-    // `exampleAToBReply`, `exampleLoopReply`, `exampleOpenReply`, `adjustSay`, `noStopsSay`.
+    // `exampleAToBReply`, `exampleOpenReply`, `adjustSay`, `noStopsSay`.
     // ⚠ Fixed 2026-08-03: this one silently DROPPED the rider's road ask ("the scenic way") while the
     // pipeline sends `travelMode: 'DRIVE'` with no route modifiers at all — so it modelled agreeing to
     // something that never happens. It now says which half is the skipper's, matching the prompt's
     // `== When they ask about the road ==`.
     exampleAToBReply: '{a} out to {b} — I pick the ends, the road picks itself. About how long do you want to be out?',
-    exampleLoop: 'A loop out of {a}, couple of hours.',
-    // ⚠ "good shape for an afternoon" was a DRIVE-TIME judgement, which the prompt forbids outright
-    // ("no distances, no drive times ... not even as a guess with a shrug in front of it").
-    exampleLoopReply: 'Out of {a} and back around. Where do you want to turn around?',
     // ⚠ NOT "Somewhere pretty. You pick." — that read fine as a standalone chip and stopped making
     // sense the moment it sat under the title "Let the skipper pick": the row said the same thing
     // twice, and the second time in the rider's mouth ("you pick") pointing at the skipper while the

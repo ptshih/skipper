@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   buildExampleAsks,
-  EXAMPLE_NAMES_PER_COLD_OPEN,
+  EXAMPLE_ROTATION_STRIDE,
   rotateNames,
   type ExampleAskTemplates,
 } from './planner-examples'
@@ -13,9 +13,6 @@ const T: ExampleAskTemplates = {
   aToBTitle: 'Drive somewhere',
   aToB: '{a} to {b}, the scenic way.',
   aToBReply: '{a} out to {b}. How long do you want to be out?',
-  loopTitle: 'Take a loop',
-  loop: 'A loop out of {a}, couple of hours.',
-  loopReply: 'Out of {a} and back around. Where do you want to turn around?',
   openTitle: 'Let the skipper pick',
   open: 'Surprise me — somewhere pretty.',
   openRegion: 'Surprise me — somewhere pretty around {r}.',
@@ -23,35 +20,36 @@ const T: ExampleAskTemplates = {
 }
 
 describe('shape degradation', () => {
-  test('two or more names → all three shapes', () => {
+  test('two or more names → both shapes', () => {
     const asks = buildExampleAsks(['Tahoe City', 'Emerald Bay', 'Incline Village'], T)
-    expect(asks).toHaveLength(3)
+    expect(asks).toHaveLength(2)
     expect(asks[0]?.ask).toBe('Tahoe City to Emerald Bay, the scenic way.')
-    // ⚠ THE THIRD NAME, not the first. Three rows naming three places is the fix for the cold open
-    // reading as one town shouting — with the loop reusing `{a}`, a launch whose slot 0 was
-    // `Carson City` said it in the A→B ask, its reply, the loop ask, ITS reply and the placeholder.
-    expect(asks[1]?.ask).toBe('A loop out of Incline Village, couple of hours.')
-    expect(asks[2]?.ask).toBe('Surprise me — somewhere pretty.')
-    // ⚠ Titles ride through UNFILLED and stay paired with their own shape. The pairing is the thing
-    // worth pinning: the list is built by three separate pushes under three different conditions, so
-    // a mis-paired title is a one-character edit away and would label the loop "Drive somewhere".
-    expect(asks.map((e) => e.title)).toEqual(['Drive somewhere', 'Take a loop', 'Let the skipper pick'])
+    expect(asks[1]?.ask).toBe('Surprise me — somewhere pretty.')
+    // ⚠ A THIRD NAME BUYS NO THIRD CHIP. It used to: the loop row ran out of `clean[2]`, and that row
+    // was removed when a loop became an explicit-ask exception (no-same-road-loops.md §8). A surplus
+    // name is now simply unspent by this call — `rotateNames` upstream is what puts it on screen on a
+    // later launch. Pinned so nobody "fixes" the unused name by inventing a row for it.
+    // ⚠ Titles ride through UNFILLED and stay paired with their own shape. The pairing is worth
+    // pinning: the list is built by separate pushes under different conditions, so a mis-paired title
+    // is a one-character edit away.
+    expect(asks.map((e) => e.title)).toEqual(['Drive somewhere', 'Let the skipper pick'])
   })
 
   // ⚠ THE POINT OF `shape`, pinned: the list degrades, so POSITION does not identify a shape. A screen
   // pairing icons by array index looks right on a two-name region and mis-pairs on a one-name one —
   // i.e. it breaks only where nobody is looking. These two assertions are what make that unnecessary.
   test('shape survives degradation, so position never has to be trusted', () => {
-    expect(buildExampleAsks(['Tahoe City'], T).map((e) => e.shape)).toEqual(['loop', 'open'])
+    expect(buildExampleAsks(['Tahoe City', 'Emerald Bay'], T).map((e) => e.shape)).toEqual([
+      'aToB',
+      'open',
+    ])
+    expect(buildExampleAsks(['Tahoe City'], T).map((e) => e.shape)).toEqual(['open'])
     expect(buildExampleAsks([], T).map((e) => e.shape)).toEqual(['open'])
   })
 
-  test('one name → the loop and the open ask', () => {
+  test('one name → only the open ask, because A→B needs two', () => {
     const asks = buildExampleAsks(['Tahoe City'], T)
-    expect(asks.map((a) => a.ask)).toEqual([
-      'A loop out of Tahoe City, couple of hours.',
-      'Surprise me — somewhere pretty.',
-    ])
+    expect(asks.map((a) => a.ask)).toEqual(['Surprise me — somewhere pretty.'])
   })
 
   test('a region name makes the open-ended ask region-specific too', () => {
@@ -82,16 +80,15 @@ describe('the names themselves', () => {
 
   test('blank and duplicate names are dropped, so no chip reads back an empty gap', () => {
     // Two names that clean to the SAME place would produce "X to X" — one chip's worth of nonsense.
+    // Three raw entries collapse to ONE real name here, which is below A→B's floor, so the open ask is
+    // all that survives. That is the point: the dedupe happens before the count is taken, never after.
     const asks = buildExampleAsks(['  ', 'Tahoe City', 'Tahoe City, California'], T)
-    expect(asks.map((a) => a.ask)).toEqual([
-      'A loop out of Tahoe City, couple of hours.',
-      'Surprise me — somewhere pretty.',
-    ])
+    expect(asks.map((a) => a.ask)).toEqual(['Surprise me — somewhere pretty.'])
   })
 
   test('the reply is interpolated too — it ships into the transcript, not just onto a chip', () => {
-    const asks = buildExampleAsks(['Tahoe City'], T)
-    expect(asks[0]?.reply).toBe('Out of Tahoe City and back around. Where do you want to turn around?')
+    const asks = buildExampleAsks(['Tahoe City', 'Emerald Bay'], T)
+    expect(asks[0]?.reply).toBe('Tahoe City out to Emerald Bay. How long do you want to be out?')
   })
 })
 
@@ -105,28 +102,13 @@ describe('no placeholder ever reaches a rider', () => {
     }
   })
 
-  test('a template that grows a {b} degrades to one fewer chip, never to braces on screen', () => {
-    // voice.ts changes under a different review than this file — this is that seam's guard.
-    const grown = { ...T, loop: 'A loop out of {a} by way of {b}.' }
-    const asks = buildExampleAsks(['Tahoe City'], grown)
+  test('a template that grows a token degrades to one fewer chip, never to braces on screen', () => {
+    // voice.ts changes under a different review than this file — this is that seam's guard. ⚠ The
+    // grown token is `{c}`, one this file has NEVER filled, because that is the real case: the guard
+    // has to catch a token nobody here has heard of, not just a known one in a new slot.
+    const grown = { ...T, aToB: '{a} to {b} by way of {c}.' }
+    const asks = buildExampleAsks(['Tahoe City', 'Emerald Bay'], grown)
     expect(asks.map((a) => a.ask)).toEqual(['Surprise me — somewhere pretty.'])
-  })
-})
-
-describe('the loop gets its own town', () => {
-  test('with only two names it falls back to the first — a repeat beats a blank', () => {
-    const asks = buildExampleAsks(['Tahoe City', 'Emerald Bay'], T)
-    expect(asks[1]?.ask).toBe('A loop out of Tahoe City, couple of hours.')
-  })
-
-  test('three names name three places across the whole cold open', () => {
-    // The regression this change exists to prevent, stated as a property rather than as three
-    // separate string assertions: no name appears in more than one ROW.
-    const asks = buildExampleAsks(['Truckee', 'Genoa', 'Virginia City'], T)
-    expect(asks[0]?.ask).toContain('Truckee')
-    expect(asks[0]?.ask).toContain('Genoa')
-    expect(asks[1]?.ask).toContain('Virginia City')
-    expect(asks[1]?.ask).not.toContain('Truckee')
   })
 })
 
@@ -144,15 +126,20 @@ describe('rotateNames — the client’s entire share of the selection', () => {
   })
 
   test('consecutive cold opens share NO name at the stride the screen uses', () => {
-    // ⚠ THE WHOLE REASON THE STRIDE IS 3 RATHER THAN 1. Advancing one slot would leave two of the
-    // three names on screen, in different roles, which reads as a glitch rather than as variety.
-    // With eight names (coprime with 3) each launch gets a disjoint window.
+    // ⚠ THE WHOLE REASON THE STRIDE IS 3 RATHER THAN 1. Advancing one slot would leave a name on
+    // screen in a different role, which reads as a glitch rather than as variety.
+    // ⚠ THE WINDOW IS 2 AND THE STRIDE IS 3, and they are no longer the same number — a cold open
+    // spends the A→B start and end, and the loop row that spent a third name is gone
+    // (no-same-road-loops.md §8). The stride did NOT follow the window down to 2, deliberately: see
+    // the next test, which is the reason.
+    const WINDOW = 2
     const windowAt = (launch: number) =>
-      rotateNames(names, launch * EXAMPLE_NAMES_PER_COLD_OPEN).slice(0, EXAMPLE_NAMES_PER_COLD_OPEN)
-    expect(windowAt(0)).toEqual(['a', 'b', 'c'])
-    expect(windowAt(1)).toEqual(['d', 'e', 'f'])
-    expect(windowAt(2)).toEqual(['g', 'h', 'a'])
-    for (const launch of [0, 1, 3, 4]) {
+      rotateNames(names, launch * EXAMPLE_ROTATION_STRIDE).slice(0, WINDOW)
+    expect(windowAt(0)).toEqual(['a', 'b'])
+    expect(windowAt(1)).toEqual(['d', 'e'])
+    expect(windowAt(2)).toEqual(['g', 'h'])
+    expect(windowAt(3)).toEqual(['b', 'c'])
+    for (const launch of [0, 1, 2, 3, 4]) {
       const here = new Set(windowAt(launch))
       expect(windowAt(launch + 1).some((n) => here.has(n))).toBe(false)
     }
@@ -160,9 +147,13 @@ describe('rotateNames — the client’s entire share of the selection', () => {
 
   test('no name is stuck in the shop window — every one visits slot 0', () => {
     // The literal complaint, as a test: `Carson City` led every launch because slot 0 never moved.
+    // ⚠ THIS IS WHY THE STRIDE MUST STAY COPRIME WITH THE NAME COUNT, and why it did not drop to 2
+    // when the window did. At a stride of 2 over 8 names only the even slots ever lead, `leads.size`
+    // is 4, and half the region's names never open a cold open — the original complaint, re-created
+    // by arithmetic. Changing EXAMPLE_ROTATION_STRIDE to "match" the window fails right here.
     const leads = new Set(
       Array.from({ length: names.length }, (_, i) =>
-        rotateNames(names, i * EXAMPLE_NAMES_PER_COLD_OPEN)[0],
+        rotateNames(names, i * EXAMPLE_ROTATION_STRIDE)[0],
       ),
     )
     expect(leads.size).toBe(names.length)
