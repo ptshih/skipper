@@ -1,12 +1,15 @@
 # Drive density: the glance fill's arity, the cluster orphan, and the return leg
 
-> **Status:** DECIDED + BUILT 2026-08-03 (founder). Three changes landed together in
-> `@skipper/engine` + `apps/api`: the glance fill takes as many call-outs as fit rather than one per
-> window, `DRIVE_MIN_GAP_SEC` moved 180 → 120, and a fused telling a route cannot REACH no longer
-> suppresses its own members. Measured on the four saved Tahoe drives: **31 → 41 stops**, worst
-> silence 17:56 → 15:10, and the flagship corridor's worst silence 8:49 → 3:54.
+> **Status:** DECIDED + BUILT 2026-08-03 (founder). FOUR changes in `@skipper/engine` + `apps/api`:
+> the glance fill takes as many call-outs as fit rather than one per window; `DRIVE_MIN_GAP_SEC` moved
+> 180 → 120; a fused telling a route cannot REACH no longer suppresses its own members; and (§6, found
+> last and the most consequential) **selection admits on the `OFF_ROUTE_MAX_M` honesty bound alone** —
+> the trigger-radius reach filter was modelling a pipeline we do not run, and is deleted.
+> Measured on the four saved Tahoe drives: **31 → 41 stops**, avg coverage 34% → **40%**, worst silence
+> 17:56 → **14:24**, and the flagship corridor's worst silence 8:49 → **3:54**.
 > Updates the premise of [scenic-filler-and-the-empty-stretch.md](scenic-filler-and-the-empty-stretch.md)
 > §(b) — see §4. **§5 (the return leg) is a FINDING, not a decision: nothing is greenlit there.**
+> ⚠ `driveMaxStops` now BINDS on two of the four drives; it bound on none before today.
 
 ## 0. The question
 
@@ -21,14 +24,13 @@ using the real `buildDrive`. Scripts are read-only and re-runnable from `package
 | suspect | verdict |
 | --- | --- |
 | `driveMaxStops` (~1 stop / 4 min, cap 24) | **innocent.** Removing the cap entirely changed NOTHING on any of the four drives. |
-| the 250 m anchored trigger reach | **a thin tail.** 88% of anchored candidates already sit inside 250 m; widening all the way to the 700 m honesty bound bought **+2 stops** across the set. The near-misses look dramatic (Spooner Lake fails by 14 m) and do not add up. |
+| the 250 m anchored trigger reach | **looked like a thin tail — was actually a wrong premise.** 88% of anchored candidates already sit inside 250 m, so widening it bought only ~2 stops and I ranked it last. That measured the right number for the wrong reason: the filter should not have existed. See §6. |
 | the glance fill's arity | **the biggest lever** — §2. |
 | `DRIVE_MIN_GAP_SEC = 180` | **binding on half the drives** — 180 → 120 is worth +4 stops. |
 | the 1 km co-located dedupe | drops 3–9 per drive, but the survivors are genuinely the same physical stop; the drops sit inside a min-gap window anyway. |
 
-⚠ The reach filter's own comment already said it "can only ever TIGHTEN the gate", and that is still
-true and still correct — a stop admitted past its trigger range is selected-then-silent. The lesson is
-that the honest gate was never the reason drives felt thin.
+⚠ The reach filter's own comment said it "can only ever TIGHTEN the gate", which was true — but the
+justification for tightening was not. That is §6, found by pulling on this thread afterwards.
 
 ## 2. The glance fill took ONE per window, however long the window
 
@@ -124,3 +126,69 @@ a repeat could read as a warm bookend or as the app running out of things to say
 shape is a b-side ([tell-me-more-spec.md](../designs/tell-me-more-spec.md)) — different words about a
 place you now recognise — but that spec's own measurement found only 1 of 8 stops on the flagship
 drive carries leftover material, so it does not cover a return leg on its own. Not scheduled.
+
+## 6. The reach filter was answering a question about a pipeline we don't run
+
+Added 2026-08-03, after §1 ranked this last. The ranking was right about the number and wrong about
+the reason, which is a worse mistake than being wrong about the number.
+
+`buildDrive`'s step 1 admitted a candidate only if the route came within
+`min(OFF_ROUTE_MAX_M, effectiveRadiusM(triggerRadiusM, avgMps, leadSeconds))`. Its stated reason: the
+trigger fires on the car's **distance to the stop**, floored at 250 m for a road-snapped anchor, so a
+candidate in the 250–700 m band would be selected and then sit silent — *"Granlibakken (622 m
+off-route) would have needed 116 mph."*
+
+**That is not how a stop is served.** `manifestClips` ships `item.triggerLat/Lng` — the ROUTE-SNAPPED
+point, not the POI. The player (`useDrive.ts`) and the sim (`runDrive`) then both call
+`snapStopsToRoute`, which **replaces** the coordinates with the snapped position, keeping the original
+only as `poiLat/poiLng`. `TriggerEngine` fires on the replaced pair. So the stop sits ON the polyline,
+the car drives over it, and it fires at closest approach however far off-road the POI is.
+
+**Verified three ways on the real engine before changing anything** (`.scratch/verify-snap-claim.ts`),
+at 45 mph on an 11 km road, serving the real `ANCHORED_TRIGGER_RADIUS_M`:
+
+| POI off-route | served snapped (what ships) | served raw, via `runDrive` | raw, `snapStopsToRoute` BYPASSED |
+| --- | --- | --- | --- |
+| 264 m (Spooner Lake) | fired @264 s | fired @264 s | **never fired** |
+| 390 m (Edgewood) | fired @264 s | fired @264 s | **never fired** |
+| 622 m (Granlibakken) | fired @264 s | fired @264 s | **never fired** |
+| 900 m | fired @264 s | excluded off-route | **never fired** |
+
+⚠ The middle column is NOT a control — `runDrive` snaps whatever it is given, so it cannot
+discriminate. Only the last column, with the snap bypassed, reproduces the old arithmetic — and there
+it is exactly right, which is almost certainly how the original "3 of 18 could not fire" was measured.
+The filter was refusing content to prevent a failure that cannot occur, at a cost its own comment
+recorded: *"the other had no other candidate in range and went from 8 stops to 6."*
+
+**The fix is a deletion.** Admission is `OFF_ROUTE_MAX_M` and nothing else — the honesty bound the
+project already chose for "is this place actually along the drive". `drive-select.ts` no longer imports
+from `./trigger` at all, and that absence is load-bearing: the moment admission reaches for a trigger
+constant it has started answering a different question.
+
+**`triggerRadiusM` IS A LEAD-TIME KNOB, NOT AN ADMISSION KNOB.** That conflation was the bug. It still
+governs how EARLY a stop fires and is served unchanged — including the cluster cap, which remains a
+genuine lead-time concern (a district must not announce itself a kilometre out). What it must never
+again decide is WHETHER a place is on the drive.
+
+Measured across the four saved drives (gap 120, with §2 and §3 already in):
+
+| | stops | avg coverage | worst silence |
+| --- | --- | --- | --- |
+| before | 3 · 14 · 17 · 7 = 41 | 36% | 15:10 |
+| after | 3 · 13 · 17 · 8 = **41** | **40%** | **14:24** |
+
+The stop count is flat — one drive trades a glance for a longer telling — but coverage rises on two
+drives, the Stateline loop goes 7 → 8, and ~12 more candidates per set become eligible. ⚠ A
+side-effect worth watching: `driveMaxStops` now BINDS on two of the four drives (it bound on none
+before 2026-08-03), so the cap is the next thing to reason about, and it is spent greedily front-to-back.
+
+⚠ **Two dead things this leaves behind, deliberately not removed.** The player's own
+`offRouteM <= OFF_ROUTE_MAX_M` guard can never fire — the server ships pre-snapped coordinates, so
+client-side `offRouteM` is ~0 for every stop, which also makes its `stop_skipped`/`off_route` trace
+event unreachable. It is harmless defence-in-depth against a manifest that ships raw coords, and
+`apps/mobile` is another agent's tree today. The comment above it ("the API ships raw coords, not
+trigger points") is simply false and should be corrected when someone is next in that file.
+
+⚠ **What this does NOT settle.** He will now sometimes talk about a place ~600 m away that the rider
+may not be able to see. That is a TASTE question, not a correctness one, and no desk pass can answer
+it — it is exactly what RISK-1's real drive is for.

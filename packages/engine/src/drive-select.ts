@@ -13,9 +13,11 @@
 // Break stops are layered by the caller when they land (DEFERRED — `detours`); this is the
 // narration core.
 
-import { cumulativeMeters, haversineMeters, OFF_ROUTE_MAX_M, totalMeters, triggerRadiusForKind, type LngLat } from './geo'
+// ⚠ This module no longer imports from './trigger'. That is the POINT, not an accident of cleanup:
+// admission is a geometry question ("is this place along the drive"), and the moment it reaches for a
+// trigger constant it has started answering a different one. See `buildCandidatePlacer`.
+import { haversineMeters, OFF_ROUTE_MAX_M, triggerRadiusForKind, type LngLat } from './geo'
 import { buildRouteSnapper, type RouteSnap } from './pacing'
-import { DEFAULT_TRIGGER, effectiveRadiusM } from './trigger'
 
 /** A reusable narration a drive can include — the place's ONE shared telling (1:1 with the POI).
  *  engine stays DB-agnostic, so the caller maps DB rows to this shape. */
@@ -207,29 +209,36 @@ export function buildCandidatePlacer(
   totalSec: number,
 ): (cand: DriveCandidate) => CandidatePlacement | null {
   const snap = buildRouteSnapper(polyline, totalSec)
-  // The route's average speed — the best estimate this function has of how fast the car will be
-  // moving, and therefore how far the speed-adaptive trigger will reach. Same uniform-speed
-  // approximation `timeAtAlong` already makes to pace stops, used here for the same reason: it is
-  // the only speed signal a frozen route carries. A stop on an unusually slow stretch can still
-  // fall short; a stop admitted by the ceiling alone reliably does.
-  const routeM = polyline.length > 1 ? totalMeters(cumulativeMeters(polyline)) : 0
-  const avgMps = totalSec > 0 && routeM > 0 ? routeM / totalSec : 0
 
+  // ⚠ `totalSec` is still required, and not vestigially: `buildRouteSnapper` needs it to convert
+  // along-route metres into the `alongSec` every downstream rule paces on. What it is no longer used
+  // for is a route-average speed — admission stopped depending on how fast the car is moving when the
+  // speed-adaptive reach came out of this decision (see below).
   return (cand) => {
-    // ⚠ Two different distances used to govern this, and they disagreed. `OFF_ROUTE_MAX_M` (700 m) is
-    // an HONESTY bound — "is this place actually along the drive". The TRIGGER fires on the car's
-    // distance to the stop, floored at ANCHORED_TRIGGER_RADIUS_M (250 m) for a road-snapped anchor and
-    // only stretched by speed (max(floor, speed x leadSeconds) ~ 322 m at 60 mph). So every candidate
-    // admitted in the 250-700 m band was SELECTED and then silent: it consumed a min-gap pacing slot,
-    // blocked a stop that would have played, and produced nothing. Measured on the three saved Tahoe
-    // drives before this filter: 3 of 18 selected stops could not fire at the drive's own average
-    // speed, and Granlibakken (622 m off-route) would have needed 116 mph.
+    // ADMISSION IS THE HONESTY BOUND, AND ONLY THAT — "is this place actually along the drive".
     //
-    // Selecting on the radius the TRIGGER will actually use makes the two agree by construction.
-    const reachM = Math.min(
-      OFF_ROUTE_MAX_M,
-      effectiveRadiusM(candidateTriggerRadiusM(cand), avgMps, DEFAULT_TRIGGER.leadSeconds),
-    )
+    // ⚠ From 2026-08-02 to 2026-08-03 this was `min(OFF_ROUTE_MAX_M, effectiveRadiusM(...))`, on the
+    // theory that a candidate in the 250-700 m band would be SELECTED and then silent, because the
+    // trigger fires on the car's distance to the stop and an anchored floor is 250 m. That theory
+    // described a pipeline we do not run. A stop is served at its ROUTE-SNAPPED point
+    // (`manifestClips` ships `item.triggerLat/Lng`), and both the player and the sim then call
+    // `snapStopsToRoute`, which REPLACES the coordinates with the snapped position. The stop therefore
+    // sits ON the polyline, the car drives over it, and it fires at closest approach no matter how far
+    // off-road the POI itself is.
+    //
+    // ⚠ VERIFIED before this was changed, three ways on the real engine: a POI at 264/365/390/542/622 m
+    // fires at the same second (closest approach) whether it is served snapped or raw, because
+    // `runDrive` snaps either one. Only when `snapStopsToRoute` is bypassed entirely — the world the
+    // old arithmetic assumed — does anything past 250 m go silent, which is almost certainly how the
+    // original "3 of 18 could not fire" number was produced. The filter was refusing content to prevent
+    // a failure that cannot occur, and its own note recorded the cost: one drive went 8 stops to 6.
+    //
+    // ⚠ SO `triggerRadiusM` IS A LEAD-TIME KNOB, NOT AN ADMISSION KNOB — that conflation is the whole
+    // bug. It still governs how EARLY a stop fires (the client keeps firing on
+    // `candidateTriggerRadiusM`, and the cluster cap still keeps a district from announcing itself a
+    // kilometre out). It must never again decide WHETHER a place is on the drive; that question has
+    // one answer, and this is it.
+    const reachM = OFF_ROUTE_MAX_M
 
     // The SECOND admission rule: a group too spread out for a point has no single point to snap, so
     // the point rule cannot judge it — and judging it anyway is not a harmless approximation.

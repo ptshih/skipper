@@ -322,37 +322,58 @@ describe('buildDrive', () => {
     expect(stops.some((s) => s.poiId.startsWith('glance'))).toBe(false)
   })
 
-  // The 250-700 m band: a candidate the old flat off-route ceiling admitted but the TRIGGER could
-  // never reach, so it consumed a pacing slot and played nothing. Measured on the real Tahoe drives at
-  // 3 of 18 selected stops before the fix. ~11.1 km over 660 s = ~17 m/s, so speed x 12 s lead ~ 202 m
-  // and an ANCHORED stop keeps its 250 m floor — a 400 m offset is unreachable, a 150 m one is fine.
-  test('drops an ANCHORED candidate the trigger radius can never reach (250-700m band)', () => {
+  // ⚠ THE 250-700 m BAND, AND WHY IT IS ADMITTED AGAIN. These two tests used to assert the opposite:
+  // that an ANCHORED candidate ~400 m off route was dropped because the trigger (250 m floor, stretched
+  // only by speed) could never reach it. That reasoning modelled a pipeline we do not run. A stop is
+  // served at its ROUTE-SNAPPED point and both the player and `runDrive` call `snapStopsToRoute`, which
+  // replaces the coordinates with the snapped position — so the stop sits ON the road and fires at
+  // closest approach whatever the POI's own offset. Verified on the real engine before the change: a
+  // POI at 264/365/390/542/622 m fires at the same second; only with `snapStopsToRoute` bypassed
+  // entirely does anything past 250 m go silent.
+  //
+  // So admission is the HONESTY bound and nothing else, and it must not depend on whether the pin is
+  // road-snapped — which is what the pair below pins. `anchored` still changes the served
+  // `triggerRadiusM` (how EARLY he starts talking); it must never again change WHETHER the place is on
+  // the drive.
+  test('admits the 250-700 m band — a snapped stop fires at closest approach', () => {
     const stops = buildDrive({
       polyline,
       totalSec: TOTAL_SEC,
       minGapSec: 180,
       maxStops: 10,
       candidates: [
-        cand({ poiId: 'near', lat: 38.02, lng: 0.0017, anchored: true }), // ~150 m east — within the 250 m floor
-        cand({ poiId: 'far', lat: 38.07, lng: 0.0046, anchored: true }), // ~400 m east — past it, silent
+        cand({ poiId: 'near', lat: 38.02, lng: 0.0017, anchored: true }), // ~150 m east
+        cand({ poiId: 'band', lat: 38.07, lng: 0.0046, anchored: true }), // ~400 m east — used to be dropped
       ],
     })
     expect(stops.some((s) => s.poiId === 'near')).toBe(true)
-    expect(stops.some((s) => s.poiId === 'far')).toBe(false)
+    expect(stops.some((s) => s.poiId === 'band')).toBe(true)
   })
 
-  // The same 400 m offset must STILL be admitted when the stop is NOT road-snapped: an un-anchored pin
-  // keeps the fat kind-aware floor (600 m default), so tightening the gate must not regress it. This is
-  // what stops the fix from quietly deleting the ~99 un-anchored backcountry places.
-  test('KEEPS the same offset when un-anchored (fat kind-aware floor still applies)', () => {
+  test('...and `anchored` no longer changes admission at all — same offset, both ways', () => {
+    const at = (anchored: boolean) =>
+      buildDrive({
+        polyline,
+        totalSec: TOTAL_SEC,
+        minGapSec: 180,
+        maxStops: 10,
+        candidates: [cand({ poiId: 'band', lat: 38.07, lng: 0.0046, ...(anchored ? { anchored } : {}) })],
+      }).some((s) => s.poiId === 'band')
+    expect(at(true)).toBe(at(false))
+    expect(at(true)).toBe(true)
+  })
+
+  // The bound itself still has to BITE, or the two tests above would pass on a gate that admits
+  // everything. ~900 m east is past OFF_ROUTE_MAX_M: not on this drive, in any sense.
+  test('still refuses a candidate past the honesty bound', () => {
     const stops = buildDrive({
       polyline,
       totalSec: TOTAL_SEC,
       minGapSec: 180,
       maxStops: 10,
-      candidates: [cand({ poiId: 'far', lat: 38.07, lng: 0.0046 })], // no `anchored` → 600 m floor
+      candidates: [cand({ poiId: 'gone', lat: 38.05, lng: 0.0103, anchored: true })], // ~900 m east
     })
-    expect(stops.some((s) => s.poiId === 'far')).toBe(true)
+    expect(stops).toHaveLength(0)
   })
 
   test('respects the minimum time gap and is ordered (seq 0..n-1, alongSec non-decreasing)', () => {
