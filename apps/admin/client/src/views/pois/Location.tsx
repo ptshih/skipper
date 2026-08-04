@@ -202,9 +202,10 @@ export function Location({ poiId, poiLat, poiLng }: { poiId: string; poiLat?: nu
             </div>
           )}
           <div className="text-xs leading-relaxed text-muted-foreground">
-            Grouping is recorded but <strong className="text-foreground">not yet acted on</strong> — every
-            place still has its own clip until the fused tellings are generated. Change it by re-running
-            <span className="font-mono"> classify-treatments</span>, not here.
+            Grouping is <strong className="text-foreground">live</strong>: once a group's fused telling is
+            generated, it speaks for its members and they carry no clip of their own — which is why Exclude
+            and Delete are refused below for a place named by a RELEASED fused telling. Change the grouping
+            by re-running <span className="font-mono">classify-treatments</span>, not here.
           </div>
         </div>
       )}

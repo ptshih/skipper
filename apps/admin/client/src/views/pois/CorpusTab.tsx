@@ -28,24 +28,32 @@ const SOURCE_OPTIONS = [
   { value: 'wikidata', label: 'Wikidata' },
 ]
 
-const FLAG_OPTIONS = [
-  { value: 'flagged', label: 'Needs attention (any flag)' },
-  { value: 'story-eligible', label: 'Story: eligible' },
-  { value: 'story-filtered', label: 'Story: filtered out' },
-  { value: 'enriched', label: 'Enriched' },
-  { value: 'needs-enrich', label: 'Eligible · un-enriched' },
-  { value: 'narrated', label: 'Narration: any' },
-  { value: 'excluded', label: 'Excluded' },
-  { value: 'hide-excluded', label: 'Hide excluded' },
-  { value: 'narration-stale', label: 'Narration: stale' },
-  { value: 'staged', label: 'Narration: staged (unreleased)' },
-  { value: 'sheet-drift', label: 'Story: sheet drifted' },
-  { value: 'speakable-drift', label: 'Speakable: drifted' },
-  { value: 'off-road', label: 'Off-road: no road anchor' },
-  { value: 'defect', label: 'Narration defects' },
-  { value: 'stale', label: 'Stale facts' },
-  { value: 'unattrib', label: 'Unattributed' },
+// The flag vocabulary, ONE list. Each entry carries the DROPDOWN label and the shorter SCOPE-CHIP label:
+// deliberately different wording for two surfaces (a chip sits inline in a sentence, an option doesn't),
+// but ONE key set — these were two hand-kept tables, free to gain a flag in the dropdown that the chip
+// then rendered as its raw slug. Every `value` must also have a matching `flags === '…'` guard in the
+// `filtered` predicate below; a value with no guard silently filters nothing rather than failing.
+const FLAG_FILTERS = [
+  { value: 'flagged', label: 'Needs attention (any flag)', chip: 'Needs attention' },
+  { value: 'story-eligible', label: 'Story: eligible', chip: 'Story: eligible' },
+  { value: 'story-filtered', label: 'Story: filtered out', chip: 'Story: filtered out' },
+  { value: 'enriched', label: 'Enriched', chip: 'Enriched' },
+  { value: 'needs-enrich', label: 'Eligible · un-enriched', chip: 'Eligible · un-enriched' },
+  { value: 'narrated', label: 'Narration: any', chip: 'Has narration' },
+  { value: 'excluded', label: 'Excluded', chip: 'Excluded' },
+  { value: 'hide-excluded', label: 'Hide excluded', chip: 'Excluded hidden' },
+  { value: 'narration-stale', label: 'Narration: stale', chip: 'Narration: stale' },
+  { value: 'staged', label: 'Narration: staged (unreleased)', chip: 'Narration: staged' },
+  { value: 'sheet-drift', label: 'Story: sheet drifted', chip: 'Story: sheet drifted' },
+  { value: 'speakable-drift', label: 'Speakable: drifted', chip: 'Speakable: drifted' },
+  { value: 'off-road', label: 'Off-road: no road anchor', chip: 'Off-road (no road anchor)' },
+  { value: 'defect', label: 'Narration defects', chip: 'Narration defects' },
+  { value: 'stale', label: 'Stale facts', chip: 'Stale facts' },
+  { value: 'unattrib', label: 'Unattributed', chip: 'Unattributed' },
 ]
+
+const FLAG_OPTIONS = FLAG_FILTERS.map(({ value, label }) => ({ value, label }))
+const FLAG_LABELS: Record<string, string> = Object.fromEntries(FLAG_FILTERS.map((f) => [f.value, f.chip]))
 
 export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: boolean; openPoiId?: string }) {
   const [q, setQ] = useState('')
@@ -194,14 +202,6 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
       : '')
 
   // The active filters, surfaced in every action's confirm dialog so a spend can't run on an unseen scope.
-  const FLAG_LABELS: Record<string, string> = {
-    flagged: 'Needs attention',
-    'story-eligible': 'Story: eligible', 'story-filtered': 'Story: filtered out', enriched: 'Enriched',
-    'needs-enrich': 'Eligible · un-enriched', narrated: 'Has narration', 'narration-stale': 'Narration: stale', staged: 'Narration: staged',
-    'sheet-drift': 'Story: sheet drifted', 'speakable-drift': 'Speakable: drifted', defect: 'Narration defects',
-    excluded: 'Excluded', 'hide-excluded': 'Excluded hidden',
-    stale: 'Stale facts', unattrib: 'Unattributed', 'off-road': 'Off-road (no road anchor)',
-  }
   // ⚠ Chips describe the FILTER, which only equals the run in 'all' mode. A hand-picked selection is
   // deliberately filter-independent, so showing "Region: Tahoe" beside 40 ids picked across two regions
   // would be the same lie in a new place — say so instead.
@@ -217,19 +217,28 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
   }
   const scope: ScopeDescriptor = { selection: buildSelection(), summary: selectionSummary, chips: scopeChips }
 
-  const totals = {
-    withClips: pois.filter((p) => p.narrationCount > 0).length,
-    eligible: pois.filter((p) => p.storyEligibility === 'eligible').length,
-    enriched: pois.filter((p) => p.enriched).length,
-    // Attribution applies to STORY narrations (CC BY-SA): an unattributed narration is one that exists.
-    unattrib: pois.filter((p) => !p.attributed && p.narrationCount > 0).length,
-    defects: pois.filter((p) => p.suspiciousDuration).length,
-    // The combined remediation queue (the folded-in "Retire" tab) — anything needing attention.
-    flagged: pois.filter((p) => p.staleFacts || p.suspiciousDuration || (!p.attributed && p.narrationCount > 0) || p.speakableDrift).length,
-    // Off-road = no road anchor in a snapped region (won't trigger). Its OWN stat, NOT in `flagged`:
-    // backcountry isn't a fixable defect, it's a "know these won't fire" awareness count.
-    offRoad: pois.filter((p) => p.offRoad).length,
-  }
+  // ⚠ CORPUS-WIDE on purpose — none of these reads the search box or the filter axes (that is why
+  // `applyQuickFilter` resets the others), so they change only when the corpus does. Memoized on `pois`
+  // and accumulated in ONE pass: as seven bare `.filter()` calls in the render body they re-scanned the
+  // whole corpus seven times per keystroke, which grows with every region added.
+  const totals = useMemo(() => {
+    const t = { withClips: 0, eligible: 0, enriched: 0, unattrib: 0, defects: 0, flagged: 0, offRoad: 0 }
+    for (const p of pois) {
+      // Attribution applies to STORY narrations (CC BY-SA): an unattributed narration is one that exists.
+      const unattributed = !p.attributed && p.narrationCount > 0
+      if (p.narrationCount > 0) t.withClips += 1
+      if (p.storyEligibility === 'eligible') t.eligible += 1
+      if (p.enriched) t.enriched += 1
+      if (unattributed) t.unattrib += 1
+      if (p.suspiciousDuration) t.defects += 1
+      // The combined remediation queue (the folded-in "Retire" tab) — anything needing attention.
+      if (p.staleFacts || p.suspiciousDuration || unattributed || p.speakableDrift) t.flagged += 1
+      // Off-road = no road anchor in a snapped region (won't trigger). Its OWN stat, NOT in `flagged`:
+      // backcountry isn't a fixable defect, it's a "know these won't fire" awareness count.
+      if (p.offRoad) t.offRoad += 1
+    }
+    return t
+  }, [pois])
 
   // The 8-col corpus table. `colSpan`/skeleton cols derive from the column count (DataTable); the select
   // column guards its own clicks (`cellStopPropagation`) so toggling a checkbox never opens the row sheet.

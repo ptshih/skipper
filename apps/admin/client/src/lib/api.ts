@@ -65,8 +65,11 @@ export interface Region {
   bbox: string | null
   /** region-release-gate: null = DRAFT (POIs not public), ISO string = RELEASED (open). Monotonic. */
   releasedAt: string | null
-  /** POIs whose coords fall in this region's bbox (geometry-first, single-assignment — matches the POIs
-   *  view's region coverage). null = no/invalid bbox set (can't count), distinct from a genuine 0. */
+  /** POIs whose coords fall in this region's bbox (geometry-first). ⚠ MANY-TO-MANY, not single
+   *  assignment: bboxes may overlap and a poi counts toward EVERY region containing it, so these
+   *  deliberately do NOT sum to the corpus size (founder, 2026-08-02 — see the tally in
+   *  `GET /admin/regions`, which records the `.find()` first-region-wins version as the bug it fixed).
+   *  null = no/invalid bbox set (can't count), distinct from a genuine 0. */
   poiCount: number | null
 }
 

@@ -18,7 +18,12 @@
  */
 import { describe, expect, it } from 'bun:test'
 import { isAddressLike, isBusinessLike, isParkingLike, nameDisagrees } from './places'
-import { isBusinessLike as isBusinessLikeStudio } from '../../../packages/studio/src/pipeline/places'
+import {
+  isAddressLike as isAddressLikeStudio,
+  isBusinessLike as isBusinessLikeStudio,
+  isParkingLike as isParkingLikeStudio,
+  nameDisagrees as nameDisagreesStudio,
+} from '../../../packages/studio/src/pipeline/places'
 
 // Shapes as the Places API (New) returns them — address-component types vs a locality's types.
 const TOWN = ['locality', 'political']
@@ -196,6 +201,55 @@ describe('isBusinessLike', () => {
     // not, and a divergence means the console and the CLI would curate different sets from one draft.
     for (const types of [PAINTER, REALTY, COWORKING, BUS_STOP, TOWN, STATE_PARK, TRANSIT, undefined]) {
       expect(isBusinessLikeStudio(types)).toBe(isBusinessLike(types))
+    }
+  })
+})
+
+/**
+ * ⚠ PARITY FOR THE OTHER THREE GUARDS, which the mirror comments always claimed ("the two must move
+ * together") but only `isBusinessLike` actually had. All four are hand-duplicated across
+ * apps/admin/server/places.ts and packages/studio/src/pipeline/places.ts, and all four decide what
+ * lands in `places` — the planner's wire-level allowlist. A divergence means the console and the CLI
+ * curate DIFFERENT SETS from one draft, which is exactly the failure the mirroring was supposed to
+ * prevent and the one nothing was watching for.
+ *
+ * Still NOT pinned, and worth knowing: `draftSystem` (the Opus draft prompt) is mirrored the same way
+ * — server/places.ts vs packages/studio/src/curate-places.ts — but both copies are module-private, so
+ * parity there needs a text comparison rather than a call. It is the highest-value remaining gap.
+ */
+describe('mirrored guard parity (admin ↔ studio)', () => {
+  const TYPE_CASES: (string[] | undefined)[] = [
+    TOWN, STREET, STREET_ADDRESS, STATE_PARK, TRANSIT,
+    ['parking_lot'], ['parking_garage', 'point_of_interest'],
+    ['painter', 'point_of_interest', 'establishment'],
+    ['bus_stop', 'transit_station'],
+    ['lodging', 'point_of_interest'],
+    [], undefined,
+  ]
+
+  it('isAddressLike agrees across both copies', () => {
+    for (const types of TYPE_CASES) expect(isAddressLikeStudio(types)).toBe(isAddressLike(types))
+  })
+
+  it('isParkingLike agrees across both copies', () => {
+    for (const types of TYPE_CASES) expect(isParkingLikeStudio(types)).toBe(isParkingLike(types))
+  })
+
+  it('nameDisagrees agrees across both copies — including its NAME_NOISE stop-list', () => {
+    // Pairs chosen to exercise the shared noise list and the rename false-positive, not just the
+    // trivially-equal case: if one copy's NAME_NOISE gains or loses a word, these diverge.
+    const NAME_CASES: [string, string][] = [
+      ['Reno', 'Downtown'],
+      ['Squaw Valley', 'Palisades Tahoe'],
+      ['Lake Tahoe', 'Lake Tahoe'],
+      ['The Y', 'Y Junction'],
+      ['Emerald Bay', 'Emerald Bay State Park'],
+      ['Donner Pass', 'Donner Pass Road'],
+      ['Truckee', 'Truckee, CA'],
+      ['', 'Truckee'],
+    ]
+    for (const [drafted, resolved] of NAME_CASES) {
+      expect(nameDisagreesStudio(drafted, resolved)).toBe(nameDisagrees(drafted, resolved))
     }
   })
 })
