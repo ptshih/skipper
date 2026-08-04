@@ -30,7 +30,22 @@
 > Cause: stating the bounds was not enough while the prompt still opened "a driving audio tour of
 > `<display_name>`" — Truckee reads as Tahoe, Reno reads as somewhere else. The prompt was restructured
 > so the BOX is given first as the area and the name appears once, explicitly labelled a NICKNAME.
-> ⚠ **That second pass is UNMEASURED** — it needs another paid draft to confirm the east side fills in.
+> ⚠ **MEASURED (2026-08-03, two more drafts, ~$0.21 each, no writes).** Demoting the name to a nickname
+> got the Carson Valley (Carson City, Genoa, Washoe Lake, the Nevada State Capitol) — but NOT the
+> Comstock. The remaining blocker was NOT the region name: the ENDPOINT bullet listed only rural kinds
+> ("towns and villages, marinas and boat launches, scenic lookouts, state-park gateways, trailheads"),
+> so a CITY or a historic mining district matched no offered category. Widening it to name cities,
+> downtowns, historic districts and county seats brought in **Virginia City (featured), Gold Hill, Silver
+> City, Dayton, Mound House, Empire, Bowers Mansion, Minden, Gardnerville, Carson City Historic
+> District** on the next draft (107 places). ⚠ **RENO AND SPARKS STILL DO NOT APPEAR** after two passes,
+> though the box reaches them and 10 of the orphaned tellings are theirs — the drafts stop at Floriston
+> and Hirschdale in the river canyon. Treat Reno as a MANUAL add (or its own region — see the note in
+> `apps/admin/server/region-membership.test.ts` that a future `reno` sits inside this box), not something
+> to keep re-rolling the prompt for.
+> ⚠ Also unfixed: ~10 drafts per run sit SOUTH of the box edge (Kirkwood, Markleeville, Hope Valley,
+> Carson Pass, Caples/Silver Lake, Grover Hot Springs, Woodfords, Blue Lakes). A "leave it out if you
+> cannot place it confidently" clause did NOT help — the model has no map and cannot self-check
+> containment. Prune them before resolving; `isAddressLike` catches only the endpoint-role ones.
 >
 > ⚠ **SECOND, SEPARATE DEFECT FOUND IN THAT RUN — a silent WRONG resolve, now guarded.** Autocomplete is
 > sent a HARD bbox restriction and the resolver takes the FIRST prediction with no check that it

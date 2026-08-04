@@ -235,12 +235,12 @@ The tour area is a BOX on the map: southwest corner ${bbox.swLat}, ${bbox.swLng}
 
 Riders call this area "${regionName}". That is a NICKNAME, not a boundary. A box this size routinely covers ground nobody would file under that name: a neighboring city, the next valley over, a mountain pass, another state line. Those places are in scope exactly as much as the ones the nickname obviously covers, and they are the ones most often left out. Work the WHOLE box, corner to corner — if your list only contains what the nickname brings to mind, you have missed most of the area.
 
-A place just OUTSIDE the box is the one thing that cannot be used at all, so never spend a slot on one.
+A place just OUTSIDE the box is the one thing that cannot be used at all, so never spend a slot on one. If you cannot place somewhere on the map with confidence, leave it out and name something you can — a near-miss is worse than an omission here.
 
 == What to draft ==
 
 Draft roughly ${targetN} places:
-- ENDPOINT hubs (most of the list): towns and villages, marinas and boat launches, famous scenic lookouts and state-park gateways, major trailheads — the kind of place someone says "let's drive from ___ to ___".
+- ENDPOINT hubs (most of the list): towns, villages and CITIES — a city's downtown, a historic district, a main street or a landmark quarter is a destination exactly as much as a lake is — plus marinas and boat launches, famous scenic lookouts, state-park gateways and major trailheads. The test is whether somebody says "let's drive from ___ to ___", NOT whether the place is scenic or outdoorsy. If the box contains a city, a county seat or an old mining town, it belongs on this list.
 - BREAK pitstops (a smaller share): well-known coffee spots, gas stations at natural stopping points, rest areas, and viewpoint pull-offs along the main routes.
 - Mark role="both" for a hub that is also a natural pitstop.
 - Mark featured=true for ONLY the few most iconic, popular start points (think 4–8).
