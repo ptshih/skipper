@@ -101,6 +101,18 @@ export interface PlannerModelArgs {
    *  the SDK collapses both into an indistinguishable APIUserAbortError. Getting that wrong logs every
    *  rider who closes the app as a vendor outage. */
   signal?: AbortSignal
+  /** An EXTRA volatile system block, rendered last. Omitted in production — there is no producer.
+   *
+   *  ⚠ IT EXISTS SO A QUESTION CAN BE MEASURED BEFORE IT IS BUILT, and it is the cheapest half of a
+   *  decision that would otherwise cost a routing dependency. The open question is whether giving the
+   *  planner spatial data (drive times between curated places) makes it plan better — and whether it
+   *  then LEAKS those numbers to the rider, which the prompt forbids and which published work says
+   *  suppression instructions only partly prevent. This seam lets the eval inject a HAND-WRITTEN table
+   *  and answer both, with no matrix, no migration, no Routes call and no Google terms exposure.
+   *  ⚠ It rides AFTER the cache breakpoint, like the wrap-up notice, so an experiment can never
+   *  silently re-bill the cached prefix. If this ever gains a production producer, that is a founder
+   *  decision about D9 and about Google's caching terms — not a refactor. */
+  extraSystem?: string
   /** Reasoning depth override. Omitted in production, which uses `PLANNER_EFFORT`.
    *
    *  ⚠ IT EXISTS FOR THE EVAL PANEL AND FOR ONE MEASURED QUESTION (apps/api/eval). Anthropic documents
@@ -345,6 +357,8 @@ export async function runPlannerTurn(args: PlannerModelArgs): Promise<PlannerTur
     },
   ]
   if (args.wrapUpNotice) system.push({ type: 'text', text: args.wrapUpNotice })
+  // Experiment-only, and last so it can never sit between the prefix and its breakpoint.
+  if (args.extraSystem) system.push({ type: 'text', text: args.extraSystem })
 
   // ⚠ BOTH LOCALS STAY REFERENCED for the life of the call, deliberately. A composite AbortSignal whose
   // only strong reference lives inside the SDK has been GC-collectable in some runtimes; holding the

@@ -122,13 +122,51 @@ export function voiceCheck(o: TurnOutcome): TurnEval {
 /* -------------------------------------------------------------------------- */
 
 /**
- * A DISTANCE claim. Durations are deliberately NOT matched: the skipper legitimately asks for and
- * repeats back the duration the rider named ("and you said a couple of hours"), so a bare number
- * detector would fire on correct output. He has no distances at all, under any phrasing.
+ * A DISTANCE claim. Durations are matched separately below, because the two need different rules.
  */
 const DISTANCE = /\b\d+(\.\d+)?\s*(miles?|mi\b|kilometers?|kilometres?|km)\b/i
 /** "twenty minutes away" / "an hour out" — a distance dressed as a duration, which he also lacks. */
 const DISTANCE_AS_TIME = /\b(minutes?|hours?)\s+(away|out from|from here)\b/i
+
+/* -------------------------------------------------------------------------- */
+/* The DURATION detector — the one the panel was blind to.                      */
+/* -------------------------------------------------------------------------- */
+
+/** Any spoken duration: "two hours", "a couple of hours", "40 minutes", "half an hour". */
+// ⚠ The spelled-out numbers matter as much as the digits — "about fifty minutes" is the natural
+// register for this character, and an earlier cut of this list stopped at six and missed it entirely.
+const DURATION =
+  /\b(\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|fifteen|twenty|thirty|forty|fifty|sixty|ninety|half|couple|few)\s*(?:-|\s)?\s*(hours?|hrs?|minutes?|mins?)\b/i
+
+/**
+ * Marks the duration as the RIDER'S, which is legitimate and which the prompt explicitly teaches
+ * ("How long they want is THEIRS, never yours: say it back as the thing they asked for").
+ */
+const RIDER_ATTRIBUTED = /\byou(?:'ve|'re| have| are)?\s+(said|asked|wanted|named|mentioned|told|got|after)\b|\basked for\b|\byour\b/i
+
+/**
+ * A duration asserted as a fact about the ROAD rather than echoed back as the rider's own ask.
+ *
+ * ⚠ WHY THIS EXISTS, AND WHY IT DID NOT BEFORE. The panel shipped with durations deliberately
+ * EXCLUDED, on the reasoning that the skipper legitimately repeats the rider's stated target and a
+ * bare number check would fire on correct output. That reasoning is right about the false positive and
+ * wrong about the consequence: it left "Incline's about fifty minutes from Emerald Bay" — the exact
+ * leak that giving the model spatial data would invite — passing all three gates clean. The panel
+ * could not see the thing it would most need to see.
+ *
+ * ⚠ IT IS COARSE ON PURPOSE, AND ITS VALUE IS THE DELTA, NOT THE COUNT. Telling "the two hours you
+ * asked for" (fine) from "a couple of hours' worth of road" (an assertion) is a judgement call that a
+ * regex cannot make reliably, and tuning it until it could would be fitting it to one run's wording.
+ * What it CAN do honestly is be applied identically to two arms of an experiment: if the arm holding a
+ * drive-time table asserts durations at a materially higher rate than the arm without one, that is the
+ * leak, measured. Read it as an instrument, not as a verdict on any single line.
+ */
+export function assertedDurations(say: string): string[] {
+  return say
+    .split(/(?<=[.!?])\s+|\s+--\s+|\s+—\s+/)
+    .map((s) => s.trim())
+    .filter((s) => DURATION.test(s) && !RIDER_ATTRIBUTED.test(s))
+}
 
 /**
  * Sentences the model lifted VERBATIM out of its own system prompt.
@@ -162,6 +200,10 @@ export function disciplineCheck(o: TurnOutcome, turn: ScenarioTurn): TurnEval {
   for (const b of turn.banned ?? []) {
     if (lower.includes(b.toLowerCase())) findings.push(`said a banned phrase for this turn: ${JSON.stringify(b)}`)
   }
+  // ⚠ `assertedDurations` is deliberately NOT a finding here. It fires on legitimate readbacks that
+  // carry the rider's own target without the word "you" ("Kings Beach out to Emerald Bay, a couple of
+  // hours"), so gating on it would fail every run and mean nothing. It is reported as a MEASURED COUNT
+  // instead — an instrument for comparing two arms of an experiment, not a rule. See its doc.
   if (DISTANCE.test(o.say)) findings.push('asserted a DISTANCE — he has no map, no coordinates and no distances')
   if (DISTANCE_AS_TIME.test(o.say)) findings.push('asserted how far away something is — same gap, dressed as a duration')
 
@@ -170,6 +212,47 @@ export function disciplineCheck(o: TurnOutcome, turn: ScenarioTurn): TurnEval {
   }
 
   return evalOf(o, 'discipline', findings)
+}
+
+/* -------------------------------------------------------------------------- */
+/* The JUKEBOX metric — deterministic, because the judge's is not.              */
+/* -------------------------------------------------------------------------- */
+
+/** Phrases shorter than this collide on ordinary English ("out to", "and back around"). */
+const PHRASE_WORDS = 6
+
+/**
+ * Count near-verbatim phrase reuse ACROSS turns — the jukebox, measured rather than judged.
+ *
+ * ⚠ WHY THIS EXISTS: THE JUDGE'S `canned` COUNT IS TOO NOISY TO STEER BY. Measured 2026-08-03 across
+ * seven replays: the SAME prompt scored 5 canned turns on one run and 15 on the next, and three
+ * genuinely different prompts scored 12, 13 and 5-15 — mutually indistinguishable. A decision was
+ * actually made on one of those samples and had to be retracted. An advisory dimension that cannot
+ * separate a real change from chance at n=1 is not a signal, it is a coin.
+ *
+ * This is the same trade the panel already makes elsewhere: the objective half gates, the subjective
+ * half informs. Repetition happens to be objectively countable, so it moves to the objective half. The
+ * judge keeps what only taste can see — whether a line is warm, whether a joke lands — and loses the
+ * one job it was measurably bad at.
+ *
+ * ⚠ Compares across DIFFERENT turns only. A phrase repeated inside one turn is a writing tic; the same
+ * sentence in the same slot of every conversation is the failure mode that kills the character.
+ * ⚠ Normalized on words, so punctuation and capitalisation cannot hide a repeat, and place NAMES are
+ * left in deliberately — "Kings Beach out to Emerald Bay and back" recurring IS the template firing.
+ */
+export function repeatedPhrases(says: readonly string[]): { phrase: string; count: number }[] {
+  const seen = new Map<string, number>()
+  for (const say of says) {
+    const words = say.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean)
+    // A turn contributes each distinct phrase ONCE, so an intra-turn repeat cannot inflate the count.
+    const here = new Set<string>()
+    for (let i = 0; i + PHRASE_WORDS <= words.length; i++) here.add(words.slice(i, i + PHRASE_WORDS).join(' '))
+    for (const p of here) seen.set(p, (seen.get(p) ?? 0) + 1)
+  }
+  return [...seen.entries()]
+    .filter(([, count]) => count >= 2)
+    .map(([phrase, count]) => ({ phrase, count }))
+    .sort((a, b) => b.count - a.count)
 }
 
 /* -------------------------------------------------------------------------- */

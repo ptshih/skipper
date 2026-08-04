@@ -18,9 +18,9 @@ import { CLAUDE_MODELS, usageUsd } from '@skipper/shared'
 import { runPlannerTurn, type PlannerTurnInput } from '../src/planner'
 import { PLANNER_WRAP_UP_NOTICE } from '../src/planner-prompt'
 import { PLAN_WRAP_UP_AFTER_MESSAGES } from '../src/limits'
-import { checkScenario, routeKey } from './checks'
+import { assertedDurations, checkScenario, repeatedPhrases, routeKey } from './checks'
 import { judgePersona, judgeSpendUsd, personaToEvals, rollUp, type PersonaVerdict } from './judge'
-import { FIXTURE_ANCHORS, FIXTURE_REGION, SCENARIOS } from './scenarios'
+import { FIXTURE_ANCHORS, FIXTURE_REGION, FIXTURE_SPATIAL_BLOCK, SCENARIOS } from './scenarios'
 import type { Scenario, TurnEval, TurnOutcome } from './types'
 
 const args = process.argv.slice(2)
@@ -32,9 +32,17 @@ const ONLY = args.includes('--only') ? args[args.indexOf('--only') + 1] : null
 const EFFORT = args.includes('--effort')
   ? (args[args.indexOf('--effort') + 1] as 'low' | 'medium' | 'high')
   : undefined
+/** ⚠ THE EXPERIMENT ARM. Injects a HAND-WRITTEN drive-time table as a volatile block after the cache
+ *  breakpoint — no matrix, no migration, no Routes call, no Google terms exposure. Run the suite with
+ *  and without and compare THREE numbers: the routing gate (does it plan better?), `durations`
+ *  (does it leak?), and `repeats` (does it get more templated?). */
+const SPATIAL = args.includes('--spatial')
 
 /** Rough per-turn cost, for the preview only. ⚠ Never used in the report — that reads real usage. */
 const EST_USD_PER_TURN = 0.02
+
+/** Named so the report says what a "repeated phrase" actually is, rather than printing a bare count. */
+const PHRASE_LABEL = '6+ words verbatim'
 
 const suite = ONLY ? SCENARIOS.filter((s) => s.id === ONLY) : SCENARIOS
 
@@ -64,6 +72,7 @@ async function replay(scenario: Scenario): Promise<TurnOutcome[]> {
       anchors: FIXTURE_ANCHORS,
       ...wrapUp,
       ...(EFFORT ? { effort: EFFORT } : {}),
+      ...(SPATIAL ? { extraSystem: FIXTURE_SPATIAL_BLOCK } : {}),
     })
 
     outcomes.push({
@@ -163,6 +172,21 @@ async function main(): Promise<void> {
     const canned = verdict.turns.filter((t) => t.canned)
     if (canned.length) console.log(`  ⚠ ${canned.length} turn(s) read as CANNED — the jukebox failure mode`)
   }
+
+  // ⚠ THE TWO DETERMINISTIC METRICS, and they exist because the judge's equivalents are too noisy to
+  // steer by: measured 2026-08-03, the SAME prompt scored 5 canned turns on one run and 15 on the
+  // next. These are computed from the transcript with no model in the loop, so a difference between
+  // two arms is a difference in the prompt, not in the weather.
+  const says = outcomes.map((o) => o.say)
+  const repeats = repeatedPhrases(says)
+  const durations = outcomes.flatMap((o) => assertedDurations(o.say))
+
+  console.log(`\n${line(78)}\nMEASURED (no judge — compare these across arms)\n${line(78)}`)
+  console.log(`  repeated phrases (${PHRASE_LABEL}, across turns): ${repeats.length}`)
+  for (const r of repeats.slice(0, 6)) console.log(`    x${r.count}  ${JSON.stringify(r.phrase)}`)
+  console.log(`  durations asserted as road fact:                 ${durations.length}`)
+  for (const d of durations.slice(0, 6)) console.log(`    ${JSON.stringify(d.slice(0, 72))}`)
+  if (SPATIAL) console.log(`  ⚠ --spatial ARM: a hand-written drive-time table was in context this run.`)
 
   // ⚠ BILLED, from real usage on every call this process made. Not an estimate, and not the preview's.
   console.log(`\n  BILLED THIS RUN: $${billed.toFixed(4)}  (${outcomes.length} planner turns + judge)`)

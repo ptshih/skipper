@@ -26,7 +26,62 @@ export const FIXTURE_ANCHORS: PlannerAnchor[] = [
   { id: '66666666-6666-4666-8666-666666666666', name: 'Heavenly Village Way' },
 ]
 
+/**
+ * A HAND-WRITTEN drive-time table for the fixture region — the `--spatial` arm's whole payload.
+ *
+ * ⚠ INVENTED NUMBERS, AND THAT IS FINE FOR WHAT IT MEASURES. The experiment asks two things: does the
+ * model USE a table like this to plan better, and does it LEAK the numbers to the rider. Neither
+ * question needs the numbers to be true — it needs them to be present, plausible and checkable against
+ * what comes out. Using invented values also keeps this file free of Google-derived durations, which
+ * may not be stored (Maps Platform terms §3.2.3 — "distance matrix results" is named in the
+ * No-Scraping list), so the experiment carries no licence exposure at all.
+ *
+ * ⚠ Banded and name-keyed rather than a numeric grid, per the region-generality research: a measured
+ * band assumes no shape, so it reads correctly on a ring, a corridor, a hub-and-spoke or a blob, while
+ * any projection onto a line quietly invents a relationship for the topologies it does not fit.
+ * ⚠ It deliberately does NOT tell the model it may say these aloud. The prompt forbids stating drive
+ * times; the point is to find out whether it obeys that while holding the table.
+ */
+export const FIXTURE_SPATIAL_BLOCK = [
+  '== How the country sits together ==',
+  '',
+  'Roughly how long it takes to drive between the places on your list. This is for your own judgement',
+  'when they ask for a longer or a shorter drive. It is not yours to recite.',
+  '',
+  'Emerald Bay State Park -- about 25 minutes: South Lake Tahoe. About half an hour: Tahoe City.',
+  '  The better part of an hour: Kings Beach, Incline Village.',
+  'Kings Beach -- about 15 minutes: Incline Village. About 25 minutes: Tahoe City.',
+  '  The better part of an hour: South Lake Tahoe, Emerald Bay State Park.',
+  'Incline Village -- about 15 minutes: Kings Beach. About half an hour: Tahoe City.',
+  '  Near enough an hour: South Lake Tahoe, Emerald Bay State Park.',
+  'South Lake Tahoe -- about 5 minutes: Heavenly Village Way. About 25 minutes: Emerald Bay State Park.',
+  '  Near enough an hour: Tahoe City, Incline Village, Kings Beach.',
+  'Tahoe City -- about 25 minutes: Kings Beach. About half an hour: Emerald Bay State Park, Incline Village.',
+  '  Near enough an hour: South Lake Tahoe.',
+  'Heavenly Village Way -- about 5 minutes: South Lake Tahoe. About half an hour: Emerald Bay State Park.',
+  '  Near enough an hour: Tahoe City, Incline Village, Kings Beach.',
+].join('\n')
+
 export const SCENARIOS: Scenario[] = [
+  {
+    id: 'contradictory-ask',
+    about:
+      'THE durationDrift CASE, which no scenario could previously fail on. A rider names two endpoints ' +
+      'AND a duration the road cannot honour (Emerald Bay to Incline is ~50 min, not two hours). Today ' +
+      'the skipper agrees to both in prose and the card prints the real number above the CTA — observed ' +
+      'on device 2026-08-03, and the whole reason durationDrift exists to apologise afterwards. He must ' +
+      'not assert the road takes two hours; saying it back as THEIR ask is fine. This is also the ' +
+      'scenario the --spatial arm should improve if spatial context is worth anything at all.',
+    turns: [
+      {
+        rider: 'Emerald Bay State Park over to Incline Village, and I have got about two hours.',
+        expect: 'hold',
+        note: 'must not assert the road takes two hours; attributing it to the rider is fine',
+      },
+      { rider: 'is that going to fill the time?', expect: 'hold', note: 'a direct invitation to guess a duration' },
+      { rider: 'alright, draw it', expect: 'draw' },
+    ],
+  },
   {
     id: 'deflect-plan-draw-chat',
     about:

@@ -9,7 +9,16 @@
 // half and IS the bug.
 
 import { describe, expect, test } from 'bun:test'
-import { checkScenario, disciplineCheck, parrotedSentences, routeKey, routingCheck, voiceCheck } from '../eval/checks'
+import {
+  assertedDurations,
+  checkScenario,
+  disciplineCheck,
+  parrotedSentences,
+  repeatedPhrases,
+  routeKey,
+  routingCheck,
+  voiceCheck,
+} from '../eval/checks'
 import { personaToEvals, rollUp } from '../eval/judge'
 import { SCENARIOS } from '../eval/scenarios'
 import { PLANNER_SYSTEM_PROMPT } from '../src/planner-prompt'
@@ -153,6 +162,55 @@ describe('parrot detector', () => {
 
   test('short fragments are ignored — they collide on ordinary English', () => {
     expect(parrotedSentences('That is the deal.')).toEqual([])
+  })
+})
+
+describe('asserted durations — the leak detector the panel lacked', () => {
+  // ⚠ Durations were EXCLUDED from the discipline gate by design, on the correct observation that the
+  // skipper legitimately repeats the rider's target. The consequence was that "Incline's about fifty
+  // minutes from Emerald Bay" — the exact leak spatial context would invite — passed all three gates.
+  test('a duration attributed to the rider is NOT a leak', () => {
+    expect(assertedDurations('You said a couple of hours, so about two.')).toEqual([])
+    expect(assertedDurations('The two hours you asked for, out and back.')).toEqual([])
+    expect(assertedDurations('And your couple of hours is about right for it.')).toEqual([])
+  })
+
+  test('a duration asserted about the road IS flagged', () => {
+    expect(assertedDurations("That's about fifty minutes.").length).toBe(1)
+    expect(assertedDurations('Incline runs near enough an hour from there.').length).toBe(1)
+  })
+
+  test('prose with no duration at all is clean', () => {
+    expect(assertedDurations('Kings Beach out to Emerald Bay. Want that drawn up?')).toEqual([])
+  })
+})
+
+describe('repeated phrases — the jukebox, measured instead of judged', () => {
+  // ⚠ THE REASON THIS IS NOT THE JUDGE'S JOB: measured across seven replays, the SAME prompt scored 5
+  // canned turns on one run and 15 on the next. A decision was made on one of those samples and had to
+  // be retracted. This is deterministic.
+  test('a phrase repeated across turns is counted once per turn', () => {
+    const r = repeatedPhrases([
+      'Kings Beach out to Emerald Bay and back around, couple of hours.',
+      'Tahoe City out to Incline Village. Want me to draw that up?',
+      'Kings Beach out to Emerald Bay and back around, near enough two hours.',
+    ])
+    expect(r.length).toBeGreaterThan(0)
+    // Every reported phrase came from the two turns that share the template, so all count 2 — and
+    // WHICH of the equally-frequent windows sorts first is not a property worth pinning.
+    expect(r.every((x) => x.count === 2)).toBe(true)
+    expect(r.some((x) => x.phrase.includes('out to emerald bay and back'))).toBe(true)
+  })
+
+  test('a phrase repeated INSIDE one turn is not a jukebox', () => {
+    // A writing tic within one line is a different defect from the same sentence in every conversation.
+    expect(repeatedPhrases(['one way and done, one way and done, one way and done'])).toEqual([])
+  })
+
+  test('ordinary distinct prose scores zero, and punctuation cannot hide a repeat', () => {
+    expect(repeatedPhrases(['Where do you want to start from?', 'Which end shall we move?'])).toEqual([])
+    const r = repeatedPhrases(['So it is Kings Beach out to Emerald Bay!', 'so it is kings beach out to emerald bay...'])
+    expect(r.length).toBeGreaterThan(0)
   })
 })
 
