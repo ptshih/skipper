@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge'
 import { Callout } from '@/components/ui/callout'
 import { Checkbox } from '@/components/ui/checkbox'
 import { EmptyState } from '@/components/ui/empty-state'
-import { SearchInput } from '@/components/ui/search-input'
+import { FilterToolbar } from '@/components/ui/filter-toolbar'
 import { DriveDetailSheet } from './drives/DriveDetailSheet'
 
 const drivesRoute = getRouteApi('/drives')
@@ -176,21 +176,18 @@ export function DrivesView() {
         </Callout>
       )}
 
-      <div className="flex flex-wrap items-center gap-3">
-        <SearchInput
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search by name, route, owner, region, or id…"
-          wrapperClassName="w-full max-w-sm"
-        />
+      <FilterToolbar
+        search={q}
+        onSearch={setQ}
+        searchPlaceholder="Search by name, route, owner, region, or id…"
+        shown={rows.length}
+        total={drives.length}
+      >
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <Checkbox checked={showDeleted} onCheckedChange={(v) => setShowDeleted(v === true)} />
           Show rider-deleted ({deletedCount})
         </label>
-        <span className="ml-auto text-sm text-muted-foreground tabular-nums">
-          {rows.length} of {drives.length}
-        </span>
-      </div>
+      </FilterToolbar>
 
       <DataTable
         columns={columns}

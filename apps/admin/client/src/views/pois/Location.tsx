@@ -1,9 +1,6 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Locate, MapPin, RefreshCw, Trash2 } from 'lucide-react'
-import { api, ApiError } from '@/lib/api'
-import { errMsg } from '@/lib/format'
-import { qk } from '@/lib/queryKeys'
+import { ApiError } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,28 +14,18 @@ import { AnchorMap } from '@/components/ui/google-map'
 // here rather than imported because the admin client must not pull in a studio (node-only) module.
 const MAJOR_ROAD = /^(motorway|trunk|primary|secondary|tertiary)(_link)?$/
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { usePoiCorrections } from './usePoiCorrections'
 
 // The POI's LOCATION surface: its pin + an optional SPEAKABLE ANCHOR (the vantage side-of-road content
 // speaks from, when the POI's own centroid is misleading). Anchor edits take effect on the NEXT
 // generate/regeneration — they don't rewrite existing audio. Reads/writes the same poi-corrections
 // endpoint as the Corrections tab (the anchor rides in the corrections payload).
 export function Location({ poiId, poiLat, poiLng }: { poiId: string; poiLat?: number; poiLng?: number }) {
-  const qc = useQueryClient()
   const confirm = useConfirm()
-  const [validationErr, setValidationErr] = useState<string | null>(null)
   const [lat, setLat] = useState('')
   const [lng, setLng] = useState('')
 
-  const { data, isLoading: loading, error: loadErr } = useQuery({
-    queryKey: qk.poiCorrections(poiId),
-    queryFn: () => api.poiCorrections(poiId),
-  })
-  const saveMut = useMutation({
-    mutationFn: (input: Parameters<typeof api.saveCorrection>[1]) => api.saveCorrection(poiId, input),
-    onSuccess: (updated) => { qc.setQueryData(qk.poiCorrections(poiId), updated); setValidationErr(null) },
-  })
-  const saving = saveMut.isPending
-  const err = validationErr ?? (loadErr ? errMsg(loadErr) : saveMut.error ? errMsg(saveMut.error) : null)
+  const { data, loading, saving, saveMut, setValidationErr, err } = usePoiCorrections(poiId)
 
   // The draggable marker must reflect the PENDING edit (the lat/lng inputs), not the saved anchor —
   // otherwise dragging fires onAnchor (which only fills the inputs) while the controlled marker snaps

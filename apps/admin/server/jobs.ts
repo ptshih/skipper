@@ -215,6 +215,17 @@ function idCsv(v: unknown, name: string): string {
   return ids.join(',')
 }
 
+/** Append a `--flag=<csv>` only when the id list is non-empty. Sibling of {@link pushPosNum}, and the
+ *  reason it exists is the ONE-expression rule: every call site used to read
+ *  `if (idCsv(x, n)) args.push(\`--f=${idCsv(x, n)}\`)`, deriving the list it TESTED and the list it
+ *  SENT from two separate calls. They agree today, but that is the shape this repo keeps getting bitten
+ *  by — a guard and an action computed twice, free to drift on the next edit. One call, one value.
+ *  (It also stops re-filtering the array and re-running the MAX_JOB_IDS ceiling check twice per flag.) */
+function pushIdCsv(args: string[], flag: string, value: unknown, name: string): void {
+  const csv = idCsv(value, name)
+  if (csv) args.push(`${flag}=${csv}`)
+}
+
 /** Build the per-execution override args from a request body (the spec §5 contract). Value
  *  flags use the `=` form — the parser drops a space-form value that begins with `--`. */
 export function buildJobArgs(body: Record<string, unknown>): BuildResult {
@@ -260,8 +271,8 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     if (body.region) args.push(`--region=${str(body.region)}`)
     if (body.source) args.push(`--source=${str(body.source)}`)
     if (body.query) args.push(`--query=${str(body.query)}`)
-    if (idCsv(body.includeIds, 'includeIds')) args.push(`--include-ids=${idCsv(body.includeIds, 'includeIds')}`)
-    if (idCsv(body.excludeIds, 'excludeIds')) args.push(`--exclude-ids=${idCsv(body.excludeIds, 'excludeIds')}`)
+    pushIdCsv(args, '--include-ids', body.includeIds, 'includeIds')
+    pushIdCsv(args, '--exclude-ids', body.excludeIds, 'excludeIds')
     pushPosNum(args, '--limit', body.limit, 'limit')
     if (body.force) args.push('--force')
     if (body.model) args.push(`--model=${str(body.model)}`)
@@ -281,8 +292,8 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     // narrowable by query/exclude-ids. The CLI resolves --region → its discovery bbox server-side.
     if (body.region) args.push(`--region=${str(body.region)}`)
     if (body.query) args.push(`--query=${str(body.query)}`)
-    if (idCsv(body.includeIds, 'includeIds')) args.push(`--include-ids=${idCsv(body.includeIds, 'includeIds')}`)
-    if (idCsv(body.excludeIds, 'excludeIds')) args.push(`--exclude-ids=${idCsv(body.excludeIds, 'excludeIds')}`)
+    pushIdCsv(args, '--include-ids', body.includeIds, 'includeIds')
+    pushIdCsv(args, '--exclude-ids', body.excludeIds, 'excludeIds')
     pushPosNum(args, '--limit', body.limit, 'limit')
     if (body.force) args.push('--force')
     // --min-extract removed 2026-06-16: story-eligibility is "has a fact sheet" (#1), not a char floor.
@@ -304,7 +315,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     // console could never re-narrate a region whose clusters are all fresh. `--include-ids` implies it.
     if (body.region) args.push(`--region=${str(body.region)}`)
     if (body.query) args.push(`--query=${str(body.query)}`)
-    if (idCsv(body.includeIds, 'includeIds')) args.push(`--include-ids=${idCsv(body.includeIds, 'includeIds')}`)
+    pushIdCsv(args, '--include-ids', body.includeIds, 'includeIds')
     if (body.force) args.push('--force')
     pushPosNum(args, '--limit', body.limit, 'limit')
     pushPosNum(args, '--max-cost', body.maxCostUsd, 'maxCostUsd')
@@ -368,8 +379,8 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     // Same geometry-first selection as generate (region XOR include-ids, narrowable by query/exclude-ids).
     if (body.region) args.push(`--region=${str(body.region)}`)
     if (body.query) args.push(`--query=${str(body.query)}`)
-    if (idCsv(body.includeIds, 'includeIds')) args.push(`--include-ids=${idCsv(body.includeIds, 'includeIds')}`)
-    if (idCsv(body.excludeIds, 'excludeIds')) args.push(`--exclude-ids=${idCsv(body.excludeIds, 'excludeIds')}`)
+    pushIdCsv(args, '--include-ids', body.includeIds, 'includeIds')
+    pushIdCsv(args, '--exclude-ids', body.excludeIds, 'excludeIds')
     pushPosNum(args, '--limit', body.limit, 'limit')
     pushPosNum(args, '--max-cost', body.maxCostUsd, 'maxCostUsd')
     if (body.charm) args.push('--charm')

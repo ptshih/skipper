@@ -113,6 +113,31 @@ function regionBoxesOf(rows: RegionBoxRow[]): { slug: string; name: string; box:
   })
 }
 
+/** One region by slug, with its bbox ALREADY PARSED — the opening move of all four curated-places
+ *  routes (list / resolve / draft / curate), which had each written the same select + 404 + `parseBbox`
+ *  preamble out longhand.
+ *
+ *  ⚠ It returns the pair rather than enforcing anything, because the four genuinely DISAGREE about what
+ *  a missing box means: the list route answers an empty page (nothing curated yet is not an error), the
+ *  three write/spend routes answer 400 `bbox_required`. Sharing the LOOKUP and leaving the DECISION with
+ *  the caller is the split that keeps this honest — folding the 400 in here would have silently turned
+ *  the list route into an error page.
+ *
+ *  The parse-once discipline is the point (see the draft route, which spells out why): the bbox is not
+ *  merely a precondition, it SCOPES the work, so the string must not be read twice by two expressions. */
+async function regionWithBox(
+  slug: string,
+): Promise<{ displayName: string; bbox: string | null; box: BboxCorners | null } | null> {
+  const row = (
+    await db
+      .select({ displayName: regions.displayName, bbox: regions.bbox })
+      .from(regions)
+      .where(eq(regions.slug, slug))
+      .limit(1)
+  )[0]
+  return row ? { ...row, box: parseBbox(row.bbox) } : null
+}
+
 /** A valid, length-bounded http(s) URL — the override's sourceUrl is operator-supplied provenance. */
 function isHttpUrl(s: string): boolean {
   if (s.length > 2048) return false
@@ -491,11 +516,9 @@ function upsertCuratedPlace(row: {
 app.get('/admin/places', async (c) => {
   const slug = (c.req.query('region') ?? '').trim()
   if (!slug) return c.json({ error: 'region (slug) is required' }, 400)
-  const region = (
-    await db.select({ bbox: regions.bbox }).from(regions).where(eq(regions.slug, slug)).limit(1)
-  )[0]
+  const region = await regionWithBox(slug)
   if (!region) return c.json({ error: 'not_found' }, 404)
-  const box = parseBbox(region.bbox)
+  const box = region.box
   if (!box) return c.json({ places: [], bbox: null }) // no bbox set → nothing to scope yet
   const rows = await db
     .select(placeCols)
@@ -591,11 +614,9 @@ app.post('/admin/places/resolve', async (c) => {
   const slug = (body.region ?? '').trim()
   const query = (body.query ?? '').trim()
   if (!slug || !query) return c.json({ error: 'region and query are required' }, 400)
-  const region = (
-    await db.select({ bbox: regions.bbox }).from(regions).where(eq(regions.slug, slug)).limit(1)
-  )[0]
+  const region = await regionWithBox(slug)
   if (!region) return c.json({ error: 'not_found' }, 404)
-  const box = parseBbox(region.bbox)
+  const box = region.box
   if (!box) return c.json({ error: 'bbox_required', message: 'Set a valid region bbox before adding places.' }, 400)
   const apiKey = process.env.GOOGLE_MAPS_API_KEY
   if (!apiKey) return c.json({ error: 'places_unconfigured', message: 'GOOGLE_MAPS_API_KEY is not set.' }, 503)
@@ -673,14 +694,12 @@ app.post('/admin/places/draft', async (c) => {
   const body = await c.req.json<{ region?: string; target?: number }>().catch(() => ({}) as Record<string, never>)
   const slug = (body.region ?? '').trim()
   if (!slug) return c.json({ error: 'region is required' }, 400)
-  const region = (
-    await db.select({ displayName: regions.displayName, bbox: regions.bbox }).from(regions).where(eq(regions.slug, slug)).limit(1)
-  )[0]
+  const region = await regionWithBox(slug)
   if (!region) return c.json({ error: 'not_found' }, 404)
-  // ⚠ Parse ONCE and pass the RESULT down — the bbox is no longer merely a precondition, it is what
-  // SCOPES the draft (see draftSystem). Re-parsing at the call site would be the same string read twice
-  // by two expressions, which is the drift this repo keeps paying for.
-  const bbox = parseBbox(region.bbox)
+  // ⚠ Parsed ONCE by regionWithBox and passed the RESULT down — the bbox is no longer merely a
+  // precondition, it is what SCOPES the draft (see draftSystem). Re-parsing at the call site would be
+  // the same string read twice by two expressions, which is the drift this repo keeps paying for.
+  const bbox = region.box
   if (!bbox) {
     return c.json({ error: 'bbox_required', message: 'Set a valid region bbox before curating.' }, 400)
   }
@@ -725,9 +744,9 @@ app.post('/admin/places/curate', async (c) => {
   if (drafts.length > MAX_CURATE_DRAFTS) {
     return c.json({ error: 'bad_request', message: `at most ${MAX_CURATE_DRAFTS} drafts per curate (got ${drafts.length})` }, 400)
   }
-  const region = (await db.select({ bbox: regions.bbox }).from(regions).where(eq(regions.slug, slug)).limit(1))[0]
+  const region = await regionWithBox(slug)
   if (!region) return c.json({ error: 'not_found' }, 404)
-  const box = parseBbox(region.bbox)
+  const box = region.box
   if (!box) return c.json({ error: 'bbox_required', message: 'Set a valid region bbox before curating.' }, 400)
   const apiKey = process.env.GOOGLE_MAPS_API_KEY
   if (!apiKey) return c.json({ error: 'places_unconfigured', message: 'GOOGLE_MAPS_API_KEY is not set.' }, 503)

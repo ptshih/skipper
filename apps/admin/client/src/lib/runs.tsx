@@ -1,5 +1,6 @@
 import { useMemo, useState, type ElementType } from 'react'
-import { Activity, Combine, Filter, MapPin, RefreshCw, Scissors, Sparkles, Trash2, Zap } from 'lucide-react'
+import { Activity, Combine, Filter, MapPin, Mountain, RefreshCw, Scissors, Sparkles, Trash2, Zap } from 'lucide-react'
+import type { JobKind } from '@skipper/shared'
 import { api, type RunEvent } from '@/lib/api'
 import { qk } from '@/lib/queryKeys'
 import { useAdminList } from '@/lib/useAdminList'
@@ -11,12 +12,18 @@ import { useAdminList } from '@/lib/useAdminList'
 // (via <AutoRefreshControl>), from ONE constant so the cadence and its label can't drift apart.
 export const RUNS_REFETCH_MS = 15_000
 
-// Kind → label/icon. generate / resynth / patch_clip are LEGACY (deferred in V2) — kept so historical
-// job rows render a readable label; they are no longer dispatchable here.
-export const KIND_META: Record<string, { label: string; icon: ElementType }> = {
-  generate:        { label: 'Generate',          icon: Sparkles },
-  resynth:         { label: 'Resynth',           icon: RefreshCw },
-  patch_clip:      { label: 'Patch clip',        icon: Scissors },
+type KindMeta = { label: string; icon: ElementType }
+
+// Kind → label/icon for the CURRENT vocabulary, typed `Record<JobKind, …>` against the enum that
+// defines it (@skipper/shared › enums.ts). That typing is the point: adding a kind to `jobKind` and
+// `jobs.ts` SCRIPTS without giving it a label here is now a COMPILE error rather than a run that
+// quietly lists its raw slug.
+//
+// ⚠ It had already drifted exactly that way. `generate_scenic_narrations` was added to the enum and to
+// the dispatch, but not here — so every scenic run rendered as "generate_scenic_narrations" under the
+// fallback icon while its neighbours read as English. A hand-kept parallel copy of a closed vocabulary
+// is the repo's most-repeated bug shape; this makes the copy answer to its source.
+const CURRENT_KIND_META: Record<JobKind, KindMeta> = {
   resynth_narration: { label: 'Re-synth narration', icon: RefreshCw },
   refetch_facts:   { label: 'Re-fetch facts',    icon: RefreshCw },
   sweep_orphans:   { label: 'Sweep orphans',     icon: Trash2 },
@@ -24,9 +31,23 @@ export const KIND_META: Record<string, { label: string; icon: ElementType }> = {
   enrich_pois:     { label: 'Enrich corpus',     icon: Sparkles },
   generate_narrations: { label: 'Generate Narration', icon: Zap },
   generate_cluster_narrations: { label: 'Fuse clusters', icon: Combine },
+  generate_scenic_narrations: { label: 'Scenic call-outs', icon: Mountain },
   curate_places:   { label: 'Curate places',     icon: MapPin },
   offline_audit:   { label: 'Re-score corpus',   icon: Activity },
 }
+
+// LEGACY kinds — dropped from `jobKind` with the V1 tour pipeline (2026-08-02) but still sitting on
+// historical `studio_jobs` rows, which must keep rendering a readable label. Deliberately kept OUT of
+// the typed record above: they are not dispatchable, and listing them there would defeat its
+// exhaustiveness check by making the map accept keys the enum no longer has.
+const LEGACY_KIND_META: Record<string, KindMeta> = {
+  generate:        { label: 'Generate',          icon: Sparkles },
+  resynth:         { label: 'Resynth',           icon: RefreshCw },
+  patch_clip:      { label: 'Patch clip',        icon: Scissors },
+}
+
+// Lookup is by raw `kind` string off a run row, so the exported shape stays string-keyed.
+export const KIND_META: Record<string, KindMeta> = { ...LEGACY_KIND_META, ...CURRENT_KIND_META }
 
 // A run targeting no region (whole-corpus) leaves its slug NULL → "All". Lock labels that aren't
 // region slugs map to a friendly label rather than a raw slug.

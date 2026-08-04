@@ -1,9 +1,6 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, Wrench } from 'lucide-react'
-import { api, type CorrectionOverride } from '@/lib/api'
-import { errMsg } from '@/lib/format'
-import { qk } from '@/lib/queryKeys'
+import { type CorrectionOverride } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,30 +8,18 @@ import { Label } from '@/components/ui/label'
 import { ErrorCallout } from '@/components/ui/error-callout'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { usePoiCorrections } from './usePoiCorrections'
 
 // Operator surface for a POI's upstream-fact corrections. Corrections take effect on the NEXT
 // generate/regeneration — they don't rewrite audio. (The speakable anchor moved to the Location tab.)
 export function Corrections({ poiId }: { poiId: string }) {
-  const qc = useQueryClient()
-  const [validationErr, setValidationErr] = useState<string | null>(null)
-
   // Add-correction form
   const [find, setFind] = useState('')
   const [replace, setReplace] = useState('')
   const [reason, setReason] = useState('')
   const [sourceUrl, setSourceUrl] = useState('')
 
-  const { data, isLoading: loading, error: loadErr } = useQuery({
-    queryKey: qk.poiCorrections(poiId),
-    queryFn: () => api.poiCorrections(poiId),
-  })
-  // A save returns the updated corrections — write it straight into the cache.
-  const saveMut = useMutation({
-    mutationFn: (input: Parameters<typeof api.saveCorrection>[1]) => api.saveCorrection(poiId, input),
-    onSuccess: (updated) => { qc.setQueryData(qk.poiCorrections(poiId), updated); setValidationErr(null) },
-  })
-  const saving = saveMut.isPending
-  const err = validationErr ?? (loadErr ? errMsg(loadErr) : saveMut.error ? errMsg(saveMut.error) : null)
+  const { data, loading, saving, saveMut, setValidationErr, err } = usePoiCorrections(poiId)
 
   // One shared submit path. The buttons only disable AFTER the first mutate re-renders, so guard at the
   // top here — a fast double-tap can't double-submit.

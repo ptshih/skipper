@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { SearchInput } from '@/components/ui/search-input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { FilterSelect } from '@/components/ui/filter-toolbar'
 import { DataTable, type Column } from '@/components/ui/data-table'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SelectionBar } from '@/components/ui/selection-bar'
@@ -18,6 +18,34 @@ import type { EnrichSelection, ScopeDescriptor } from './types'
 import { EnrichDialog, NarrateDialog, RescoreDialog } from './dialogs'
 import { PoiDetailSheet } from './PoiDetailSheet'
 import { useCorpusSelection } from './useCorpusSelection'
+
+// The two STATIC filter option lists (the region list is built from data). Module-level so they aren't
+// re-allocated per render, and so the `flags` values sit in one block: each must have a matching
+// `flags === '…'` guard in the `filtered` predicate below, and a value with no guard silently filters
+// nothing rather than failing.
+const SOURCE_OPTIONS = [
+  { value: 'wikipedia', label: 'Wikipedia' },
+  { value: 'wikidata', label: 'Wikidata' },
+]
+
+const FLAG_OPTIONS = [
+  { value: 'flagged', label: 'Needs attention (any flag)' },
+  { value: 'story-eligible', label: 'Story: eligible' },
+  { value: 'story-filtered', label: 'Story: filtered out' },
+  { value: 'enriched', label: 'Enriched' },
+  { value: 'needs-enrich', label: 'Eligible · un-enriched' },
+  { value: 'narrated', label: 'Narration: any' },
+  { value: 'excluded', label: 'Excluded' },
+  { value: 'hide-excluded', label: 'Hide excluded' },
+  { value: 'narration-stale', label: 'Narration: stale' },
+  { value: 'staged', label: 'Narration: staged (unreleased)' },
+  { value: 'sheet-drift', label: 'Story: sheet drifted' },
+  { value: 'speakable-drift', label: 'Speakable: drifted' },
+  { value: 'off-road', label: 'Off-road: no road anchor' },
+  { value: 'defect', label: 'Narration defects' },
+  { value: 'stale', label: 'Stale facts' },
+  { value: 'unattrib', label: 'Unattributed' },
+]
 
 export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loading: boolean; openPoiId?: string }) {
   const [q, setQ] = useState('')
@@ -398,43 +426,14 @@ export function CorpusTab({ pois, loading, openPoiId }: { pois: PoiRow[]; loadin
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <Select value={region} onValueChange={setRegion}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All regions</SelectItem>
-            {regions.map((r) => <SelectItem key={r.slug} value={r.slug}>{r.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={source} onValueChange={setSource}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All sources</SelectItem>
-            <SelectItem value="wikipedia">Wikipedia</SelectItem>
-            <SelectItem value="wikidata">Wikidata</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={flags} onValueChange={setFlags}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All flags</SelectItem>
-            <SelectItem value="flagged">Needs attention (any flag)</SelectItem>
-            <SelectItem value="story-eligible">Story: eligible</SelectItem>
-            <SelectItem value="story-filtered">Story: filtered out</SelectItem>
-            <SelectItem value="enriched">Enriched</SelectItem>
-            <SelectItem value="needs-enrich">Eligible · un-enriched</SelectItem>
-            <SelectItem value="narrated">Narration: any</SelectItem>
-            <SelectItem value="excluded">Excluded</SelectItem>
-            <SelectItem value="hide-excluded">Hide excluded</SelectItem>
-            <SelectItem value="narration-stale">Narration: stale</SelectItem>
-            <SelectItem value="staged">Narration: staged (unreleased)</SelectItem>
-            <SelectItem value="sheet-drift">Story: sheet drifted</SelectItem>
-            <SelectItem value="speakable-drift">Speakable: drifted</SelectItem>
-            <SelectItem value="off-road">Off-road: no road anchor</SelectItem>
-            <SelectItem value="defect">Narration defects</SelectItem>
-            <SelectItem value="stale">Stale facts</SelectItem>
-            <SelectItem value="unattrib">Unattributed</SelectItem>
-          </SelectContent>
-        </Select>
+        <FilterSelect
+          value={region}
+          onChange={setRegion}
+          allLabel="All regions"
+          options={regions.map((r) => ({ value: r.slug, label: r.name }))}
+        />
+        <FilterSelect value={source} onChange={setSource} allLabel="All sources" options={SOURCE_OPTIONS} />
+        <FilterSelect value={flags} onChange={setFlags} allLabel="All flags" options={FLAG_OPTIONS} />
         {filtersActive && (
           <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={clearFilters}>
             <X className="h-3.5 w-3.5" /> Clear filters

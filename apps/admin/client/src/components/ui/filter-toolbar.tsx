@@ -60,7 +60,8 @@ export function FilterToolbar({
         onChange={(e) => onSearch(e.target.value)}
       />
       {children}
-      <span className="ml-auto text-sm text-muted-foreground">
+      {/* tabular-nums so the count doesn't reflow the bar as digits change under a keystroke. */}
+      <span className="ml-auto text-sm text-muted-foreground tabular-nums">
         {shown} of {total}
       </span>
     </div>
