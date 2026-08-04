@@ -177,7 +177,9 @@ The tour area is a BOX on the map: southwest corner ${bbox.swLat}, ${bbox.swLng}
 
 Riders call this area "${regionName}". That is a NICKNAME, not a boundary. A box this size routinely covers ground nobody would file under that name: a neighboring city, the next valley over, a mountain pass, another state line. Those places are in scope exactly as much as the ones the nickname obviously covers, and they are the ones most often left out. Work the WHOLE box, corner to corner — if your list only contains what the nickname brings to mind, you have missed most of the area.
 
-A place just OUTSIDE the box is the one thing that cannot be used at all, so never spend a slot on one. If you cannot place somewhere on the map with confidence, leave it out and name something you can — a near-miss is worse than an omission here.
+A place just OUTSIDE the box is the one thing that cannot be used at all, so never spend a slot on one. Check each name against the four corners above before you include it: a town south of the southern edge, or west of the western edge, is a wasted slot however good it is. If you cannot place somewhere on the map with confidence, leave it out and name something you can — a near-miss is worse than an omission here.
+
+⚠ WORK THE BOX CORNER BY CORNER, AND NAME THE CITIES AND TOWNS IN EACH ONE FIRST. A box this size usually spans more than one state, and the settlements on the far side are the ones that get missed — not because they are marginal, but because they are not what the nickname brings to mind. A state capital, a county seat, an old mining town or a small city inside these corners belongs on this list ahead of any lake or lookout. If your finished list has no towns from some corner of the box, you have not worked that corner: go back and name them.
 
 == What to draft ==
 
