@@ -37,15 +37,23 @@ COPY package.json ./
 COPY packages/studio/package.json packages/studio/
 COPY packages/db/package.json packages/db/
 COPY packages/engine/package.json packages/engine/
+COPY packages/routing/package.json packages/routing/
 COPY packages/shared/package.json packages/shared/
 COPY packages/storage/package.json packages/storage/
-RUN bun -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.workspaces=['packages/studio','packages/db','packages/engine','packages/shared','packages/storage'];fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
+# ⚠ THE CLOSURE IS WRITTEN THREE TIMES IN THIS FILE — the two COPY lists and this `workspaces`
+# array — and bun needs a package in ALL THREE. Adding a workspace dep to packages/studio and
+# updating only the COPYs still fails to RESOLVE it; updating only this array fails to FIND it.
+# That is how `@skipper/routing` broke the image build: the dep landed in packages/studio/package.json
+# and none of the three learned about it, so every studio job image after that commit was stale
+# while the API's own Dockerfile (which does copy routing) kept building green.
+RUN bun -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.workspaces=['packages/studio','packages/db','packages/engine','packages/routing','packages/shared','packages/storage'];fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
  && bun install --production
 
 # 2) The source the CLIs run (bun executes .ts directly — no dist build).
 COPY packages/studio/src packages/studio/src
 COPY packages/db/src packages/db/src
 COPY packages/engine/src packages/engine/src
+COPY packages/routing/src packages/routing/src
 COPY packages/shared/src packages/shared/src
 COPY packages/storage/src packages/storage/src
 COPY .env.production ./
