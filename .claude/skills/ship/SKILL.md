@@ -115,6 +115,13 @@ the same R2 bucket. "I didn't push" is not "nothing shipped."
 
 ## Report
 
+This one lands on the human, so it takes the `/wrap-up` shape: plain English,
+then the block, then the ask.
+
+Open with two or three sentences a non-engineer could follow — what landed, and
+what is now true that wasn't. Then the block, **verbatim**; it is already
+scannable, so keep it as the detail layer rather than melting it into prose:
+
 ```
 Committed: <sha> <subject>
   Files: path/a, path/b
@@ -124,3 +131,18 @@ Committed: <sha> <subject>
   Reference page: updated | n/a
   Pushed: no (not requested)
 ```
+
+Then close with a `**Next:**` line. Three things belong there, and each is an
+**action** that a field above can only imply:
+
+- **The push decision.** `Pushed: no` states a fact; the human still has to make
+  a call. Say so plainly — and if DB or R2 writes already went live, say that
+  too, because "I didn't push" is not "nothing shipped."
+- **Anything left behind.** A mixed file is someone else's move, not a footnote.
+  Name who has to act before your change can finish landing.
+- **Any judgment you could not make.** A Status line you suspect is stale, or a
+  `docs/decisions/` conflict you raised rather than resolved.
+
+When none of the three applies, say so out loud —
+`**Next:** nothing — this is done.` An absent Next line reads as a forgotten
+thought, not a finished task.

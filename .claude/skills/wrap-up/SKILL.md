@@ -53,6 +53,13 @@ The order is the whole point. The summary is what gets read; the detail is what
 gets clicked; the **Next** line is what gets acted on, and it sits at the bottom
 because that is where the eye lands last and stops.
 
+⚠ **When a skill already prescribes a structured report block — `/ship`,
+`/investigate`, `/sim-qa`, `/docs-drift` all do — that block IS the middle
+layer.** Keep it verbatim. Do not melt it into prose: a fielded block is already
+scannable, which is the entire goal here. Wrap it, don't rewrite it. What those
+blocks were missing was never structure — it was the sentence above and the ask
+below.
+
 ## The Next line
 
 It goes **last**, on its own line, with the literal `**Next:**` label every time.
