@@ -8,8 +8,10 @@
 > [what-is-a-drive-endpoint.md](what-is-a-drive-endpoint.md), whose destination/waypoint split becomes a
 > flag on `pois` rather than on `places`. ⚠ Touches INV-1 (the wire allowlist) and INV-11 (rider spend);
 > neither is broken by it, but both are re-founded on a different table. Carries a **concrete estimate**
-> (roughly a week; the reconciliation and the prompt are what cannot be rushed) and the **taste test**
-> that should be run before any of it.
+> (roughly a week; the reconciliation and the prompt are what cannot be rushed). ⚠ The **taste test it
+> said to run first HAS BEEN RUN** (2026-08-04, ~$0.14): model taste is a good first filter and NOT a
+> sufficient one, so the endpoint-worthiness column is MANDATORY and the estimate stands at its larger
+> end.
 
 ## The flow being proposed
 
@@ -193,13 +195,41 @@ the model's name → id in `plan-route.ts`, before `PlannedRoute` reaches the cl
 anywhere later and names hit the wire, the mobile client changes, and `driveProposeRequest` changes with
 it.
 
-### Buy this down first
+### The taste test — RUN 2026-08-04. Verdict: the flag is MANDATORY.
 
-**The taste test — ~$1, no wire changes, nothing written.** Hand a model the 729 names and a dozen
-realistic rider openings, and see whether it picks sane endpoints when two thirds of the list are things
-you drive PAST. Today a curator is the filter; afterwards the model is. If it proposes ending a drive at
-`Olcovich–Meyers House`, the endpoint-worthiness column is mandatory rather than optional and the
-reconciliation grows. This is the cheapest question with the biggest effect on the estimate.
+Two rounds, 24 rider openings against the real 728-name roster with the endpoint criterion in the system
+prompt. ~$0.14 all in.
+
+**Round 1 — twelve ordinary openings: 12/12 sane, 0 off-list.** Every pick was a town, a state park or a
+road-crossed pass. *"Somewhere I can get lunch"* chose Truckee, not a restaurant row. *"Take me to
+Fannette Island"* ended at **Emerald Bay State Park** — the drivable place you go to see it.
+
+**Round 2 — twelve adversarial openings, each naming something in the roster that is NOT an endpoint:
+10/12 held.** *"Take me to Fannette Island AND I MEAN IT, end the drive there"* still ended at Emerald
+Bay. `Homewood Canyon` → the town of Homewood. `Mount Tallac`'s summit → Camp Richardson. The
+`Palisades Tahoe Aerial Tram` → Olympic Valley. `Rubicon Peak` → Tahoma.
+
+⚠ **The two failures share one shape, and it is the shape that matters:**
+
+| opening | picked | why it is wrong |
+| --- | --- | --- |
+| *"Drive me to Audrey Harris Park"* | **ended AT** Audrey Harris Park | a poi, never vetted as an endpoint — and the ONE ambiguous name in the corpus |
+| *"I want to start from Boca Dam"* | **started AT** Boca Dam | a dam is not somewhere a drive begins |
+
+**The model redirects well on its own initiative and complies when pushed.** It will not volunteer a bad
+endpoint, but a rider who NAMES one gets it. So model taste is a good first filter and **not a
+sufficient one**: ~17% of directly-named bad endpoints got through, and the rider-facing cost of each is
+a non-refundable credit spent on a drive that ends at a dam.
+
+**Therefore the endpoint-worthiness column is mandatory**, the reconciliation of the 103 judgments is
+required rather than optional, and the estimate above stands at its larger end.
+
+⚠ Two caveats on the test, kept because a single measurement has been wrong five times in this entry:
+the criterion was IN the system prompt (so this measures *criterion + names*, not names alone), and this
+was single-shot rather than the multi-turn conversation the real planner has, where a rider can push
+back twice. Also unmeasured: *"Drive me to Yosemite Valley"* (out of region) was silently answered with
+an in-region drive rather than a refusal — a prompt gap the test prompt had, not a data one, but the
+real prompt's out-of-country rule needs re-checking against a 728-name roster.
 
 ## What I argued wrong
 
