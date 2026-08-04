@@ -93,6 +93,19 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   call-out) out of the tree before the v2 release: built + smoke-tested but never run, so zero rows and
   no audio existed and the removal was code-only; the `'wave'` enum value stays as reserved vocabulary,
   and the two traps the build surfaced (structural monotony, name-derived claims) are recorded (2026-07-26).
+- [drive-density-and-the-return-leg.md](decisions/drive-density-and-the-return-leg.md) — why drives felt
+  thin, measured on the four saved drives: the stop CAP was innocent (removing it changed NOTHING). The
+  levers were the glance fill taking **one call-out per window however long the window**, the 180 s
+  pacing floor (→ 120), a fused telling a route cannot REACH still suppressing its own members
+  (Vikingsholm was silenced on the drive that passes Emerald Bay), and — found last, the most
+  consequential — the **trigger-reach admission filter, which modelled a pipeline we do not run**: stops
+  are served route-SNAPPED, so a POI 600 m off-road fires fine, and the filter was refusing content to
+  prevent a failure that cannot occur. Admission is now the `OFF_ROUTE_MAX_M` honesty bound alone.
+  31 → 41 stops, coverage 34% → 40%, worst silence 17:56 → 14:24 (2026-08-03). ⚠ Its §5 — a
+  there-and-back retraces 96% of its ground and 17 of 18 candidates snap to the outbound half, so the
+  return leg is structurally silent — is the measurement behind
+  [no-same-road-loops.md](decisions/no-same-road-loops.md). ⚠ `driveMaxStops` now BINDS on two of four
+  drives; it bound on none before.
 - [sample-ride-postcard.md](decisions/sample-ride-postcard.md) — the `/sample` "postcard": one curated
   Tahoe clip anyone outside the corpus (incl. an App Review tester) can hear in one permission-free tap,
   fixing the "I don't know these roads yet" dead-end; anonymous `GET /sample` (it lost its `/roam`
