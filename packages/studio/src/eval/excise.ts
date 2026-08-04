@@ -32,6 +32,7 @@ const SYSTEM = `You are EDITING a finished tour-narration script — not rewriti
 For each flagged claim, take the least-invasive fix that lands:
 - GENERALIZE toward the sheet when a grounded core remains: replace an unsupported SPECIFIC with the broader term the sheet actually gives ("lions" → "big cats" when the sheet says only "big cats"), or drop the unsupported half of a sentence and keep the grounded half. This preserves the beat and the joke where it can.
 - DELETE the phrase, clause, or sentence when it has no grounded core. If a sentence exists only to carry a flagged claim, cut the whole sentence.
+- A JOKE GOES WITH ITS FACT. This narrator's groaners are built to ride one real detail, so cutting the detail strands the punchline — it now points at nothing, and nothing downstream will notice, because a stranded punchline asserts no fact at all. When a flagged claim is the thing a joke was built on, cut the joke with it, setup and payoff together, even when the payoff is a separate sentence that still reads fine by itself. A cut that leaves "so", "which is why", or "that is" pointing at ground you just removed is not finished.
 - Re-join the neighbors only if a cut left them dangling, so the result still reads as smooth, natural, spoken narration.
 
 Hard rules — you may only REMOVE or GENERALIZE-TOWARD-THE-SHEET, never add:
