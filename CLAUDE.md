@@ -77,8 +77,8 @@ itself is recorded in `docs/guides/1-1-cutover-runbook.md`). RISK-1's real drive
   `GET /sample`. The wall lands at `POST /drives` — "Make this drive". A **DRIVE is user-OWNED**
   (`drives.user_id`, never a shared content table). ⚠ `requireAccount` is **per-ROUTE, never on the
   `driveRoutes.use('*', …)` mount** — re-mounting it there silently re-walls the whole preview. Free
-  credits are an append-only `credit_entries` ledger (a lazy `FREE_DRIVE_CAP` grant — the value lives in
-  `apps/api/src/credits.ts` + env, never in prose — −1 at `POST /drives` co-committed via `db.batch`;
+  credits are an append-only `credit_entries` ledger (a `FREE_DRIVE_CAP` grant at SIGNUP + lazy backstop;
+  value in `apps/api/src/credits.ts` + env, never in prose — −1 at `POST /drives` co-committed via `db.batch`;
   `idempotency_key` UNIQUE = exactly-once; **delete never refunds**). Audio is PRIVATE in R2 (presigned,
   short TTL, after the tier check). See `docs/decisions/credit-ledger.md`.
 - **An anonymous session is a REAL user row, DELETED at link — never upgraded.** The Better Auth anonymous
@@ -243,7 +243,7 @@ itself is recorded in `docs/guides/1-1-cutover-runbook.md`). RISK-1's real drive
 - **STORAGE IS BREAK-FREELY AGAIN (founder, 2026-07-31): 1.0 will probably never be released.** The
   "assume real riders / additive migrations only" rule is VOID — its premise was a shipped 1.0. Destructive
   migrations are allowed, corpus tables included. ⚠ Two things keep this from being reckless: (1) a corpus +
-  R2 **snapshot must exist before any destructive work** — 458 released clips cost real money and the ledger
+  R2 **snapshot must exist before any destructive work** — the released corpus cost real money and the ledger
   has no second copy; (2) **`.env.development` and `.env.production` point at the SAME Neon DB and the SAME
   R2**, so there is no staging — `db:push` (drizzle-kit push DROPS to match the schema) and `dev:admin`
   (`ADMIN_DEV_BYPASS=1`, unauthenticated, full delete authority) are aimed at PRODUCTION despite the
