@@ -9,8 +9,35 @@
 //
 // It is deliberately NOT named `*.test.ts`, so `bun test` does not collect it as a suite.
 
+// The one import, and it is TYPE-ONLY, so it adds no runtime edge and cannot violate the rule above.
+import type { LngLat } from '@skipper/engine'
+
 /** The session shape the API's mocks answer with — structurally what `tierOf` reads. */
 export type FakeSession = { user: { id: string; isAnonymous: boolean; role: string | null } }
+
+/* ------------------------------ route geometry ----------------------------- */
+
+/**
+ * A straight run of `km` kilometres — one road, driven once.
+ *
+ * ⚠ SHARED BY THE TWO BILLED-PATH GATE SUITES (loop-retrace, restricted-route) because both measure a
+ * REAL number against it, not because it saves lines. `retraceFraction` is computed over the polyline's
+ * SAMPLES, so the 20-per-km density is part of the answer — two copies that drifted by one sample could
+ * move the fraction across `LOOP_MAX_RETRACE` in one suite while the other stayed green, and the two
+ * suites exist precisely to check gates that fire on the same shape.
+ *
+ * ⚠ INERT, like everything here: a pure function of its argument, no module state, no side effect. It
+ * is safe to share for exactly that reason — the mock scaffolding around it is NOT, and deliberately
+ * stays in each file (bun's `mock.module` registry is process-wide; see the header).
+ */
+export function road(km: number): LngLat[] {
+  const degPerKm = 1 / (111.32 * Math.cos((39 * Math.PI) / 180))
+  return Array.from({ length: km * 20 + 1 }, (_, i): LngLat => [-120 + (i / 20) * degPerKm, 39])
+}
+
+/** Out and back down the SAME road — a ~100% retrace, and the shape both gate suites turn on (one
+ *  refuses it, the other has to tell it apart from an undrivable anchor that produces the same shape). */
+export const thereAndBack = (km: number): LngLat[] => [...road(km), ...[...road(km)].reverse()]
 
 /**
  * ⚠ THE ANONYMOUS FIXTURE IS LOAD-BEARING IN TWO DIFFERENT WAYS, AND THEY ARE NOT THE SAME FIELD.

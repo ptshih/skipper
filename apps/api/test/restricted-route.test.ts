@@ -24,7 +24,7 @@ import { drives, places } from '@skipper/db/schema'
 import type { MaterializedRoute, Waypoint } from '@skipper/routing'
 import { hasRestrictedRoads } from '@skipper/routing'
 import type { LngLat } from '@skipper/engine'
-import { ACCOUNT, ANON, type FakeSession } from './fixtures'
+import { ACCOUNT, ANON, road, thereAndBack, type FakeSession } from './fixtures'
 
 let driving = false
 
@@ -171,15 +171,11 @@ const { driveRoutes } = await import('../src/drives')
 
 /* --------------------------------- shapes ---------------------------------- */
 
-/** A straight run of `km` kilometres — one road, driven once. */
-function road(km: number): LngLat[] {
-  const degPerKm = 1 / (111.32 * Math.cos((39 * Math.PI) / 180))
-  return Array.from({ length: km * 20 + 1 }, (_, i): LngLat => [-120 + (i / 20) * degPerKm, 39])
-}
-
 /** Out and back down the SAME road — what an undrivable anchor actually produces, and therefore the
- *  shape that makes the two gates race. */
-const THERE_AND_BACK: LngLat[] = [...road(20), ...[...road(20)].reverse()]
+ *  shape that makes the two gates race.
+ *  ⚠ Built from the SHARED `road` (./fixtures), which loop-retrace.test.ts measures `retraceFraction`
+ *  against: the sample density is part of that number, and these two suites turn on the same shape. */
+const THERE_AND_BACK: LngLat[] = thereAndBack(20)
 
 /** The exact string Google returned for the Spooner Lake pin. */
 const RESTRICTED = 'This route has restricted usage or private roads.'

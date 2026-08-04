@@ -25,7 +25,7 @@ import { PgDialect } from 'drizzle-orm/pg-core'
 import { drives, places } from '@skipper/db/schema'
 import type { MaterializedRoute, Waypoint } from '@skipper/routing'
 import { LOOP_MAX_RETRACE, retraceFraction, type LngLat } from '@skipper/engine'
-import { ACCOUNT, ANON, type FakeSession } from './fixtures'
+import { ACCOUNT, ANON, thereAndBack, type FakeSession } from './fixtures'
 
 let driving = false
 
@@ -165,14 +165,10 @@ const { driveRoutes } = await import('../src/drives')
 
 /* --------------------------------- shapes ---------------------------------- */
 
-/** A straight run of `km` kilometres — one road, driven once. */
-function road(km: number): LngLat[] {
-  const degPerKm = 1 / (111.32 * Math.cos((39 * Math.PI) / 180))
-  return Array.from({ length: km * 20 + 1 }, (_, i): LngLat => [-120 + (i / 20) * degPerKm, 39])
-}
-
-/** Out and back down the SAME road — the shape the whole rule exists to refuse. */
-const THERE_AND_BACK: LngLat[] = [...road(20), ...[...road(20)].reverse()]
+/** Out and back down the SAME road — the shape the whole rule exists to refuse.
+ *  ⚠ Built from the SHARED `road` (./fixtures), which restricted-route.test.ts also measures against:
+ *  the sample density is part of the retrace fraction, so the two suites must not drift apart on it. */
+const THERE_AND_BACK: LngLat[] = thereAndBack(20)
 
 /** A closed ring — out one way, home another. */
 const RING: LngLat[] = Array.from({ length: 721 }, (_, i): LngLat => {
