@@ -264,14 +264,38 @@ type DegradedReason =
  * this file — there is no path by which a body, a turn, the prompt, the roster, `say`, thinking or a
  * tool input can reach it. Anything derived from the turn would break that proof; add a field only if
  * you can make the same claim about it.
- * ⚠ warn, not error, and the stream is what a local `bun run dev` and a container tail actually read.
+ * ⚠ THE SEVERITY IS EXPLICIT, AND IT USED TO BE ABSENT — which meant this line said one thing and did
+ * another. The note here read "none of these is an outage", and the emit was `console.warn`: stderr.
+ * By the rule ./rate-limit writes down at its own emitter, a LogEntry with no `severity` field falls
+ * back to the STREAM, and stderr is conventionally ERROR — so the ordinary healthy beats in this set
+ * (`refused` is a safety classifier doing its job; `route_wordless` and `loop_without_return` are
+ * prompt signals) were shaped to land in Error Reporting looking like an outage, which is exactly the
+ * "a guardrail doing its job must not page someone" failure that emitter avoided. `rate_limited` faced
+ * the identical choice and answered it the other way. Setting the field is the DOCUMENTED lever, so it
+ * is set, and the stream is chosen to agree with it rather than contradict it.
+ *
+ * ⚠ ONE REASON IS GENUINELY OURS AND GENUINELY BROKEN: `not_configured` is a missing ANTHROPIC_API_KEY
+ * on a live deploy — every rider on that instance hears the outage line, forever, while /health and
+ * every 5xx alert stay green. That is an ERROR by any reading, and flattening this to a single
+ * severity would either bury it or promote the healthy beats alongside it. `bad_transcript` stays a
+ * WARNING: it counts forged or broken callers, not a fault of ours.
+ *
+ * ⚠ INV-13 SURVIVES THE EXTRA FIELD — `severity` is derived from `reason`, a closed set of literals
+ * declared in this file, by a comparison against one more literal. Nothing from the turn reaches it.
+ * ⚠ CANNOT THROW, which is load-bearing on the SSE path — see the streamSSE note below. Stringifying an
+ * object of three string literals has no cycle, no BigInt and no toJSON to run.
+ *
  * The two THROW paths below deliberately emit nothing here — ./planner has already logged a vendor
  * failure, and a rider hanging up is not a degradation at all.
- * ⚠ CANNOT THROW, which is load-bearing on the SSE path — see the streamSSE note below. Stringifying an
- * object of two string literals has no cycle, no BigInt and no toJSON to run.
  */
 function noteDegraded(reason: DegradedReason): void {
-  console.warn(JSON.stringify({ evt: 'plan_degraded', reason }))
+  const severity = reason === 'not_configured' ? 'ERROR' : 'WARNING'
+  const line = JSON.stringify({ severity, evt: 'plan_degraded', reason })
+  // Stream picked to MATCH the field rather than fight it: a deploy fault goes to stderr, everything
+  // else to stdout, so an operator reading a raw container tail and a log-based metric reading the
+  // structured field reach the same conclusion.
+  if (severity === 'ERROR') console.error(line)
+  else console.info(line)
 }
 
 /**

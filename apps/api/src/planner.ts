@@ -64,7 +64,12 @@ export interface PlannerTurnInput {
 /** One curated endpoint, as the planner is allowed to know it.
  *  ⚠ NAME AND ID ONLY. `lat`/`lng` would hand the model a coordinate to emit (INV-1) and `kind`
  *  ("scenic spot", "marina") is a place FACT — D9 gives the planner none. `rank` is ORDERING, never a
- *  printed field. A `RegionAnchor` row is assignable here; the extra columns are simply not read. */
+ *  printed field.
+ *  ⚠ THE LOADER NOW MATCHES THIS SHAPE RATHER THAN MERELY BEING ASSIGNABLE TO IT. `loadRegionAnchors`
+ *  used to project the wider `RegionAnchor` wire DTO — coordinates and `kind` included — and this
+ *  comment said the extra columns were "simply not read". True, and one refactor away from false: the
+ *  per-region roster was memoized with them in it. Since 2026-08-04 it selects id/name/rank only, so
+ *  what the model may not see is absent from the process rather than politely ignored. */
 export interface PlannerAnchor {
   id: string
   name: string

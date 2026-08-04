@@ -807,7 +807,7 @@ describe('POST /drives/plan — plan_degraded', () => {
   test.each(both)('the same degradation emits the same line on both transports (accept=%s)', async (accept) => {
     impl = async () => ({ outcome: 'truncated', say: 'Alright, so we start at', rawRoute: null, stopReason: 'max_tokens' })
     const { lines } = await runTurn(accept)
-    expect(degradedLines(lines)).toEqual([{ evt: 'plan_degraded', reason: 'truncated' }])
+    expect(degradedLines(lines)).toEqual([{ severity: 'WARNING', evt: 'plan_degraded', reason: 'truncated' }])
   })
 
   // ⚠ THE CASE THE ADVERSARIAL REVIEW'S LITERAL CONDITION MISSES ENTIRELY. stop_reason IS 'tool_use' —
@@ -911,7 +911,11 @@ describe('POST /drives/plan — plan_degraded', () => {
   test.each(both)('a route with no line is COUNTED — a spike here is the prompt slipping (accept=%s)', async (accept) => {
     impl = async () => wordless()
     const { lines } = await runTurn(accept)
-    expect(degradedLines(lines)).toEqual([{ evt: 'plan_degraded', reason: 'route_wordless' }])
+    // ⚠ WARNING, NOT ERROR, and that is the assertion doing the work here. A model that drew without
+    // speaking is a PROMPT signal on otherwise-healthy traffic; emitting it at ERROR would put an
+    // ordinary beat into Error Reporting, which is the "a guardrail doing its job must not page
+    // someone" failure ../src/rate-limit already argued. Pinned so a future edit cannot promote it.
+    expect(degradedLines(lines)).toEqual([{ severity: 'WARNING', evt: 'plan_degraded', reason: 'route_wordless' }])
   })
 
   test('the rider still hears something, and it is NOT the retry line', async () => {
@@ -955,7 +959,12 @@ describe('POST /drives/plan — plan_degraded', () => {
   // transient rider content: counts, ids and enums may be logged, prose may not. The exact-keys
   // assertion is the part that bites in the future — it fails the moment anyone enriches this line with
   // a field derived from the turn, which is precisely how a log starts carrying a rider's sentence.
-  test('the emitted line carries no rider text and no model text, and exactly two fields', async () => {
+  // ⚠ THE COUNT WENT 2 → 3 ON 2026-08-04 and the assertion stays exact on purpose. `severity` is
+  // derived from `reason` — a closed set of literals declared in ../src/plan-route — by a comparison
+  // against one more literal, so it cannot carry anything from the turn. That is the ONLY kind of field
+  // that may be added here, and re-pinning the exact key list rather than loosening to a subset is what
+  // keeps the next addition an explicit decision instead of a silent one.
+  test('the emitted line carries no rider text and no model text, and exactly three fields', async () => {
     const RIDER = 'CANARY-RIDER-SENTENCE'
     const MODEL = 'CANARY-MODEL-SAY'
     impl = async () => ({ outcome: 'truncated', say: MODEL, rawRoute: null, stopReason: 'max_tokens' })
@@ -967,7 +976,7 @@ describe('POST /drives/plan — plan_degraded', () => {
 
     const emitted = degradedLines(lines)
     expect(emitted.length).toBe(1)
-    expect(Object.keys(emitted[0]!).sort()).toEqual(['evt', 'reason'])
+    expect(Object.keys(emitted[0]!).sort()).toEqual(['evt', 'reason', 'severity'])
     // Not just the structured line — NOTHING this request logged may carry either string.
     for (const line of lines) {
       expect(line).not.toContain(RIDER)
@@ -1004,7 +1013,12 @@ describe('POST /drives/plan — plan_degraded', () => {
       throw new PlannerTurnError('not_configured')
     }
     const { lines } = await runTurn(accept)
-    expect(degradedLines(lines)).toEqual([{ evt: 'plan_degraded', reason: 'not_configured' }])
+    // ⚠ THE ONE REASON IN THIS SET THAT IS ERROR, and the counterpart to the WARNING pinned above. A
+    // missing ANTHROPIC_API_KEY on a live deploy means every rider on that instance hears the outage
+    // line while /health and every 5xx alert stay green — the exact condition this event exists to make
+    // visible. If it is ever flattened to the same severity as the healthy beats, it stops being
+    // findable among them.
+    expect(degradedLines(lines)).toEqual([{ severity: 'ERROR', evt: 'plan_degraded', reason: 'not_configured' }])
   })
 
   // ⚠ THE THREE REASONS THAT MUST STAY SILENT HERE, and each for its own reason: `timeout` and `upstream`

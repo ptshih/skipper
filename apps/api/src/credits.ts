@@ -108,6 +108,40 @@ export async function creditSummary(userId: string): Promise<{ remaining: number
   return { remaining: rows[0]?.remaining ?? 0, granted: rows[0]?.granted ?? 0 }
 }
 
+/**
+ * The balance, with the one-time allotment materialized first if this account somehow has none.
+ *
+ * ⚠ IT ASKS BEFORE IT WRITES, AND THAT ORDER IS THE WHOLE CHANGE. Both readers used to call
+ * `ensureFreeGrant` UNCONDITIONALLY and then sum — an INSERT round-trip in front of every balance read,
+ * on a stateless neon-http client where one statement is one HTTP request. Since the signup hook landed
+ * (2026-07-28, ./auth `databaseHooks.user.create.after`) every live account is granted at creation, so
+ * that write was a no-op on essentially every request — including `GET /drives`, which the home screen
+ * hits on every app launch.
+ *
+ * ⚠ THE SEMANTICS ARE UNCHANGED, and this is the argument to check rather than take on trust. The
+ * ordering that mattered was "a brand-new account must read its full balance, not zero" — i.e. the
+ * grant must land before the sum THAT REPORTS IT. `granted === 0` is exactly and only the case where
+ * that has not happened yet, and it is precisely the branch that still grants and re-reads. An account
+ * that already holds a grant cannot be made to need one: `credit_entries` is APPEND-ONLY and a grant's
+ * amount is FROZEN when written, so `granted` is monotonic — it can never fall back to 0 and strand a
+ * rider on the skip path. A refund/clawback is a `reverse`, which `granted` does not sum, so it cannot
+ * fake this either.
+ *
+ * ⚠ EXACTLY-ONCE IS NOT WEAKENED, because it never rested on this call in the first place: it rests on
+ * the `free:<userId>` UNIQUE idempotency key. A concurrent pair that both read `granted === 0` both
+ * attempt the insert and one no-ops — the same outcome as before, since the old code raced identically.
+ *
+ * The pathological config (FREE_DRIVE_CAP = 0) makes a granted row sum to 0, so such an account pays
+ * the grant attempt + a re-read every time. It is idempotent and correct, just not cheap; a zero cap
+ * means nobody can drive anyway.
+ */
+export async function creditSummaryEnsuringGrant(userId: string): Promise<{ remaining: number; granted: number }> {
+  const summary = await creditSummary(userId)
+  if (summary.granted > 0) return summary
+  await ensureFreeGrant(userId)
+  return creditSummary(userId)
+}
+
 /** The consume entry that pays for a drive — a PURE value builder so the caller can co-commit it with
  *  the drive insert in one `db.batch` (atomic). Keyed on the drive id, so a given drive charges exactly
  *  one credit even if the insert is retried. `source` is null (a debit has no funding source). */

@@ -339,11 +339,17 @@ describe('⚠ INV-5: the BuildCorpus brand is asserted in exactly ONE place', ()
 
   test('the unfiltered replay loaders cannot produce the brand', () => {
     const code = codeOnly(SRC)
-    expect(code).toContain(
-      'async function loadCorpusBySubjectIds(subjectIds: string[]): Promise<Map<string, NarrationRow>>',
+    // ⚠ THE RETURN TYPE IS THE INVARIANT, so that is what these pin — matched ACROSS the parameter
+    // list rather than through it. These used to spell out the whole signature, and that broke on
+    // 2026-08-04 when `loadCorpusBySubjectIds` began taking a partitioned `{ poiIds, clusterIds }`
+    // object (which cannot fit on one line under printWidth 100) — a red test for a reason that had
+    // nothing to do with the property it exists to protect: that NEITHER replay loader hands back a
+    // `BuildCorpus`. Anchor on the name and the return type; the arguments are free to change.
+    expect(code).toMatch(
+      /async function loadCorpusBySubjectIds\([\s\S]*?\): Promise<Map<string, NarrationRow>> \{/,
     )
-    expect(code).toContain(
-      'async function corpusForSelection(selection: DriveSelectionItem[]): Promise<Map<string, NarrationRow>>',
+    expect(code).toMatch(
+      /async function corpusForSelection\([\s\S]*?\): Promise<Map<string, NarrationRow>> \{/,
     )
   })
 

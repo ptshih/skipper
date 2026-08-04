@@ -26,6 +26,7 @@ import { and, asc, between, desc, eq, inArray, isNotNull, isNull, sql } from 'dr
 import { db } from '@skipper/db'
 import { creditEntries, drives, narrations, places, pois, selectionSubject } from '@skipper/db/schema'
 import type { DriveSelection, DriveSelectionItem, Polyline, RouteProvenance } from '@skipper/db/schema'
+import type { RankableAnchor } from './anchor-format'
 import { polylineBbox } from './drive-geometry'
 import { materializeRoute, type Waypoint } from '@skipper/routing'
 import {
@@ -56,15 +57,14 @@ import {
   type SignedDriveAudio,
   isAdmin,
   varietyKey,
-  type RegionAnchor,
 } from '@skipper/shared'
 import { ACCOUNT_REQUIRED, requireAccount, withFreshSession, withSession, type ApiEnv } from './entitlements'
-import { creditSummary, driveConsumeEntry, ensureFreeGrant } from './credits'
+import { creditSummaryEnsuringGrant, driveConsumeEntry } from './credits'
 import { SUPPORT_EMAIL } from './email'
 import { DRIVE_CREATE_RATE, MAX_DRIVE_BODY_BYTES, MAX_PLAN_ANCHORS, readBoundedText } from './limits'
 import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
-import { audioUnavailable, contentTypeForKey, presignGet } from './storage'
+import { audioUnavailable, presignedClipFields } from './storage'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -122,7 +122,7 @@ function toClipForm(form: string): DriveClipForm {
  *  (the five owner routes below) and the mount carries only `withSession`, so a re-added `/anchors`
  *  would inherit NOTHING and become an anonymous dump of the whole curated allowlist WITH coordinates.
  *  What a rider may see is NAMES, and only a handful (see ./example-anchors). */
-export async function loadRegionAnchors(bbox: string | null): Promise<RegionAnchor[]> {
+export async function loadRegionAnchors(bbox: string | null): Promise<RankableAnchor[]> {
   // ⚠ ONE parser, in @skipper/engine (1.1 sweep). There were four of these, agreeing only by luck —
   // and since a region IS a bbox and never a stored FK, two readers disagreeing about this one string
   // silently move places between regions. `between` below is inclusive, matching `pointInRegionBbox`.
@@ -132,7 +132,15 @@ export async function loadRegionAnchors(bbox: string | null): Promise<RegionAnch
   const rows = await withRetry(
     () =>
       db
-        .select({ id: places.id, name: places.name, lat: places.lat, lng: places.lng, primaryType: places.primaryType, rank: places.rank })
+        // ⚠ ID, NAME AND RANK ONLY — no coordinates, no `primary_type`. The sole consumer is the
+        // planner's roster (./roster-cache → `buildRosterBlock`), and D9 gives that model NO
+        // coordinates and no place FACTS: `kind` ("marina", "scenic spot") is a fact, and a lat/lng is
+        // the one thing that can bill a Routes call (INV-1). This used to project all of them for the
+        // deleted client-facing `/drives/anchors` route, so the memoized per-region roster sat there
+        // holding exactly the fields the model may never be shown. Narrowing the SELECT means they are
+        // not merely unread — they are not in the process. Endpoints that DO need coordinates get them
+        // from `hydrateAnchors`, which is owner-of-record for that and re-checks the allowlist.
+        .select({ id: places.id, name: places.name, rank: places.rank })
         .from(places)
         // ⚠ NO ROLE FILTER ANY MORE, and its absence IS the allowlist: `places` holds destinations and
         // nothing else since 2026-08-04, so membership is eligibility. INV-1 is unchanged in strength —
@@ -181,15 +189,10 @@ export async function loadRegionAnchors(bbox: string | null): Promise<RegionAnch
     )
     rows.length = MAX_PLAN_ANCHORS
   }
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    lat: r.lat,
-    lng: r.lng,
-    // Humanize the raw Google primaryType for the picker subtitle (e.g. 'scenic_spot' → 'scenic spot'); null when absent.
-    kind: r.primaryType ? r.primaryType.replace(/_/g, ' ') : null,
-    rank: r.rank,
-  }))
+  // The rows ARE the shape now — no mapper. The humanized `kind` this used to derive per row existed
+  // for a picker subtitle on a route that no longer exists, and it was a regex over every row of every
+  // roster load to build a field nothing read.
+  return rows
 }
 
 /** A resolved endpoint (a picked anchor), as the server produced it. */
@@ -970,9 +973,7 @@ function manifestClips(selection: DriveSelection, corpusById: Map<string, Narrat
       approachHeadingDeg: item.approachHeadingDeg,
       alongSec: item.alongSec,
       durationMs: n.durationMs,
-      url: presignGet(n.key),
-      contentType: contentTypeForKey(n.key),
-      ...(n.attribution ? { attribution: n.attribution } : {}),
+      ...presignedClipFields(n.key, n.attribution),
       ...(n.revisedAt ? { revisedAt: n.revisedAt.toISOString() } : {}),
     })
   }
@@ -1011,12 +1012,11 @@ export function previewClipFor(stops: readonly DriveStop[], corpus: BuildCorpus)
     try {
       return {
         name: n.name,
-        url: presignGet(n.key),
-        contentType: contentTypeForKey(n.key),
         durationMs: n.durationMs,
-        // Not decoration: Wikipedia is CC BY-SA and this is the most-seen anonymous surface, so the
-        // credit rides with the clip exactly as it does on GET /sample.
-        ...(n.attribution ? { attribution: n.attribution } : {}),
+        // The credit is NOT decoration here — this is the most-seen anonymous surface there is, and
+        // Wikipedia is CC BY-SA. It rides from the same expression as the URL (./storage) precisely so
+        // that "this surface remembered the credit" is not a thing anyone has to check.
+        ...presignedClipFields(n.key, n.attribution),
       }
     } catch (e) {
       // ⚠ Not audioUnavailable(). A presign failure is an R2-config fault, not per-key, so retrying the
@@ -1179,10 +1179,11 @@ driveRoutes.post('/', requireAccount, createDriveLimiter, withFreshSession, asyn
   // Credit gate — EVERY account spends from the user-owned ledger (there is no uncapped tier; a comp is
   // a large admin grant). The balance is SUM(grants − consumes), NOT a count of drive rows — a delete
   // never refunds because no `reverse` is emitted, so there's no tombstone-counting hack to maintain.
-  // `ensureFreeGrant` lazily materializes the one-time allotment on first touch. This is a pre-check
-  // (cheap; avoids the route/LLM work for a user with no credits); the consume is co-committed below.
-  await ensureFreeGrant(userId)
-  const { remaining, granted } = await creditSummary(userId)
+  // The one-time allotment is materialized here only if this account somehow has none — see
+  // `creditSummaryEnsuringGrant`, which reads before it writes so the common case is ONE statement
+  // rather than an unconditional INSERT in front of every balance read. This is a pre-check (cheap;
+  // avoids the route work for a user with no credits); the consume is co-committed below.
+  const { remaining, granted } = await creditSummaryEnsuringGrant(userId)
   if (remaining < 1) {
     // ⚠ `granted`, NOT the FREE_DRIVE_CAP env constant. A grant's amount is FROZEN when written
     // (credits.ts), so the env value is what the NEXT account will get, not what this one got. They
@@ -1365,11 +1366,13 @@ driveRoutes.get('/', requireAccount, withFreshSession, async (c) => {
   // and the client renders that field verbatim — so the one wall answered in two voices.
   if (!userId) return c.json(ACCOUNT_REQUIRED, 401)
   // ⚠ The list and the ledger read share NO data, and this route is hit on every app focus — so they
-  // go together rather than one after the other. The PAIR inside stays ordered: `ensureFreeGrant`
-  // materializes the allotment so a brand-new user reads the full balance even before their first
-  // drive, which only works if it lands before the summing read. neon-http is stateless (one HTTP
-  // round trip per statement), so what this actually saves is a whole RTT of rider-visible latency.
-  // The grant is an idempotent upsert, so it is harmless if the list half rejects first.
+  // go together rather than one after the other. neon-http is stateless (one HTTP round trip per
+  // statement), so what this actually saves is a whole RTT of rider-visible latency.
+  // ⚠ The ledger half is now ONE statement on the common path: `creditSummaryEnsuringGrant` reads
+  // first and only writes for an account that has no grant yet, where it used to grant-then-sum
+  // unconditionally. A brand-new user still reads their full balance before their first drive — that
+  // is exactly the branch that still writes. Any write it does make is an idempotent upsert, so it
+  // remains harmless if the list half rejects first.
   const [rows, { remaining, granted }] = await Promise.all([
     withRetry(
       () =>
@@ -1391,7 +1394,7 @@ driveRoutes.get('/', requireAccount, withFreshSession, async (c) => {
           .orderBy(desc(drives.createdAt)),
       { label: 'drive.list' },
     ),
-    ensureFreeGrant(userId).then(() => creditSummary(userId)),
+    creditSummaryEnsuringGrant(userId),
   ])
   // Proactive "N drives left" hint, from the user-owned credit LEDGER (every account has a balance).
   // `remaining` is the spendable balance and `cap` the lifetime granted (for "N of M" framing).
@@ -1509,11 +1512,21 @@ async function selectStopsForRoute(route: { polyline: LngLat[]; durationSeconds:
  *  poi id directly is the mistake that made `narrations.poi_id → 3rd Street Flats` for a clip about
  *  downtown Reno. One definition, shared by the replay manifest and the offline re-sign. */
 async function corpusForSelection(selection: DriveSelectionItem[]): Promise<Map<string, NarrationRow>> {
-  const subjectIds = selection
-    .filter((i) => i.kind === 'narration')
-    .map((i) => selectionSubject(i)?.id)
-    .filter((id): id is string => Boolean(id))
-  return subjectIds.length ? await loadCorpusBySubjectIds(subjectIds) : new Map<string, NarrationRow>()
+  // ⚠ PARTITIONED BY KIND, not handed to both loaders as one list. `selectionSubject` already answers
+  // WHICH kind each item is — it has to, since a fused telling is named by its cluster id — so throwing
+  // that answer away and letting each query filter the whole list back down was paying for a statement
+  // whose result was knowably empty. Every drive today is poi-only (fused generation is CLI-only), so
+  // the cluster query ran, matched nothing and was discarded on every single drive open.
+  const poiIds: string[] = []
+  const clusterIds: string[] = []
+  for (const item of selection) {
+    if (item.kind !== 'narration') continue
+    const subject = selectionSubject(item)
+    if (!subject) continue
+    ;(subject.kind === 'cluster' ? clusterIds : poiIds).push(subject.id)
+  }
+  if (poiIds.length === 0 && clusterIds.length === 0) return new Map<string, NarrationRow>()
+  return loadCorpusBySubjectIds({ poiIds, clusterIds })
 }
 
 /** Build a replay manifest from a STORED drive row: frozen structure + LIVE narration content (a
@@ -1660,22 +1673,32 @@ driveRoutes.delete('/:id', requireAccount, async (c) => {
  *  callers (INV-5): this map is structurally identical to the build corpus, so handing it to the
  *  preview picker would publish STAGED work to a stranger with nothing failing. It deliberately does
  *  NOT return `BuildCorpus`; that brand is the compile error standing in the way. */
-async function loadCorpusBySubjectIds(subjectIds: string[]): Promise<Map<string, NarrationRow>> {
-  // A frozen selection names subjects of both kinds, and the id spaces are disjoint uuids — so both
-  // queries run against the same list and each matches only its own. `includeStaged: true` on the
-  // cluster side mirrors the poi side's deliberate absence of a release filter (see above): this path
-  // resolves a frozen set's CONTENT and must not re-adjudicate eligibility.
+async function loadCorpusBySubjectIds(subjects: {
+  poiIds: string[]
+  clusterIds: string[]
+}): Promise<Map<string, NarrationRow>> {
+  // ⚠ EACH SIDE IS SKIPPED WHEN ITS LIST IS EMPTY, and the caller partitions rather than passing one
+  // list to both. It used to hand the WHOLE subject list to both queries and lean on the id spaces
+  // being disjoint uuids — correct, but it meant a poi-only drive (i.e. every drive today) still paid
+  // for a cluster read that could not match. The empty guard is also load-bearing on the poi side:
+  // `inArray(col, [])` is not a free no-op to hand a driver.
+  //
+  // `includeStaged: true` on the cluster side mirrors the poi side's deliberate absence of a release
+  // filter (see above): this path resolves a FROZEN selection's CONTENT and must never re-adjudicate
+  // what belongs in it. A capability withhold here would silently shrink a drive the rider paid a
+  // non-refundable credit for — and would do it differently on different devices, since capability is
+  // per-request.
   const [rows, clusters] = await Promise.all([
-    withRetry(() => narrationCorpusSelect().where(inArray(narrations.poiId, subjectIds)), {
-      label: 'drive.corpusByIds',
-    }),
-    // `includeStaged: true` because this path resolves a
-    // FROZEN selection's content and must never re-adjudicate what belongs in it. A capability
-    // withhold here would silently shrink a drive the rider paid a non-refundable credit for —
-    // and would do it differently on different devices, since capability is per-request.
-    withRetry(() => loadClusterTellings({ includeStaged: true, clusterIds: subjectIds }), {
-      label: 'drive.clusterCorpusByIds',
-    }),
+    subjects.poiIds.length
+      ? withRetry(() => narrationCorpusSelect().where(inArray(narrations.poiId, subjects.poiIds)), {
+          label: 'drive.corpusByIds',
+        })
+      : Promise.resolve([] as Awaited<ReturnType<typeof narrationCorpusSelect>>),
+    subjects.clusterIds.length
+      ? withRetry(() => loadClusterTellings({ includeStaged: true, clusterIds: subjects.clusterIds }), {
+          label: 'drive.clusterCorpusByIds',
+        })
+      : Promise.resolve([] as ClusterTelling[]),
   ])
   return clusterRowsToCorpus(clusters, rowsToCorpus(rows))
 }

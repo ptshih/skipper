@@ -42,7 +42,7 @@ import { planRoutes } from './plan-route'
 import { withSession, type ApiEnv } from './entitlements'
 import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
-import { audioUnavailable, contentTypeForKey, presignGet } from './storage'
+import { audioUnavailable, presignedClipFields } from './storage'
 import { VERSION_POLICIES } from './version-policy'
 
 // ⚠ BOOT-TIME FAIL-FAST, AND IT IS THE ONLY ONE LEFT. ./auth's instance is now a lazy memoized proxy
@@ -358,10 +358,11 @@ app.get('/sample', async (c) => {
     return c.json({
       qid: row.qid,
       name: row.name,
-      url: presignGet(row.key),
-      contentType: contentTypeForKey(row.key),
       durationMs: row.durationMs,
-      attribution: (row.attribution ?? undefined) as AttributionList,
+      // URL + content type + the CC BY-SA credit from ONE expression (./storage) — the same one the
+      // drive manifest and the route preview use, so the obligation cannot be met on two surfaces and
+      // forgotten on the third.
+      ...presignedClipFields(row.key, row.attribution as AttributionList | null),
     })
   } catch (e) {
     return audioUnavailable(c, 'sample', e)

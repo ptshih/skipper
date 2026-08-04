@@ -25,10 +25,13 @@
 import { eq } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { regions } from '@skipper/db/schema'
-// ⚠ `RegionAnchor` comes from @skipper/shared, NOT from ./drives — drives.ts imports it too but does
-// not re-export it. (And the DTO, never the Drizzle row: `Region` is the live name collision this repo
-// lints for, so anything region-shaped is worth importing deliberately rather than by autocomplete.)
-import type { RegionAnchor } from '@skipper/shared'
+// ⚠ `RankableAnchor` (./anchor-format), NOT the `RegionAnchor` WIRE DTO this used to hold. The DTO
+// carries lat/lng and `kind` because it once served a client-facing picker route; that route is gone,
+// and the planner is now the only consumer — a model D9 gives no coordinates and no place facts. The
+// narrower type is what makes "the roster cannot leak a coordinate" a fact about the TYPE rather than
+// a promise about who reads it. (And it is a pure, env-free module, which keeps this one importable
+// without dragging anything in.)
+import type { RankableAnchor } from './anchor-format'
 import { loadRegionAnchors } from './drives'
 import { PLAN_ROSTER_MEMO_TTL_MS } from './limits'
 import { withRetry } from './retry'
@@ -37,8 +40,9 @@ import { withRetry } from './retry'
 export interface RegionRoster {
   /** The region's stored display name — rides in the cached prefix, so never anything per-request. */
   name: string
-  /** The curated `endpoint_eligible` places: the planner's ENTIRE world besides that name (D9). */
-  anchors: RegionAnchor[]
+  /** The curated places: the planner's ENTIRE world besides that name (D9) — ids and names, plus the
+   *  `rank` that ORDERS them and is never printed. No coordinates, by type. */
+  anchors: RankableAnchor[]
 }
 
 /**

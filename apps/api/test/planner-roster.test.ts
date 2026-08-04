@@ -187,9 +187,15 @@ describe('the anchor cap truncates, and says so without naming anyone', () => {
 /* -------------------------------------------------------------------------- */
 
 describe('the block carries names and ids and nothing else (D9)', () => {
-  /** A row as ../src/drives actually produces it — `RegionAnchor` is wider than `PlannerAnchor` and is
-   *  assignable to it, so the extra columns reach this function on every real request and are simply
-   *  never read. Passing them here is what makes "never read" an assertion instead of an intention. */
+  /** A row WIDER than the loader now hands over, on purpose.
+   *
+   *  ⚠ THIS USED TO MIRROR PRODUCTION AND NOW DELIBERATELY EXCEEDS IT. `loadRegionAnchors` projected
+   *  the full `RegionAnchor` DTO — coordinates and `kind` included — so these columns really did reach
+   *  the builder on every request, and this fixture made "never read" an assertion rather than an
+   *  intention. Since 2026-08-04 the loader selects id/name/rank only, so the leak is now closed a
+   *  layer earlier. The fixture stays WIDE anyway, and that is the point: it keeps the RENDERER's own
+   *  guarantee under test independently of the loader, so re-widening that SELECT — or adding a second
+   *  producer that does — cannot quietly put a coordinate in the model's prompt. */
   interface WideAnchor extends PlannerAnchor {
     lat: number
     lng: number
