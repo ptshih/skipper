@@ -175,12 +175,38 @@ function placeWideGroup(
   return best
 }
 
-export function buildDrive(params: BuildDriveParams): DriveStop[] {
-  const { polyline, totalSec, candidates, minGapSec, maxStops } = params
-  const minGapMs = minGapSec * 1000
+/** Where a candidate meets a route, or null when the car never comes close enough to TRIGGER it. */
+export interface CandidatePlacement {
+  /** The point the stop was placed from — the candidate's own point, or a wide group's chosen member. */
+  anchor: LngLat
+  alongSec: number
+  triggerLat: number
+  triggerLng: number
+  approachHeadingDeg: number
+}
 
+/**
+ * THE admission rule, as ONE expression: build it for a route, then ask it of any candidate.
+ *
+ * ⚠ It is exported because a SECOND caller genuinely needs the same answer, and asking it a second way
+ * is what broke it. `notSupersededByServedCluster` retires a cluster's members in SQL the moment the
+ * fused telling is SERVED — but "served" is a release-gate question, and whether the fused clip can
+ * actually PLAY is a route-geometry one. When the two disagreed, a drive lost both: measured
+ * 2026-08-03 on the Stateline→Stateline loop, "Emerald Bay and Vikingsholm" was refused for range (its
+ * centre sits 605 m off Highway 89, past its own 516 m floor) while Vikingsholm's own released 81 s
+ * clip — 175 m off route, comfortably reachable — stayed retired behind it. The drive passed Emerald
+ * Bay in silence, inside a 17:56 gap. The loader now asks THIS function, so a telling a route cannot
+ * reach cannot suppress anything.
+ *
+ * The wide-group branch is the same rule the design already applied one level down (see the admission
+ * loop): a group too spread out for a point is placed on its earliest reachable MEMBER, never on its
+ * off-road enclosing-circle centre.
+ */
+export function buildCandidatePlacer(
+  polyline: LngLat[],
+  totalSec: number,
+): (cand: DriveCandidate) => CandidatePlacement | null {
   const snap = buildRouteSnapper(polyline, totalSec)
-
   // The route's average speed — the best estimate this function has of how fast the car will be
   // moving, and therefore how far the speed-adaptive trigger will reach. Same uniform-speed
   // approximation `timeAtAlong` already makes to pace stops, used here for the same reason: it is
@@ -189,37 +215,24 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
   const routeM = polyline.length > 1 ? totalMeters(cumulativeMeters(polyline)) : 0
   const avgMps = totalSec > 0 && routeM > 0 ? routeM / totalSec : 0
 
-  // 1. Snap to the route, then drop candidates the car will never come close enough to TRIGGER.
-  //
-  //    ⚠ Two different distances used to govern this, and they disagreed. `OFF_ROUTE_MAX_M` (700 m) is
-  //    an HONESTY bound — "is this place actually along the drive". The TRIGGER fires on the car's distance
-  //    to the stop, floored at ANCHORED_TRIGGER_RADIUS_M (250 m) for a road-snapped anchor and only
-  //    stretched by speed (max(floor, speed x leadSeconds) ~ 322 m at 60 mph). So every candidate
-  //    admitted in the 250-700 m band was SELECTED and then silent: it consumed a min-gap pacing slot,
-  //    blocked a stop that would have played, and produced nothing. Measured on the three saved Tahoe
-  //    drives before this filter: 3 of 18 selected stops could not fire at the drive's own average
-  //    speed, and Granlibakken (622 m off-route) would have needed 116 mph.
-  //
-  //    Selecting on the radius the TRIGGER will actually use makes the two agree by construction. This
-  //    can only ever TIGHTEN the gate (the radius is min'd with the honesty ceiling), so the stop COUNT
-  //    can fall. Measured on the same three drives: 18 stops with 3 silent became 16 stops with 0
-  //    silent — AUDIBLE stops went 15 to 16. One drive backfilled the freed window (7 audible to 8);
-  //    the other had no other candidate in range and went from 8 stops to 6. That is a truth
-  //    correction, not a regression: the stops it removes were never going to play, and a shorter
-  //    honest drive beats a longer one with silent gaps in it.
-  const placed: Snapped[] = []
-  // Glances are admitted on the SAME geometry as stops (they are real places on the route) but are
-  // held out of the pacing pass entirely — see the glance fill after step 4.
-  const glancesPlaced: Snapped[] = []
-  for (const cand of candidates) {
+  return (cand) => {
+    // ⚠ Two different distances used to govern this, and they disagreed. `OFF_ROUTE_MAX_M` (700 m) is
+    // an HONESTY bound — "is this place actually along the drive". The TRIGGER fires on the car's
+    // distance to the stop, floored at ANCHORED_TRIGGER_RADIUS_M (250 m) for a road-snapped anchor and
+    // only stretched by speed (max(floor, speed x leadSeconds) ~ 322 m at 60 mph). So every candidate
+    // admitted in the 250-700 m band was SELECTED and then silent: it consumed a min-gap pacing slot,
+    // blocked a stop that would have played, and produced nothing. Measured on the three saved Tahoe
+    // drives before this filter: 3 of 18 selected stops could not fire at the drive's own average
+    // speed, and Granlibakken (622 m off-route) would have needed 116 mph.
+    //
+    // Selecting on the radius the TRIGGER will actually use makes the two agree by construction.
     const reachM = Math.min(
       OFF_ROUTE_MAX_M,
       effectiveRadiusM(candidateTriggerRadiusM(cand), avgMps, DEFAULT_TRIGGER.leadSeconds),
     )
 
     // The SECOND admission rule: a group too spread out for a point has no single point to snap, so
-    // the point rule cannot judge it — and judging it anyway is not a harmless approximation. It gets
-    // placed from its MEMBERS instead (`placeWideGroup`).
+    // the point rule cannot judge it — and judging it anyway is not a harmless approximation.
     //
     // ⚠ A wide group's `lat/lng` is its enclosing-circle CENTRE, which `clusterTrigger` deliberately
     // leaves un-snapped and off-road, while the radius it arrives with is CAPPED (600 m) below the
@@ -237,24 +250,49 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
     // the hull's deletion cost it nothing: the route is the rails, so where the polyline meets the
     // members is the whole answer.
     //
-    // ⚠ Until 2026-08-03 this was a flat `continue`. That refused three groups holding 8m13s of
-    // RELEASED audio (downtown Reno, Reno's Historic Homes, the UNR campus) — content no drive could
-    // ever play, while `notSupersededByServedCluster` had already retired their members behind it.
+    // ⚠ Until 2026-08-03 this was a flat refusal. That refused three groups holding 8m13s of RELEASED
+    // audio (downtown Reno, Reno's Historic Homes, the UNR campus) — content no drive could ever play,
+    // while `notSupersededByServedCluster` had already retired their members behind it.
     const wide = cand.tooWideForPoint === true
     const placement = wide ? placeWideGroup(cand.memberPoints, snap, reachM) : null
-    if (wide && placement === null) continue
+    if (wide && placement === null) return null
     const anchor: LngLat = placement ? placement.anchor : [cand.lng, cand.lat]
     const s = placement ? placement.s : snap(anchor)
-    if (s.offRouteM <= reachM) {
-      ;(cand.glance === true ? glancesPlaced : placed).push({
-        cand,
-        anchor,
-        alongSec: s.alongSec,
-        triggerLat: s.triggerLat,
-        triggerLng: s.triggerLng,
-        approachHeadingDeg: s.approachHeadingDeg,
-      })
+    if (s.offRouteM > reachM) return null
+    return {
+      anchor,
+      alongSec: s.alongSec,
+      triggerLat: s.triggerLat,
+      triggerLng: s.triggerLng,
+      approachHeadingDeg: s.approachHeadingDeg,
     }
+  }
+}
+
+export function buildDrive(params: BuildDriveParams): DriveStop[] {
+  const { polyline, totalSec, candidates, minGapSec, maxStops } = params
+  const minGapMs = minGapSec * 1000
+
+  // 1. Snap to the route, then drop candidates the car will never come close enough to TRIGGER.
+  //    The rule itself lives in `buildCandidatePlacer` — ONE expression, because the corpus loader
+  //    has to ask the same question to decide whether a fused telling may retire its members.
+  //
+  //    ⚠ Selecting on the radius the TRIGGER will actually use can only ever TIGHTEN the gate (the
+  //    radius is min'd with the honesty ceiling), so the stop COUNT can fall. Measured on three saved
+  //    drives when it landed: 18 stops with 3 silent became 16 stops with 0 silent — AUDIBLE stops
+  //    went 15 to 16. One drive backfilled the freed window (7 audible to 8); the other had no other
+  //    candidate in range and went from 8 stops to 6. That is a truth correction, not a regression:
+  //    the stops it removes were never going to play, and a shorter honest drive beats a longer one
+  //    with silent gaps in it.
+  const place = buildCandidatePlacer(polyline, totalSec)
+  const placed: Snapped[] = []
+  // Glances are admitted on the SAME geometry as stops (they are real places on the route) but are
+  // held out of the pacing pass entirely — see the glance fill after step 4.
+  const glancesPlaced: Snapped[] = []
+  for (const cand of candidates) {
+    const p = place(cand)
+    if (p === null) continue
+    ;(cand.glance === true ? glancesPlaced : placed).push({ cand, ...p })
   }
 
   // 2. PICK-ONE co-located dedupe — the INVERSE of the studio pipeline's merge (you cannot fuse two
@@ -341,11 +379,21 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
   // (~1 stop / 4 min); a 20-second glance in a 6-minute silence is not what it was protecting against,
   // and counting them would have the cap starve exactly the gaps this fills.
   //
-  // ONE per window, and it must clear `GLANCE_EDGE_SEC` on BOTH sides — of the clip that just finished
-  // playing (not merely of the previous trigger: the FIFO means a stop's audio outlives its trigger by
-  // its whole duration) and of the next stop's trigger. Among the eligible, the EARLIEST wins, because
-  // a glance's alongSec is where the place physically is — you call a thing out as you pass it, and
-  // the second-best candidate in a window is simply further down the road.
+  // Every glance must clear `GLANCE_EDGE_SEC` on BOTH sides — of the clip that just finished playing
+  // (not merely of the previous trigger: the FIFO means a stop's audio outlives its trigger by its
+  // whole duration) and of whatever comes next. Among the eligible, the EARLIEST wins, because a
+  // glance's alongSec is where the place physically is — you call a thing out as you pass it, and the
+  // second-best candidate in a window is simply further down the road.
+  //
+  // ⚠ The fill takes AS MANY as fit, not one per window, and the difference is the whole point.
+  // Until 2026-08-03 it took exactly one however long the window was, which meant a 17-minute silence
+  // could receive a single 20-second call-out and the rest of the road stayed mute. Measured on the
+  // live corpus: South Lake Tahoe → Incline Village had 17 reachable glances and used 3 (8 stops); the
+  // greedy fill uses 7 (12 stops). Tahoe City → South Lake Tahoe went 14 → 16. Nothing about a window
+  // justified the cap — `maxStops` is what protects against a lecture, and glances deliberately do not
+  // count against it (a 20-second glance in a 6-minute silence is not what that cap was guarding).
+  // The EDGE rule is the real spacing guarantee, and it is per-glance, so applying it repeatedly is
+  // the same promise kept more often: each pick re-arms the cursor `GLANCE_EDGE_SEC` past its own end.
   if (glancesPlaced.length > 0) {
     const bySeq = [...survivors].sort((a, b) => a.alongSec - b.alongSec)
     const taken: Snapped[] = []
@@ -355,16 +403,24 @@ export function buildDrive(params: BuildDriveParams): DriveStop[] {
       const next = bySeq[w]
       // The quiet runs from when the previous clip stops PLAYING to when the next one triggers.
       if (prev) playEndCursor = Math.max(playEndCursor, prev.alongSec) + prev.cand.audioDurationMs / 1000
-      const from = (prev ? playEndCursor : 0) + GLANCE_EDGE_SEC
+      let from = (prev ? playEndCursor : 0) + GLANCE_EDGE_SEC
       const until = (next ? next.alongSec : totalSec) - GLANCE_EDGE_SEC
-      const pick = glancesPlaced
-        .filter((g) => !taken.includes(g))
-        .filter((g) => g.alongSec >= from && g.alongSec + g.cand.audioDurationMs / 1000 <= until)
-        // Never call out a place the drive already stops at — the co-located rule the stop pass
-        // applies to itself, applied across the two passes.
-        .filter((g) => !bySeq.some((s) => haversineMeters(s.anchor, g.anchor) < DRIVE_MIN_SEPARATION_M))
-        .sort((a, b) => a.alongSec - b.alongSec)[0]
-      if (pick) taken.push(pick)
+      for (;;) {
+        const pick = glancesPlaced
+          .filter((g) => !taken.includes(g))
+          .filter((g) => g.alongSec >= from && g.alongSec + g.cand.audioDurationMs / 1000 <= until)
+          // Never call out a place the drive already stops at — the co-located rule the stop pass
+          // applies to itself, applied across the two passes.
+          .filter((g) => !bySeq.some((s) => haversineMeters(s.anchor, g.anchor) < DRIVE_MIN_SEPARATION_M))
+          // …and never call out the same place twice in a row either. Once glances can be adjacent,
+          // the pass needs the separation rule against ITSELF: two call-outs 400 m apart naming
+          // neighbouring coves is exactly the repetition the stop pass already refuses.
+          .filter((g) => !taken.some((t) => haversineMeters(t.anchor, g.anchor) < DRIVE_MIN_SEPARATION_M))
+          .sort((a, b) => a.alongSec - b.alongSec)[0]
+        if (!pick) break
+        taken.push(pick)
+        from = pick.alongSec + pick.cand.audioDurationMs / 1000 + GLANCE_EDGE_SEC
+      }
     }
     survivors.push(...taken)
   }

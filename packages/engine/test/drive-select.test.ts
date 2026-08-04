@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { buildDrive, type DriveCandidate } from '../src/drive-select'
+import { buildCandidatePlacer, buildDrive, type DriveCandidate } from '../src/drive-select'
 import type { LngLat } from '../src/geo'
 
 // ~11.1 km north-south line; lat 38.0+i*0.001 → alongSec ≈ i*6.6 over a 660s drive.
@@ -27,6 +27,45 @@ describe('buildDrive', () => {
     })
     expect(stops.some((s) => s.poiId === 'on')).toBe(true)
     expect(stops.some((s) => s.poiId === 'off')).toBe(false)
+  })
+
+  // ⚠ THE ADMISSION RULE HAS TWO CALLERS AND MUST STAY ONE EXPRESSION. `buildDrive` admits on it, and
+  // `loadCorpusForRoute` (apps/api) asks it whether a fused telling is reachable before letting that
+  // telling retire its own members. When those two answers disagreed the drive lost BOTH: measured on
+  // the live Stateline→Stateline loop, "Emerald Bay and Vikingsholm" was refused for range while
+  // Vikingsholm's own reachable 81 s clip stayed suppressed behind it. This test is what stops a second
+  // copy of the reach test being re-inlined into either side — it fails the moment they diverge.
+  test('buildCandidatePlacer agrees with buildDrive on every admission, exactly', () => {
+    const place = buildCandidatePlacer(polyline, TOTAL_SEC)
+    const cases: DriveCandidate[] = [
+      cand({ poiId: 'on-line', lat: 38.05 }),
+      cand({ poiId: 'far-off', lat: 38.05, lng: 0.02 }),
+      // The 250-700 m band: on-route by the honesty bound, out of TRIGGER reach.
+      cand({ poiId: 'band', lat: 38.05, lng: 0.004, anchored: true }),
+      cand({ poiId: 'wide-no-members', lat: 38.05, tooWideForPoint: true }),
+      cand({
+        poiId: 'wide-reachable',
+        lat: 38.05,
+        lng: 0.02, // an off-road centre, as a real cluster has
+        tooWideForPoint: true,
+        memberPoints: [[0, 38.06] as LngLat],
+        triggerRadiusM: 600,
+      }),
+    ]
+    for (const c of cases) {
+      const admitted = buildDrive({
+        polyline,
+        totalSec: TOTAL_SEC,
+        minGapSec: 1,
+        maxStops: 10,
+        candidates: [c],
+      }).length === 1
+      expect({ id: c.poiId, admitted }).toEqual({ id: c.poiId, admitted: place(c) !== null })
+    }
+    // …and the set is not vacuously all-yes or all-no, or the agreement would prove nothing.
+    const verdicts = cases.map((c) => place(c) !== null)
+    expect(verdicts).toContain(true)
+    expect(verdicts).toContain(false)
   })
 
   // The PICK-ONE co-located dedupe (DRIVE_MIN_SEPARATION_M). Two narrations closer than 1 km on the
@@ -214,6 +253,45 @@ describe('buildDrive', () => {
     })
     expect(near.some((s) => s.poiId.startsWith('glance'))).toBe(false)
     expect(far.some((s) => s.poiId.startsWith('glance'))).toBe(true)
+  })
+
+  // ⚠ EVERY test above this line uses exactly ONE glance candidate, which is why they all stayed green
+  // through the change from "one glance per window" to "as many as fit". A cap that can only be
+  // observed with a SECOND candidate is invisible to a suite that never supplies one — the pair below
+  // is what actually pins the fill's arity.
+  test('a long window takes AS MANY glances as fit, not one', () => {
+    // Two stops ~8.9 km apart leave ≈530 s of quiet between them. At 20 s a glance plus the 45 s edge
+    // clearance on each side, that window has room for several — and before 2026-08-03 it took one,
+    // which is how a 17-minute silence on the live Stateline loop received a single 20-second call-out.
+    const glances = [glanceAt(38.03), glanceAt(38.05), glanceAt(38.07)]
+    const stops = buildDrive({
+      polyline,
+      totalSec: TOTAL_SEC,
+      minGapSec: 180,
+      maxStops: 10,
+      candidates: [stopAt(38.01, 20_000), stopAt(38.09, 20_000), ...glances],
+    })
+    expect(stops.filter((s) => s.poiId.startsWith('glance'))).toHaveLength(3)
+    // …and the tellings are still untouched — the fill runs after selection is final.
+    expect(stops.filter((s) => !s.poiId.startsWith('glance')).map((s) => s.poiId)).toEqual([
+      'stop@38.01',
+      'stop@38.09',
+    ])
+  })
+
+  test('...but two glances closer than the separation floor do not BOTH land', () => {
+    // 38.05 and 38.053 are ≈333 m apart — inside DRIVE_MIN_SEPARATION_M. Once the fill can take more
+    // than one per window it needs the co-located rule against ITSELF, or it calls out neighbouring
+    // coves back to back. Exactly one survives; which one is the earliest, per the fill's ordering.
+    const stops = buildDrive({
+      polyline,
+      totalSec: TOTAL_SEC,
+      minGapSec: 180,
+      maxStops: 10,
+      candidates: [stopAt(38.01, 20_000), stopAt(38.09, 20_000), glanceAt(38.05), glanceAt(38.053)],
+    })
+    expect(stops.filter((s) => s.poiId.startsWith('glance'))).toHaveLength(1)
+    expect(stops.some((s) => s.poiId === 'glance@38.05')).toBe(true)
   })
 
   // ⚠ The quiet is measured from when the previous clip stops PLAYING, not from its trigger — the FIFO

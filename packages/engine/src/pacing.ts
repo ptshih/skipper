@@ -11,8 +11,17 @@ import {
   type LngLat,
 } from './geo'
 
-// Drive pacing — a 3-min floor between stops, with the cap scaled to the route's length (~1 stop / 4 min, capped at 24).
-export const DRIVE_MIN_GAP_SEC = 180
+// Drive pacing — a floor between consecutive stops, with the cap scaled to the route's length
+// (~1 stop / 4 min, capped at 24). The two are different guards and only one of them binds in
+// practice: the FLOOR is what real drives hit, the CAP has never been reached on a saved drive.
+//
+// ⚠ Was 180 s until 2026-08-03. Measured across the four saved Tahoe drives, the floor — not the cap,
+// and not the reachability filter — was the binding constraint on half of them: at 180 s the set
+// selected 31 stops, at 120 s it selects 35, while lifting the cap entirely changed nothing at all
+// and widening the trigger reach to its 700 m ceiling bought 2. A 2-minute floor is still well clear
+// of the ~90-second tellings the corpus actually holds; the FIFO lag drop (`DRIVE_MAX_LAG_SEC`) is
+// what stops a run of long clips from stacking up, so this number does not have to do that job too.
+export const DRIVE_MIN_GAP_SEC = 120
 export const DRIVE_MAX_STOPS_CAP = 24
 export const driveMaxStops = (totalSec: number): number =>
   Math.max(3, Math.min(DRIVE_MAX_STOPS_CAP, Math.round(totalSec / 240)))

@@ -37,10 +37,11 @@ Both were checked 2026-08-03 while trying to find grounds to reopen it, and both
   (`f6aff09`), two days BEFORE the decision. So "stays silent" never meant silence — the founder
   made this call knowing an empty stretch is a rotating curated instrumental. ⚠ Any future argument
   of the form *"but today that stretch is dead air"* is false and was false in June.
-- **Nothing measures quiet, deliberately.** `DRIVE_MIN_GAP_SEC = 180`
-  (`packages/engine/src/pacing.ts:15`) is a **floor**; `driveMaxStops = totalSec / 240` is a **cap**.
-  There is no gap CEILING anywhere in selection — no code path treats a long quiet stretch as a
-  defect. The absence is the design, not an oversight.
+- **Nothing measures quiet, deliberately.** `DRIVE_MIN_GAP_SEC` (`packages/engine/src/pacing.ts`) is a
+  **floor**; `driveMaxStops` is a **cap**. There is no gap CEILING anywhere in selection — no code path
+  treats a long quiet stretch as a defect. The absence is the design, not an oversight, and it is still
+  true. ⚠ The floor's VALUE has since moved (180 → 120, 2026-08-03) — read it from the constant, never
+  from this prose; the sweep in §5(b) below was run at 180.
 
 ## 3. Reopened 2026-08-03 (founder), and where it went
 
@@ -92,6 +93,14 @@ question this entry exists to answer — *what goes in the void* — is still an
 June decision, until the §3 shape is funded.
 
 ## 5. MEASURED 2026-08-03 — four numbers that settle §1 empirically
+
+> ⚠ **PREMISE SUPERSEDED (2026-08-03, later the same day).** Everything below was measured on a corpus
+> that was **458 of 458 `story`** — the scenic tier had never been run. It has since been generated,
+> and (b)'s *"real stops can't fill an empty stretch"* no longer holds on the corpus we now have:
+> selecting the glances that were already released took the flagship corridor's worst silence from
+> 8:49 to **3:54**. The DECISION in §1 is untouched (nothing added is filler; every clip is a real
+> grounded telling), but do not re-cite (b)'s table as current. See
+> [drive-density-and-the-return-leg.md](drive-density-and-the-return-leg.md) §4.
 
 The June call was made on instinct. It is now measured, and it holds. All four are $0, read-only,
 re-runnable from `packages/studio/.scratch` (gitignored) and `packages/sim --gaps`.
@@ -146,6 +155,14 @@ gap it *punctuates* the silence; it does not fill it. Nothing short fills a six-
 nothing long can be written for a place with no facts. So §1's decision survives in its strongest
 form: **the empty stretch stays mostly empty, by arithmetic** — the open question is only whether
 naming what you are passing is worth 15 seconds.
+
+⚠ **That question got answered, and the arithmetic above under-counted the SUPPLY, not the clip
+length.** It assumed one call-out per gap; the fill was in fact taking one per gap *because of a cap
+in the code*, not because only one was available. There were 17 reachable glances on that route. Once
+the fill takes as many as fit, punctuation happens repeatedly and the longest silence drops from 8:49
+to 3:54 — see [drive-density-and-the-return-leg.md](drive-density-and-the-return-leg.md) §2. What
+remains true is the shape of the claim: glances *punctuate*, and a stretch with no candidates at all
+(the Stateline return leg) stays silent no matter what selection does.
 
 ## 6. Related
 

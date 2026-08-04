@@ -121,10 +121,11 @@ as the reason again.
 is now wrong**, but in three different ways — corrected 2026-08-03 after a first pass here
 over-claimed that they had simply vanished:
 
-- **The 180 s floor is ALIVE and MOVED** — `DRIVE_MIN_GAP_SEC = 180` now lives at
-  `packages/engine/src/pacing.ts:15` (with `driveMaxStops = totalSec / 240`, capped 24), because the
-  device must be able to re-pace a drive offline with the same math. So Finding 1's premise still
-  stands; only its address changed.
+- **The floor is ALIVE and MOVED** — `DRIVE_MIN_GAP_SEC` now lives in `packages/engine/src/pacing.ts`
+  (alongside `driveMaxStops`), because the device must be able to re-pace a drive offline with the same
+  math. So Finding 1's premise still stands; only its address changed. ⚠ Its VALUE has since moved too
+  (180 → 120, 2026-08-03 — [drive-density-and-the-return-leg.md](../decisions/drive-density-and-the-return-leg.md));
+  read it from the constant, never from this prose.
 - **`TARGET_SECONDS.story` is GONE as a constant** — clip length is now a per-call `targetSeconds` /
   `maxSeconds` pair on the narrate request (`packages/studio/src/pipeline/narrate.ts:106`). There is
   no single global "a story is 120 s" number to divide against any more.
@@ -134,8 +135,9 @@ over-claimed that they had simply vanished:
   helper could not.
 
 ⚠ So "a ~120 s clip against a 180 s floor leaves ~60 s of quiet" is no longer arithmetic you can
-re-derive from two constants — the clip half is now per-call. **Re-measure (§0.6); do not inherit the
-number.** ⚠ `SIM_MPH = 60` does still stand at `apps/mobile/src/lib/useDrive.ts:61`.
+re-derive from two constants — the clip half is now per-call, and the floor itself has moved since.
+**Re-measure (§0.6); do not inherit the number.** ⚠ `SIM_MPH = 60` does still stand at
+`apps/mobile/src/lib/useDrive.ts:61`.
 
 ### 0.5 ⚠ Requirement A (§9) is mis-scoped — `packages/sim` already exists
 
