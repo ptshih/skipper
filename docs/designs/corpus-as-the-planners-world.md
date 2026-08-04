@@ -73,7 +73,9 @@ Vocabulary is not the answer — the corpus wins that 729 to 103. What the curat
 
 - `pois` gains endpoint-worthiness and an access point — the same two columns `places` carries.
 - The planner's prefix carries released POI NAMES (~3.7k tokens, measured), not ids. Names only is what
-  keeps it affordable (ids triple it to ~11k) and is not a safety property here, because —
+  keeps it affordable — ⚠ **ids cost ~6×, not the 3× first estimated from character counts**: the real
+  prefix measured **~33k tokens** with `name | uuid` rows, because a uuid is 36 characters but tokenizes
+  to roughly 20 (see *Round 3*). It is not a safety property here, because —
 - ⚠ **the wire allowlist has to move, not disappear.** Today `hydrateAnchors` re-asserts
   `endpoint_eligible` on a `places` row before any billed Routes call. The equivalent must exist against
   `pois`: a name the model emits resolves server-side to exactly one released poi in the region, or it
