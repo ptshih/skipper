@@ -62,6 +62,7 @@ import { checkAccessPoint, checkSpeakableAnchor } from '@skipper/engine'
 import { groundingHash } from '@skipper/db/hash'
 import { requireAdmin, type AdminEnv } from './auth'
 import { bboxError, bboxOverlapsRect, parseBbox, pointInBbox, type BboxCorners } from './bbox'
+import { mapWithConcurrency } from './concurrency'
 import { draftCuratedPlaces, isAddressLike, isBusinessLike, isParkingLike, nameDisagrees, resolvePlaceInBbox, type PlaceDraft, type ResolvedPlace } from './places'
 import { contentTypeForKey, presignGet } from './storage'
 import {
@@ -458,6 +459,19 @@ app.post('/admin/regions/bbox-lookup', async (c) => {
 // surface. See docs/designs/places-endpoints-spec.md.
 
 /** Columns returned for a curated place row (the table + map). */
+/** The `pois` columns the corrections payload reports back. Named once so the row loaded at the top of
+ *  `POST /admin/pois/:id/corrections` and the rows its own UPDATEs return are the SAME shape — which is
+ *  what lets that route answer from the write instead of re-reading what it just stored. */
+const poiFreshCols = {
+  speakableLat: pois.speakableLat,
+  speakableLng: pois.speakableLng,
+  speakableRoadClass: pois.speakableRoadClass,
+  excludedReason: pois.excludedReason,
+}
+/** Derived from the schema, never hand-written: spelling these four types out again is how a column's
+ *  nullability changes in one place and stays true-looking in the other. */
+type PoiFreshCols = Pick<typeof pois.$inferSelect, keyof typeof poiFreshCols>
+
 const placeCols = {
   id: places.id,
   placeId: places.placeId,
@@ -686,6 +700,16 @@ app.post('/admin/places', async (c) => {
 const MAX_DRAFT_TARGET = 120
 const MAX_CURATE_DRAFTS = 160
 
+/** How many curate drafts are resolved (and later upserted) at once.
+ *
+ *  ⚠ DELIBERATELY SMALL, and not a throughput dial. The ceiling that matters is not this server's — it
+ *  is Google's per-minute quota on a PAID API, and the failure mode of guessing high is a burst of
+ *  rate-limit errors partway through a run that has already billed for every resolve it completed.
+ *  6 turns MAX_CURATE_DRAFTS from ~320 serial round trips (~130s, brushing IDLE_TIMEOUT_SEC) into
+ *  roughly a fifth of that, which is the whole win; going wider buys little and risks the run.
+ *  Raise it only with a real measurement of the quota in front of you. */
+const CURATE_CONCURRENCY = 6
+
 // POST /admin/places/draft { region, target? } — LLM-draft this region's curated hubs + pitstops with
 // Opus (forced tool). The REVIEWABLE preview: spends a few cents on ONE Opus call, makes NO Places calls
 // and writes NOTHING. The operator prunes the returned list, then POST /admin/places/curate resolves +
@@ -751,24 +775,44 @@ app.post('/admin/places/curate', async (c) => {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY
   if (!apiKey) return c.json({ error: 'places_unconfigured', message: 'GOOGLE_MAPS_API_KEY is not set.' }, 503)
 
-  // Resolve sequentially (one-time, ~30 places) and merge by place_id — two drafts can pin the same
-  // canonical place, and the BEST rank wins. Mirrors curate-places.ts.
-  const byId = new Map<string, { place: ResolvedPlace; rank: number }>()
-  const results: { name: string; status: 'resolved' | 'dropped' | 'error'; resolvedName?: string; message?: string }[] = []
-  for (const d of drafts) {
+  // ⚠ TWO PHASES ON PURPOSE: the NETWORK fans out, the DECISIONS stay sequential.
+  //
+  // Phase 1 is the only slow part — `resolvePlaceInBbox` is two necessarily-sequential Google calls
+  // (Autocomplete → Details), but the drafts are independent of each other, so they were paying for
+  // each other's latency: at MAX_CURATE_DRAFTS that is 320 round trips end to end, ~130s against this
+  // service's own 240s idle timeout (see the IDLE_TIMEOUT_SEC note — it already named parallelising
+  // this loop as the fix that has to come with any raise of the draft cap).
+  //
+  // Phase 2 then folds in DRAFT ORDER, and that is what keeps this change boring: `results` stays in
+  // the order the operator's list was in, and the `byId` merge is deterministic by CONSTRUCTION rather
+  // than by an argument about `Math.min` being commutative. The guards are pure, so running them here
+  // costs nothing.
+  const resolved = await mapWithConcurrency(drafts, CURATE_CONCURRENCY, async (d) => {
     const query = (d?.query ?? '').trim()
     const rank = d?.rank
-    if (!query || typeof rank !== 'number') {
+    if (!query || typeof rank !== 'number') return { kind: 'invalid' as const }
+    try {
+      // `rank` rides along rather than being re-read (and re-asserted) in phase 2: it was validated
+      // HERE, so carrying it keeps that proof structural instead of a cast the compiler can't check.
+      return { kind: 'ok' as const, rank, place: await resolvePlaceInBbox(query, box, apiKey) }
+    } catch (e) {
+      return { kind: 'failed' as const, message: e instanceof Error ? e.message : String(e) }
+    }
+  })
+
+  const byId = new Map<string, { place: ResolvedPlace; rank: number }>()
+  const results: { name: string; status: 'resolved' | 'dropped' | 'error'; resolvedName?: string; message?: string }[] = []
+  for (const [i, d] of drafts.entries()) {
+    const outcome = resolved[i]!
+    if (outcome.kind === 'invalid') {
       results.push({ name: d?.name ?? '?', status: 'error', message: 'invalid draft (missing query/rank)' })
       continue
     }
-    let place: ResolvedPlace | null
-    try {
-      place = await resolvePlaceInBbox(query, box, apiKey)
-    } catch (e) {
-      results.push({ name: d.name, status: 'error', message: e instanceof Error ? e.message : String(e) })
+    if (outcome.kind === 'failed') {
+      results.push({ name: d.name, status: 'error', message: outcome.message })
       continue
     }
+    const { rank, place } = outcome
     if (!place) {
       results.push({ name: d.name, status: 'dropped' })
       continue
@@ -834,8 +878,13 @@ app.post('/admin/places/curate', async (c) => {
   // `results` report with it — so the operator paid for every resolve and was left unable to tell
   // which places landed, on the table that IS the planner's endpoint allowlist. A failed row is now
   // reported as an error against its own name and the batch keeps going.
+  // ⚠ Also pooled, for the same reason and with the SAME per-row semantics: under neon-http every
+  // `await` is its own HTTP request, so this was one round trip per curated place stacked on top of the
+  // resolve loop inside one request budget. The rows are deduped by place_id, so no two concurrent
+  // upserts touch the same row. A single multi-row insert would be one round trip, but it collapses the
+  // per-row error attribution this block exists for — a different trade, and a decision, not a cleanup.
   let added = 0
-  for (const r of byId.values()) {
+  await mapWithConcurrency([...byId.values()], CURATE_CONCURRENCY, async (r) => {
     try {
       await upsertCuratedPlace({
         placeId: r.place.placeId,
@@ -845,6 +894,7 @@ app.post('/admin/places/curate', async (c) => {
         lng: r.place.lng,
         rank: r.rank,
       })
+      // Safe under the pool: JS runs these callbacks on one thread, so `+=` cannot interleave.
       added += 1
     } catch (e) {
       console.error('[admin] curate upsert failed', r.place.placeId, e)
@@ -854,7 +904,7 @@ app.post('/admin/places/curate', async (c) => {
         row.message = `resolved, but the write failed: ${e instanceof Error ? e.message : String(e)}`
       }
     }
-  }
+  })
 
   // `added` is now what was actually WRITTEN, not what resolved — a row whose upsert failed is
   // counted as an error above, not as an add.
@@ -1641,26 +1691,49 @@ async function correctionsForPoi(poi: {
   excludedReason: string | null
   clusterId?: string | null
 }): Promise<CorrectionsPayload> {
-  // Resolve the grouping into one renderable shape so the console needs no second round-trip.
-  let cluster: CorrectionsPayload['cluster'] = null
-  if (poi.clusterId) {
-    const [c] = await db
+  // ⚠ ONE PHASE, three independent reads. These were serial, which under neon-http is three round trips
+  // for a sheet the operator is waiting on — and the dependency that appeared to force the order was not
+  // real: the members query keyed on `c.id`, but `c.id` IS `poi.clusterId` (that is what the cluster row
+  // was selected by), and the overrides key only on source/sourceId. Same trade `GET /admin/runs/:id/
+  // scores` already documents: the rare branch pays a little so the common one is fast.
+  // ⚠ The one cost, deliberately accepted: a poi whose `cluster_id` dangles issues a members query whose
+  // result is then discarded. That is a broken FK, not a normal read.
+  const clusterId = poi.clusterId ?? null
+  const [clusterRows, members, rows] = await Promise.all([
+    clusterId
+      ? db
+          .select({
+            id: poiClusters.id,
+            treatment: poiClusters.treatment,
+            title: poiClusters.title,
+            subjectPoiId: poiClusters.subjectPoiId,
+          })
+          .from(poiClusters)
+          .where(eq(poiClusters.id, clusterId))
+          .limit(1)
+      : [],
+    clusterId
+      ? db.select({ id: pois.id, name: pois.name }).from(pois).where(eq(pois.clusterId, clusterId)).orderBy(pois.name)
+      : [],
+    db
       .select({
-        id: poiClusters.id,
-        treatment: poiClusters.treatment,
-        title: poiClusters.title,
-        subjectPoiId: poiClusters.subjectPoiId,
+        find: poiOverrides.find,
+        replace: poiOverrides.replace,
+        reason: poiOverrides.reason,
+        sourceUrl: poiOverrides.sourceUrl,
+        active: poiOverrides.active,
+        upstreamStatus: poiOverrides.upstreamStatus,
+        updatedAt: poiOverrides.updatedAt,
       })
-      .from(poiClusters)
-      .where(eq(poiClusters.id, poi.clusterId))
-      .limit(1)
-    if (c) {
-      const members = await db
-        .select({ id: pois.id, name: pois.name })
-        .from(pois)
-        .where(eq(pois.clusterId, c.id))
-        .orderBy(pois.name)
-      cluster = {
+      .from(poiOverrides)
+      .where(and(eq(poiOverrides.source, poi.source), eq(poiOverrides.sourceId, poi.sourceId)))
+      .orderBy(desc(poiOverrides.updatedAt)),
+  ])
+
+  // Resolve the grouping into one renderable shape so the console needs no second round-trip.
+  const c = clusterRows[0]
+  const cluster: CorrectionsPayload['cluster'] = c
+    ? {
         id: c.id,
         treatment: c.treatment,
         title: c.title,
@@ -1668,21 +1741,7 @@ async function correctionsForPoi(poi: {
         subjectName: members.find((m) => m.id === c.subjectPoiId)?.name ?? null,
         others: members.filter((m) => m.id !== poi.id),
       }
-    }
-  }
-  const rows = await db
-    .select({
-      find: poiOverrides.find,
-      replace: poiOverrides.replace,
-      reason: poiOverrides.reason,
-      sourceUrl: poiOverrides.sourceUrl,
-      active: poiOverrides.active,
-      upstreamStatus: poiOverrides.upstreamStatus,
-      updatedAt: poiOverrides.updatedAt,
-    })
-    .from(poiOverrides)
-    .where(and(eq(poiOverrides.source, poi.source), eq(poiOverrides.sourceId, poi.sourceId)))
-    .orderBy(desc(poiOverrides.updatedAt))
+    : null
 
   const speakable =
     poi.speakableLat !== null && poi.speakableLng !== null
@@ -1807,6 +1866,12 @@ app.post('/admin/pois/:id/corrections', async (c) => {
   const kind = body.kind
   const operator = c.get('adminEmail')
 
+  // ⚠ Set by the two branches that WRITE to `pois`, straight off their own UPDATE. It replaces a
+  // re-select of four columns this route had just written itself — one extra round trip on every save,
+  // for a value the write already had in hand. The `fact_edit` / `retire` branches leave it undefined
+  // on purpose: they touch `poi_overrides` only, so the row loaded above is still current for them.
+  let updated: PoiFreshCols | undefined
+
   if (kind === 'fact_edit') {
     const find = typeof body.find === 'string' ? body.find : ''
     const replace = typeof body.replace === 'string' ? body.replace : null
@@ -1862,7 +1927,7 @@ app.post('/admin/pois/:id/corrections', async (c) => {
     const clear = body.clear === true || body.lat === null
     if (clear) {
       console.log(`[admin] ${operator} cleared speakable anchor on ${poi.source}:${poi.sourceId}`)
-      await db.update(pois).set({ speakableLat: null, speakableLng: null }).where(eq(pois.id, id))
+      ;[updated] = await db.update(pois).set({ speakableLat: null, speakableLng: null }).where(eq(pois.id, id)).returning(poiFreshCols)
     } else {
       const lat = typeof body.lat === 'number' ? body.lat : NaN
       const lng = typeof body.lng === 'number' ? body.lng : NaN
@@ -1890,7 +1955,7 @@ app.post('/admin/pois/:id/corrections', async (c) => {
         )
       }
       console.log(`[admin] ${operator} set speakable anchor on ${poi.source}:${poi.sourceId} → ${lat},${lng} (${Math.round(check.distanceM)}m from pin)`)
-      await db.update(pois).set({ speakableLat: lat, speakableLng: lng }).where(eq(pois.id, id))
+      ;[updated] = await db.update(pois).set({ speakableLat: lat, speakableLng: lng }).where(eq(pois.id, id)).returning(poiFreshCols)
     }
   } else if (kind === 'exclude') {
     // Hide/unhide a poi as a STOP. Cheap, reversible, and no spend — but it does change what riders
@@ -1901,7 +1966,7 @@ app.post('/admin/pois/:id/corrections', async (c) => {
     const clear = body.clear === true || body.reason === null
     if (clear) {
       console.log(`[admin] ${operator} RESTORED ${poi.name} (${poi.source}:${poi.sourceId}) — exclusion cleared`)
-      await db.update(pois).set({ excludedReason: null }).where(eq(pois.id, id))
+      ;[updated] = await db.update(pois).set({ excludedReason: null }).where(eq(pois.id, id)).returning(poiFreshCols)
     } else {
       const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
       if (!reason) {
@@ -1929,7 +1994,11 @@ app.post('/admin/pois/:id/corrections', async (c) => {
         )
       }
       console.log(`[admin] ${operator} EXCLUDED ${poi.name} (${poi.source}:${poi.sourceId}) — ${reason}`)
-      await db.update(pois).set({ excludedReason: `${reason} (by ${operator})` }).where(eq(pois.id, id))
+      ;[updated] = await db
+        .update(pois)
+        .set({ excludedReason: `${reason} (by ${operator})` })
+        .where(eq(pois.id, id))
+        .returning(poiFreshCols)
     }
   } else {
     return c.json(
@@ -1938,19 +2007,9 @@ app.post('/admin/pois/:id/corrections', async (c) => {
     )
   }
 
-  // Re-read the speakable anchor (it may have just changed) and return the refreshed payload.
-  const fresh = (
-    await db
-      .select({
-        speakableLat: pois.speakableLat,
-        speakableLng: pois.speakableLng,
-        speakableRoadClass: pois.speakableRoadClass,
-        excludedReason: pois.excludedReason,
-      })
-      .from(pois)
-      .where(eq(pois.id, id))
-      .limit(1)
-  )[0]
+  // The refreshed payload, with NO re-read: a branch that changed these columns handed them back from
+  // its own UPDATE, and a branch that didn't leaves the row loaded at the top of this route still true.
+  const fresh = updated ?? poi
   return c.json(
     await correctionsForPoi({
       source: poi.source,
@@ -2317,7 +2376,10 @@ app.get('/admin/drives/:id', async (c) => {
   // The live state of each subject's telling. Narrations are keyed by subject via the XOR'd
   // poi_id/cluster_id columns, so the two sides are separate reads — a fused telling is NOT reachable
   // through a member's poi_id, which is the bug the schema comment warns about.
-  const [poiRows, clusterRows, poiNarrations, clusterNarrations, regionRows] = await Promise.all([
+  // ⚠ The owner lookup rides ALONG here rather than after. It only ever needed `drive.userId`, which is
+  // in hand from the query above, so running it afterwards made this route three serial phases instead
+  // of two — a whole neon-http round trip of spinner on every detail open, bought nothing.
+  const [poiRows, clusterRows, poiNarrations, clusterNarrations, regionRows, owners] = await Promise.all([
     poiIds.length
       ? db.select({ id: pois.id, name: pois.name, kind: pois.kind }).from(pois).where(inArray(pois.id, poiIds))
       : [],
@@ -2351,6 +2413,7 @@ app.get('/admin/drives/:id', async (c) => {
           .where(inArray(narrations.clusterId, clusterIds))
       : [],
     db.select({ slug: regions.slug, displayName: regions.displayName, bbox: regions.bbox }).from(regions),
+    ownersByIdFor([drive.userId]),
   ])
 
   const nameById = new Map<string, { name: string; detail: string | null }>([
@@ -2393,7 +2456,6 @@ app.get('/admin/drives/:id', async (c) => {
     maxLng: drive.bboxMaxLng,
   }
   const inRegions = regionBoxesOf(regionRows).filter((b) => bboxOverlapsRect(b.box, rect))
-  const owners = await ownersByIdFor([drive.userId])
 
   return c.json({
     drive: {
@@ -2489,16 +2551,18 @@ const port = Number(process.env.PORT ?? 8788)
 //     dialog's own copy says "this takes ~30s". It could therefore NEVER have completed: the socket
 //     died at ~12s, the operator saw a network error, and the Anthropic call billed to completion
 //     regardless.
-//   • POST /admin/places/curate — 2 Google Places round-trips per draft, serially, then a second loop
-//     of upserts. ~30 drafts is 15-25s. Worse than a failed read: the handler is never aborted, so the
-//     writes still land. The operator is shown a FAILURE while curated `places` rows — the planner's
-//     wire-level endpoint allowlist (INV-1/INV-2) — are committed to production.
-//     ⚠ THIS IS WHAT BOUNDS MAX_CURATE_DRAFTS. At the measured ~0.8s/draft, the 160 cap is ~130s —
-//     inside the 240 below, but the headroom is no longer generous. Raising that cap without either
-//     raising this or parallelising the resolve loop walks straight into the writes-land-anyway case
-//     above, on the paid path that seeds the allowlist.
+//   • POST /admin/places/curate — 2 Google Places round-trips per draft, then a loop of upserts.
+//     Its failure mode is worse than a failed read: the handler is never aborted, so the writes still
+//     land. The operator is shown a FAILURE while curated `places` rows — the planner's wire-level
+//     endpoint allowlist (INV-1/INV-2) — are committed to production.
+//     ⚠ BOTH LOOPS ARE NOW POOLED (CURATE_CONCURRENCY), which is what bought the headroom back: the
+//     160-draft cap was ~130s serial at the measured ~0.8s/draft — inside the 240 below, but not
+//     generously — and is roughly a fifth of that now. The writes-land-anyway case above is still the
+//     thing to protect, so it remains the reason this timeout is load-bearing; raising
+//     MAX_CURATE_DRAFTS is no longer the same cliff, but it is still bound by the draft step and by
+//     what an operator can actually review (see that constant).
 // This is the paid path that seeds that allowlist, and it has never been run (memory: the Tahoe
-// curation is still founder-gated), so the whole two-step flow was latently unable to complete.
+// curation is still founder-gated).
 // 240s: Bun hard-caps idleTimeout at 255 (verified — 256 throws), and Cloud Run's own request timeout
 // (300s, unset in cloudbuild.admin.yaml so the default applies) stays the outer bound.
 const IDLE_TIMEOUT_SEC = 240
