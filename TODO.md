@@ -46,8 +46,10 @@ without re-deriving the reasoning. **Delete items when done** — git history is
 > (Advice to tighten it was written here first and withdrawn on reading the definition — the same
 > read-the-definition trap this file keeps recording.)
 
-- [ ] **⛔ RUN 3 ($0.5280, routing 0.93, 4/57): THE FIX BELOW BROKE THE SPEND GATE, and the reworded clause
-      is UNVERIFIED.** `change-it-up-shorter` and `duration-instead-of-a-destination` both PASSED run 2 and
+- [x] **✅ FIXED + VERIFIED ($0.1620 on the two scenarios that caught it — routing 1.00 on both, 0 flagged,
+      durations 0, all gates PASS). Mechanism confirmed, not inferred: the route now lands on the YES turns
+      and on neither read-back, the exact inversion of the bug, and the "already sitting right there in
+      front of you" stamp is gone.** RUN 3 ($0.5280, routing 0.93, 4/57): THE FIX BELOW BROKE THE SPEND GATE. `change-it-up-shorter` and `duration-instead-of-a-destination` both PASSED run 2 and
       both failed run 3, with one shape: he DREW on the read-back turn, then answered the rider's *"yep"*
       with *"That one's already sitting right there in front of you"* and drew nothing. Cause: the clause
       read *"the next thing out of you is **the plan**"*, and in this prompt "the plan" means both the
@@ -58,10 +60,17 @@ without re-deriving the reasoning. **Delete items when done** — git history is
       commits unpushed; the commit was on no remote). Reworded, not reverted — run 2 showed the either/or
       returns without something in this slot: *"say it back -- and saying it back is not drawing it. Nothing
       gets drawn until they answer."*
-      **Owed: `--only change-it-up-shorter` + `--only duration-instead-of-a-destination`, 9 turns, ~$0.20,
-      needs a founder go.** ⚠ **The durable rule: near the read-back, say SAY or say DRAW — never "the
-      plan", which has two referents.** Full write-up:
+      ⚠ **The durable rule, and the reason this is worth keeping after the fix: near the read-back, say SAY
+      or say DRAW — never "the plan", which in that prompt names both the sentence he speaks and the tool
+      call he emits.** Full write-up:
       [planner-stops-asking-how-long](docs/decisions/planner-stops-asking-how-long.md).
+- [ ] **The rejected draw-ask wording still surfaces — a taste call for the founder, not a bug.** The
+      founder rejected *"Want me to draw that up?"* on 2026-08-04; the last arm produced *"Want me to draw
+      that one up?"*. Deleting the sample line fixed the STAMP (it is no longer every turn — the four runs
+      also produced "that the one?", "Shall I set it?", "Say the word?", "is that our drive?") but it cannot
+      stop the model reaching for ordinary English on its own. **Wanting that sentence never said needs an
+      explicit ban naming it.** ⚠ Not done unilaterally: a ban narrows the variety the sample-line removal
+      just bought, and that trade is the founder's.
 - [x] **✅ FIXED + VERIFIED same day (`--only deflect-plan-draw-chat`, $0.0968 — routing 1.00, 0/4, all
       three gates PASS). THE EITHER/OR WAS BACK, IN A NEW FLAVOUR, AND A ONE-SCENARIO VERIFICATION IS WHY
       NOBODY KNEW.** Fixed by TWO CLARIFICATIONS of existing rules, not a new rule (the lesson from the last

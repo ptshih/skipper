@@ -11,8 +11,9 @@
 > read-back cannot avoid. ⚠ The record-but-do-not-recite split is confirmed working: one drawn route
 > carried `target_minutes: 120` picked up from *"actually two"* and never said back.
 > ⚠ **It also surfaced a real regression elsewhere, whose FIX then caused a second one — read the last
-> section before touching the read-back. Run 3 ($0.5280) is routing 0.93, and the open item is a reworded,
-> UNVERIFIED clause.**
+> section before touching the read-back.** Both are now fixed and VERIFIED: the reworded clause was proved
+> on the two scenarios that caught it (`$0.1620`, routing **1.00** on both, 0 flagged), with the route
+> landing on the yes turn and never on the read-back. Total spend across the four runs: **$1.34**.
 
 ## The call
 
@@ -108,11 +109,19 @@ are the one part not to carry out of it. ⚠ **Swapping one fixed line for anoth
 the note is the actual fix, and if the jukebox persists, the next move is removing the ask from the example
 rather than choosing a third sentence.
 
-**Measured:** it worked as intended. No single draw-ask dominates the run any more (the judge saw
-*"that the one you want?"*, *"is that our drive?"*, *"that the one you want?"* and others), and flagged
-persona turns went to zero. The judge's remaining complaint is CADENCE, not wording: *"the sag is the sheer
-volume of bare readback-confirm turns… fine but flavorless, and they drag the middle of several chats."*
-That is a different problem from the stamp and wants a different fix.
+**Measured:** it worked as intended. No single draw-ask dominates the run any more (across the four runs:
+*"that the one you want?"*, *"is that our drive?"*, *"Shall I set it?"*, *"Say the word?"*, *"that the
+one?"*), and flagged persona turns went to zero. The judge's remaining complaint is CADENCE, not wording:
+*"the sag is the sheer volume of bare readback-confirm turns… fine but flavorless, and they drag the middle
+of several chats."* That is a different problem from the stamp and wants a different fix.
+
+⚠ **BUT THE REJECTED WORDING STILL COMES OUT SOMETIMES — an open taste decision, not a bug.** On
+2026-08-04's last arm he said *"Want me to draw that one up?"*, near-verbatim the line the founder rejected.
+Removing the sample stopped it being EVERY turn, which is what the stamp complaint was; it cannot stop the
+model reaching for an ordinary English phrasing on its own. **If the founder wants that sentence never
+said, that needs an explicit ban naming it — deleting the example was never going to do it.** Recorded
+rather than acted on, because a ban on a natural phrasing narrows the variety this section just bought, and
+that trade is the founder's to make.
 
 ## What this change appears to have COST — found, fixed, and verified the same day
 
@@ -189,8 +198,16 @@ commit carrying it was on no remote).
 **Reworded rather than reverted**, because the clause still has a job and the previous run showed the
 either/or comes back without something in this slot: *"If nothing is actually missing, say it back -- and
 saying it back is not drawing it. Nothing gets drawn until they answer."* The last two sentences exist
-purely to foreclose the misreading. ⚠ **Unverified** — the arm that would prove it is
-`--only change-it-up-shorter` plus `--only duration-instead-of-a-destination`, 9 turns.
+purely to foreclose the misreading.
+
+✅ **VERIFIED on the two scenarios that caught it** (`--only change-it-up-shorter` + `--only
+duration-instead-of-a-destination`, 9 turns, **$0.1620**): routing **1.00** on both, 0 flagged, all gates
+PASS, `durations asserted as road fact` **0** on both. Mechanism confirmed rather than inferred from the
+score — in `change-it-up-shorter` the route lands on turn 1 (*"go for it"*) and turn 5 (*"yep"*) and on
+NEITHER read-back turn, which is the exact inversion of the bug. The *"already sitting right there in front
+of you"* construction the judge called the run's most-repeated is gone. And the new scenario's own beat
+holds: given a start and an hour with no far end, he answers *"Tahoe City it is. Where do you want to end
+up?"* — asking WHERE, without re-asking the duration and without guessing which place is an hour away.
 
 **The reusable lesson, and it is not "write clearer prompts":** in this file, *"the plan"* is a word with two
 referents — the sentence he says and the tool call he emits. A clause that reads naturally in one sense can
