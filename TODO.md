@@ -23,6 +23,61 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
+## Should we adopt an LLM framework? — researched 2026-08-03, NOT scheduled
+
+Founder asked about **BAML** and then **Vercel's AI SDK**. Both were researched against current docs
+(not memory) rather than answered from impressions. **Recommendation: not for the live planner. If
+one is ever adopted, `packages/studio` is the right first target and the planner is the last.**
+
+**Why the question came up, and it is a good one.** The session's hardest bug was the model
+serializing its `plan_route` call into rider-visible prose instead of emitting a tool block (INV-8,
+observed live for the first time). BAML's Schema-Aligned Parsing exists for exactly that class — it
+does not use native tool-calling at all, it prompts for structured output and parses whatever comes
+back (broken JSON, markdown-wrapped, chain-of-thought preceding the payload). Under SAP the failure
+would be a successful parse rather than a lost turn.
+
+**BAML — the disqualifier is structural, not capability.** It is a codegen language: `.baml` files
+compile to a typed client. This repo deliberately has NO build step ("internal packages export `.ts`
+source; bun runs it, `tsc --noEmit` type-checks"), and `apps/api/Dockerfile` copies only
+`apps/api/src`, so generated code needs a home and a story in that image. Caching is supported but
+coarser (`allowed_role_metadata ["cache_control"]` plus role-level metadata) and **it is unverified
+whether it can express TWO breakpoints in one request**, which is exactly what this path needs
+(system block 1 + the message tail). A broken cached prefix is the single most expensive silent
+regression here and shows up only on the invoice.
+
+**Vercel AI SDK — clears every hard requirement, and the founder has already shipped it**
+(`ai@6.0.190` + `@ai-sdk/react@3.0.192` in `manoa/archive/mobile`). Verified against the docs:
+`providerOptions.anthropic.cacheControl` on system parts AND message parts AND tools;
+`usage.inputTokenDetails.cacheReadTokens/cacheWriteTokens` (so the `cache_read: 0` tell survives);
+`finishReason: 'length'` distinguishable from `'stop'`/`'tool-calls'` (the truncation case);
+`thinking: { type: 'adaptive', effort }`; `disableParallelToolUse`; `abortSignal`. No build step.
+
+**And still no, for `apps/api/planner.ts`, on three grounds that are not about capability:**
+  1. **No capability gain, and the risk lands on the least testable code.** The value of that module
+     is not the HTTP call — it is the six-outcome classifier, telling a rider hanging up from a
+     vendor timeout, and the INV-13 guarantee that no vendor error body ever reaches a log
+     (`plannerFailure` reads `APIError.type` and nothing else). `finishReason` supplies raw material;
+     every one of those mappings still has to exist.
+  2. **The agent-loop framing is a spend footgun.** `ToolLoopAgent` defaults to `isStepCount(20)`.
+     On a path where one anonymous rider request MUST equal one billed call (INV-11), an abstraction
+     whose natural mode is multi-step is the wrong thing to sit beside. `streamText` is single-step,
+     but the surrounding API invites the other shape.
+  3. **`display: 'omitted'` is unverified.** The docs list `'summarized'`; this code deliberately
+     uses `'omitted'` because rider-facing text must never carry reasoning (INV-8). Prove it first.
+
+⚠ **The client is a bigger commitment than it looks, and would NOT fix the lag.** `apps/mobile` does
+not talk to a model — it talks to `POST /drives/plan`, which emits custom SSE frames (`event: say`,
+`event: turn`). `useChat` expects the SDK's own data-stream protocol, so adopting it means changing
+the WIRE CONTRACT and coupling both halves to the SDK. And manoa's smooth chat was not `useChat`
+doing the work: [docs/designs/chat-render-performance.md](docs/designs/chat-render-performance.md)
+found skipper's lag is render architecture (unvirtualized `ScrollView`, unmemoized rows, composer
+state at the screen root). Steps 4-7 there fix it with no new dependency. Adopt the SDK as an
+architecture decision if at all — never as a performance fix.
+
+**If it is ever revisited, start at `packages/studio`**: many structured batch calls (`enrich`,
+`classify-treatments`, `curate-places`, the eval judges), all forced-tool-use JSON extraction, no
+latency or cache pressure, and it never deploys to Cloud Run. That is where the leverage is.
+
 ## Test-suite sweep (2026-08-02) — 94 files, ~1,240 tests
 
 **Nothing was deleted, and that is the finding.** A sweep for stale/redundant tests came back
