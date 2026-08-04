@@ -28,7 +28,43 @@ without re-deriving the reasoning. **Delete items when done** — git history is
 > geometry measurements). Everything else deleted was a duplicate of a comment, a test, or a doc that
 > already said it.
 
-## Planner eval — PAID RUN 2026-08-04, $0.4911, routing gate FAIL (0.93, 4/54 turns)
+## Planner eval — TWO PAID RUNS 2026-08-04. Run 2 after the duration change: routing 0.96, 2/57 flagged
+
+> ⚠ **RUN 2 (founder go, `$0.5433`, 14 scenarios / 57 turns + judge, raw at
+> `apps/api/eval/.runs/2026-08-04T17-48-46-730Z-mem.json`) — read this before the run-1 notes below.**
+> It measured the duration change ([planner-stops-asking-how-long](docs/decisions/planner-stops-asking-how-long.md)),
+> and that change worked: `durations asserted as road fact` **10/54 → 2/57** with both survivors looking
+> like detector false positives, flagged persona turns **6/54 → 0/57**, repeated phrases **17 → 12** with
+> the read-back stems gone. Of run 2's two routing flags, **one was the instrument** (`wrap-up-long-conversation`
+> #7, the flip run 1 predicted and refused to make unmeasured — now measured and flipped) and **one is a
+> real regression, below.** So FINDING 3 from run 1 is closed and a new one is open.
+> ⚠ The `durations` detector itself now over-fires more than it under-fires: it flagged *"Two hours, or two
+> stops?"* (a clarifying question) and a line about his own identity. Tighten it before trusting a small
+> delta on that number again — the metric is cheap to re-apply to saved runs at zero spend.
+
+- [ ] **⚠ THE EITHER/OR IS BACK, IN A NEW FLAVOUR, AND A ONE-SCENARIO VERIFICATION IS WHY NOBODY KNEW.**
+      `deflect-plan-draw-chat #2`: the rider said *"Yeah, do it."* and no route came back, because the turn
+      before offered *"Kings Beach down to South Lake Tahoe — and you want Emerald Bay on the way, or
+      straight through?"* — an either/or, which the prompt bans by name with almost that exact sentence as
+      its counter-example. The 2026-08-03 fix (one-way as the voiced default) was verified on
+      `--only midpoint` alone, three turns; it did not generalise from "loop or straight" to "via or
+      straight". ⚠ **Second defect in the same line: the via was never asked for.** The rider's only mention
+      of Emerald Bay was *"What's the deal with Emerald Bay?"* — a place question, correctly deflected. The
+      model read **asked ABOUT** as **asked FOR**, and the prompt never says what becomes of a place the
+      rider only asked about, so a deflected name stays live and the model tries to be helpful with it.
+      ⚠ **It may be the duration change's own doing** (hypothesis, not finding): with both ends named and
+      the "how long" question gone, the model had nothing it was told to ask and filled the vacuum. If so
+      the fix is NOT restoring the ask — it is saying that asked-about is not asked-for, and that a settled
+      pair of ends goes straight to the read-back. Verify with `--only deflect-plan-draw-chat`, four turns,
+      cents. **Do NOT re-run the whole suite for one beat, and do NOT verify the fix on one scenario again —
+      that is the mistake being corrected here.**
+- [ ] **The judge's remaining persona complaint is CADENCE, not wording** — *"the sag is the sheer volume of
+      bare readback-confirm turns ('that the one you want?' / 'it is.'), which are fine but flavorless and
+      drag the middle of several chats."* The draw-ask STAMP is fixed (no single line dominates run 2, 0/57
+      flagged), so this is the next layer down and a different problem. Worth an ear before another prompt
+      edit; persona is advisory and scored 0.67.
+
+### Run 1 — $0.4911, routing gate FAIL (0.93, 4/54 turns)
 
 Founder go given explicitly. Full suite, 13 scenarios / 54 turns + judge, `--apply` with the judge on.
 Raw turns are on disk (`apps/api/eval/.runs/2026-08-04T05-48-55-670Z-mem.json`, gitignored), so any NEW
@@ -89,25 +125,20 @@ ever need measuring, the panel has to go through the route, not around it.
       rather than just the outcome: the either/or was what kept a yes from having anything to land on.
       Rationale + the Moab/Arches note:
       [docs/decisions/no-same-road-loops.md](docs/decisions/no-same-road-loops.md) §8.
-- [ ] **Re-measure `wrap-up-long-conversation` #7 — its premise is gone and it has NOT been re-run.** Its
-      `expect: 'hold_no_repeat'` was calibrated against a skipper who "has usually asked something
-      ('straight through, or back around?')" by that turn, and he no longer does. The expectation is
-      probably `draw` now — but ⚠ **it was deliberately NOT flipped on reasoning alone**, because changing
-      an expectation without measuring it is the exact instrument bug this file has now produced four
-      times. 9 rider turns, so it is not free. The stale justification is corrected in place at the
-      scenario so nobody reads it as current.
-- [ ] **FINDING 3 — the read-back turn is both the persona sag AND the duration leak, and it is one
-      turn.** Persona scored 0.64 advisory (6/54 flagged) and every flagged turn is a draw/read-back:
-      *"Tahoe City out to Incline Village, straight through, about an hour."* → judge *"Flat confirm, no
-      voice"*, 4/10, four times over. Separately, `durations asserted as road fact` came in at **10**, and
-      the quoted lines are the SAME turns. The prompt already says how long they want is theirs "never as
-      a fact about the road"; the read-back is where it gets restated as one.
-      ⚠ Both numbers are in historical range (durations measured 12, 10, 6, 12 across the spatial arms),
-      so this is the standing state of that turn, not a new slip. The prompt itself predicts it — *"This
-      is the turn you will do more than any other, so it is the one that goes stale first"* — and gives it
-      no sample line on purpose. Worth an ear before another prompt edit.
-      Also measured: 9/54 turns echo an earlier turn of the SAME chat, 17 distinct within-chat repeated
-      phrases (all read-back stems), 1 turn judged CANNED.
+- [x] **Re-measure `wrap-up-long-conversation` #7 — DONE in run 2, and it flipped to `draw`.** The turn
+      before it asked one clean single-plan question, so *"yes draw it"* is an unambiguous yes and the model
+      drawing was correct. Worth keeping the shape of this one: the flip was PREDICTED here, deliberately
+      left unmade without evidence, and then made from what a run actually did. That is the only one of the
+      four instrument bugs in that file caught before it wasted anyone's time.
+- [x] **FINDING 3 — the read-back turn was both the persona sag AND the duration leak. CLOSED by the
+      duration change** ([planner-stops-asking-how-long](docs/decisions/planner-stops-asking-how-long.md)),
+      measured in run 2: persona flagged turns **6/54 → 0/57**, `durations asserted as road fact`
+      **10 → 2** (both survivors likely detector false positives), within-chat repeated phrases **17 → 12**
+      with the read-back STEMS gone — what is left is place-name pairs a read-back cannot avoid.
+      ⚠ It was diagnosed here as "worth an ear before another prompt edit" and as "the standing state of
+      that turn, not a new slip". Both readings were too pessimistic: the turn was carrying a number the
+      model was never able to act on, and removing the QUESTION fixed the turn. The successor complaint
+      (cadence, not wording) is filed under run 2 above.
 
 ✅ **Clean, and worth recording so nobody re-checks:** `voice` and `discipline` gates both PASS at 1.00,
 0/54. No boat, no markdown, no id ever recited, no place fact handed over. **And the prompt cache is

@@ -1,9 +1,16 @@
 # The planner stops asking how long they want to be out
 
-> **Status:** ✅ **DECIDED + BUILT 2026-08-04 (founder).** Prompt-only; no wire, schema, client or
-> migration change. `target_minutes` SURVIVES on the tool and is still recorded whenever a rider offers a
-> time — what is gone is the QUESTION and the recital. ⚠ Unmeasured: this wants one paid eval arm, and the
-> number it exists to move is `durations asserted as road fact`.
+> **Status:** ✅ **DECIDED + BUILT + MEASURED 2026-08-04 (founder).** Prompt-only; no wire, schema, client
+> or migration change. `target_minutes` SURVIVES on the tool and is still recorded whenever a rider offers
+> a time — what is gone is the QUESTION and the recital.
+> **It worked, on the full paid suite ($0.5433, 14 scenarios / 57 turns + judge):**
+> `durations asserted as road fact` **10/54 → 2/57**, and both survivors look like detector false positives
+> (*"Two hours, or two stops?"* is him clarifying an ambiguous "actually two", and the other hit is a line
+> about his own identity). Flagged persona turns **6/54 → 0/57**; distinct within-chat repeated phrases
+> **17 → 12**, and the read-back STEMS are gone from that list — what remains is place-name pairs, which a
+> read-back cannot avoid. ⚠ The record-but-do-not-recite split is confirmed working: one drawn route
+> carried `target_minutes: 120` picked up from *"actually two"* and never said back.
+> ⚠ **It also surfaced a real regression elsewhere — see the last section.**
 
 ## The call
 
@@ -98,3 +105,39 @@ So the line changed (*"That the drive?"* — shorter, and it drops the drawing-u
 are the one part not to carry out of it. ⚠ **Swapping one fixed line for another only moves the stamp** —
 the note is the actual fix, and if the jukebox persists, the next move is removing the ask from the example
 rather than choosing a third sentence.
+
+**Measured:** it worked as intended. No single draw-ask dominates the run any more (the judge saw
+*"that the one you want?"*, *"is that our drive?"*, *"that the one you want?"* and others), and flagged
+persona turns went to zero. The judge's remaining complaint is CADENCE, not wording: *"the sag is the sheer
+volume of bare readback-confirm turns… fine but flavorless, and they drag the middle of several chats."*
+That is a different problem from the stamp and wants a different fix.
+
+## ⚠ What this change appears to have COST — measured, and open
+
+The full run flagged `deflect-plan-draw-chat #2`: the rider said *"Yeah, do it."* to a plan and **no route
+came back.** The cause is on the turn before, where the skipper said:
+
+> *"Kings Beach down to South Lake Tahoe — and you want Emerald Bay on the way, or straight through?"*
+
+That is an **either/or**, the construction `== Drawing it up ==` bans by name and whose counter-example is
+almost this sentence — *"do not hand them a choice in the same breath as the ask ('straight through, or
+back around?'), because there is no way to answer that with a yes, and a yes is the thing you are waiting
+for."* The yes then had nothing to land on, exactly as that rule predicts.
+
+Two things make it worth chasing rather than filing:
+
+1. **The either/or was supposedly fixed on 2026-08-03** by making one-way the voiced default — but that was
+   verified on `--only midpoint`, three turns, one scenario. It has come back in a **new flavour**: not
+   "loop or straight" but "**via or straight**". A one-scenario verification did not generalise.
+2. **The via was never asked for.** The rider's only mention of Emerald Bay was *"What's the deal with
+   Emerald Bay?"* on turn 0 — a place question, which the skipper correctly deflected. The prompt says a
+   pass-through rides along *"only if they actually asked for it. You never add one to be helpful."* The
+   model read **asked ABOUT** as **asked FOR**. That gap is real and specific: the prompt never says what
+   becomes of a place the rider only asked about, and a deflected name stays live in the conversation.
+
+⚠ **And it may be this change's own doing** — stated as a hypothesis, not a finding. With both ends named
+and the duration question gone, the model had nothing left it was told to ask, and it filled the vacuum
+with an either/or about the one loose name on the table. If that is right, the fix is not to restore the
+duration ask but to say plainly that a place they asked ABOUT is not a place they asked to go BY, and that a
+settled pair of ends goes straight to the read-back. Verifiable for cents: `--only deflect-plan-draw-chat`
+is four turns.

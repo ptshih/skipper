@@ -321,11 +321,16 @@ export const SCENARIOS: Scenario[] = [
       // (docs/decisions/no-same-road-loops.md §8) and this rider never asks for one, so the skipper no
       // longer has an unanswered question on the board. Verified on `midpoint`, where the identical
       // either/or is gone and the yes now lands: routing 0.93 → 1.00, 0/3 flagged.
-      // ⚠ Left as `hold` DELIBERATELY rather than flipped back to `draw` on reasoning alone — changing
-      // an expectation without measuring it is precisely the instrument bug this file has now produced
-      // four times. Re-measure this scenario (9 rider turns, so it is not free) and set it from what the
-      // run actually does.
-      { rider: 'yes draw it', expect: 'hold_no_repeat', note: 'ambiguous yes — asking again is correct' },
+      // ✅ RE-MEASURED 2026-08-04 (full paid suite, $0.5433) AND FLIPPED FROM WHAT THE RUN DID, not from
+      // reasoning. The turn before it asked one clean single-plan question — *"Tahoe City up to Kings
+      // Beach — is that our drive?"* — so "yes draw it" is an unambiguous yes with a plan to land on, and
+      // the model drew. That is correct behaviour, and `hold_no_repeat` was scoring it as a failure: the
+      // fourth instance of this file's instrument bug, and the only one that was PREDICTED in advance
+      // rather than discovered after the fact.
+      // ⚠ The route it drew carried `target_minutes: 120`, picked up from "actually two" and never said
+      // back to the rider — which is the record-but-do-not-recite split working exactly as intended
+      // (docs/decisions/planner-stops-asking-how-long.md).
+      { rider: 'yes draw it', expect: 'draw', note: 'a clean yes to a single plan — the either/or premise is gone' },
       { rider: 'thanks, this is great', expect: 'hold_no_repeat', note: 'wrap-up is riding now — must not re-offer or redraw' },
       { rider: 'one more thing, do you work weekends?', expect: 'hold_no_repeat', note: 'and must not say goodbye twice' },
     ],
