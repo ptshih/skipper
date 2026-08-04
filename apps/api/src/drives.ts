@@ -110,7 +110,7 @@ function toClipForm(form: string): DriveClipForm {
  *  marinas, lookouts — curated offline by `curate-places`), with coords RESOLVED + STORED at curation,
  *  so an endpoint is grounded by construction: no runtime Places call, no geocode hop. Region
  *  membership is point-in-bbox (geometry-first; `places` carries no region_id). `kind` is the humanized
- *  Google `primary_type`; `featured` floats the curator's popular subset to the top.
+ *  Google `primary_type`; `rank` floats the draft's most-asked-for subset to the top.
  *  (SUPERSEDES the interim POI-corpus join — see docs/designs/places-endpoints-spec.md.)
  *
  *  ⚠ THIS SET IS SERVER-SIDE ONLY. It IS the planner's allowlist (`plan-route.ts` is now the sole
@@ -143,18 +143,16 @@ export async function loadRegionAnchors(bbox: string | null): Promise<RegionAnch
         // unsorted list can come back permuted between requests — byte-different prefix, cache miss,
         // full-price re-read of the whole prefix, on a call that spends on every request forever.
         // A silent ~10x cost regression with nothing failing. Sort by a stable key.
-        // ⚠ `featured` LEADS, AND IT IS THE LIMIT BELOW THAT MAKES THAT LOAD-BEARING rather than
-        // cosmetic. This ORDER BY has to agree with `byAnchorRank` (./anchor-format), which the planner
-        // re-sorts by — because whichever rows this query DROPS are gone before that ranking is ever
-        // applied. Ordering by name alone meant the cap kept the 200 alphabetically-first rows, so a
-        // curator's `featured` pick whose name sorts late would be deleted from the skipper's world
-        // *because of its spelling*, silently inverting the one ranking a curator controls. Below the
-        // cap this changes nothing observable — the planner re-sorts the same SET either way, so the
-        // cached prefix is byte-identical — which is exactly why it went unnoticed.
-        // (`places.featured` is NOT NULL, so DESC has no NULLS-first hazard here.)
-        // ⚠ RANK LEADS, NULLS LAST, and the cap below is what makes that load-bearing rather than
-        // cosmetic — whichever rows this query DROPS are gone before `byAnchorRank` is ever applied. A
-        // hand-added row carries no rank and must not displace a drafted one.
+        // ⚠ RANK LEADS, AND IT IS THE LIMIT BELOW THAT MAKES THAT LOAD-BEARING rather than cosmetic.
+        // This ORDER BY has to agree with `byAnchorRank` (./anchor-format), which the planner re-sorts
+        // by — because whichever rows this query DROPS are gone before that ranking is ever applied.
+        // Ordering by name alone meant the cap kept the 200 alphabetically-first rows, so a top-ranked
+        // place whose name sorts late would be deleted from the skipper's world *because of its
+        // spelling*, silently inverting the one ranking curation controls. Below the cap this changes
+        // nothing observable — the planner re-sorts the same SET either way, so the cached prefix is
+        // byte-identical — which is exactly why it went unnoticed.
+        // ⚠ NULLS LAST, and that is not a formality: `places.rank` is NULLABLE, so a hand-added row
+        // carries no drafted rank and must not displace one the draft actually ranked.
         .orderBy(sql`${places.rank} ASC NULLS LAST`, asc(places.name), asc(places.id))
         // ⚠ And BOUND it. The set grows with every paid `curate-places` run, and an unbounded list
         // in a per-request prompt is an unbounded per-request bill. The cap is a ceiling, not a page
@@ -427,6 +425,20 @@ const RESTRICTED_ROUTE = {
  */
 export const driveLabel = (waypoints: readonly Waypoint[]): string =>
   waypoints.map((w) => w.label).join(' → ')
+
+/** The READ-side counterpart: a stored drive's display title, from the frozen `label` or — for rows
+ *  written before that column existed — rebuilt from its endpoint names.
+ *
+ *  ⚠ ONE HOME, because the two readers are the LIST CARD and the REPLAY MANIFEST: the same drive on
+ *  two screens, and a rider who sees it named one thing in their list and another when they open it
+ *  reads that as two drives. ⚠ The fallback collapses to start→end and CANNOT do better — those old
+ *  rows froze no waypoint chain, so the turnaround name `driveLabel` above exists to preserve is not
+ *  recoverable for them. That is a property of the data, not a shortcut to tidy up. */
+const storedDriveLabel = (d: {
+  label: string | null
+  startName: string | null
+  endName: string | null
+}): string => d.label ?? `${d.startName ?? 'Start'} → ${d.endName ?? 'End'}`
 
 /**
  * ONE structured cost line per BILLED Google Routes call — the Routes half of INV-11's spend visibility
@@ -1279,7 +1291,7 @@ driveRoutes.get('/', requireAccount, withFreshSession, async (c) => {
   return c.json({
     drives: rows.map((r) => ({
       driveId: r.driveId,
-      label: r.label ?? `${r.startName ?? 'Start'} → ${r.endName ?? 'End'}`,
+      label: storedDriveLabel(r),
       startName: r.startName,
       endName: r.endName,
       distanceMeters: r.distanceMeters,
@@ -1291,17 +1303,23 @@ driveRoutes.get('/', requireAccount, withFreshSession, async (c) => {
   } satisfies DriveList)
 })
 
+/** The predicate EVERY owner-scoped drive query is keyed on: this id, this owner, not soft-deleted.
+ *
+ *  ⚠ ONE EXPRESSION, and it is the same rule `ownedRef` below follows for the same reason — three
+ *  queries (the full load, the lean selection load, and the DELETE) must agree about what "the
+ *  caller's live drive" means, and the failure of disagreeing is SILENT: drop `isNull(deletedAt)` from
+ *  one of them and a deleted drive quietly becomes loadable again, or scope one by id alone and it
+ *  serves another user's row. Counting, authorising and acting from one expression is house doctrine
+ *  precisely because the second copy is the one that drifts. */
+const ownedDriveWhere = (id: string, userId: string) =>
+  and(eq(drives.id, id), eq(drives.userId, userId), isNull(drives.deletedAt))
+
 /** Owner-scoped drive load by EXPLICIT id — the shared core of loadOwnedDrive (URL param) and the
  *  POST /drives idempotent replay (body idempotencyKey). null on miss-or-not-yours-or-deleted, so we
  *  never reveal another user's drive and a soft-deleted drive reads as gone. */
 async function loadOwnedDriveById(userId: string, id: string) {
   const rows = await withRetry(
-    () =>
-      db
-        .select()
-        .from(drives)
-        .where(and(eq(drives.id, id), eq(drives.userId, userId), isNull(drives.deletedAt)))
-        .limit(1),
+    () => db.select().from(drives).where(ownedDriveWhere(id, userId)).limit(1),
     { label: 'drive.load' },
   )
   return rows[0] ?? null
@@ -1396,7 +1414,7 @@ async function manifestForStoredDrive(drive: NonNullable<Awaited<ReturnType<type
   const corpus = await corpusForSelection(drive.selection ?? [])
   return {
     driveId: drive.id,
-    label: drive.label ?? `${drive.startName ?? 'Start'} → ${drive.endName ?? 'End'}`,
+    label: storedDriveLabel(drive),
     polyline: drive.polyline,
     distanceMeters: drive.distanceMeters,
     durationSeconds: drive.durationSeconds,
@@ -1449,7 +1467,7 @@ async function loadOwnedSelection(c: Context<ApiEnv>) {
       db
         .select({ id: drives.id, selection: drives.selection })
         .from(drives)
-        .where(and(eq(drives.id, id), eq(drives.userId, userId), isNull(drives.deletedAt)))
+        .where(ownedDriveWhere(id, userId))
         .limit(1),
     { label: 'drive.loadSelection' },
   )
@@ -1510,7 +1528,7 @@ driveRoutes.delete('/:id', requireAccount, async (c) => {
       db
         .update(drives)
         .set({ deletedAt: new Date() })
-        .where(and(eq(drives.id, id), eq(drives.userId, userId), isNull(drives.deletedAt)))
+        .where(ownedDriveWhere(id, userId))
         .returning({ id: drives.id }),
     { label: 'drive.delete' },
   )

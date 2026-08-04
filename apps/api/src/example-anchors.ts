@@ -44,10 +44,11 @@ export const MIN_ANCHOR_SEPARATION_M = 8_000
  *
  *  Bounds a per-request path: `GET /regions` is anonymous and every app launch hits it. 64 rows is
  *  ~2k haversines for the seed pair plus ~4k for the greedy fill — microseconds, and memoized on top.
- *  Today's whole featured set is 16, so this binds on nothing; it exists so that a region curated to
- *  hundreds of featured places cannot quietly turn a cosmetic field into a CPU cost. ⚠ When it DOES
- *  bind it truncates in rank order, which reintroduces exactly the alphabetical bias the spread was
- *  added to remove — raise it, or narrow the pool, before letting a region grow past it. */
+ *  The eligible pool is far smaller than this today (only ranks at or under EXAMPLE_ANCHOR_MAX_RANK
+ *  qualify), so it binds on nothing; it exists so that a region curated to hundreds of top-ranked
+ *  places cannot quietly turn a cosmetic field into a CPU cost. ⚠ When it DOES bind it truncates in
+ *  rank order, which reintroduces exactly the alphabetical bias the spread was added to remove —
+ *  raise it, or narrow the pool, before letting a region grow past it. */
 export const SPREAD_POOL_LIMIT = 64
 
 /**
@@ -70,10 +71,11 @@ const EXAMPLE_ANCHOR_MAX_RANK = 3
  *  future tightening of the planner's spend cap silently starves the example asks of a multi-region
  *  deployment — two different failure modes deserve two numbers.
  *
- *  Safe to truncate because the query orders `featured DESC` FIRST: every curated-popular row across
- *  every region is fetched before any un-featured one, so a truncation can only trim a tail that was
- *  never going to be published. Far above the curated set today (tens of rows); revisit if
- *  `SELECT count(*) FROM places WHERE endpoint_eligible` approaches it. */
+ *  Safe to truncate because the query orders `rank` ASC (NULLS LAST) FIRST: every top-ranked row
+ *  across every region is fetched before any lower-ranked one, so a truncation can only trim a tail
+ *  that was never going to be published — the pool gate below only admits ranks at or under
+ *  EXAMPLE_ANCHOR_MAX_RANK anyway. Far above the curated set today (tens of rows); revisit if
+ *  `SELECT count(*) FROM places` approaches it. */
 export const EXAMPLE_ANCHOR_SCAN_LIMIT = 500
 
 /** A region as this module needs it: an id and its bbox string. No `displayName` — the caller projects
@@ -103,9 +105,9 @@ export interface ExampleAnchorPlace {
  *  before E, with no curator intending anything. And the clustering was never merely a hazard: the
  *  pre-existing pair was 600 m apart (see MIN_ANCHOR_SEPARATION_M).
  *
- *  What it is FOR now: `featured` still decides POOL MEMBERSHIP (below), and name/id still break ties
- *  so the spread is deterministic — same rows in, same names out, on every Cloud Run instance. It just
- *  no longer decides what a rider READS. */
+ *  What it is FOR now: `rank` still decides POOL MEMBERSHIP (below, via EXAMPLE_ANCHOR_MAX_RANK), and
+ *  name/id still break ties so the spread is deterministic — same rows in, same names out, on every
+ *  Cloud Run instance. It just no longer decides what a rider READS. */
 const byRank = byAnchorRank<ExampleAnchorPlace>
 
 /**
@@ -196,8 +198,8 @@ export interface RegionAnchors {
 /**
  * regionId → its display names and whether it is plannable.
  *
- * SELECTION, in one line: contained → eligible (`featured` if any, else all) → name-deduped →
- * farthest-point spread with a separation floor. `featured` gates membership and geometry orders the
+ * SELECTION, in one line: contained → eligible (top-ranked if any, else all) → name-deduped →
+ * farthest-point spread with a separation floor. `rank` gates membership and geometry orders the
  * result; NOTHING here is alphabetical any more, which is the whole point (see `byRank`).
  *
  * ⚠ THE RETURNED ORDER IS LOAD-BEARING AND THE CLIENT ROTATES THROUGH IT. It spends three names per
@@ -218,8 +220,8 @@ export interface RegionAnchors {
  * there rather than a degradation.
  *
  * ⚠ `ready` INHERITS THE SCAN CAP and that is the one way it can lie. The handler's single query is
- * `.limit(EXAMPLE_ANCHOR_SCAN_LIMIT)` ordered `featured DESC` first, so a region whose ONLY curated
- * endpoints sit in the un-featured tail beyond that limit would be reported not-ready and lose its
+ * `.limit(EXAMPLE_ANCHOR_SCAN_LIMIT)` ordered by `rank` first, so a region whose ONLY curated
+ * endpoints sit in the low-ranked tail beyond that limit would be reported not-ready and lose its
  * composer. Harmless while the whole curated set is tens of rows; the constant's own note already says
  * to revisit as it approaches the limit, and this is now a second reason to.
  */
@@ -266,10 +268,10 @@ export function pickExampleAnchors(
     // `featured` until 2026-08-04; a rank says the same thing at a grain a boolean could not.
     // Curator judgement decides who is ELIGIBLE to be an example (spread alone would return a region's
     // most obscure corners, measured); geometry decides which of the eligible actually appear. The
-    // fallback to the whole contained set is not tidiness: ./anchor-format's rule that "featured
-    // ORDERS, it never FILTERS" was protecting a real case — a region nobody has flagged yet must not
-    // lose its example asks entirely, which is what a bare `.filter(featured)` would do to the next
-    // region curated.
+    // fallback to the whole contained set is not tidiness: ./anchor-format's rule that "`rank` ORDERS,
+    // it never FILTERS" was protecting a real case — a region whose draft carried no ranks must not
+    // lose its example asks entirely, which is what a bare rank filter would do to the next region
+    // curated.
     const flagged = contained.filter((p) => p.rank != null && p.rank <= EXAMPLE_ANCHOR_MAX_RANK)
     const eligible = flagged.length > 0 ? flagged : contained
 

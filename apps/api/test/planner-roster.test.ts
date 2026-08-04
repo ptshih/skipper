@@ -27,10 +27,12 @@ import { buildRosterBlock, type PlannerAnchor } from '../src/planner'
 
 const REGION = 'Lake Tahoe'
 
-/** ⚠ `featured` is ALWAYS EXPLICIT here, matching what production hands the builder: `loadRegionAnchors`
- *  projects a NOT NULL column through `regionAnchor`'s `.default(false)`, so every real row carries a
- *  real boolean. Do not "simplify" a fixture by omitting it — see the note under the permutation tests
- *  for what a MIXED undefined/false list does to this comparator. */
+/** ⚠ `rank` is ALWAYS EXPLICIT here, matching what production hands the builder: `loadRegionAnchors`
+ *  projects `places.rank` on every row, and that column is NULLABLE — so an unranked row arrives as a
+ *  real `null`, never as an absent key. Defaulting to `null` rather than omitting is the point: the
+ *  comparator folds `null` and `undefined` together to +Infinity, so a fixture that OMITTED the field
+ *  would still pass while proving nothing about the null the database actually sends. See the note
+ *  under the permutation tests for what a MIXED undefined/null list does to this comparator. */
 const anchor = (name: string, id: string, rank: number | null = null): PlannerAnchor => ({ id, name, rank })
 
 /** The row format, spelled out on the READING side on purpose. It is the one thing this file duplicates

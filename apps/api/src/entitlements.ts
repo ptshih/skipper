@@ -1,6 +1,8 @@
 // Freemium entitlements middleware — resolves the Better Auth session per request
 // and stashes the derived tier on the Hono context. The pure tier math lives in
-// ./tiers (unit-testable without constructing the auth instance).
+// @skipper/shared (`tierOf`/`isAdmin`) — unit-testable without constructing the auth
+// instance, and shared with the CLIENT, which is the point: the app's "am I signed in"
+// check and this server gate read the same function rather than two lookalikes.
 
 import type { MiddlewareHandler } from 'hono'
 import type { AccessTier } from '@skipper/shared'

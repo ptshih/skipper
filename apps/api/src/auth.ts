@@ -388,8 +388,8 @@ function createAuth() {
       }),
       // Admin roles. Adds user.role (plugin sets 'user' on signup; server-set input:false) + ban/impersonate columns
       // and the /admin/* management endpoints (guarded — only an admin role can call them). `role==='admin'`
-      // is ALSO the region-release-gate preview check (an admin hears staged content in-app — `isAdmin` in
-      // ./tiers). Defaults: defaultRole='user', adminRoles=['admin']. The first admin is bootstrapped by
+      // is ALSO the region-release-gate preview check (an admin hears staged content in-app — `isAdmin`
+      // in @skipper/shared). Defaults: defaultRole='user', adminRoles=['admin']. The first admin is bootstrapped by
       // setting role='admin' directly in the DB (no admin exists yet to call set-role). See region-release-gate.
       admin(),
     ],

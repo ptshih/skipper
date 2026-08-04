@@ -163,8 +163,9 @@ app.get('/regions', async (c) => {
   //
   // A few curated endpoint NAMES per region (./example-anchors). ONE scan for ALL regions, bucketed by
   // point-in-bbox in JS — `places` carries no region_id (geometry-first), and a per-region query would
-  // be N+1 on an anonymous route every app launch hits. `featured DESC` first is what makes the scan
-  // limit safe: a truncation can only ever trim a tail we were not going to publish.
+  // be N+1 on an anonymous route every app launch hits. `rank` ASC first is what makes the scan limit
+  // safe: a truncation can only ever trim the least-asked-for tail, which no region was going to
+  // publish anyway (the example pool is gated at EXAMPLE_ANCHOR_MAX_RANK).
   const [rows, anchorRows] = await Promise.all([
     withRetry(
       () =>
@@ -305,6 +306,16 @@ app.route('/drives/plan', planRoutes)
 // would re-wall the whole funnel, and test/drive-access.test.ts is what catches it.
 app.route('/drives', driveRoutes)
 
+/** The soft 404 both of `GET /sample`'s miss paths answer with. ⚠ ONE COPY BECAUSE IT IS ONE ANSWER:
+ *  "the QID is unset" and "the QID resolves to nothing released" are two different OPERATOR facts and
+ *  the same RIDER fact, and the rider must not be able to tell them apart — a message that
+ *  distinguished them would report whether a given QID exists in the corpus. Deliberately vague and
+ *  retryable for that reason, not out of politeness. */
+const NO_SAMPLE = {
+  error: 'no_sample',
+  message: 'No sample is cued up just yet. Check back soon.',
+} as const
+
 // GET /sample — the anonymous "taste" for a rider OUTSIDE any coverage. The corpus is Tahoe-only, so
 // a first-timer (or an Apple reviewer in Cupertino) can talk to the Skipper and still never reach a
 // road he has stories for; this serves ONE curated, always-iconic clip so they hear him regardless of
@@ -323,9 +334,7 @@ app.get('/sample', async (c) => {
   const qid = process.env.SAMPLE_NARRATION_QID
   // Unset config is an OPERATOR miss, not a rider error — but the rider still gets a clean, retryable
   // surface rather than a 500. Setting the QID is an explicit go-live gate (see the submission guide).
-  if (!qid) {
-    return c.json({ error: 'no_sample', message: 'No sample is cued up just yet. Check back soon.' }, 404)
-  }
+  if (!qid) return c.json(NO_SAMPLE, 404)
   const rows = await withRetry(
     () =>
       db
@@ -344,9 +353,7 @@ app.get('/sample', async (c) => {
     { label: 'sample' },
   )
   const row = rows[0]
-  if (!row) {
-    return c.json({ error: 'no_sample', message: 'No sample is cued up just yet. Check back soon.' }, 404)
-  }
+  if (!row) return c.json(NO_SAMPLE, 404)
   try {
     return c.json({
       qid: row.qid,

@@ -6,7 +6,8 @@
 // 500 there would needlessly take down the open funnel for everyone, signed-in or not.
 //
 // Auth-free + generic on purpose: the fail-open path is unit-tested without constructing the
-// Better Auth instance (which needs BETTER_AUTH_SECRET at module load) — mirrors tiers.ts.
+// Better Auth instance (which needs BETTER_AUTH_SECRET at module load) — the same reason the tier
+// math itself sits in @skipper/shared rather than next to the auth config.
 
 import { withRetry } from './retry'
 
