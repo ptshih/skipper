@@ -24,7 +24,7 @@
 //
 //   preview:  dotenvx run -f .env.development -- bun packages/studio/src/snap-speakable-anchors.ts
 //   apply:    dotenvx run -f .env.development -- bun packages/studio/src/snap-speakable-anchors.ts --apply
-//   --region <slug>  scope to a region's bbox (default: lake-tahoe).
+//   --region <slug>  scope to a region's bbox (REQUIRED — no default).
 //   --force          re-snap POIs that already carry an anchor (OVERWRITES admin corrections too) — a
 //                    clean re-baseline. Default: only POIs with no speakable anchor yet.
 //   --class-only     BACKFILL `speakable_road_class` for POIs that already have an anchor, WITHOUT
@@ -40,7 +40,6 @@ import { announce, parseFlags } from './pipeline/ops'
 import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
-import { DEFAULT_REGION_SLUG } from './config'
 
 const OVERPASS = 'https://overpass-api.de/api/interpreter'
 const UA = 'Skipper/0.1 (https://github.com/ptshih/skipper; hello@skipper.fm) road-snap'
@@ -192,7 +191,7 @@ async function main(): Promise<void> {
   if (classOnly) console.log('(class-only: recording each EXISTING anchor\'s road class; anchors are NOT moved)\n')
   if (force) console.log('(force: re-snapping POIs that already carry an anchor — OVERWRITES admin corrections)\n')
 
-  const region = await resolveRegion(flags.value('region') ?? DEFAULT_REGION_SLUG)
+  const region = await resolveRegion(flags.value('region'))
   const bbox = requireRegionBbox(region)
   console.log(`Region: ${region.displayName} (${region.slug})`)
 

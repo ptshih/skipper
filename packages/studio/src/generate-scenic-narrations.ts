@@ -41,7 +41,7 @@ import { and, eq, isNull, isNotNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, pois } from '@skipper/db/schema'
 import { announce, assertReady, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
-import { resolveRegion, requireRegionBbox } from './pipeline/region'
+import { requireRegionBbox, requireRegionKey, resolveRegion } from './pipeline/region'
 import { regionLabel } from './pipeline/geo'
 import { gateNarration } from './pipeline/gate'
 import { openingAngleFor, closingAngleFor, type NarrationRequest } from './pipeline/narrate'
@@ -62,7 +62,6 @@ import { ttsStyleFor } from './models'
 import { llmSpendLines, llmSpentUsd } from '@skipper/shared'
 import { TTS_ESTIMATE_SAFETY, estimateTtsUsd } from './pipeline/spend'
 import {
-  DEFAULT_REGION_SLUG,
   GROUNDING_EVAL,
   NARRATION_CONCURRENCY,
   TTS_CONCURRENCY,
@@ -128,7 +127,8 @@ announce({
   apply,
 })
 if (apply) assertReady(['r2', 'tts'])
-const scenicTargetRegion = flags.value('region') ?? DEFAULT_REGION_SLUG
+// ⚠ --region is REQUIRED, and this line is where that fails — before runJob opens a row or main() spends.
+const scenicTargetRegion = requireRegionKey(flags.value('region'))
 
 async function main(): Promise<void> {
   const limit = numericFlag(flags, 'limit', { fallback: 3 })

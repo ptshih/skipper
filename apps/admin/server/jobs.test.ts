@@ -24,7 +24,7 @@ describe('buildJobArgs — enrich_pois (the corpus enrich op)', () => {
   // makes zero model calls. That guarantee lives in enrich-pois.ts's `if (!apply) return` BEFORE the
   // buildCorpusFactSheet loop (the script self-executes on import, so it can't be unit-imported to assert here).
   test('dry run by default: no --apply, spends:false (admin labels it free; script early-returns before any model call)', () => {
-    const r = buildJobArgs({ kind: 'enrich_pois' })
+    const r = buildJobArgs({ kind: 'enrich_pois', region: 'lake-tahoe' })
     expect(r.dryRun).toBe(true)
     expect(r.spends).toBe(false)
     expect(r.args).not.toContain('--apply')
@@ -32,7 +32,7 @@ describe('buildJobArgs — enrich_pois (the corpus enrich op)', () => {
   })
 
   test('--apply SPENDS (Anthropic) → confirm gate', () => {
-    const r = buildJobArgs({ kind: 'enrich_pois', apply: true })
+    const r = buildJobArgs({ kind: 'enrich_pois', region: 'lake-tahoe', apply: true })
     expect(r.dryRun).toBe(false)
     expect(r.spends).toBe(true)
     expect(r.args).toContain('--apply')
@@ -97,7 +97,7 @@ describe('buildJobArgs — spend classification across ALL kinds (the confirm-ga
 
   test('FREE kinds never spend (no confirm gate), with or without --apply', () => {
     for (const apply of [false, true]) {
-      expect(buildJobArgs({ kind: 'discover_pois', apply }).spends).toBe(false)
+      expect(buildJobArgs({ kind: 'discover_pois', region: 'lake-tahoe', apply }).spends).toBe(false)
       expect(buildJobArgs({ kind: 'refetch_facts', poiId: 'p1', apply }).spends).toBe(false)
     }
   })
@@ -126,10 +126,10 @@ describe('buildJobArgs — spend classification across ALL kinds (the confirm-ga
 
   test('PAID kinds spend IFF --apply (dry run = free preview; apply = confirm-gated spend)', () => {
     const paid = [
-      { kind: 'enrich_pois' },
-      { kind: 'generate_narrations' },
-      { kind: 'curate_places' },
-      { kind: 'offline_audit' },
+      { kind: 'enrich_pois', region: 'lake-tahoe' },
+      { kind: 'generate_narrations', region: 'lake-tahoe' },
+      { kind: 'curate_places', region: 'lake-tahoe' },
+      { kind: 'offline_audit', region: 'lake-tahoe' },
       { kind: 'sweep_orphans' },
       { kind: 'resynth_narration', poiId: 'p1' },
     ]
@@ -174,26 +174,26 @@ describe('buildJobArgs — spend classification across ALL kinds (the confirm-ga
 
 describe('buildJobArgs — numeric flag validation (the server is the trust boundary — audit #7)', () => {
   test('a valid positive limit / max-cost is threaded', () => {
-    const r = buildJobArgs({ kind: 'enrich_pois', limit: 5, maxCostUsd: 12.5 })
+    const r = buildJobArgs({ kind: 'enrich_pois', region: 'lake-tahoe', limit: 5, maxCostUsd: 12.5 })
     expect(r.args).toContain('--limit=5')
     expect(r.args).toContain('--max-cost=12.5')
   })
 
   test('REJECTS a non-numeric max-cost instead of emitting --max-cost=NaN (which would disable the cap)', () => {
-    expect(() => buildJobArgs({ kind: 'enrich_pois', maxCostUsd: 'abc' })).toThrow()
-    expect(() => buildJobArgs({ kind: 'generate_narrations', maxCostUsd: 'lots' })).toThrow()
+    expect(() => buildJobArgs({ kind: 'enrich_pois', region: 'lake-tahoe', maxCostUsd: 'abc' })).toThrow()
+    expect(() => buildJobArgs({ kind: 'generate_narrations', region: 'lake-tahoe', maxCostUsd: 'lots' })).toThrow()
   })
 
   test('REJECTS a negative / zero-or-less limit or max-cost', () => {
-    expect(() => buildJobArgs({ kind: 'enrich_pois', maxCostUsd: -5 })).toThrow()
-    expect(() => buildJobArgs({ kind: 'offline_audit', limit: -1 })).toThrow()
+    expect(() => buildJobArgs({ kind: 'enrich_pois', region: 'lake-tahoe', maxCostUsd: -5 })).toThrow()
+    expect(() => buildJobArgs({ kind: 'offline_audit', region: 'lake-tahoe', limit: -1 })).toThrow()
   })
 
   test('an absent (falsy/0) numeric flag stays a no-op — no flag emitted, no throw', () => {
-    const r = buildJobArgs({ kind: 'enrich_pois' })
+    const r = buildJobArgs({ kind: 'enrich_pois', region: 'lake-tahoe' })
     expect(r.args.some((a) => a.startsWith('--limit'))).toBe(false)
     expect(r.args.some((a) => a.startsWith('--max-cost'))).toBe(false)
-    expect(() => buildJobArgs({ kind: 'enrich_pois', limit: 0, maxCostUsd: 0 })).not.toThrow()
+    expect(() => buildJobArgs({ kind: 'enrich_pois', region: 'lake-tahoe', limit: 0, maxCostUsd: 0 })).not.toThrow()
   })
 })
 
@@ -300,9 +300,26 @@ describe('buildJobArgs — targetId is per-region, aligned with the studio begin
     expect(r.args.join(' ')).toContain('--include-ids=a,b')
   })
 
-  test('a region-less run falls back to the default region slug (= studio DEFAULT_REGION_SLUG)', () => {
-    expect(buildJobArgs({ kind: 'generate_narrations' }).targetId).toBe('lake-tahoe')
-    expect(buildJobArgs({ kind: 'discover_pois' }).targetId).toBe('lake-tahoe')
+  // ⚠ REPLACES "a region-less run falls back to the default region slug" (founder, 2026-08-03). The
+  // fallback was 'lake-tahoe' hardcoded here AND in studio's config.ts — two copies, one comment
+  // holding them together — and once a second region existed it meant a run typed for Yosemite would
+  // bill Tahoe's corpus and settle green. Both copies are deleted; a region-less run is now a 400 on
+  // this side and a thrown `requireRegionKey` on the CLI side.
+  test('a region-less run is REJECTED, never defaulted to a region nobody named', () => {
+    expect(() => buildJobArgs({ kind: 'generate_narrations' })).toThrow(/region is required/)
+    expect(() => buildJobArgs({ kind: 'discover_pois' })).toThrow(/region is required/)
+    expect(() => buildJobArgs({ kind: 'curate_places' })).toThrow(/region is required/)
+    expect(() => buildJobArgs({ kind: 'generate_scenic_narrations' })).toThrow(/region is required/)
+    expect(() => buildJobArgs({ kind: 'generate_cluster_narrations' })).toThrow(/region is required/)
+  })
+
+  // The one exemption, and it is the same one the CLIs make: a hand-picked id list already names its
+  // rows, spans no single region, and locks on its SELECTION instead (see `selectionLock`).
+  test('an explicit-id run needs no region — it locks on its selection', () => {
+    expect(() => buildJobArgs({ kind: 'generate_narrations', includeIds: ['a', 'b'] })).not.toThrow()
+    expect(() =>
+      buildJobArgs({ kind: 'generate_cluster_narrations', includeIds: ['c1'] }),
+    ).not.toThrow()
   })
 
   test('discover_pois keys on the region; sweep_orphans matches its script target', () => {
@@ -310,8 +327,7 @@ describe('buildJobArgs — targetId is per-region, aligned with the studio begin
     expect(buildJobArgs({ kind: 'sweep_orphans' }).targetId).toBe('narration') // audit #11 (was 'roam')
   })
 
-  test('curate_places keys on the region (default lake-tahoe) and threads model/target/max-cost', () => {
-    expect(buildJobArgs({ kind: 'curate_places' }).targetId).toBe('lake-tahoe')
+  test('curate_places keys on the region (required) and threads model/target/max-cost', () => {
     expect(buildJobArgs({ kind: 'curate_places', region: 'yosemite' }).targetId).toBe('yosemite')
     const r = buildJobArgs({ kind: 'curate_places', apply: true, region: 'lake-tahoe', model: 'opus', target: 24, maxCostUsd: 2 })
     expect(r.args).toContain('--region=lake-tahoe')

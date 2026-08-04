@@ -3,7 +3,7 @@
 // This populates the SHARED `pois` corpus for a region's bbox — the one place every DRIVE draws
 // candidates from (a poi belongs to no single consumer; it is the shared facts cache — see CLAUDE.md
 // principle #1 + docs/decisions/region-corpus-discovery.md). It discovers every Wikidata-pinned
-// place in a raw bbox (the whole Tahoe–Reno corridor by default), prose-joins Wikipedia, tiers
+// place in the region's raw discovery bbox, prose-joins Wikipedia, tiers
 // them, and upserts the STORY + SCENIC tiers into `pois` (facts for story, bare typed pins for
 // scenic — the story tier is what a long-form telling needs; a scenic pin gets NO telling today, the
 // short passing call-out that would have voiced it was cut, docs/decisions/cut-wave-form.md — they are
@@ -16,9 +16,9 @@
 // Discovery is free (WDQS + MediaWiki, no LLM/TTS spend).
 //
 // Usage:
-//   dotenvx run -f .env.development -- bun packages/studio/src/discover-pois.ts
-//   dotenvx run -f .env.development -- bun packages/studio/src/discover-pois.ts --apply
-//   ... --region <slug>                  sweep a region's discovery bbox (default: lake-tahoe)
+//   dotenvx run -f .env.development -- bun packages/studio/src/discover-pois.ts --region <slug>
+//   ... --apply                          write the sweep (previews without it)
+//   ⚠ --region is REQUIRED (no default) and the region must have a discovery bbox set.
 
 import {
   discoverWikidataBbox,
@@ -35,21 +35,12 @@ import { colocationReport, findColocations } from './pipeline/colocation'
 import { mapLimit } from './pipeline/concurrency'
 import { runJob } from './pipeline/job-progress'
 import { sleep } from './pipeline/http'
-import { resolveRegion } from './pipeline/region'
-import { DEFAULT_REGION_SLUG, TAHOE_RENO_BBOX } from './config'
+import { requireRegionBbox, requireRegionKey, resolveRegion } from './pipeline/region'
 import type { LngLat } from './pipeline/geo'
 
 /** DB-write fan-out for the corpus upserts. Matches classify-treatments' DB pool — these are Neon
  *  round trips, a different resource from the LLM/TTS knobs in config.ts, so it lives with them. */
 const POI_UPSERT_CONCURRENCY = 8
-
-/** Tahoe–Reno corridor: Meyers/South Lake Tahoe west to Homewood/Sugar Pine Point,
- *  north to Kings Beach/Incline, east through Spooner/Zephyr Cove → Carson City →
- *  Virginia City → Reno/Sparks. [lng, lat] corners — from the shared TAHOE_RENO_BBOX. */
-const TAHOE_RENO_CORRIDOR: { sw: LngLat; ne: LngLat } = {
-  sw: [TAHOE_RENO_BBOX.swLng, TAHOE_RENO_BBOX.swLat],
-  ne: [TAHOE_RENO_BBOX.neLng, TAHOE_RENO_BBOX.neLat],
-}
 
 /** Split a bbox into a lngSteps × latSteps grid (WDQS etiquette: modest result sets per call). */
 export function gridBoxes(
@@ -74,7 +65,9 @@ export function gridBoxes(
 
 const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region'] })
 const apply = flags.has('apply')
-const regionKey = flags.value('region') ?? DEFAULT_REGION_SLUG
+// ⚠ Resolved at PARSE time, before `runJob` opens a row: a region-less sweep is a mistyped command,
+// not a job worth recording (and `targetId` below is this very value — the per-region in-flight lock).
+const regionKey = requireRegionKey(flags.value('region'))
 
 announce({ tool: 'discover-pois', blast: ['MUTATES DB'], apply })
 
@@ -83,17 +76,18 @@ async function main(): Promise<void> {
   await ensurePoiOverridesLoaded()
 
   // Resolve --region → its discovery bbox (the geometry-first input; see pipeline/region.ts).
-  // A region with no bbox set yet falls back to the built-in Tahoe basin so a first sweep still
-  // has somewhere to look.
+  // ⚠ A region with no bbox is a HARD ERROR, not a fallback (founder, 2026-08-03). It used to sweep
+  // a built-in Tahoe corridor, which meant `discover-pois --region <a new region>` quietly swept
+  // TAHOE and wrote its POIs — and since a poi's region is point-in-bbox, not a stored FK, none of
+  // them would even land in the region the operator named. A sweep with nowhere to look is a missing
+  // setup step (set the bbox in the admin Regions view), and enrich/generate have always said so.
   const region = await resolveRegion(regionKey)
-  const box: { sw: LngLat; ne: LngLat } = region.bbox
-    ? { sw: [region.bbox.swLng, region.bbox.swLat], ne: [region.bbox.neLng, region.bbox.neLat] }
-    : TAHOE_RENO_CORRIDOR
-  console.log(
-    `Region: ${region.displayName} (${region.slug})` +
-      (region.bbox ? '' : ' — no discovery bbox set, using the Tahoe basin default') +
-      '\n',
-  )
+  const bbox = requireRegionBbox(region)
+  const box: { sw: LngLat; ne: LngLat } = {
+    sw: [bbox.swLng, bbox.swLat],
+    ne: [bbox.neLng, bbox.neLat],
+  }
+  console.log(`Region: ${region.displayName} (${region.slug})\n`)
 
   // 5×7 grid over the corridor (~11×11 km cells — WDQS chokes on wide-area boxes; the
   // original 2×3 attempt timed out on a mid-lake cell), merged by qid, then ONE same-place

@@ -229,11 +229,10 @@ export const NARRATION_FALLBACK_CHARS = 4_000
  *  TTS_ESTIMATE_SAFETY on top). */
 export const WORDS_PER_SECOND = 2.5
 
-/** The default region the corpus CLIs (discover/enrich/generate) scope to when `--region` is omitted.
- *  Today the only launch region; the CLIs resolve it to its discovery bbox via `resolveRegion`. */
-export const DEFAULT_REGION_SLUG = 'lake-tahoe' as const
-
-/** The Tahoe–Reno corridor fallback bbox — used ONLY by `discover-pois` when the resolved region has
- *  no `bbox` set yet (the sweep needs a box to query WDQS). Mirrors the `lake-tahoe` region's
- *  seeded bbox; enrich/generate REQUIRE a real region bbox instead (no silent fallback). */
-export const TAHOE_RENO_BBOX = { swLng: -120.25, swLat: 38.86, neLng: -119.55, neLat: 39.65 } as const
+// ⚠ `DEFAULT_REGION_SLUG` and `TAHOE_RENO_BBOX` were DELETED here on 2026-08-03 (founder call).
+// Both were "when the operator didn't say, assume Tahoe" — correct while Tahoe was the only region,
+// and a way to spend real money on the wrong corpus once a second one existed. `--region` is now
+// REQUIRED by every corpus CLI (`requireRegionKey`, pipeline/region.ts) and a region with no
+// discovery bbox is a hard error in `discover-pois` exactly as it already was in enrich/generate.
+// Don't reintroduce either: a default region is indistinguishable, at the call site, from a region
+// the operator chose.

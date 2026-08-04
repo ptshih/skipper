@@ -34,7 +34,7 @@
 //
 //   preview:  dotenvx run -f .env.development -- bun packages/studio/src/classify-treatments.ts
 //   apply:    dotenvx run -f .env.development -- bun packages/studio/src/classify-treatments.ts --apply
-//   --region <slug>   scope to a region's bbox (default: lake-tahoe)
+//   --region <slug>   scope to a region's bbox (REQUIRED — no default)
 //   --radius <m>      grouping radius around each anchor (default 600)
 //   --clear           on --apply, only CLEAR the grouping in scope (the undo); makes no model calls
 //   --force-regroup   re-baseline even when FUSED tellings exist for the clusters in scope. Without it
@@ -51,7 +51,7 @@ import { resolveRegion, requireRegionBbox } from './pipeline/region'
 import { leaderGroups, mergeDuplicateGroups, metersBetween, pickSubject, type ClassifiedGroup } from './pipeline/clustering'
 import { isContainer } from './pipeline/containment'
 import { getAnthropic, JUDGMENT_MODEL } from './models'
-import { DEFAULT_REGION_SLUG, NARRATION_CONCURRENCY } from './config'
+import { NARRATION_CONCURRENCY } from './config'
 
 /** Default grouping radius. ⚠ NOT derived — 600 m produces sane group diameters (leader grouping bounds
  *  them to 2R) but the honest radius is an open question in the design doc §8. Flag-tunable so it can be
@@ -175,7 +175,7 @@ async function main(): Promise<void> {
   const radiusM = numericFlag(flags, 'radius', { fallback: DEFAULT_RADIUS_M })
   announce({ tool: 'classify-treatments', blast: clearOnly ? ['MUTATES DB'] : ['SPENDS $', 'MUTATES DB'], apply })
 
-  const region = await resolveRegion(flags.value('region') ?? DEFAULT_REGION_SLUG)
+  const region = await resolveRegion(flags.value('region'))
   const bbox = requireRegionBbox(region)
   console.log(`Region: ${region.displayName} (${region.slug})  ·  radius ${radiusM} m`)
 

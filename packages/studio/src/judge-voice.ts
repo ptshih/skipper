@@ -29,7 +29,7 @@
 // Prefer --out over a shell redirect: the SOP preamble prints on stdout, so `> file.md` captures it too.
 //   dotenvx run -f .env.development -- bun packages/studio/src/judge-voice.ts --out=/tmp/voice.md
 //   ... --apply                  also run the Opus charm judge over the writing (SPENDS $)
-//   ... --region <slug>          a region's clips (default: config.ts's DEFAULT_REGION_SLUG → its bbox)
+//   ... --region <slug>          a region's clips (REQUIRED unless --include-ids; → its bbox)
 //   ... --include-ids a,b,c      EXACTLY these subjects — poi ids and/or cluster ids
 //   ... --query <substr>         narrow to names containing <substr>
 //   ... --limit N                at most N clips (default: the judge batch max, below)
@@ -40,9 +40,9 @@ import { narrations, poiClusters, pois } from '@skipper/db/schema'
 import { MODEL_PRICING } from '@skipper/shared'
 import { announce, numericFlag, parseFlags } from './pipeline/ops'
 import { clusterIdsInBbox, poiIdsInBbox } from './pipeline/diversity-context'
-import { requireRegionBbox, resolveRegion } from './pipeline/region'
+import { requireRegionBbox, requireRegionKey, resolveRegion } from './pipeline/region'
 import { withRetry } from './pipeline/http'
-import { ANTHROPIC_READY, DEFAULT_REGION_SLUG } from './config'
+import { ANTHROPIC_READY } from './config'
 import { JUDGMENT_MODEL } from './models'
 import { presignGet } from './pipeline/storage'
 import { judgeCharm, type CharmVerdict } from './eval/charm'
@@ -98,6 +98,10 @@ const limit = numericFlag(flags, 'limit', { fallback: JUDGE_BATCH_MAX })
 const isExplicit = includeIds.length > 0 && !regionRaw && !query
 if (includeIds.length > 0 && !isExplicit)
   console.error('⚠ --include-ids is IGNORED alongside --region/--query — drop those to select exactly those ids.')
+// ⚠ FAIL HERE, before anything is announced or billed. A FILTER run with no --region used to mean
+// "judge lake-tahoe" — judging the wrong region's clips and charging for it. An EXPLICIT run names
+// its clips and needs no region.
+if (!isExplicit) requireRegionKey(regionRaw)
 
 announce({ tool: 'judge-voice', blast: apply ? ['SPENDS $'] : ['READ-ONLY'], apply })
 
@@ -205,7 +209,7 @@ function buildReport(clips: Clip[], scope: string, verdict: CharmVerdict | null)
  * whether any MEMBER poi sits in the box (`poi_clusters` stores no coordinates, deliberately).
  */
 async function loadClips(): Promise<Clip[]> {
-  const region = isExplicit ? null : await resolveRegion(regionRaw ?? DEFAULT_REGION_SLUG)
+  const region = isExplicit ? null : await resolveRegion(regionRaw)
   const bbox = region ? requireRegionBbox(region) : null
   const scope = isExplicit
     ? // --include-ids takes SUBJECT ids, so a cluster id works the same as a poi id — the operator
@@ -260,7 +264,7 @@ async function main() {
   const all = await loadClips()
   const clips = all.slice(0, limit)
   const scope = [
-    isExplicit ? `${includeIds.length} hand-picked` : `region=${regionRaw ?? DEFAULT_REGION_SLUG}`,
+    isExplicit ? `${includeIds.length} hand-picked` : `region=${requireRegionKey(regionRaw)}`,
     query ? `query="${query}"` : null,
   ]
     .filter(Boolean)

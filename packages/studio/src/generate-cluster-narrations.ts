@@ -16,7 +16,7 @@
 //
 //   dotenvx run -f .env.development -- bun packages/studio/src/generate-cluster-narrations.ts --limit 1
 //   ... --apply             synthesize + upload + upsert (the first irreversible step)
-//   --region <slug>         scope to a region's bbox via its members (default: lake-tahoe)
+//   --region <slug>         scope to a region's bbox via its members (REQUIRED unless --include-ids)
 //   --limit N               only the first N generatable clusters, WIDEST first (cost control)
 //   --query <substr>        narrow to cluster titles containing <substr>
 //   --include-ids a,b,c     regenerate EXACTLY these cluster ids (skips the region scope + --limit;
@@ -29,7 +29,7 @@ import { db } from '@skipper/db'
 import { narrations, poiClusters } from '@skipper/db/schema'
 import type { FactSheetEntry } from '@skipper/db/schema'
 import { announce, assertReady, day, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
-import { resolveRegion, requireRegionBbox } from './pipeline/region'
+import { requireRegionBbox, requireRegionKey, resolveRegion } from './pipeline/region'
 import { regionLabel } from './pipeline/geo'
 import { synthesizeWithTailRetake, type TailOutcome } from './pipeline/tts'
 import type { LoudnessOutcome } from './pipeline/loudnorm'
@@ -56,7 +56,6 @@ import { recordEvalRun, type ClipIdentity } from './eval/record'
 import { llmSpendLines, llmSpentUsd, unpricedModels } from '@skipper/shared'
 import { TTS_ESTIMATE_SAFETY, estimateTtsUsd } from './pipeline/spend'
 import {
-  DEFAULT_REGION_SLUG,
   GROUNDING_EVAL,
   NARRATION_CONCURRENCY,
   TTS_CONCURRENCY,
@@ -115,9 +114,10 @@ const maxCostUsd = maxCostFlag(flags)
 announce({ tool: 'generate-cluster-narrations', blast: ['SPENDS $', 'MUTATES DB'], apply })
 if (apply) assertReady(['r2', 'tts'])
 // A targeted --include-ids run has no region scope, so it keys on nothing and surfaces as "All".
+// ⚠ Every other run REQUIRES --region, and this line is where that fails — before main() spends.
 const clusterTargetRegion = (flags.value('include-ids') ?? '').trim()
   ? undefined
-  : (flags.value('region') ?? DEFAULT_REGION_SLUG)
+  : requireRegionKey(flags.value('region'))
 
 async function main(): Promise<void> {
   // Same first move as the solo generator. This CLI never loaded overrides at all, which made it the
@@ -134,13 +134,13 @@ async function main(): Promise<void> {
   const force = flags.has('force') || includeIds.length > 0
 
   // ⚠ An explicit id list spans NO single region, so it must not resolve one. This used to fall back to
-  // DEFAULT_REGION_SLUG: a targeted re-run of clusters anywhere in the corpus scored its diversity lint
+  // a default region slug: a targeted re-run of clusters anywhere in the corpus scored its diversity lint
   // against lake-tahoe's tellings and filed its eval_run under lake-tahoe. The job row already went
   // NULL for this case (`clusterTargetRegion` above); the eval run and the lint did not agree with it.
   // A null bbox loads the WHOLE corpus for diversity — a superset, and more context is never worse —
   // and the admin surfaces a null region as "All", exactly as the solo generator does.
   const isExplicitRun = includeIds.length > 0 && !flags.value('region') && !query
-  const region = isExplicitRun ? null : await resolveRegion(flags.value('region') ?? DEFAULT_REGION_SLUG)
+  const region = isExplicitRun ? null : await resolveRegion(flags.value('region'))
   const bbox = region ? requireRegionBbox(region) : null
   const scopeLabel = region ? region.displayName : 'All (explicit ids)'
 

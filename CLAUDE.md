@@ -19,6 +19,8 @@ desk passes — its §0 owns what they can't prove, so don't re-argue it here.
   `generate-narrations --apply`, `classify-treatments`, `curate-places`, TTS, any Cloud Run job spends
   real GCP credits. Studio CLIs preview by default and only spend on `--apply` — the spend itself waits
   for a human yes, never a guess. ("Correctness over cost" governs the DESIGN, never a license to RUN.)
+  ⚠ **Every corpus CLI REQUIRES `--region`** (explicit-id runs exempt); no default region, no fallback
+  sweep bbox — a defaulted one billed the wrong corpus GREEN (`docs/decisions/no-default-region.md`).
 - **💸 RIDER-triggered spend is a DIFFERENT rule — it is governed by CAPS, not by a go-per-run.**
   `POST /drives/plan` (model tokens) and `POST /drives/propose` (Google Routes) spend on EVERY rider
   request, forever, anonymously, with no `--apply` and no human in the loop. Their only guards are:

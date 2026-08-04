@@ -26,13 +26,34 @@ export interface ResolvedRegion {
 
 
 /**
+ * The `--region` a run must name, or a clear failure. THE one expression that owns "a corpus run
+ * says which region it is for" — `resolveRegion` delegates to it, so the rule and its wording cannot
+ * drift between the CLIs that check early and the ones that check at resolve time.
+ *
+ * ⚠ THERE IS DELIBERATELY NO DEFAULT, and that is a SPEND control (founder, 2026-08-03). Every CLI
+ * used to read `flags.value('region') ?? DEFAULT_REGION_SLUG`, which silently scoped a region-less
+ * run to lake-tahoe. Harmless while Tahoe was the only region; a money bug the moment a second one
+ * existed — `enrich-pois --apply` typed for Yosemite would bill a full Tahoe run and report success,
+ * which is precisely the "a run that did nothing must not settle GREEN" failure with a receipt
+ * attached. Failing costs one retyped flag. Guessing costs real GCP credits against the wrong corpus.
+ */
+export function requireRegionKey(value: string | null | undefined): string {
+  const key = value?.trim()
+  if (!key) throw new Error('--region is required (a region slug, e.g. lake-tahoe, or its id).')
+  return key
+}
+
+/**
  * Resolve a region by its SLUG (e.g. `lake-tahoe`) OR its uuid → identity + parsed discovery bbox.
  * The `::text` cast lets a slug and a uuid both match in one query without a uuid-parse crash on the
  * non-uuid input (Postgres would throw "invalid input syntax for type uuid" on `id = 'lake-tahoe'`).
+ *
+ * ⚠ Takes the RAW flag value (nullable) on purpose: the missing-region failure belongs to
+ * `requireRegionKey` above, so a call site can never re-spell it as a different message — or paper
+ * over it with a default.
  */
-export async function resolveRegion(idOrSlug: string): Promise<ResolvedRegion> {
-  const key = idOrSlug.trim()
-  if (!key) throw new Error('--region is required (a region slug, e.g. lake-tahoe, or its id).')
+export async function resolveRegion(idOrSlug: string | null | undefined): Promise<ResolvedRegion> {
+  const key = requireRegionKey(idOrSlug)
   const rows = await withRetry(
     () =>
       db
@@ -48,7 +69,18 @@ export async function resolveRegion(idOrSlug: string): Promise<ResolvedRegion> {
     { label: `resolveRegion(${key})` },
   )
   const row = rows[0]
-  if (!row) throw new Error(`No region matches "${key}" — pass a region slug (e.g. lake-tahoe) or its id.`)
+  // ⚠ LIST THE REAL SLUGS on a miss. Now that `--region` is required rather than defaulted, a typo is
+  // the common failure instead of a rare one — and the match is exact and CASE-SENSITIVE, so a region
+  // seeded with a non-conforming slug (the admin only started validating lowercase-kebab later) is
+  // unreachable by the name an operator would reasonably guess. One extra query, only on the error
+  // path, turns "No region matches" from a dead end into the answer.
+  if (!row) {
+    const known = await withRetry(() => db.select({ slug: regions.slug }).from(regions).orderBy(regions.slug), {
+      label: 'resolveRegion.known',
+    })
+    const list = known.map((r) => r.slug).join(', ') || '(none — create one in the admin Regions view)'
+    throw new Error(`No region matches "${key}" — pass a region slug or its id. Known slugs: ${list}`)
+  }
   return { id: row.id, slug: row.slug, displayName: row.displayName, bbox: parseRegionBbox(row.bbox) }
 }
 

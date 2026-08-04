@@ -33,7 +33,7 @@
 //
 //   preview:  dotenvx run -f .env.development -- bun packages/studio/src/prune-corpus.ts
 //   apply:    dotenvx run -f .env.development -- bun packages/studio/src/prune-corpus.ts --apply
-//   --region <slug>   scope to a region's bbox (default: lake-tahoe)
+//   --region <slug>   scope to a region's bbox (REQUIRED — no default)
 //   --restore         clear the reason this tool sets, on the same scope (the undo)
 //   --delete          HARD-DELETE rows this tool already flagged (founder call 2026-07-30). Flagging was
 //                     the compromise for rows whose audio was already paid for; deleting is the honest
@@ -49,7 +49,6 @@ import { announce, parseFlags } from './pipeline/ops'
 import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
-import { DEFAULT_REGION_SLUG } from './config'
 import { containmentReason } from './pipeline/containment'
 import { colocationReport, findColocations } from './pipeline/colocation'
 
@@ -81,7 +80,7 @@ async function main(): Promise<void> {
     apply,
   })
 
-  const region = await resolveRegion(flags.value('region') ?? DEFAULT_REGION_SLUG)
+  const region = await resolveRegion(flags.value('region'))
   const bbox = requireRegionBbox(region)
   console.log(`Region: ${region.displayName} (${region.slug})`)
 

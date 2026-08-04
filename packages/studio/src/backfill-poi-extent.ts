@@ -19,7 +19,7 @@
 //
 //   preview:  dotenvx run -f .env.development -- bun packages/studio/src/backfill-poi-extent.ts
 //   apply:    dotenvx run -f .env.development -- bun packages/studio/src/backfill-poi-extent.ts --apply
-//   --region <slug>   scope to a region's bbox (default: lake-tahoe)
+//   --region <slug>   scope to a region's bbox (REQUIRED — no default)
 //   --force           re-fetch POIs that already have an area recorded
 
 import { and, eq, isNull, sql } from 'drizzle-orm'
@@ -29,7 +29,7 @@ import { announce, parseFlags } from './pipeline/ops'
 import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
 import { resolveRegion, requireRegionBbox } from './pipeline/region'
-import { DEFAULT_REGION_SLUG, WDQS_ENDPOINT, WDQS_USER_AGENT } from './config'
+import { WDQS_ENDPOINT, WDQS_USER_AGENT } from './config'
 import { containmentReason, isContainer } from './pipeline/containment'
 
 /** DB-write fan-out. These are Neon round trips — a different resource from the LLM/TTS knobs in
@@ -99,7 +99,7 @@ async function main(): Promise<void> {
   const force = flags.has('force')
   announce({ tool: 'backfill-poi-extent', blast: ['MUTATES DB'], apply })
 
-  const region = await resolveRegion(flags.value('region') ?? DEFAULT_REGION_SLUG)
+  const region = await resolveRegion(flags.value('region'))
   const bbox = requireRegionBbox(region)
   console.log(`Region: ${region.displayName} (${region.slug})`)
 

@@ -22,7 +22,7 @@
 //   ... --limit 5                cap how many places to enrich (a smoke run)
 //   ... --force                  re-enrich places that already have a fact sheet
 //   ... --model opus             A/B the calibration tier vs the default (sonnet)
-//   ... --region <slug>          enrich a region's corpus (default: lake-tahoe; resolves to its bbox)
+//   ... --region <slug>          enrich a region's corpus (REQUIRED unless --include-ids; resolves to its bbox)
 //   ... --source wikipedia       narrow to a POI source (faithfully resolves a table 'source' filter)
 //   ... --query "emerald"        substring match on name/source-id (a table search filter)
 //   ... --include-ids a,b,c      enrich EXACTLY these poi ids (a hand-picked selection)
@@ -33,7 +33,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { pois } from '@skipper/db/schema'
 import { announce, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
-import { resolveRegion, requireRegionBbox } from './pipeline/region'
+import { requireRegionBbox, requireRegionKey, resolveRegion } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
 import { regionLabel } from './pipeline/geo'
@@ -46,7 +46,7 @@ import { wikiUrlForPageId } from './pipeline/wikipedia'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { ENRICH_MODELS, type EnrichModelChoice } from './models'
-import { ANTHROPIC_READY, DEFAULT_REGION_SLUG, GEOLOGY_ENRICHMENT, SCOUT_CONCURRENCY, WIKIDATA_ENRICHMENT } from './config'
+import { ANTHROPIC_READY, GEOLOGY_ENRICHMENT, SCOUT_CONCURRENCY, WIKIDATA_ENRICHMENT } from './config'
 import { llmSpendLines, llmSpentUsd } from '@skipper/shared'
 import { classifyStoryEligibility } from '@skipper/shared'
 
@@ -71,8 +71,9 @@ const model = ENRICH_MODELS[modelChoice]
 // all matching, minus a few") — the Gmail two-tier model, so server-side pagination never has to enumerate
 // every id client-side. NOTE: it is XOR, not a union — `isExplicit` requires include-ids with NO filter;
 // include-ids passed ALONGSIDE a filter falls to FILTER mode and the ids are ignored (the UI never sends both).
-// FILTER mode is REGION-scoped (geometry-first: --region → its discovery bbox → point-in-bbox), defaulting to
-// the launch region. `--bbox` is gone — a region is the only geographic input. The bbox is resolved in main().
+// FILTER mode is REGION-scoped (geometry-first: --region → its discovery bbox → point-in-bbox), and
+// --region is REQUIRED there. `--bbox` is gone — a region is the only geographic input. The bbox is
+// resolved in main().
 const parseIds = (v: string | undefined): string[] => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : [])
 const regionRaw = flags.value('region') || null
 const sourceFilter = flags.value('source') || null
@@ -81,6 +82,10 @@ const includeIds = parseIds(flags.value('include-ids'))
 const excludeIds = new Set(parseIds(flags.value('exclude-ids')))
 // EXPLICIT mode = a hand-picked id list with NO filter; otherwise FILTER mode (region/source/query).
 const isExplicit = includeIds.length > 0 && !regionRaw && !sourceFilter && !query
+// ⚠ FAIL HERE, before `announce` and before main() bills anything. A FILTER run with no --region used
+// to mean "enrich lake-tahoe"; on a paid CLI that is a wrong-corpus charge that reports success. An
+// EXPLICIT run names its pois outright and needs no region — that is the only exemption.
+if (!isExplicit) requireRegionKey(regionRaw)
 
 announce({ tool: 'enrich-pois', blast: ['SPENDS $', 'MUTATES DB'], apply })
 
@@ -103,7 +108,7 @@ async function main(): Promise<void> {
 
   // FILTER mode is region-scoped: resolve --region (default: the launch region) → its discovery bbox →
   // point-in-bbox (geometry-first; see pipeline/region.ts). EXPLICIT mode (hand-picked ids) needs no bbox.
-  const region = isExplicit ? null : await resolveRegion(regionRaw ?? DEFAULT_REGION_SLUG)
+  const region = isExplicit ? null : await resolveRegion(regionRaw)
   const bbox = region ? requireRegionBbox(region) : null
 
   const rows = await withRetry(

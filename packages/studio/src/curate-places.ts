@@ -21,7 +21,7 @@
 // Usage:
 //   dotenvx run -f .env.development -- bun packages/studio/src/curate-places.ts
 //   ... --apply                  run it (drafts + resolves + upserts role-tagged `places`)
-//   ... --region <slug>          curate a region (default: lake-tahoe; resolves to its bbox)
+//   ... --region <slug>          curate a region (REQUIRED — no default; resolves to its bbox)
 //   ... --model sonnet           draft with Sonnet instead of the default Opus (cheaper A/B)
 //   ... --target 100             roughly how many places to draft (guidance to the model; 8-120)
 //   ... --max-cost 1             abort before any spend if the LLM estimate exceeds this
@@ -31,13 +31,13 @@ import { db } from '@skipper/db'
 import { places } from '@skipper/db/schema'
 import Anthropic from '@anthropic-ai/sdk'
 import { announce, maxCostFlag, parseFlags } from './pipeline/ops'
-import { resolveRegion, requireRegionBbox, type RegionBbox } from './pipeline/region'
+import { requireRegionBbox, requireRegionKey, resolveRegion, type RegionBbox } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'
 import { withRetry, sleep } from './pipeline/http'
 import { isAddressLike, resolveCuratedPlace, type CuratedPlace, type PlacesBbox } from './pipeline/places'
 import { ENRICH_MODELS, getAnthropic, type EnrichModelChoice } from './models'
 import { llmSpendLines, llmSpentUsd, recordModelUsage, usageUsd } from '@skipper/shared'
-import { ANTHROPIC_READY, DEFAULT_REGION_SLUG, GOOGLE_READY, requireEnv } from './config'
+import { ANTHROPIC_READY, GOOGLE_READY, requireEnv } from './config'
 
 /** The draft call's pre-run estimate, priced through the SAME `usageUsd` the real tally uses rather
  *  than a hand-kept dollar constant (pre-run estimate only; the real tally prints after).
@@ -70,7 +70,9 @@ function estimateDraftUsd(modelId: string, targetN: number): number {
 
 const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region', 'model', 'target', 'max-cost'] })
 const apply = flags.has('apply')
-const regionKey = flags.value('region') ?? DEFAULT_REGION_SLUG
+// ⚠ Resolved at PARSE time, before `runJob` opens a row — and this value IS the run's `targetId`
+// (the per-region in-flight lock), so a defaulted one would lock the wrong region as well as curate it.
+const regionKey = requireRegionKey(flags.value('region'))
 const modelChoice: EnrichModelChoice = flags.value('model') === 'sonnet' ? 'sonnet' : 'opus'
 const model = ENRICH_MODELS[modelChoice]
 // ⚠ THE CEILING IS COUPLED TO TWO THINGS, so do not raise it alone.

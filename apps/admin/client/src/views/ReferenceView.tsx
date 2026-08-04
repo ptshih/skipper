@@ -119,6 +119,8 @@ export function ReferenceView() {
         <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
           <li>
             Regions page → <Step>Add region</Step> — set the slug + a discovery bbox (the lookup helps find one).
+            Both are REQUIRED: a region with no bbox cannot be swept, enriched or generated, and there is no
+            longer a built-in fallback area. The slug is permanent and must be lowercase-kebab.
           </li>
           <li>
             Regions page → the new region row’s <Step>Discover</Step> button (or select multiple rows for a bulk run; the POIs page has a <Step>Discover POIs</Step> picker too) → hit <Step>Preview</Step> to dry-run the sweep (counts candidates) → verify the POI list in the job log.
@@ -164,7 +166,7 @@ type RunKind = { kind: string; does: string; cost: ReactNode; safe: string }
 const RUN_KINDS: RunKind[] = [
   {
     kind: 'Discover POIs',
-    does: 'Discover Wikidata-pinned places in a region, join Wikipedia, tier them, and upsert the shared POI corpus — the foundational first step that drives select from.',
+    does: 'Discover Wikidata-pinned places in a region, join Wikipedia, tier them, and upsert the shared POI corpus — the foundational first step that drives select from. ⚠ Every region-scoped run now REQUIRES an explicit region (2026-08-03): there is no default region and no default sweep area, so a run that does not name one is refused rather than quietly targeting Lake Tahoe. The only exemption is a hand-picked id list, which already names its rows.',
     cost: 'Free — WDQS + MediaWiki only, no LLM or TTS.',
     safe: 'Preview — lists the POIs, writes nothing. Free, so no confirm.',
   },

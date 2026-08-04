@@ -93,10 +93,10 @@ export interface BuildResult {
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 
-// = studio's DEFAULT_REGION_SLUG (packages/studio/src/config.ts). buildJobArgs sets each region run's
-// targetSlug+targetId to MATCH the studio script's beginJob (per-region), so the in-flight lock + the
-// studio_jobs_active_target_uq unique index scope per-region — two regions run concurrently, and an
-// admin- vs CLI-triggered run of the same target agree. (audit #9 / #1)
+// buildJobArgs sets each region run's targetSlug+targetId to MATCH the studio script's beginJob
+// (per-region), so the in-flight lock + the studio_jobs_active_target_uq unique index scope
+// per-region — two regions run concurrently, and an admin- vs CLI-triggered run of the same target
+// agree. (audit #9 / #1)
 //
 // ⚠ `targetId` is REQUIRED on BuildResult, and that is a spend control rather than a tidiness rule.
 // The unique index is `(kind, target_id) WHERE status in (queued,running)`, and Postgres treats NULLs
@@ -106,7 +106,20 @@ const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 // places: here via `scopeTarget`, and again in `generate_cluster_narrations`, which hand-rolls the same
 // derivation and is the one kind that spends even on a DRY RUN. The required type is what stops a third.
 // A run with no region now locks on its SELECTION instead (`selectionLock`).
-const DEFAULT_REGION_SLUG = 'lake-tahoe'
+/** The `region` a run must carry, or a 400 — the console-side mirror of the studio's `requireRegionKey`
+ *  (packages/studio/src/pipeline/region.ts). Rejects HERE so no `studio_jobs` row is opened and no
+ *  Cloud Run job is triggered for a request the CLI would only reject on the far side.
+ *
+ *  ⚠ THIS REPLACED A HARDCODED `DEFAULT_REGION_SLUG = 'lake-tahoe'` (founder, 2026-08-03), and the
+ *  duplication was the actual hazard: `apps/admin` does not depend on `@skipper/studio`, so that
+ *  literal was a SECOND copy of studio's default held in agreement by a comment. Both are gone. A
+ *  region-less run is now an error on both sides rather than a silent Tahoe run on both sides — which
+ *  on the paid kinds meant billing the wrong corpus and reporting success. */
+function requireRegion(body: Record<string, unknown>): string {
+  const region = str(body.region)
+  if (!region) throw new HttpError(400, 'region is required — pick the region this run is for')
+  return region
+}
 
 /** Append a `--flag=N` only when the body carries a POSITIVE-number value; REJECT a present-but-invalid
  *  one (NaN / negative / non-numeric). The server is the trust boundary (the SPA isn't): without this a
@@ -147,7 +160,7 @@ function scopeTarget(body: Record<string, unknown>): { targetSlug?: string; targ
   // same target collide on the in-flight lock instead of both proceeding. Dropping it would have
   // silently unaligned the two (caught by the audit #9/#11 tests, which is what they are for).
   const ids = idCsv(body.includeIds, 'includeIds')
-  const byRegion = ids ? undefined : str(body.region) || DEFAULT_REGION_SLUG
+  const byRegion = ids ? undefined : requireRegion(body)
   const label = typeof body.scopeLabel === 'string' && body.scopeLabel.trim() ? body.scopeLabel.trim() : byRegion
   const explicitLock =
     typeof body.lockRegion === 'string' && body.lockRegion.trim() ? body.lockRegion.trim() : undefined
@@ -231,10 +244,12 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
   if (kind === 'discover_pois') {
     const apply = body.apply === true
     const args: string[] = [script]
-    if (body.region) args.push(`--region=${str(body.region)}`)
+    // ⚠ ONE expression for the flag AND the lock (see generate_scenic_narrations for why).
+    const discoverRegion = requireRegion(body)
+    args.push(`--region=${discoverRegion}`)
     if (apply) args.push('--apply')
     // sweep is free (WDQS + MediaWiki, no LLM/TTS); spends:false so no confirm gate.
-    return { args, dryRun: !apply, spends: false, targetId: str(body.region) || DEFAULT_REGION_SLUG }
+    return { args, dryRun: !apply, spends: false, targetId: discoverRegion }
   }
 
   if (kind === 'enrich_pois') {
@@ -262,7 +277,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
   if (kind === 'generate_narrations') {
     const apply = body.apply === true
     const args: string[] = [script]
-    // Same selection contract as enrich: a region (default: lake-tahoe) XOR an explicit include-ids list,
+    // Same selection contract as enrich: a region (REQUIRED) XOR an explicit include-ids list,
     // narrowable by query/exclude-ids. The CLI resolves --region → its discovery bbox server-side.
     if (body.region) args.push(`--region=${str(body.region)}`)
     if (body.query) args.push(`--query=${str(body.query)}`)
@@ -305,7 +320,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     // even on a DRY RUN (see above), so every double-submit of it costs money, not just the applied ones.
     // Same selection-keyed lock as `scopeTarget`, so the two derivations cannot drift apart again.
     const clusterIds = idCsv(body.includeIds, 'includeIds')
-    const clusterRegion = clusterIds ? undefined : str(body.region) || DEFAULT_REGION_SLUG
+    const clusterRegion = clusterIds ? undefined : requireRegion(body)
     return {
       args,
       dryRun: !apply,
@@ -322,7 +337,10 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     // use case yet: you pick a REGION and a KIND, not individual pins. `--offset` is offered because a
     // re-run after a prompt change must be able to land off the population the change was built from
     // (ops-scripts-sop's repair-population trap).
-    if (body.region) args.push(`--region=${str(body.region)}`)
+    // ⚠ ONE expression for the flag AND the lock — they must name the same region, and reading
+    // `body.region` twice is exactly how they would stop doing so.
+    const scenicRegion = requireRegion(body)
+    args.push(`--region=${scenicRegion}`)
     if (body.kind) args.push(`--kind=${str(body.kind)}`)
     if (body.spread) args.push('--spread')
     pushPosNum(args, '--limit', body.limit, 'limit')
@@ -339,8 +357,8 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
       args,
       dryRun: !apply,
       spends: apply,
-      targetSlug: str(body.region) || DEFAULT_REGION_SLUG,
-      targetId: str(body.region) || DEFAULT_REGION_SLUG,
+      targetSlug: scenicRegion,
+      targetId: scenicRegion,
     }
   }
 
@@ -369,14 +387,16 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     const apply = body.apply === true
     const args: string[] = [script]
     // Region-scoped (geometry-first: --region → its bbox). Optional model/target tweak the LLM draft.
-    if (body.region) args.push(`--region=${str(body.region)}`)
+    // ⚠ ONE expression for the flag AND the lock (see generate_scenic_narrations for why).
+    const curateRegion = requireRegion(body)
+    args.push(`--region=${curateRegion}`)
     if (body.model) args.push(`--model=${str(body.model)}`)
     pushPosNum(args, '--target', body.target, 'target')
     pushPosNum(args, '--max-cost', body.maxCostUsd, 'maxCostUsd')
     if (apply) args.push('--apply')
     // curate SPENDS (Anthropic draft + Google Places resolve) on --apply → confirm gate; the dry run
     // makes no paid calls (free preview). Keys the lock per-region (matches the studio beginJob target).
-    return { args, dryRun: !apply, spends: apply, targetId: str(body.region) || DEFAULT_REGION_SLUG }
+    return { args, dryRun: !apply, spends: apply, targetId: curateRegion }
   }
 
   // sweep_orphans — V2 sweeps the whole narration/ R2 prefix (tour-scoped sweeping is gone with the

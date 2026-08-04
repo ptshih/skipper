@@ -16,7 +16,7 @@
 // Usage:
 //   dotenvx run -f .env.development -- bun packages/studio/src/audit-corpus.ts            # preview
 //   ... --apply                  score grounding (Opus) + record the audit eval_run
-//   ... --region <slug>          a region's story corpus (default: lake-tahoe; → its bbox)
+//   ... --region <slug>          a region's story corpus (REQUIRED unless --include-ids; → its bbox)
 //   ... --include-ids a,b,c      audit EXACTLY these poi ids
 //   ... --query <substr>         narrow to names/source-ids containing <substr>
 //   ... --charm                  add the advisory charm judge (ONE Opus call over the batch — cheap)
@@ -29,13 +29,13 @@ import { narrations, pois } from '@skipper/db/schema'
 import type { FactSheetEntry, PoiFacts } from '@skipper/db/schema'
 import { STORY_TASTE_DENYLIST } from '@skipper/shared'
 import { announce, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
-import { resolveRegion, requireRegionBbox } from './pipeline/region'
+import { requireRegionBbox, requireRegionKey, resolveRegion } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'
 import { regionLabel } from './pipeline/geo'
 import { resolveStoryGrounding } from './pipeline/select'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
-import { ANTHROPIC_READY, DEFAULT_REGION_SLUG, NARRATION_CONCURRENCY, NARRATION_FALLBACK_CHARS } from './config'
+import { ANTHROPIC_READY, NARRATION_CONCURRENCY, NARRATION_FALLBACK_CHARS } from './config'
 import { llmSpendLines, llmSpentUsd } from '@skipper/shared'
 import { JUDGMENT_MODEL } from './models'
 import { buildGroundingWell, evaluateGrounding } from './eval/grounding'
@@ -84,6 +84,10 @@ const query = (flags.value('query') ?? '').trim().toLowerCase()
 const includeIds = parseIds(flags.value('include-ids'))
 const excludeIds = new Set(parseIds(flags.value('exclude-ids')))
 const isExplicit = includeIds.length > 0 && !regionRaw && !query
+// ⚠ FAIL HERE, before anything is announced or billed. A FILTER run with no --region used to mean
+// "audit lake-tahoe", so an audit typed for another region would judge Tahoe's clips and file the
+// eval_run under it. An EXPLICIT run names its clips and needs no region.
+if (!isExplicit) requireRegionKey(regionRaw)
 
 // ⚠ --apply MUTATES DB: it never touches narrations/R2, but recording the audit IS a write
 // (`eval_runs` + per-clip `eval_scores`) and the blast line is what an operator reads before saying
@@ -106,7 +110,7 @@ interface Audited {
 }
 
 async function main(): Promise<FinishOutcome> {
-  const region = isExplicit ? null : await resolveRegion(regionRaw ?? DEFAULT_REGION_SLUG)
+  const region = isExplicit ? null : await resolveRegion(regionRaw)
   const bbox = region ? requireRegionBbox(region) : null
   // NULL (not a sentinel) when the run spans no single region; the admin shows it as "All".
   const runRegion = region ? region.slug : null
@@ -344,7 +348,7 @@ async function main(): Promise<FinishOutcome> {
 
 // A region run keys the lock on its slug; a whole-corpus explicit-id run leaves slug+target NULL
 // (no fake-region sentinel) — the admin shows it as "All".
-const auditTargetRegion = isExplicit ? undefined : (regionRaw ?? DEFAULT_REGION_SLUG)
+const auditTargetRegion = isExplicit ? undefined : requireRegionKey(regionRaw)
 await runJob(
   'offline_audit',
   { dryRun: !apply, targetSlug: auditTargetRegion, targetId: auditTargetRegion },

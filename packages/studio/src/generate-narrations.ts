@@ -26,7 +26,7 @@
 //   ... --apply                 run it (spends; writes R2 clips + narrations)
 //   ... --apply --limit 3      smoke run (the cheapest real ear-test)
 //   ... --force                regenerate even clips whose facts_hash is still fresh
-//   ... --region <slug>          generate a region's narration corpus (default: lake-tahoe; → its bbox)
+//   ... --region <slug>          generate a region's narration corpus (REQUIRED unless --include-ids; → its bbox)
 //   ... --include-ids a,b,c      regenerate EXACTLY these poi ids (implies --force)
 
 import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
@@ -34,7 +34,7 @@ import { db } from '@skipper/db'
 import { narrations, pois } from '@skipper/db/schema'
 import type { FactSheetEntry, PoiFacts } from '@skipper/db/schema'
 import { announce, assertReady, day, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
-import { resolveRegion, requireRegionBbox } from './pipeline/region'
+import { requireRegionBbox, requireRegionKey, resolveRegion } from './pipeline/region'
 import { runJob, type FinishOutcome } from './pipeline/job-progress'
 import {
   ensurePoiOverridesLoaded,
@@ -56,7 +56,6 @@ import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { personaFromKey } from './persona'
 import {
-  DEFAULT_REGION_SLUG,
   GROUNDING_EVAL,
   NARRATION_CONCURRENCY,
   NARRATION_FALLBACK_CHARS,
@@ -103,6 +102,10 @@ const query = (flags.value('query') ?? '').trim().toLowerCase()
 const includeIds = parseIds(flags.value('include-ids'))
 const excludeIds = new Set(parseIds(flags.value('exclude-ids')))
 const isExplicit = includeIds.length > 0 && !regionRaw && !query
+// ⚠ FAIL HERE, before anything is announced or billed. A FILTER run with no --region used to mean
+// "generate lake-tahoe" — on the most expensive CLI in the repo (model + TTS + R2), that is a
+// wrong-corpus charge that settles green. An EXPLICIT run names its pois and needs no region.
+if (!isExplicit) requireRegionKey(regionRaw)
 // `--include-ids` IMPLIES regeneration — you asked for those exact pois, so don't freshness-skip them.
 const force = flags.has('force') || isExplicit
 
@@ -124,7 +127,7 @@ async function main(): Promise<FinishOutcome | void> {
 
   // Region-scoped selection (geometry-first; see pipeline/region.ts): --region → discovery bbox →
   // point-in-bbox, XOR an explicit id list. Generate is wikipedia-only (the story corpus).
-  const region = isExplicit ? null : await resolveRegion(regionRaw ?? DEFAULT_REGION_SLUG)
+  const region = isExplicit ? null : await resolveRegion(regionRaw)
   const bbox = region ? requireRegionBbox(region) : null
 
   // ── Candidate corpus: wikipedia-sourced pois with story-grade extracts, in the region ──
@@ -788,7 +791,7 @@ async function main(): Promise<FinishOutcome | void> {
 
 // A region run keys the lock on its slug; a whole-corpus explicit-id run leaves slug+target NULL
 // (no fake-region sentinel) — the admin shows it as "All".
-const genTargetRegion = isExplicit ? undefined : (regionRaw ?? DEFAULT_REGION_SLUG)
+const genTargetRegion = isExplicit ? undefined : requireRegionKey(regionRaw)
 await runJob(
   'generate_narrations',
   { dryRun: !apply && !scriptsOnly, targetSlug: genTargetRegion, targetId: genTargetRegion },

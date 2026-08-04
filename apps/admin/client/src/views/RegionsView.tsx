@@ -124,7 +124,9 @@ export function RegionsView() {
         r.bbox ? (
           <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{r.bbox}</code>
         ) : (
-          <Badge variant="secondary">default (Tahoe)</Badge>
+          // ⚠ NOT "default (Tahoe)" any more — there is no default. A region with no bbox cannot be
+          // swept at all (discover-pois throws), so this is a blocking gap, not a fallback.
+          <Badge variant="destructive">not set — can’t sweep</Badge>
         ),
     },
     {
@@ -218,8 +220,8 @@ export function RegionsView() {
         <span className="font-medium text-foreground">Discovery bbox</span> — the area{' '}
         <code className="font-mono text-xs">Discover POIs</code> sweeps for this region (
         <code className="font-mono text-xs">lng_min,lat_min,lng_max,lat_max</code>). It's stored on the region and
-        resolved by slug at sweep time. Leave blank to use the built-in default (Tahoe basin). Set this before
-        running a discovery sweep for any new region.
+        resolved by slug at sweep time. It is REQUIRED — a region without one cannot be swept, enriched or
+        generated, and there is no longer a built-in fallback. Set it before running a discovery sweep.
       </Callout>
 
       {numSelected > 0 && (
@@ -350,8 +352,8 @@ function RegionDialog({
                 className="font-mono text-sm"
               />
               <p className="text-xs text-muted-foreground">
-                <code className="font-mono">lng_min,lat_min,lng_max,lat_max</code>. Leave blank to use the built-in
-                default (Tahoe basin). Use the lookup, or draw a box on the map.
+                <code className="font-mono">lng_min,lat_min,lng_max,lat_max</code>. Required before this region can
+                be swept — there is no built-in fallback. Use the lookup, or draw a box on the map.
               </p>
             </div>
 
