@@ -199,8 +199,15 @@ describe('buildDrawnBlock', () => {
   test('names the drive in order, from the ROSTER — never from the caller', () => {
     const block = buildDrawnBlock([{ start: 'a1', end: 'b2' }], [A, B, C])
     expect(block).toContain('Kings Beach to Emerald Bay State Park')
-    // The instruction is the point of the block, not the list.
-    expect(block).toContain('already drawn')
+  })
+
+  // ⚠ IT RESTATES THE PROMPT'S RULE ON PURPOSE, AND THIS PINS THAT. Removing it as "one rule, two
+  // homes" is the obvious tidy-up and it was done on 2026-08-04 — four replays later the re-emit
+  // defect was back (0,1,1,0 across 200 turns vs 0,0 across 100 with the rule here). A rule beside
+  // the data it governs is doing work the same rule 3,000 cached tokens earlier is not.
+  test('restates the do-not-redraw rule beside the data — measured, not tidiness', () => {
+    const block = buildDrawnBlock([{ start: 'a1', end: 'b2' }], [A, B, C])!
+    expect(block.toLowerCase()).toContain('do not draw one of these again')
   })
 
   test('midpoints ride in order', () => {

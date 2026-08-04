@@ -334,11 +334,23 @@ export function buildDrawnBlock(
     lines.push(`${flatten(stops.join(' to '))}.`)
   }
   if (lines.length === 0) return null
+  // ⚠ IT RESTATES A RULE THE PROMPT ALREADY TEACHES, AND THAT DUPLICATION IS DELIBERATE — MEASURED,
+  // NOT ASSUMED. `== Once it is drawn ==` says the same thing in the cached prefix, so on the usual
+  // "one rule, one home" reasoning these two sentences are drift and were removed on 2026-08-04.
+  // Four replays later they came back: with the rule stated ONLY in the prompt, the re-emit defect
+  // reappeared at 0,1,1,0 across 4 runs (200 turns) against 0,0 across 2 runs with it here.
+  //
+  // ⚠ SO DO NOT "CLEAN THIS UP". A prompt is not a module: the model reads by salience and recency,
+  // not by resolution, and a rule sitting next to the data it governs is doing work that the same
+  // rule 3,000 cached tokens earlier does not. Code-quality doctrine loses to the measurement here.
+  // The evidence is weak (2 occurrences in 200 turns vs 0 in 100 — not a distinguishable rate) and it
+  // is kept anyway, because the duplication costs a few tokens while the defect is the one the founder
+  // reported. Re-run `bun apps/api/eval/run.ts --apply --no-judge` before touching it.
   return [
-    '== Drives you have already drawn for these folks ==',
+    '== Drives already on their screen ==',
     '',
-    'These are on their screen right now. You drew them; they can see them. Do not draw one of these',
-    'again, and do not announce them as though you just this moment made them.',
+    'You drew these for these folks, earlier in this conversation. They can see them right now, so',
+    'you do not draw one of these again, and you do not announce one as though you just made it.',
     '',
     ...lines,
   ].join('\n')
