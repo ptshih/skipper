@@ -58,12 +58,44 @@ process.env.BETTER_AUTH_SECRET ??= 'test-only-secret-that-signs-nothing-real'
 /** How many times the anchor read actually ran. ⚠ The ONLY way to observe the roster memo from out
  *  here — a cache that is working looks exactly like one that is not, from the response body. */
 let anchorLoads = 0
+
+/**
+ * The stubbed region's roster.
+ *
+ * ⚠ IT IS LOAD-BEARING NOW, NOT SCENERY, AND THAT CHANGED THE MEANING OF `crypto.randomUUID()` IN THIS
+ * FILE. `plan-route.ts` re-asserts every anchor id the model emits against the list the turn was given,
+ * so a route only survives translation when its ids are IN here. A random UUID is therefore how a test
+ * SAYS "off the roster" — deliberately, in the off-roster section — and using one by accident makes a
+ * route silently vanish for a reason the test does not name. Draw from the constants below.
+ *
+ * ⚠ Thirteen entries, and the count is derived rather than picked: the via-cap test has to exceed
+ * MAX_ROUTE_VIA (8) with ids that all EXIST, or it proves the allowlist check instead of the cap it was
+ * written for. Four named + nine midpoints covers that with one to spare.
+ */
+const rosterId = (n: number): string => `3582ed8a-a55e-4fb2-b8af-59dcd9eef1${n.toString(16).padStart(2, '0')}`
+const ROSTER: readonly { id: string; name: string }[] = [
+  // ⚠ Byte-identical to the single anchor this stub used to return, so the roster-memo and D9-shape
+  // assertions that name 'Tahoe City' keep testing exactly what they tested before.
+  { id: rosterId(0x6c), name: 'Tahoe City' },
+  { id: rosterId(0x01), name: 'Emerald Bay State Park' },
+  { id: rosterId(0x02), name: 'Kings Beach' },
+  { id: rosterId(0x03), name: 'Incline Village' },
+  ...Array.from({ length: 9 }, (_, i) => ({ id: rosterId(0x10 + i), name: `Waypoint ${i + 1}` })),
+]
+const [TAHOE_CITY, EMERALD_BAY, KINGS_BEACH] = ROSTER.map((a) => a.id) as [string, string, string]
+/** Nine ON-ROSTER midpoints — enough to push a translated route past MAX_ROUTE_VIA using ids that all
+ *  exist, which is what keeps the via-cap test about the cap. */
+const VIA_POOL: readonly string[] = ROSTER.slice(4).map((a) => a.id)
+/** An id that is deliberately NOT on the roster. Named, so a reader never has to wonder whether a bare
+ *  `crypto.randomUUID()` in a route was the point or an oversight. */
+const OFF_ROSTER_ID = (): string => crypto.randomUUID()
+
 const realDrives = { ...(await import('../src/drives')) }
 mock.module('../src/drives', () => ({
   ...realDrives,
   loadRegionAnchors: async () => {
     anchorLoads++
-    return [{ id: '3582ed8a-a55e-4fb2-b8af-59dcd9eef16c', name: 'Tahoe City' }]
+    return ROSTER.map((a) => ({ ...a }))
   },
 }))
 
@@ -483,9 +515,11 @@ describe('POST /drives/plan — SSE frames', () => {
   // wire's loop shape (end === start, then the turnaround and the way home as the LAST TWO via
   // midpoints).
   test('a route rides the terminal frame only, already translated', async () => {
-    const start = crypto.randomUUID()
-    const far = crypto.randomUUID()
-    const back = crypto.randomUUID()
+    // ⚠ ON-ROSTER ids, necessarily: the handler drops a route naming a place it never printed, so random
+    // UUIDs here would make this assert the off-roster path while claiming to assert translation.
+    const start = TAHOE_CITY
+    const far = EMERALD_BAY
+    const back = KINGS_BEACH
     impl = async (a) => {
       a.onSay?.('Drawing that up.')
       return {
@@ -522,7 +556,7 @@ describe('POST /drives/plan — SSE frames', () => {
     impl = async () => ({
       outcome: 'route',
       say: PROMISED,
-      rawRoute: { start_anchor_id: crypto.randomUUID(), end_anchor_id: crypto.randomUUID(), round_trip: true },
+      rawRoute: { start_anchor_id: TAHOE_CITY, end_anchor_id: EMERALD_BAY, round_trip: true },
     })
     const body = await (await post(OK, SSE)).text()
     const terminal = drivePlanResponse.parse(JSON.parse(frames(body).find((f) => f.event === 'turn')!.data))
@@ -541,8 +575,8 @@ describe('POST /drives/plan — SSE frames', () => {
     // Both spellings of "no return leg", refused before any Routes call — the wire gate downstream
     // could only catch these AFTER paying to discover them.
     for (const naming of ['end', 'start'] as const) {
-      const start = crypto.randomUUID()
-      const far = crypto.randomUUID()
+      const start = TAHOE_CITY
+      const far = EMERALD_BAY
       impl = async () => ({
         outcome: 'route',
         say: 'Drawing that up.',
@@ -563,8 +597,8 @@ describe('POST /drives/plan — SSE frames', () => {
   // A ONE-WAY route is untouched by any of this — the rule is about loops, and a rider who asked to
   // pass through somewhere on the way is not being overruled.
   test('a one-way route needs no way home', async () => {
-    const start = crypto.randomUUID()
-    const end = crypto.randomUUID()
+    const start = TAHOE_CITY
+    const end = EMERALD_BAY
     impl = async () => ({
       outcome: 'route',
       say: 'Drawing that up.',
@@ -576,6 +610,45 @@ describe('POST /drives/plan — SSE frames', () => {
     expect(route.start).toBe(start)
     expect(route.end).toBe(end)
     expect(route.via ?? []).toEqual([])
+  })
+
+  // ⚠ THE ZERO-DISTANCE SHAPE. A one-way call whose two ends are the same id is not a drive: it
+  // materializes as a near-zero polyline that `retraceFraction` scores 0 (it needs ~1.5 km of
+  // along-route distance to see a doubling-back), so the no-same-road gate waves it through, /propose
+  // bills Google and answers 200 with estStopCount 0, and only CREATE rejects it — after billing a
+  // SECOND Routes call. Refused here so the rider is never shown the card. `isDegenerateRoute` is the
+  // shared predicate the two billed request schemas refine on.
+  test('a one-way route from a place back to itself is NOT a drive', async () => {
+    impl = async () => ({
+      outcome: 'route',
+      say: 'Drawing that up.',
+      rawRoute: { start_anchor_id: TAHOE_CITY, end_anchor_id: TAHOE_CITY },
+    })
+    const body = await (await post(OK, SSE)).text()
+    const terminal = drivePlanResponse.parse(JSON.parse(frames(body).find((f) => f.event === 'turn')!.data))
+    expect(terminal.route).toBeFalsy()
+  })
+
+  // ⚠ AND THE COUNTERPART, WHICH IS WHAT KEEPS THE GUARD FROM EATING THE PRODUCT: `start === end` WITH a
+  // midpoint is exactly how a legitimate loop is encoded, so it must still translate. A guard written as
+  // "reject start === end" would refuse every round trip in the app and pass every test above.
+  test('a LOOP is start === end WITH midpoints — the degenerate guard must not touch it', async () => {
+    impl = async () => ({
+      outcome: 'route',
+      say: 'Drawing that up.',
+      rawRoute: {
+        start_anchor_id: TAHOE_CITY,
+        end_anchor_id: EMERALD_BAY,
+        return_anchor_id: KINGS_BEACH,
+        round_trip: true,
+      },
+    })
+    const body = await (await post(OK, SSE)).text()
+    const terminal = drivePlanResponse.parse(JSON.parse(frames(body).find((f) => f.event === 'turn')!.data))
+    const route = plannedRoute.parse(terminal.route)
+    expect(route.start).toBe(TAHOE_CITY)
+    expect(route.end).toBe(TAHOE_CITY)
+    expect(route.via).toEqual([EMERALD_BAY, KINGS_BEACH])
   })
 })
 
@@ -742,12 +815,15 @@ describe('POST /drives/plan — plan_degraded', () => {
   // translation, so the rider hears the retry line and no route ever reaches the map. `stop_reason !==
   // 'tool_use'` is silent here, which is why the emit keys on the OUTCOME plus this branch.
   const untranslatable: [string, unknown][] = [
-    ['a missing endpoint id', { start_anchor_id: crypto.randomUUID() }],
+    ['a missing endpoint id', { start_anchor_id: TAHOE_CITY }],
     // Over the wire's `via` ceiling — the other way a well-formed-looking tool call is not a route.
+    // ⚠ EVERY ID HERE IS ON THE ROSTER, and that is what keeps this test about the CAP. With random ids
+    // the allowlist check (which runs first, on purpose — an id that names no place makes every shape
+    // question below it moot) would report `route_off_roster` and the cap would go untested.
     ['too many via ids', {
-      start_anchor_id: crypto.randomUUID(),
-      end_anchor_id: crypto.randomUUID(),
-      via_anchor_ids: Array.from({ length: 9 }, () => crypto.randomUUID()),
+      start_anchor_id: TAHOE_CITY,
+      end_anchor_id: EMERALD_BAY,
+      via_anchor_ids: VIA_POOL,
     }],
   ]
   test.each(untranslatable)('a route the vendor called a success but we cannot translate (%s) emits', async (_label, rawRoute) => {
@@ -756,6 +832,61 @@ describe('POST /drives/plan — plan_degraded', () => {
     // The rider half: a turn, in persona, with no route on it.
     expect(drivePlanResponse.parse(value).route).toBeNil()
     expect(reasonsFrom(lines)).toEqual(['route_untranslatable'])
+  })
+
+  // ⚠ A WELL-FORMED CALL ABOUT A PLACE THAT DOES NOT EXIST — the model composed an id instead of copying
+  // one off the printed list, which the tool description forbids precisely because it is possible. The
+  // rider used to be handed this as a tappable card whose tap was a 400 from `hydrateAnchors`; now the
+  // route is dropped and the turn degrades. It gets its OWN reason, not `route_untranslatable`: only this
+  // one says the "copy ids exactly" instruction has stopped landing.
+  const offRoster: [string, unknown][] = [
+    ['a fabricated start', { start_anchor_id: OFF_ROSTER_ID(), end_anchor_id: EMERALD_BAY }],
+    ['a fabricated end', { start_anchor_id: TAHOE_CITY, end_anchor_id: OFF_ROSTER_ID() }],
+    // ⚠ THE MIDDLE TOO. Guarding both ends and leaving `via` open is not a partial guarantee — it is
+    // none; the same lesson `resolveRouteAnchors` exists for at the wire.
+    ['a fabricated midpoint', {
+      start_anchor_id: TAHOE_CITY,
+      end_anchor_id: EMERALD_BAY,
+      via_anchor_ids: [OFF_ROSTER_ID()],
+    }],
+    // ⚠ AND `return_anchor_id`, the newest of these fields and the easiest to forget: it is an anchor id
+    // like any other. Note this must NOT be reported as `loop_without_return` — the loop is not missing a
+    // way home, it names one that does not exist, and asking "which way home?" would be the wrong
+    // question.
+    ['a fabricated way home', {
+      start_anchor_id: TAHOE_CITY,
+      end_anchor_id: EMERALD_BAY,
+      return_anchor_id: OFF_ROSTER_ID(),
+      round_trip: true,
+    }],
+  ]
+  test.each(offRoster)('an anchor id the model was never given (%s) drops the route', async (_label, rawRoute) => {
+    impl = async () => ({ outcome: 'route', say: 'Drawing that up.', rawRoute, stopReason: 'tool_use' })
+    const { value, lines } = await capture(async () => (await post(OK)).json())
+    const parsed = drivePlanResponse.parse(value)
+    expect(parsed.route).toBeNil()
+    // The skipper's own line survives — it may be a perfectly good sentence that came with a bad call.
+    expect(parsed.say).toBe('Drawing that up.')
+    expect(reasonsFrom(lines)).toEqual(['route_off_roster'])
+  })
+
+  // ⚠ THE GUARD IS THE ROSTER *THIS TURN* WAS GIVEN, which is the whole claim in the doc comment. If the
+  // check ever read some other list — a second query, a global, the request body — this passes and the
+  // guarantee is gone. Asserted by using an id that is real-looking and correctly shaped but simply not
+  // in the stub's roster.
+  test('an id from ANOTHER region is off-roster too, not merely a malformed one', async () => {
+    // Shaped exactly like a roster id (same prefix, valid v4) but never printed for this region.
+    const otherRegionsAnchor = rosterId(0xfe)
+    expect(ROSTER.some((a) => a.id === otherRegionsAnchor)).toBe(false)
+    impl = async () => ({
+      outcome: 'route',
+      say: 'Drawing that up.',
+      rawRoute: { start_anchor_id: TAHOE_CITY, end_anchor_id: otherRegionsAnchor },
+      stopReason: 'tool_use',
+    })
+    const { value, lines } = await capture(async () => (await post(OK)).json())
+    expect(drivePlanResponse.parse(value).route).toBeNil()
+    expect(reasonsFrom(lines)).toEqual(['route_off_roster'])
   })
 
   // ⚠ A ROUTE WITH NO LINE. Nothing STRUCTURALLY guarantees a text block rides with a tool call (see
@@ -770,7 +901,10 @@ describe('POST /drives/plan — plan_degraded', () => {
   const wordless = () => ({
     outcome: 'route' as const,
     say: '',
-    rawRoute: { start_anchor_id: crypto.randomUUID(), end_anchor_id: crypto.randomUUID() },
+    // ⚠ ON-ROSTER, so the route SURVIVES and this test stays about the missing line. Random ids here
+    // would drop the route and the assertion below ("the route still reaches the map") would be testing
+    // the off-roster path instead.
+    rawRoute: { start_anchor_id: TAHOE_CITY, end_anchor_id: EMERALD_BAY },
     stopReason: 'tool_use' as const,
   })
 
@@ -803,8 +937,10 @@ describe('POST /drives/plan — plan_degraded', () => {
   })
 
   test.each(both)('a successful route turn emits NOTHING (accept=%s)', async (accept) => {
-    const start = crypto.randomUUID()
-    const end = crypto.randomUUID()
+    // ⚠ ON-ROSTER — a "successful" turn is only successful if the route survives translation. With random
+    // ids this test would pass a `route_off_roster` line off as silence.
+    const start = TAHOE_CITY
+    const end = EMERALD_BAY
     impl = async () => ({
       outcome: 'route',
       say: 'Drawing that up.',
@@ -837,6 +973,51 @@ describe('POST /drives/plan — plan_degraded', () => {
       expect(line).not.toContain(RIDER)
       expect(line).not.toContain(MODEL)
     }
+  })
+
+  // ⚠ THE THROW PATH, AND IT IS THE HALF THAT WAS INVISIBLE. These two reasons are raised by ../src/planner
+  // BEFORE the model call, so `logPlanSpend` never runs — no `plan_spend` line either — while the rider
+  // still gets HTTP 200 and an in-persona apology. A missing ANTHROPIC_API_KEY on a deployed revision was
+  // therefore countable by nothing: `/health` green, no 5xx, one unstructured stderr line that no
+  // log-based metric can read. That is the exact condition this event exists for.
+  const thrownReasons: ['not_configured' | 'bad_transcript', string][] = [
+    ['not_configured', 'a deploy with no ANTHROPIC_API_KEY'],
+    ['bad_transcript', 'a caller sending a shape the vendor would reject'],
+  ]
+  test.each(thrownReasons)('%s is COUNTED (%s)', async (reason) => {
+    impl = async () => {
+      throw new PlannerTurnError(reason)
+    }
+    const { value, lines } = await capture(async () => (await post(OK)).json())
+    // The rider half is unchanged: in persona, 200, no leak of why.
+    const parsed = drivePlanResponse.parse(value)
+    expect(parsed.say).toContain('Radio')
+    expect(parsed.route).toBeNil()
+    expect(reasonsFrom(lines)).toEqual([reason])
+  })
+
+  // ⚠ BOTH TRANSPORTS, because "a rider's Accept header cannot change what an operator sees" is the rule
+  // this file exists to hold — and the SSE path runs inside hono's DETACHED callback, where a throw would
+  // escape the app's error handler entirely.
+  test.each(both)('not_configured is counted identically on accept=%s', async (accept) => {
+    impl = async () => {
+      throw new PlannerTurnError('not_configured')
+    }
+    const { lines } = await runTurn(accept)
+    expect(degradedLines(lines)).toEqual([{ evt: 'plan_degraded', reason: 'not_configured' }])
+  })
+
+  // ⚠ THE THREE REASONS THAT MUST STAY SILENT HERE, and each for its own reason: `timeout` and `upstream`
+  // are ALREADY a structured `plan_spend` line with `outcome: 'failed'` (../src/planner), so counting them
+  // again double-counts one failure; `client_gone` is a rider closing the app, which is not a degradation
+  // at all and is the one thing that must never page an operator. Widening the throw-path helper to a
+  // catch-all is the obvious "cleanup" — this is what goes red when someone does it.
+  test.each(['timeout', 'upstream', 'client_gone'] as const)('%s emits NO plan_degraded line', async (reason) => {
+    impl = async () => {
+      throw new PlannerTurnError(reason)
+    }
+    const { lines } = await capture(async () => (await post(OK)).json())
+    expect(degradedLines(lines)).toEqual([])
   })
 })
 

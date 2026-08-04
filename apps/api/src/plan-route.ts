@@ -34,6 +34,7 @@ import { Hono } from 'hono'
 import { streamSSE, type SSEMessage } from 'hono/streaming'
 import {
   drivePlanRequest,
+  isDegenerateRoute,
   MAX_ROUTE_VIA,
   type DrivePlanResponse,
   type PlannedRoute,
@@ -91,12 +92,14 @@ const wantsStream = (accept: string | undefined): boolean => (accept ?? '').incl
 const SSE_HEARTBEAT_MS = 10_000
 
 /** Why a tool call did not become a route. `loop_without_return` is NOT a malformed call — it is a
- *  complete, well-formed loop that has no way home, and it gets its own answer (see VOICE). */
+ *  complete, well-formed loop that has no way home, and it gets its own answer (see VOICE).
+ *  `off_roster` is a well-formed call naming a place the model was never given. */
 type RouteTranslation =
   | { ok: true; route: PlannedRoute }
-  | { ok: false; reason: 'untranslatable' | 'loop_without_return' }
+  | { ok: false; reason: 'untranslatable' | 'loop_without_return' | 'off_roster' }
 
 const UNTRANSLATABLE = { ok: false, reason: 'untranslatable' } as const
+const OFF_ROSTER = { ok: false, reason: 'off_roster' } as const
 
 /** The model's tool vocabulary → the wire shape. ⚠ THREE TRANSLATIONS, all load-bearing — see the
  *  `rawRoute` doc in ./planner. The one that bites: `round_trip` is NOT the wire's loop shape. Here it
@@ -111,9 +114,24 @@ const UNTRANSLATABLE = { ok: false, reason: 'untranslatable' } as const
  *  the way back, so the geography comes from them rather than from a model that has no coordinates
  *  (D9) and could only guess at which roads connect.
  *
+ *  ⚠ IT RE-ASSERTS EVERY ID AGAINST THE ROSTER THIS TURN WAS GIVEN, and that is the reason it takes a
+ *  second argument. The tool description tells the model to copy ids "exactly… never compose, correct, or
+ *  infer one" — a rule that exists because the authors consider the opposite possible, and an id is the
+ *  one field of the call nothing else here can sanity-check. Without this the route reaches the rider as a
+ *  tappable card whose tap is a 400 from `hydrateAnchors` (./drives), which is a dead end wearing the
+ *  clothes of a working drive.
+ *
+ *  ⚠ IT IS NOT INV-1's ENFORCEMENT AND MUST NEVER BE MISTAKEN FOR IT. INV-1 lives at the WIRE, in the
+ *  QUERY (`resolveRouteAnchors` → `hydrateAnchors`, ./drives), and that is the check that stands between
+ *  an anonymous request and a billed Routes call. This one is a UX guard in front of it, and it is
+ *  strictly weaker for a reason worth knowing: the roster is memoized for up to `PLAN_ROSTER_MEMO_TTL_MS`
+ *  (./roster-cache), so it can be stale — it catches a FABRICATED id but not a place an operator
+ *  de-curated in the last minute. Do not "consolidate" the two; the stale one cannot be the guard, and
+ *  the authoritative one cannot run before the rider taps.
+ *
  *  Returns `untranslatable` on anything malformed — model output is untrusted, and a half-parsed route
  *  must read as "no route" rather than as a route to somewhere nobody asked for. */
-function toPlannedRoute(raw: unknown): RouteTranslation {
+function toPlannedRoute(raw: unknown, allowed: ReadonlySet<string>): RouteTranslation {
   if (typeof raw !== 'object' || raw === null) return UNTRANSLATABLE
   const r = raw as Record<string, unknown>
   const start = typeof r.start_anchor_id === 'string' ? r.start_anchor_id : null
@@ -122,6 +140,13 @@ function toPlannedRoute(raw: unknown): RouteTranslation {
   const via = Array.isArray(r.via_anchor_ids) ? r.via_anchor_ids.filter((v): v is string => typeof v === 'string') : []
   const minutes = typeof r.target_minutes === 'number' && Number.isFinite(r.target_minutes) ? Math.round(r.target_minutes) : null
   const back = typeof r.return_anchor_id === 'string' ? r.return_anchor_id : null
+
+  // ⚠ BEFORE THE ROUND-TRIP SHAPE CHECKS, DELIBERATELY. An id that is not on the roster does not name a
+  // place, so every question below it ("is this loop's way home the same as its far end?") is a question
+  // about nothing — and answering one of those instead would hand the rider the wrong follow-up (the
+  // way-home question for a route whose problem is a place that does not exist).
+  // `back` is included: it is an anchor id like any other, and it is the newest of these fields.
+  if ([start, end, ...via, ...(back ? [back] : [])].some((id) => !allowed.has(id))) return OFF_ROSTER
 
   // The round-trip mapping. A loop ends where it started and needs a real far end to turn around at,
   // so the model's `end` becomes a midpoint and `start` becomes both ends — then the rider's way home
@@ -142,6 +167,12 @@ function toPlannedRoute(raw: unknown): RouteTranslation {
   // model that filled `via` to the brim would push it over — drop the route rather than ship a request
   // the next endpoint will reject anyway.
   if ((wire.via?.length ?? 0) > MAX_ROUTE_VIA) return UNTRANSLATABLE
+  // ⚠ The zero-distance shape: `start === end` with nothing in between. STRUCTURALLY UNREACHABLE through
+  // the round-trip branch above (it always appends two midpoints), so this only ever catches a ONE-WAY
+  // call whose two ends are the same id — which the schemas now refuse at the wire, meaning without this
+  // line the rider gets a card and the refusal arrives on the tap. `isDegenerateRoute` is that same
+  // shared predicate (@skipper/shared), read rather than re-expressed so the two can never disagree.
+  if (isDegenerateRoute(wire)) return UNTRANSLATABLE
   return { ok: true, route: wire }
 }
 
@@ -165,6 +196,35 @@ type DegradedReason =
   /** The model serialized a TOOL CALL into rider-visible prose instead of emitting a tool_use block —
    *  INV-8's documented failure mode. Observed on the live model 2026-08-03 during an eval replay. */
   | 'say_leaked_tool_call'
+  /** The model named an anchor id that is not on the roster it was given — it composed one instead of
+   *  copying it (see `toPlannedRoute`). A PROMPT/MODEL signal, never an outage. ⚠ Deliberately DISTINCT
+   *  from `route_untranslatable`: that one is a malformed CALL, this one is a perfectly well-formed call
+   *  about a place that does not exist. Only the second says the tool's "copy ids exactly, never compose
+   *  one" instruction has stopped landing, so collapsing them would hide the one defect that INV-1 is
+   *  downstream of. */
+  | 'route_off_roster'
+  /** ⚠ THE TWO BELOW ARE THE ONLY ONES THAT ARE OURS TO FIX RATHER THAN THE MODEL'S, and they are here
+   *  because without them they are INVISIBLE. Both are thrown by ./planner BEFORE a stream exists, so
+   *  `logPlanSpend` never runs and no `plan_spend` line is emitted either — while the rider still gets
+   *  HTTP 200 and an in-persona line, so `/health` and every 5xx alert stay green with the product
+   *  broken. That is the exact condition this event was created to make countable.
+   *
+   *  `not_configured` is a MISSING ANTHROPIC_API_KEY on the deployed service: every rider on the
+   *  instance hears VOICE.down, forever, and the only other trace is one unstructured `console.error`
+   *  that lands in Cloud Logging's `textPayload` where no log-based metric can read it. A non-zero count
+   *  of this is a deploy fault, not traffic.
+   *
+   *  `bad_transcript` is a caller sending a shape the vendor would reject (a leading or trailing skipper
+   *  turn, or nothing but whitespace). ⚠ NOT reachable from the shipped client, which trims and blocks
+   *  empty sends — so this counts forged or broken callers, and a rise in it after a client release is
+   *  the signal that the release broke transcript assembly.
+   *
+   *  ⚠ The other three `PlannerTurnError` reasons stay OFF this list on purpose: `timeout` and `upstream`
+   *  are already logged by ./planner as a structured `plan_spend` with `outcome: 'failed'`, and
+   *  `client_gone` is a rider closing the app, which is not a degradation at all. Adding either would
+   *  double-count a failure or page on healthy traffic. */
+  | 'not_configured'
+  | 'bad_transcript'
 
 /**
  * Did the model write a tool call into the prose instead of calling the tool?
@@ -182,8 +242,21 @@ type DegradedReason =
  *
  * Matched on the block shape rather than the tool name, since a leak can name any tool, and kept
  * deliberately narrow so ordinary prose about a drive can never trip it.
+ *
+ * ⚠ THE NAMESPACE PREFIX IS NOT OPTIONAL TO MATCH, AND LEAVING IT OUT WAS A HOLE. The first cut listed
+ * the bare names only (`<invoke`, `<parameter`), which is the form the 2026-08-03 leak happened to take
+ * — but the tag family these models emit is routinely namespace-qualified (`<ns:invoke`), and a
+ * prefixed tag matched NOTHING: the guard passed the markup straight through to the rider's bubble.
+ * Verified by probe before widening. The `<` is still REQUIRED, which is what keeps ordinary prose safe
+ * ("we'll pass the parameter road" and "the Invoke overlook" both stay clean) — the prefix is matched as
+ * an optional `word:` and never as bare words.
+ *
+ * ⚠ Still narrow ON PURPOSE, and one shape is knowingly out of scope: a tool call the model writes as
+ * JSON prose (`{"name":"plan_route",…}`) is not matched, because every pattern loose enough to catch it
+ * also catches a rider being shown a legitimate object. That case degrades to `route_untranslatable`
+ * (no tool_use block ⇒ no route), which is the correct outcome — ugly prose, but never a wrong drive.
  */
-const LEAKED_TOOL_CALL = /<(invoke|function_calls|parameter)\b|<\/(invoke|function_calls|parameter)>/i
+const LEAKED_TOOL_CALL = /<\/?(?:[a-z][\w.-]*:)?(?:invoke|function_calls|parameter)\b/i
 
 /**
  * ONE structured line when a paid turn produced nothing the rider can use.
@@ -225,6 +298,36 @@ function noteDegraded(reason: DegradedReason): void {
   console.warn(JSON.stringify({ evt: 'plan_degraded', reason }))
 }
 
+/**
+ * The THROW path's half of `plan_degraded`, and it deliberately covers only TWO of the five
+ * `PlannerTurnError` reasons.
+ *
+ * WHY IT EXISTS. `logPlanSpend` (./planner) can only run once a stream exists, so the two reasons thrown
+ * BEFORE the model call — a missing API key and a malformed transcript — produced no structured line
+ * anywhere, while the rider still got HTTP 200 and an in-persona apology. A misconfigured deploy was
+ * therefore invisible to every log-based metric AND to `/health`, which is the precise "5xx alert stays
+ * green while the product is broken" condition this event was created for.
+ *
+ * ⚠ IT IS NOT A CATCH-ALL, AND WIDENING IT DOUBLE-COUNTS. `timeout` and `upstream` are ALREADY a
+ * structured `plan_spend` line with `outcome: 'failed'` (./planner), and `client_gone` is a rider closing
+ * the app — not a degradation at all, and the one reason that must never reach an operator's dashboard as
+ * one. Those three are handled where they happen; only these two had no home.
+ *
+ * ⚠ INV-13. It reads `err.reason` and NOTHING else — a closed five-value set declared on our own error
+ * class, never `err.message` and never a vendor field. The error object itself may carry a prompt or a
+ * vendor body; this function is structurally unable to reach it.
+ * ⚠ CANNOT THROW, which is load-bearing on the SSE path (see the streamSSE note): an `instanceof` test
+ * and two literal comparisons have nothing in them that can.
+ * ⚠ Called from BOTH transports, which is what keeps "a rider's Accept header cannot change what an
+ * operator sees" true — the same reason there is only one response builder.
+ */
+function noteThrownDegradation(err: unknown): void {
+  if (!(err instanceof PlannerTurnError)) return
+  // Identity, not a translation table: both literals are members of DegradedReason under the same names,
+  // so a new PlannerTurnError reason fails to compile here rather than being silently dropped.
+  if (err.reason === 'not_configured' || err.reason === 'bad_transcript') noteDegraded(err.reason)
+}
+
 /** Map a planner outcome to what the rider hears. ⚠ Derived from the OUTCOME, never from "is there a
  *  route" — a truncated turn and a normal chat beat are byte-identical from the caller's side, and
  *  treating them the same is how a rider says yes and watches nothing happen.
@@ -233,7 +336,7 @@ function noteDegraded(reason: DegradedReason): void {
  *  transports funnel through, which is what makes "a rider's Accept header cannot change what an
  *  operator sees" true by CONSTRUCTION rather than by convention. An emit at either call site instead
  *  would be a second thing to keep in sync — the same reason there is only one response builder. */
-function toResponse(turn: PlannerTurn): DrivePlanResponse {
+function toResponse(turn: PlannerTurn, allowed: ReadonlySet<string>): DrivePlanResponse {
   // ⚠ FIRST, BEFORE ANY BRANCH, because it can happen on ANY of them and the consequence is identical:
   // raw markup in the rider's chat bubble. See LEAKED_TOOL_CALL. The route (if any) is kept — it came
   // from a real tool_use block and is unaffected — but the prose is replaced wholesale rather than
@@ -245,7 +348,7 @@ function toResponse(turn: PlannerTurn): DrivePlanResponse {
 
   switch (turn.outcome) {
     case 'route': {
-      const translated = toPlannedRoute(turn.rawRoute)
+      const translated = toPlannedRoute(turn.rawRoute, allowed)
       // A loop with no way home is the one "no route" outcome that is not a failure — the plan is one
       // answer short, so the rider gets that question instead of an apology, and the model's own line
       // is REPLACED because it has already promised a drive that is not coming. Kept ahead of the
@@ -254,29 +357,34 @@ function toResponse(turn: PlannerTurn): DrivePlanResponse {
         noteDegraded('loop_without_return')
         return { say: VOICE.needReturnLeg, done: false }
       }
-      const route = translated.ok ? translated.route : null
-      // A route we cannot translate is not a route. The rider still hears what the skipper said; they
-      // simply are not handed a drive to confirm — which is why this, uniquely, is a degradation the
-      // vendor's own stop_reason calls a success.
-      if (!route) noteDegraded('route_untranslatable')
-      // ⚠ BOTH BRANCHES BACKSTOP AN EMPTY `say`, and this is now the LAST resort rather than the only
-      // one. The prompt's "say a line every single turn" was measured not to work at all on a draw
-      // turn — the model emits the tool JSON and no text block, on every draw, under either prompt
-      // (2026-08-03). So `say` became a REQUIRED field on PLAN_ROUTE_TOOL and ./planner unwraps it;
-      // read that note before touching this. Reaching this line now means the model returned a route
-      // with neither a text block NOR a `say` in the call, which is a schema violation rather than the
-      // ordinary case it used to be — so a rise in `route_wordless` is now a much sharper signal.
+      // A route we cannot use is not a route. The rider still hears what the skipper said; they simply
+      // are not handed a drive to confirm — which is why this, uniquely, is a degradation the vendor's own
+      // stop_reason calls a success.
+      // ⚠ TWO REASONS, ONE RIDER-FACING BRANCH, and the asymmetry IS the design: an off-roster id and a
+      // malformed call are the same thing to the RIDER (no card, the skipper's own line stands) and very
+      // different things to an OPERATOR (a model composing ids vs. a broken call shape). So they split on
+      // the log and share the response. Never collapse the two reasons to save a line.
+      if (!translated.ok) {
+        noteDegraded(translated.reason === 'off_roster' ? 'route_off_roster' : 'route_untranslatable')
+        // ⚠ `retry` asks them to say it again, which is right here and WRONG on the branch below — see
+        // VOICE.drawnWordless. The model's own line is kept when it produced one: it may be a perfectly
+        // good sentence that simply came with an unusable call.
+        return { say: turn.say || VOICE.retry, done: false }
+      }
+      // ⚠ THIS BACKSTOPS AN EMPTY `say`, and it is now the LAST resort rather than the only one. The
+      // prompt's "say a line every single turn" was measured not to work at all on a draw turn — the
+      // model emits the tool JSON and no text block, on every draw, under either prompt (2026-08-03). So
+      // `say` became a REQUIRED field on PLAN_ROUTE_TOOL and ./planner unwraps it; read that note before
+      // touching this. Reaching this line now means the model returned a route with neither a text block
+      // NOR a `say` in the call, which is a schema violation rather than the ordinary case it used to be
+      // — so a rise in `route_wordless` is now a much sharper signal.
       //
       // That used to be survivable by accident: the empty bubble arrived WITH a card, so the turn still
       // looked like something happened. It stopped being survivable when the client began refusing to
       // redraw a route it already has — the card is correctly suppressed, and a blank `say` then makes
       // the whole turn render as nothing at all. The rider types, and the screen does not move.
-      //
-      // A different line from the no-route branch on purpose: `retry` asks them to say it again, which
-      // is wrong when the drive is fine and about to appear.
-      if (!route) return { say: turn.say || VOICE.retry, done: false }
       if (!turn.say) noteDegraded('route_wordless')
-      return { say: turn.say || VOICE.drawnWordless, route, done: false }
+      return { say: turn.say || VOICE.drawnWordless, route: translated.route, done: false }
     }
     case 'say':
       return { say: turn.say, done: false }
@@ -355,6 +463,12 @@ planRoutes.post('/', async (c) => {
     signal: c.req.raw.signal,
   }
 
+  // ⚠ THE SAME LIST THE MODEL WAS GIVEN, AS A SET — built from `roster.anchors` and nothing else, so
+  // "re-assert against the allowlist THIS TURN was given" is true by construction rather than by two
+  // reads of the same table hopefully agreeing. Built once per request, not per id, and deliberately
+  // AFTER `args` so it can never drift from `args.anchors`. See `toPlannedRoute`.
+  const allowed: ReadonlySet<string> = new Set(roster.anchors.map((a) => a.id))
+
   // ⚠ THE ONLY BRANCH IN THIS HANDLER, AND IT IS DELIBERATELY THE LAST THING IN IT. Every rejection
   // above — the 413, both 400s, the cap wrap-up, the unknown region — answers with the SAME JSON on
   // both Accepts, so "does this client stream?" can never change whether a request is accepted or what
@@ -364,11 +478,14 @@ planRoutes.post('/', async (c) => {
   // the rider — the JSON path never went away.
   if (!wantsStream(c.req.header('accept'))) {
     try {
-      return c.json(toResponse(await runPlannerTurn(args)) satisfies DrivePlanResponse)
-    } catch {
-      // ⚠ Swallowed deliberately: the caught value may carry a prompt, a transcript fragment, or a
-      // vendor message, none of which may reach the rider OR the log (INV-13). The planner module has
-      // already logged what is safe to log.
+      return c.json(toResponse(await runPlannerTurn(args), allowed) satisfies DrivePlanResponse)
+    } catch (err) {
+      // ⚠ STILL SWALLOWED. The caught value may carry a prompt, a transcript fragment, or a vendor
+      // message, none of which may reach the rider OR the log (INV-13) — so it is never logged, never
+      // rethrown and never echoed. `noteThrownDegradation` reads ONLY its `reason` (a closed set on our
+      // own error class) and only for the two reasons ./planner cannot log itself; read that note before
+      // widening it. Everything else safe to log, the planner module has already logged.
+      noteThrownDegradation(err)
       return c.json({ say: VOICE.down, done: false } satisfies DrivePlanResponse, 200)
     }
   }
@@ -423,11 +540,15 @@ planRoutes.post('/', async (c) => {
         // "simplify" this to `data: ${delta}`.
         onSay: (delta) => void push({ event: 'say', data: JSON.stringify({ delta }) }),
       })
-      await terminate(toResponse(turn) satisfies DrivePlanResponse)
+      await terminate(toResponse(turn, allowed) satisfies DrivePlanResponse)
     } catch (err) {
       // The rider hung up. There is no socket to write to and nothing to apologise for; leaving WITHOUT
       // a terminal frame is CORRECT, and the client's own EOF-without-`turn` rule covers it.
       if (err instanceof PlannerTurnError && err.reason === 'client_gone') return
+      // ⚠ The SAME call the JSON path makes, so an operator's view of a broken deploy does not depend on
+      // whether the rider's client happened to ask for SSE. It cannot throw — see its own note; a throw
+      // here would escape hono's detached runner entirely.
+      noteThrownDegradation(err)
       await terminate({ say: VOICE.down, done: false } satisfies DrivePlanResponse)
     } finally {
       clearInterval(beat)

@@ -140,13 +140,42 @@ export async function loadRegionAnchors(bbox: string | null): Promise<RegionAnch
         // unsorted list can come back permuted between requests — byte-different prefix, cache miss,
         // full-price re-read of the whole prefix, on a call that spends on every request forever.
         // A silent ~10x cost regression with nothing failing. Sort by a stable key.
-        .orderBy(asc(places.name), asc(places.id))
+        // ⚠ `featured` LEADS, AND IT IS THE LIMIT BELOW THAT MAKES THAT LOAD-BEARING rather than
+        // cosmetic. This ORDER BY has to agree with `byAnchorRank` (./anchor-format), which the planner
+        // re-sorts by — because whichever rows this query DROPS are gone before that ranking is ever
+        // applied. Ordering by name alone meant the cap kept the 200 alphabetically-first rows, so a
+        // curator's `featured` pick whose name sorts late would be deleted from the skipper's world
+        // *because of its spelling*, silently inverting the one ranking a curator controls. Below the
+        // cap this changes nothing observable — the planner re-sorts the same SET either way, so the
+        // cached prefix is byte-identical — which is exactly why it went unnoticed.
+        // (`places.featured` is NOT NULL, so DESC has no NULLS-first hazard here.)
+        .orderBy(desc(places.featured), asc(places.name), asc(places.id))
         // ⚠ And BOUND it. The set grows with every paid `curate-places` run, and an unbounded list
-        // in a per-request prompt is an unbounded per-request bill. The cap is deliberately far above
-        // today's 26 so it never truncates a real region silently — it is a ceiling, not a page size.
-        .limit(MAX_PLAN_ANCHORS),
+        // in a per-request prompt is an unbounded per-request bill. The cap is a ceiling, not a page
+        // size — see MAX_PLAN_ANCHORS, whose "comfortable margin" is gone (26 → 109 in one day).
+        // ⚠ CAP + 1, AND THE EXTRA ROW IS THE WHOLE POINT: it is how we learn that truncation happened
+        // at all. Fetching exactly the cap makes a truncated region indistinguishable from one that fits
+        // — and `buildRosterBlock`'s truncation warning, the only operator signal for this, then becomes
+        // UNREACHABLE from production, because it is handed a list already trimmed to the cap. Ask for
+        // one more than we will use, report it, and trim. (No silent caps — CLAUDE.md.)
+        .limit(MAX_PLAN_ANCHORS + 1),
     { label: 'drive.anchors' },
   )
+  if (rows.length > MAX_PLAN_ANCHORS) {
+    // ⚠ COUNTS ONLY, NEVER NAMES — this is the same INV-13 discipline as the spend lines below, and a
+    // place name here is a rider's destination. Single-line JSON so `evt` is a queryable field: the whole
+    // failure this fixes was a condition nothing could count. The count is "at least", because the query
+    // stops at cap + 1 rather than counting the region.
+    console.warn(
+      JSON.stringify({
+        severity: 'WARNING',
+        evt: 'anchor_roster_truncated',
+        cap: MAX_PLAN_ANCHORS,
+        at_least: rows.length,
+      }),
+    )
+    rows.length = MAX_PLAN_ANCHORS
+  }
   return rows.map((r) => ({
     id: r.id,
     name: r.name,

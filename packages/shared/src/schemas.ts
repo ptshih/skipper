@@ -224,14 +224,46 @@ export const MAX_ROUTE_VIA = 8
  *  partial guarantee — it is none. */
 const via = z.array(anchorId).max(MAX_ROUTE_VIA).optional()
 
+/**
+ * The one shape that is not a drive: start === end with nothing in between.
+ *
+ * ⚠ IT IS A ROUTE THAT BILLS TWICE AND ARRIVES NOWHERE. `[start, ...via, end]` with an empty `via` and
+ * both ends the same materializes as a zero-distance polyline, which nothing downstream refuses:
+ * `loopShapeOf` (apps/api/src/drives.ts) computes `retraceFraction` over it and scores 0 — the retrace
+ * measure needs ~1.5 km of along-route distance before it can see a doubling-back at all — so the
+ * no-same-road gate waves it through. `/drives/propose` then answers 200 with `estStopCount: 0`, and the
+ * only guard that catches an empty drive lives on the CREATE path, which bills a SECOND Routes call
+ * before its 422. The rider pays two vendor calls for a card that was never a drive.
+ *
+ * ⚠ `start === end` WITH A `via` IS LEGITIMATE AND MUST STAY SO — it is exactly how a loop is encoded
+ * (see `via` above: the turnaround and the way home are the last two midpoints). So the predicate is the
+ * EMPTY-via case only. Widening it to all `start === end` would refuse every round trip in the product.
+ *
+ * ⚠ ONE HOME, THREE READERS, deliberately not four. The two BILLED request schemas below refine on it,
+ * and `toPlannedRoute` (apps/api/src/plan-route.ts) reads it so the planner never hands a rider a card
+ * for one. `plannedRoute` itself is NOT refined: it also types the `drawn` array, whose documented rule
+ * is that a bad entry is DROPPED rather than rejected — refining it there would turn one stale card in a
+ * client's history into a 400 on a legitimate conversation turn.
+ */
+export const isDegenerateRoute = (r: { start: string; end: string; via?: readonly string[] | null }): boolean =>
+  r.start === r.end && (r.via?.length ?? 0) === 0
+
+/** The message both billed request schemas reject with. ⚠ Not rider-facing — both handlers answer their
+ *  own in-persona line; this is what a developer sees in a parse failure. */
+const DEGENERATE_ROUTE_MSG = 'a route from a place back to itself needs somewhere in between'
+
 /** POST /drives/propose — preview the route for a picked START→END (+ optional via midpoints) before
  *  spending a credit. The endpoints were chosen from the region's anchors (GET /drives/anchors), so we
- *  just materialize the route + count stories. Persists nothing, no credit — the confirm interstitial. */
-export const driveProposeRequest = z.object({
-  start: anchorId,
-  end: anchorId,
-  via,
-})
+ *  just materialize the route + count stories. Persists nothing, no credit — the confirm interstitial.
+ *  ⚠ Refined against `isDegenerateRoute` so the zero-distance shape is refused BEFORE the billed Routes
+ *  call, rather than after two of them. */
+export const driveProposeRequest = z
+  .object({
+    start: anchorId,
+    end: anchorId,
+    via,
+  })
+  .refine((r) => !isDegenerateRoute(r), { message: DEGENERATE_ROUTE_MSG })
 export type DriveProposeRequest = z.infer<typeof driveProposeRequest>
 
 /** The anonymous rider's ONE taste of the product (D14): a single presigned clip drawn from THIS
@@ -386,16 +418,21 @@ export const drivePlanResponse = z.object({
 export type DrivePlanResponse = z.infer<typeof drivePlanResponse>
 
 /** POST /drives — generate + persist the confirmed drive (consumes a credit; account-gated). */
-export const createDriveRequest = z.object({
-  start: anchorId,
-  end: anchorId,
-  via,
-  /** Client-minted v4 UUID, STABLE across retries of one logical create. The server uses it AS the
-   *  drive id, so a lost-ACK network retry hits the existing drive PK + the `drive:<id>` consume
-   *  idempotency key and no-ops — exactly-once create + charge of a non-refundable credit. Optional:
-   *  an older client omits it → the server mints the id → no cross-request dedupe (today's behavior). */
-  idempotencyKey: z.uuid().optional(),
-})
+export const createDriveRequest = z
+  .object({
+    start: anchorId,
+    end: anchorId,
+    via,
+    /** Client-minted v4 UUID, STABLE across retries of one logical create. The server uses it AS the
+     *  drive id, so a lost-ACK network retry hits the existing drive PK + the `drive:<id>` consume
+     *  idempotency key and no-ops — exactly-once create + charge of a non-refundable credit. Optional:
+     *  an older client omits it → the server mints the id → no cross-request dedupe (today's behavior). */
+    idempotencyKey: z.uuid().optional(),
+  })
+  // ⚠ Same guard as `/propose`, and it is NOT redundant with it: a client may call create directly, and
+  // this path bills a Routes call AND reaches the credit ledger. Refusing at parse is the only place the
+  // rejection is free. See `isDegenerateRoute`.
+  .refine((r) => !isDegenerateRoute(r), { message: DEGENERATE_ROUTE_MSG })
 export type CreateDriveRequest = z.infer<typeof createDriveRequest>
 
 /** One played clip in a drive: a place narration, with its presigned clip — the player's single clip

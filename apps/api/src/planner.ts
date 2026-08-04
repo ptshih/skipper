@@ -180,8 +180,15 @@ export interface PlannerTurn {
    *      there a loop is `end === start` with the turnaround as the LAST `via` midpoint. Map it:
    *      `{ start, end: start, via: [...(via ?? []), end] }` — which is also why the tool caps `via` at
    *      6 while the shared schema allows 8.
-   *   3. Every id is re-asserted against the same allowlist this turn was given, and the whole route is
-   *      DROPPED (degrading to a `say` turn) if any misses — never a route the rider taps into a 400.
+   *   3. Every id is re-asserted against the same allowlist this turn was given (`args.anchors`, as a
+   *      Set), and the whole route is DROPPED — degrading to a `say` turn plus a `route_off_roster`
+   *      signal — if any misses. ⚠ THAT IS A UX GUARD, NOT INV-1. INV-1 is enforced at the WIRE, in the
+   *      QUERY (`resolveRouteAnchors` → `hydrateAnchors`, ./drives), and that is what stands between an
+   *      anonymous request and a billed Routes call. This one is strictly weaker on purpose: the roster
+   *      is memoized (`PLAN_ROSTER_MEMO_TTL_MS`), so it catches a FABRICATED id but not a place an
+   *      operator de-curated a minute ago. Its whole job is that a rider is not handed a card whose tap
+   *      is a 400. Do not consolidate them — the stale one cannot be the guard, and the authoritative
+   *      one cannot run before the rider taps.
    */
   rawRoute: unknown
   /** Verbatim from the API, for logs and for a caller that wants to branch further. */
@@ -266,8 +273,14 @@ export function buildRosterBlock(regionName: string, anchors: PlannerAnchor[]): 
   const printable = [...anchors].sort(byAnchorRank)
 
   if (printable.length > MAX_PLAN_ANCHORS) {
-    // The cap is a ceiling far above any curated region today, so this firing is a product signal, not
-    // a paging event — log the count (never the names) and let the operator decide.
+    // ⚠ NOT REACHABLE FROM PRODUCTION, AND THAT IS NOW BY DESIGN RATHER THAN BY ACCIDENT.
+    // `loadRegionAnchors` (./drives) selects `MAX_PLAN_ANCHORS + 1`, emits the `anchor_roster_truncated`
+    // line and trims — so a roster arriving here is already at or under the cap. THAT is the operator
+    // signal; this is the belt to it, kept for direct callers (tests, and any future producer that does
+    // not go through the loader). It used to be the ONLY signal, which was the defect: the loader trimmed
+    // to EXACTLY the cap, so this branch could never fire and a region that had outgrown the planner's
+    // world was indistinguishable from one that fit.
+    // Log the count, never the names.
     console.warn(`[planner] anchor list truncated to ${MAX_PLAN_ANCHORS} of ${printable.length}`)
     printable.length = MAX_PLAN_ANCHORS
   }

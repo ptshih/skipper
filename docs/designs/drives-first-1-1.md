@@ -701,6 +701,50 @@ dark. ⚠ It SUPPRESSES rather than salvages: parsing a route back out of prose 
 write would mean reconstructing a billed request from untrusted text, which is the exact hole INV-1's
 wire re-assert exists to close.
 
+⚠ **THE FOUR 2026-08-04 HARDENING ITEMS BELOW ARE ON `main` AND NOT DEPLOYED.** Steps 0–12 went to prod
+on 2026-08-02; these landed after and have not been pushed, so "now" in them means *on main*, not *in
+production*. The live revision still hands a rider a card for a fabricated anchor id, still passes a
+namespace-prefixed tool-call leak through to the chat bubble, still cannot count a missing
+`ANTHROPIC_API_KEY`, and still bills two Routes calls for an A→A route. Ship them with the next push.
+
+⚠ **AND THE SUPPRESSION MISSED THE FORM THE MODELS ACTUALLY EMIT — widened 2026-08-04.** The first cut
+matched the bare tag names only (`<invoke`, `<parameter`), which is the shape that day's leak happened to
+take; a **namespace-qualified** tag (`<ns:invoke`) matched nothing and went straight through to the rider's
+bubble. `LEAKED_TOOL_CALL` now allows an optional `word:` prefix on open and close tags. Verified by probe
+in both directions: it catches bare and prefixed forms, and still ignores prose using those words
+("the parameter road", "the Invoke overlook") because the `<` stays required. Knowingly still out of scope:
+a call the model writes as JSON prose — every pattern loose enough to catch that also flags a legitimate
+object, and it already degrades to `route_untranslatable`, i.e. ugly prose but never a wrong drive.
+
+⚠ **THREE MORE `plan_degraded` REASONS, AND A GUARD THE CODE CLAIMED TO HAVE (2026-08-04).**
+`planner.ts` documented that the caller "re-asserts every id against the same allowlist this turn was
+given" and drops the route if any misses — **it never did**, and `plan-stream.test.ts` pinned the absence by
+feeding random UUIDs through and expecting them to translate. INV-1's real enforcement was, and remains, at
+the WIRE (`hydrateAnchors`); the consequence of the missing plan-time check was that a **fabricated** id
+reached the rider as a tappable card whose tap was a 400. `toPlannedRoute` now takes the roster as a Set and
+refuses `start`, `end`, every `via` **and `return_anchor_id`** against it, counting `route_off_roster` —
+deliberately distinct from `route_untranslatable`, because only this one says the tool's "copy ids exactly,
+never compose one" instruction has stopped landing. ⚠ It is a **UX guard, not INV-1**, and strictly weaker
+on purpose: the roster is memoized (`PLAN_ROSTER_MEMO_TTL_MS`), so it catches a fabricated id but not a
+place de-curated a minute ago. Do not consolidate the two — the stale one cannot be the guard, and the
+authoritative one cannot run before the rider taps.
+Also now counted: **`not_configured`** and **`bad_transcript`**, the two `PlannerTurnError` reasons raised
+BEFORE the model call — so `logPlanSpend` never ran and no line existed anywhere, while the rider still got
+HTTP 200 and an in-persona apology. A deployed revision with no `ANTHROPIC_API_KEY` was therefore countable
+by nothing: `/health` green, no 5xx, one unstructured stderr line no log-based metric can read. `timeout`,
+`upstream` and `client_gone` stay OFF that list — the first two are already a structured `plan_spend` with
+`outcome: 'failed'`, and the third is a rider closing the app, which must never page anyone.
+
+⚠ **The zero-distance route is refused at parse now, on both billed paths (2026-08-04).** `start === end`
+with an empty `via` is not a drive: it materializes as a near-zero polyline that `retraceFraction` scores 0
+(it needs ~1.5 km of along-route distance to see a doubling-back), so the no-same-road gate passed it,
+`/propose` billed Google and answered 200 with `estStopCount: 0`, and only CREATE rejected it — after
+billing a **second** Routes call. `isDegenerateRoute` (`@skipper/shared`) is one predicate refined onto
+`driveProposeRequest` + `createDriveRequest` and read by `toPlannedRoute`, so the rider never sees the card.
+⚠ `plannedRoute` is deliberately NOT refined: it also types `drawn`, whose rule is that a bad entry is
+DROPPED, never a 400. ⚠ And the guard is "same ends **AND** nothing in between" — a loop IS `end === start`
+with midpoints, so a rule written as "reject `start === end`" would refuse every round trip in the product.
+
 ⚠ Landed with it, from the same review: the example no longer teaches **"Consider it drawn"** (the
 prompt quotes that exact phrase as its canonical violation, and a few-shot beats an instruction — the
 observed device failure was that string verbatim); the draw beat now RESTATES the drive, which is also
@@ -961,6 +1005,20 @@ red; `>` relaxed to `>=` → red).
 
 ⚠ **Units corrected while here:** `MAX_PLAN_MESSAGES` counts MESSAGES, but its "~2x the wrap-up point"
 note read in EXCHANGES. Against the number it actually compares to it is 1.5x, not 2x.
+
+⚠ **THE ROSTER CAP TRUNCATED IN THE WRONG ORDER, AND SAID NOTHING — fixed 2026-08-04.**
+`MAX_PLAN_ANCHORS` is applied twice: as a SQL `LIMIT` in `loadRegionAnchors` and again in
+`buildRosterBlock`, which re-sorts by `byAnchorRank` (`featured` FIRST) before trimming. The query ordered
+by name alone, so whichever rows it dropped were gone **before** that ranking was ever applied — a
+curator's `featured` pick whose name sorts late would be deleted from the skipper's world *because of its
+spelling*, silently inverting the one ranking a curator controls. And because the query fetched EXACTLY
+the cap, `buildRosterBlock`'s truncation warning — the only operator signal — was **unreachable from
+production**; the test proving it worked called the function directly with cap + 1, so it was green while
+the path was dead. The query now leads with `desc(places.featured)` (NOT NULL, so no NULLS-first hazard),
+fetches `cap + 1`, emits a queryable name-free `anchor_roster_truncated` line, then trims.
+⚠ **Latent, not live, and measured rather than assumed:** Lake Tahoe is **109 eligible / 16 featured / 91
+headroom** and Yosemite 0 (read-only count, 2026-08-04) — nothing is being dropped today. But `limits.ts`
+records Tahoe going 26 → 111 in a single day, so the margin is one curation pass wide. Count the DB.
 
 **12 — Docs + store.** ✅ **The in-repo half is DONE 2026-08-02** (`add97ee`, `6f07de9`, `f81794c`).
 CLAUDE.md was already rewritten (`0c268cf`).
