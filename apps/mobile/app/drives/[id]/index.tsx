@@ -514,6 +514,37 @@ export default function DriveDetailScreen() {
     [stops, preview.activeSeq],
   )
 
+  // Shared across the List + Map layouts (extracted so the two branches don't duplicate them).
+  // ⚠ MEMOIZED, same defect as step 1 of docs/designs/chat-render-performance.md: `Screen` pushes
+  // `options` through `navigation.setOptions` from a `useLayoutEffect` keyed on that object, and
+  // react-navigation always spreads a new one, so a fresh literal forces a navigator-wide re-render
+  // plus a native header re-commit, synchronously before paint. This screen re-renders on every
+  // 500 ms tick of `useStopPreview` while a stop clip plays, and the two header arrows below were
+  // fresh every time. Memoizing the ELEMENT keeps the `options` object identity stable too.
+  const stackScreen = useMemo(
+    () => (
+    <Stack.Screen
+      options={{
+        title: 'Drive',
+        headerRight: () => (
+          <HeaderIconButton name="more" accessibilityLabel="More actions" onPress={openMenu} />
+        ),
+        // iOS 26: strip the Liquid Glass capsule so the chip isn't a second glow (mirrors index).
+        unstable_headerRightItems: () => [
+          {
+            type: 'custom',
+            hidesSharedBackground: true,
+            element: (
+              <HeaderIconButton name="more" accessibilityLabel="More actions" onPress={openMenu} />
+            ),
+          },
+        ],
+      }}
+    />
+    ),
+    [openMenu],
+  )
+
   if (loading) return <DriveDetailSkeleton />
   if (needsAccount)
     return (
@@ -546,27 +577,6 @@ export default function DriveDetailScreen() {
       ? null
       : (drive.clips.find((c) => c.seq === preview.activeSeq) ?? null)
 
-  // Shared across the List + Map layouts (extracted so the two branches don't duplicate them).
-  const stackScreen = (
-    <Stack.Screen
-      options={{
-        title: 'Drive',
-        headerRight: () => (
-          <HeaderIconButton name="more" accessibilityLabel="More actions" onPress={openMenu} />
-        ),
-        // iOS 26: strip the Liquid Glass capsule so the chip isn't a second glow (mirrors index).
-        unstable_headerRightItems: () => [
-          {
-            type: 'custom',
-            hidesSharedBackground: true,
-            element: (
-              <HeaderIconButton name="more" accessibilityLabel="More actions" onPress={openMenu} />
-            ),
-          },
-        ],
-      }}
-    />
-  )
   // The route's ONE chrome row — what to do with the list (left) + the List/Map toggle (right).
   //
   // ⚠ The "THE ROUTE · N STOPS" label that used to lead this row is gone, and the hint moved up onto

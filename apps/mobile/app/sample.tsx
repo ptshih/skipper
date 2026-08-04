@@ -39,6 +39,16 @@ import {
 // jump-scared by a voice the instant they tap, and reads the "A TASTE" badge first.
 const AUTOPLAY_BEAT_MS = 450
 
+// ⚠ A MODULE CONSTANT, not an inline literal, and it is the same defect step 1 of
+// docs/designs/chat-render-performance.md fixed on the chat screen. `Screen` pushes `options` through
+// `navigation.setOptions` from a `useLayoutEffect` keyed on that object, and react-navigation always
+// spreads a new one — so a fresh literal forces a navigator-wide re-render plus a native header
+// re-commit, synchronously before paint. This screen subscribes to expo-audio's status, so it
+// re-renders every 500 ms while the sample clip plays. Four call sites, one object.
+// (Blank on purpose: StateView skips its own Stack.Screen for a falsy title, so an empty string here
+// is what keeps the route name "sample" out of the header.)
+const BLANK_HEADER = { title: '' } as const
+
 export default function SampleScreen() {
   const router = useRouter()
   const { colors } = useTheme()
@@ -186,14 +196,14 @@ export default function SampleScreen() {
   if (phase === 'loading')
     return (
       <>
-        <Stack.Screen options={{ title: '' }} />
+        <Stack.Screen options={BLANK_HEADER} />
         <StateView loading message={voice.sample.loading} />
       </>
     )
   if (phase === 'error')
     return (
       <>
-        <Stack.Screen options={{ title: '' }} />
+        <Stack.Screen options={BLANK_HEADER} />
         <StateView
           message={voice.error.generic}
           tone="danger"
@@ -206,7 +216,7 @@ export default function SampleScreen() {
   if (phase === 'ended')
     return (
       <Screen padded center contentContainerStyle={styles.body}>
-        <Stack.Screen options={{ title: '' }} />
+        <Stack.Screen options={BLANK_HEADER} />
         <View style={styles.heroSunburst} pointerEvents="none">
           <Sunburst size={168} opacity={0.09} />
         </View>
@@ -237,7 +247,7 @@ export default function SampleScreen() {
   // bar (the old RouteTrack motif was a redundant second one). ──
   return (
     <Screen padded center contentContainerStyle={styles.body}>
-      <Stack.Screen options={{ title: '' }} />
+      <Stack.Screen options={BLANK_HEADER} />
 
       <PostcardFrame image={postcardImageFor(sample?.qid)} caption={voice.sample.kicker} colors={colors} />
 

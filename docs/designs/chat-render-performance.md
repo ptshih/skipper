@@ -111,6 +111,38 @@ Each step is independently shippable and independently observable.
   to interleave, so transitions pile up between paints.
 - **FlatList / VirtualizedList window tuning** — a dead end in the prior art regardless.
 
+## The same defect on the OTHER ticking screens — swept 2026-08-03
+
+Step 1's finding (a fresh `<Stack.Screen options>` literal forces a navigator-wide re-render plus a
+native-stack header re-commit, synchronously before paint) was fixed on the chat screen and left
+everywhere else. It is worse everywhere else, because the chat screen's tick lasts seconds and these
+run far longer. Four audio-status subscribers exist, not one — `useRoutePreview` (chat),
+`useStopPreview` (drive detail), `useDrive` (the PLAYER), and `app/sample.tsx`.
+
+- **`app/drives/[id]/play.tsx` — the player.** It re-renders every 500 ms for the ENTIRE LENGTH OF A
+  DRIVE, in the car, on battery (`useDrive` exposes `positionMs` from `status.currentTime`, which the
+  Scrubber needs). It had the literal TWICE — byte-identical in the map and list paths — plus a
+  `viewToggle` render-prop rebuilt every render as its `headerRight`. Now one memoized `screenOptions`
+  serves both paths and `viewToggle` is a `useCallback`. ⚠ Stabilising `viewToggle` is not optional
+  polish: as `headerRight` it is INSIDE the options object, so a fresh identity busts the memo and the
+  fix does nothing.
+- **`app/drives/[id]/index.tsx` — drive detail.** Ticks via `useStopPreview` while a stop clip plays;
+  its `stackScreen` element carried two fresh header arrows. Memoized on `[openMenu]`.
+- **`app/sample.tsx`.** Four `options={{ title: '' }}` literals, now one module constant.
+- **`StopList` is memoized** (`StopRow` already was, so rows bailed out but the list rebuilt its tree
+  every tick). ⚠ Its `items` prop was a fresh `.map()` inline at the player's call site — memoizing the
+  component without `stopListItems` would have been a silent no-op, the same trap as `TranscriptCard`'s
+  `onPlayClip`. That is now the third time this exact trap appeared; assume it, don't discover it.
+
+⚠ **Measured by ANALOGY, not directly.** Step 1's mechanism was measured on the chat screen; these are
+the same defect on screens that tick longer, and were verified FUNCTIONALLY (player list + map, the
+header toggle actually toggling, drive detail, 12-stop list) rather than re-counted. Someone should put
+a counter on the player before claiming a number.
+
+⚠ **The lint earned its keep here.** Placing the new hooks near their use sites put three of them
+below early returns; `react-hooks/rules-of-hooks` caught all three as errors before the app ever ran.
+On a screen with this many phase-gated returns, add hooks at the TOP, not beside what reads them.
+
 ## Step 8 — virtualization is a REAL dependency decision, left unmade
 
 The unvirtualized `ScrollView` is the structural ceiling under everything above, but it is not what is

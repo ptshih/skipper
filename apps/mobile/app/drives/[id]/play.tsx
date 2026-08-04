@@ -197,6 +197,83 @@ export default function DriveScreen() {
       }),
     [d.stops, d.phase, d.playedSeqs, d.activeSeq],
   )
+
+  /** The itinerary rows, MEMOIZED — `StopList` is memoized and this was the one prop that could not
+   *  have matched, because it was a fresh `.map()` built inline at the call site on every render.
+   *  On this screen that is twice a second for the whole drive, rebuilding a row object per stop for
+   *  a list whose contents only change when the car reaches one. Every helper below is pure, so
+   *  `stopViews` is the only real input. */
+  const stopListItems = useMemo(
+    () =>
+      stopViews.map((s) => ({
+        seq: s.seq,
+        name: s.name,
+        // The trailing meta: how long he talks here, and the stop TYPE only when it isn't a
+        // story (`stopMeta` returns '' for those — the row's glyph already says it).
+        meta: [stopMeta(s.stopType), clipLength(s.durationMs)].filter(Boolean).join(' · '),
+        // Spoken, the type is never redundant: a screen reader gets no glyph, so the FULL label
+        // is what carries it — and mm:ss reads badly aloud.
+        metaLabel: [stopLabel(s.stopType), s.durationMs ? spokenLength(s.durationMs) : '']
+          .filter(Boolean)
+          .join(', '),
+        icon: stopIcon(s.stopType),
+        state: s.state,
+      })),
+    [stopViews],
+  )
+
+  // The Map ⇄ List header switch (real-map spec §4).
+  // ⚠ STABLE, and it is load-bearing rather than tidy: it is the `headerRight` of the memoized
+  // `screenOptions` below, so a fresh identity here would bust that memo on every render — which on
+  // THIS screen means twice a second for the whole drive. See the note on `screenOptions`.
+  const viewToggle = useCallback(
+    () => (
+      <View style={[styles.toggle, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.rule }]}>
+        {(['map', 'list'] as const).map((m) => {
+          const on = view === m
+          return (
+            <Pressable
+              key={m}
+              onPress={() => changeView(m)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: on }}
+              accessibilityLabel={m === 'map' ? 'Map view' : 'List view'}
+              // The 30×36 segment is below the 48pt in-car tap floor and it's a MID-DRIVE control —
+              // lift the effective target past ~48pt (height 30+24, width 36+12). (M5)
+              hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }}
+              style={[styles.toggleBtn, on && { backgroundColor: theme.colors.accent }]}
+            >
+              <Icon name={m} size={15} color={on ? 'onPrimary' : 'inkDim'} />
+            </Pressable>
+          )
+        })}
+      </View>
+    ),
+    [theme.colors, view, changeView],
+  )
+
+  /** ⚠ MEMOIZED, and this is the SAME DEFECT step 1 of docs/designs/chat-render-performance.md fixed
+   *  on the chat screen — left unfixed here, where it costs far more. `Screen` pushes `options`
+   *  through `navigation.setOptions` from a `useLayoutEffect` keyed on that object, and
+   *  react-navigation's updater always spreads a new object, so React can never bail out: a fresh
+   *  literal forces a navigator-wide re-render PLUS a native-stack header re-commit, synchronously
+   *  before paint. On the chat screen that fired per keystroke; HERE it fires on every 500 ms audio
+   *  tick, for the entire length of a drive, in the car, on battery.
+   *
+   *  ⚠ ONE object for BOTH render paths (map and list), which were byte-identical literals — two
+   *  copies of a header is exactly the drift this repo keeps paying for. */
+  const screenOptions = useMemo(
+    () => ({
+      title: 'Drive',
+      // Edge-swipe back is allowed when parked but DISABLED while a drive is rolling (a stray swipe
+      // shouldn't kill the run — the back chevron confirms instead). Also stop the Scrubber drag
+      // from triggering the iOS-26 whole-screen back gesture.
+      gestureEnabled: d.phase !== 'driving',
+      fullScreenGestureEnabled: false,
+      headerRight: viewToggle,
+    }),
+    [d.phase, viewToggle],
+  )
   // Don't yank the list back while the rider is browsing the itinerary: mark a drag live on
   // begin, and keep it "browsing" for a grace window after they let go so a stop transition
   // mid-browse doesn't snatch the list — auto-scroll resumes on the next transition at rest.
@@ -394,30 +471,6 @@ export default function DriveScreen() {
       />
     )
 
-  // The Map ⇄ List header switch (real-map spec §4).
-  const viewToggle = () => (
-    <View style={[styles.toggle, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.rule }]}>
-      {(['map', 'list'] as const).map((m) => {
-        const on = view === m
-        return (
-          <Pressable
-            key={m}
-            onPress={() => changeView(m)}
-            accessibilityRole="button"
-            accessibilityState={{ selected: on }}
-            accessibilityLabel={m === 'map' ? 'Map view' : 'List view'}
-            // The 30×36 segment is below the 48pt in-car tap floor and it's a MID-DRIVE control —
-            // lift the effective target past ~48pt (height 30+24, width 36+12). (M5)
-            hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }}
-            style={[styles.toggleBtn, on && { backgroundColor: theme.colors.accent }]}
-          >
-            <Icon name={m} size={15} color={on ? 'onPrimary' : 'inkDim'} />
-          </Pressable>
-        )
-      })}
-    </View>
-  )
-
   // Offline chip (M7): a quiet "playing from download" flag when the drive loaded entirely off the
   // saved copy (zero network). Same icon + accent tone as the drive-detail "Saved offline" chip, so
   // the two surfaces read as one idea.
@@ -502,14 +555,7 @@ export default function DriveScreen() {
     const pct = Math.min(100, (d.positionMs / Math.max(1, d.durationMs)) * 100)
     return (
       <Screen edges={['bottom']}>
-        <Stack.Screen
-          options={{
-            title: 'Drive',
-            gestureEnabled: d.phase !== 'driving',
-            fullScreenGestureEnabled: false,
-            headerRight: viewToggle,
-          }}
-        />
+        <Stack.Screen options={screenOptions} />
         <View style={styles.mapFill}>
           <DriveMap
             polyline={d.polyline}
@@ -602,17 +648,9 @@ export default function DriveScreen() {
 
   return (
     <Screen edges={['bottom']}>
-      {/* Edge-swipe back is allowed when parked but DISABLED while a drive is rolling (a stray
-          swipe shouldn't kill the run — the back chevron confirms instead). Also stop the
-          Scrubber drag from triggering the iOS-26 whole-screen back gesture. */}
-      <Stack.Screen
-        options={{
-          title: 'Drive',
-          gestureEnabled: d.phase !== 'driving',
-          fullScreenGestureEnabled: false,
-          headerRight: viewToggle,
-        }}
-      />
+      {/* The gesture rules that used to be described here now live on `screenOptions`, beside the
+          values that implement them. */}
+      <Stack.Screen options={screenOptions} />
 
       {/* ONE header band, and the drive's name gets ALL of it. The mode line ("live drive" — chrome
           stating the normal case on every real drive) is gone entirely, and the counter moved DOWN
@@ -651,20 +689,7 @@ export default function DriveScreen() {
         onMomentumScrollEnd={onScrollSettled}
         style={styles.listCard}
         enterStamp={d.phase === 'done' && !reduce}
-        items={stopViews.map((s) => ({
-          seq: s.seq,
-          name: s.name,
-          // The trailing meta: how long he talks here, and the stop TYPE only when it isn't a
-          // story (`stopMeta` returns '' for those — the row's glyph already says it).
-          meta: [stopMeta(s.stopType), clipLength(s.durationMs)].filter(Boolean).join(' · '),
-          // Spoken, the type is never redundant: a screen reader gets no glyph, so the FULL label
-          // is what carries it — and mm:ss reads badly aloud.
-          metaLabel: [stopLabel(s.stopType), s.durationMs ? spokenLength(s.durationMs) : '']
-            .filter(Boolean)
-            .join(', '),
-          icon: stopIcon(s.stopType),
-          state: s.state,
-        }))}
+        items={stopListItems}
       />
 
       {/* ── PLAYER CARD ── now-playing + scrubber + transport, contained in ONE elevated card

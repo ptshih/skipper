@@ -9,7 +9,7 @@
 //   • scroll  — the card is a FIXED shell (the caller gives it flex:1); only the rows scroll,
 //               inside it, clipped to the rounded corners. The in-drive player, so all four
 //               corners stay put while the itinerary scrolls.
-import { Fragment, useRef, type Ref } from 'react'
+import { Fragment, memo, useRef, type Ref } from 'react'
 import {
   ScrollView,
   StyleSheet,
@@ -61,7 +61,7 @@ export interface StopListProps {
   style?: StyleProp<ViewStyle>
 }
 
-export function StopList({
+function StopListBase({
   items,
   title,
   titleRight,
@@ -197,3 +197,13 @@ const styles = StyleSheet.create({
   },
   rule: { marginHorizontal: space.md },
 })
+
+/** ⚠ MEMOIZED. The player subscribes to expo-audio's status, so its screen re-renders every 500 ms
+ *  for the whole of a drive — and this list's contents only change when the car actually reaches a
+ *  stop. `StopRow` was already memoized, so the ROWS bailed out, but the list still rebuilt its
+ *  element tree on every one of those ticks.
+ *
+ *  ⚠ SO THE CALLER MUST PASS A STABLE `items`. It was a fresh `.map()` inline at the player's call
+ *  site, which would have defeated this comparator completely and silently — see `stopListItems`
+ *  there. The scroll handlers are already `useCallback`s; keep them that way. */
+export const StopList = memo(StopListBase)
