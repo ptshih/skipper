@@ -7,8 +7,8 @@
 > on-device sweep, then the listing. Verified 2026-08-03: build `1.1.0 (20)` is uploaded and
 > `processingState=VALID`, and the 1.1.0 record is `PREPARE_FOR_SUBMISSION` with **no build attached
 > yet**. RISK-1's real drive is OFF the critical path (founder, 2026-08-03).
-> The build truth is [docs/designs/drives-first-1-1.md](docs/designs/drives-first-1-1.md) (43 decisions,
-> 16 invariants) with verified file:line coordinates in
+> The build truth is [docs/designs/drives-first-1-1.md](docs/designs/drives-first-1-1.md) (D1–D42,
+> INV-1–INV-16) with verified file:line coordinates in
 > [docs/designs/drives-first-1-1-build-notes.md](docs/designs/drives-first-1-1-build-notes.md).
 > Items below that assume ROAM, the client capability channel, or per-drive-only offline are superseded
 > by that spec — it wins.

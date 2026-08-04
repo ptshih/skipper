@@ -39,7 +39,9 @@ they are. **One telling per place remains true.**
 4. **It is ADDITIVE.** A new table touches no existing data, so this does not trip the destructive-change
    gate (snapshot-before-destructive-work). That is a real and deliberate consequence of the choice, not
    a happy accident — the same feature via `UNIQUE(poi_id, form)` would have altered a live constraint on
-   458 released clips in a database that has no staging copy.
+   the whole released corpus, in a database that has no staging copy. (This read "458 released clips"
+   when it was written on 2026-08-03; the scenic tier released 309 more the same day. Count it, don't
+   quote it — that is exactly why the number is gone from this sentence.)
 
 ## What it must carry (none of these optional)
 

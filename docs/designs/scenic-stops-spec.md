@@ -1,9 +1,19 @@
 # Scenic stops spec — deliberately adding scenic stops
 
-**Status:** design, agreed in a PM session (2026-06-08). NOT built — KEEP + REWRITE for V2
-(re-anchored 2026-06-19). The CONCEPT survives the V1→V2 pivot, but its implementation plan was
-written against storage that no longer exists; read the V2 banner below before building.
+**Status:** ✅ **BUILT, GENERATED AND RELEASED — 2026-08-03.** 309 scenic clips, 114 minutes, ~$44,
+live in production for lake-tahoe (§11.12 built it, §11.13 released it; API revision
+`skipper-api-00144-czl`). The tier now exists end to end: `generate-scenic-narrations.ts` →
+released → `loadCorpusForRoute` → `glance` in `candidateOf` → placed by `buildDrive`. Began as a
+design agreed in a PM session (2026-06-08), re-anchored for V2 2026-06-19, scoped 2026-08-03.
+⚠ **NOBODY HAS LISTENED TO IT** (§11.13) and release is a one-way latch — that is the open item, not
+the build. ⚠ Read §11 top-down: its subsections are numbered in the order they were WRITTEN, so the
+outcome (11.10–11.13) sits ABOVE the earlier planning (11.1–11.9).
 
+> ⚠ **The §11 banner below is preserved as it was written when the tier was still unbuilt** — its
+> "the scenic tier has NEVER been generated" and "every one of the 458 live narrations is a `story`"
+> were true on the morning of 2026-08-03 and are the MEASUREMENT that justified the build. They are
+> history now: the corpus is 458 story + 309 scenic. Don't read them as current.
+>
 > ✅ **SCOPED 2026-08-03 — read §11 first.** The demand is now measured (every one of the 458 live
 > narrations is a `story`; the scenic tier has NEVER been generated, while a real drive runs 79%
 > silent), the population is counted (925 fact-less POIs, **312** with both a kind and a road-snapped

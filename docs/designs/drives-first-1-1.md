@@ -254,11 +254,15 @@ device is normal, a hundred a minute is not.
 | API | the `areaCapable` option, hull synthesis, and the roam-protecting radius cap in `clusters.ts` |
 | DB | the `drive_demand` table + its upsert (D25) |
 
-⚠ **The removal table is INCOMPLETE — pre-flight found these, and two are architectural:**
-- `packages/engine/src/area.ts` — load-bearing for `drive-select.ts:169`'s frozen-drive guard until D40
-  lands. Do step 2 first and it dies honestly. `drives.ts` and `entitlements.ts` also need listing.
-- `packages/shared/src/client-identity.ts` — its `APP_VERSION` feeds `VersionGate`, the shipped
-  force-upgrade hatch. **Re-home `APP_VERSION` in the same commit** or that gate breaks.
+✅ **RESOLVED — the removal table WAS incomplete; pre-flight caught these and all of them landed.**
+Kept because the near-miss is the instructive part: a table of "what we delete" is exactly where a
+shipped, load-bearing dependency hides. Verified at HEAD 2026-08-04 — every item below is done.
+- `packages/engine/src/area.ts` — was load-bearing for `drive-select.ts`'s frozen-drive guard until D40
+  landed. Step 2 went first and it died honestly. `drives.ts` and `entitlements.ts` were also listed.
+  **Gone at HEAD**; `packages/engine/src` has no `area.ts` and no area branch in `trigger.ts`.
+- `packages/shared/src/client-identity.ts` — its `APP_VERSION` fed `VersionGate`, the shipped
+  force-upgrade hatch, so re-homing it in the same commit was mandatory. **Done: `APP_VERSION` now
+  lives in `apps/mobile/src/ui/VersionGate.tsx`**, beside its only consumer, and the gate still works.
 - Unlisted mobile fallout: `voice.settings.roamPack*` (~18 keys) + `voice.settings.diagnostics`,
   `app/developer.tsx`, `sim-mode.tsx`, `sample.tsx`'s `router.replace('/roam')`, the home modes block.
 - ⚠ Engine tests live in `test/`, **not** `src/` — and there is a third: `test/area-trigger.test.ts`.

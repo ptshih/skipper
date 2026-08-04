@@ -5,7 +5,19 @@
 > backfilled: the original call was made in a design session, shipped as a revert, and written down
 > **nowhere** — it survived only in agent memory and git history, while
 > [scenic-stops-spec.md](../designs/scenic-stops-spec.md) went on proposing the very mechanism it
-> rejected. The reopening is recorded in §3; nothing new is greenlit.
+> rejected. The reopening is recorded in §3.
+>
+> ⚠ **AMENDED 2026-08-04 — "nothing new is greenlit" was true when written and stopped being true
+> hours later.** The SCENIC TIER was greenlit, generated (309 clips, ~$44) and RELEASED on 2026-08-03
+> ([scenic-stops-spec.md](../designs/scenic-stops-spec.md) §11.12–11.13). **That does NOT reopen this
+> decision, and the boundary is the whole point (founder, 2026-08-04):** what June rejected was
+> `SCENIC_ANCHORS`, a SYNTHETIC curated-overlook table on a `'curated'` poi source — a place invented
+> to have something to say. What shipped is a REAL Wikidata `pois` row that happens to carry no fact
+> sheet, told name-and-kind only. Real stops only still holds; the tier is fact-less delivery on a real
+> stop, not a manufactured one. ⚠ Still unresolved by that release: the §3 "narrate the EMPTINESS"
+> shape, which needs a stretch subject kind and a fact source, and remains unbuilt.
+> ⚠ Nobody has LISTENED to the released tier (spec §11.13) — whether it clears the June
+> "too neutered" bar is an ear question, still open.
 
 ## 1. What was decided in June, and what was thrown away
 
