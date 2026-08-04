@@ -251,6 +251,49 @@ export function checkSpeakableAnchor(pin: LngLat, anchor: LngLat, kind: string |
 }
 
 /* -------------------------------------------------------------------------- */
+/*  Access point — where a car is sent when the pin itself is not drivable      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * How far (m) a curated endpoint's ACCESS POINT may sit from the place's own pin.
+ *
+ * ⚠ A SUBSTITUTION GUARD, not a precision target. The access point exists because the pin is somewhere
+ * a car cannot go — a lake surface, a beach, a mansion inside a park — so it is EXPECTED to be a few
+ * hundred metres off, and a tight bound would reject every real correction. What it must catch is the
+ * coordinate that is not this place at all: a typo, a transposed pair, or a well-meant "nearest town"
+ * that would route a rider somewhere they never asked to go and bill a Google Routes call to do it.
+ *
+ * 2 km is set from the measured corrections rather than picked: the Tahoe sweep's proposals ran 126 m
+ * (Hellman-Ehrman Mansion, effectively the park entrance) to ~900 m (Baldwin Beach, the CA-89 turn-off),
+ * so this clears the worst real case by more than double while still failing anything at the scale of a
+ * different place. ⚠ NOT kind-aware, unlike `speakableAnchorMaxM`: that bound scales with the feature's
+ * own body because a vantage must sit INSIDE it, whereas an access point deliberately sits OUTSIDE the
+ * feature — on the nearest public road, whose distance is a fact about the road network and not about
+ * how big the lake is.
+ */
+export const ACCESS_POINT_MAX_M = 2_000
+
+export interface AccessPointCheck {
+  /** Great-circle pin→access-point distance, meters. */
+  distanceM: number
+  /** The ceiling `distanceM` is judged against (`ACCESS_POINT_MAX_M`). */
+  maxM: number
+  /** False when the access point is implausibly far from the pin — reject the write / flag in an audit. */
+  ok: boolean
+}
+
+/**
+ * Sanity-check an endpoint's access point against the place's own pin. `ok:false` ⇒ this is not a
+ * correction, it is a different place. Pure, and single-sourced here so the admin write boundary and
+ * any audit judge it identically — the same contract `checkSpeakableAnchor` has. `pin`/`access` are
+ * [lng, lat]. See docs/decisions/undrivable-endpoint-anchors.md.
+ */
+export function checkAccessPoint(pin: LngLat, access: LngLat): AccessPointCheck {
+  const distanceM = haversineMeters(pin, access)
+  return { distanceM, maxM: ACCESS_POINT_MAX_M, ok: distanceM <= ACCESS_POINT_MAX_M }
+}
+
+/* -------------------------------------------------------------------------- */
 /*  Retrace — how much of a route is driven TWICE                               */
 /* -------------------------------------------------------------------------- */
 

@@ -192,6 +192,10 @@ interface ResolvedEndpoint {
   name: string
   lat: number
   lng: number
+  /** Where a car is actually sent, when this place's own pin is not somewhere a car can go. Null for
+   *  almost every anchor. ⚠ READ BY `routeWaypoints` AND BY NOTHING ELSE — see the note there. */
+  accessLat: number | null
+  accessLng: number | null
 }
 
 /**
@@ -218,12 +222,24 @@ async function hydrateAnchors(ids: string[]): Promise<ResolvedEndpoint[] | null>
   const rows = await withRetry(
     () =>
       db
-        .select({ id: places.id, name: places.name, lat: places.lat, lng: places.lng })
+        .select({
+          id: places.id,
+          name: places.name,
+          lat: places.lat,
+          lng: places.lng,
+          accessLat: places.accessLat,
+          accessLng: places.accessLng,
+        })
         .from(places)
         .where(and(inArray(places.id, unique), eq(places.endpointEligible, true))),
     { label: 'drive.hydrateAnchors' },
   )
-  const byId = new Map(rows.map((r) => [r.id, { name: r.name, lat: r.lat, lng: r.lng }]))
+  const byId = new Map(
+    rows.map((r) => [
+      r.id,
+      { name: r.name, lat: r.lat, lng: r.lng, accessLat: r.accessLat, accessLng: r.accessLng },
+    ]),
+  )
   const out: ResolvedEndpoint[] = []
   for (const id of ids) {
     const hit = byId.get(id)
@@ -279,11 +295,34 @@ const NOT_AN_ANCHOR = {
   message: "I don't know one of those spots. Pick one from the list and I'll plot it.",
 } as const
 
-/** Build the ordered Routes waypoints for a drive: [start, ...via, end]. A LOOP is end===start with a
- *  single `via` midpoint, so it materializes as a real out-and-back (start==end alone is a degenerate
- *  zero-distance route). materializeRoute routes through the middle waypoints as Routes intermediates. */
+/**
+ * Build the ordered Routes waypoints for a drive: [start, ...via, end]. A LOOP is end===start with a
+ * single `via` midpoint, so it materializes as a real out-and-back (start==end alone is a degenerate
+ * zero-distance route). materializeRoute routes through the middle waypoints as Routes intermediates.
+ *
+ * ⚠ THIS IS THE ONE PLACE AN ACCESS POINT IS ALLOWED TO WIN, and keeping it that way is the entire
+ * design. Google Places pins a FEATURE where the feature is — a lake on its water, a beach on its sand
+ * — and Routes then snaps that to whatever it can reach, which for `Spooner Lake` was a gated forest
+ * track 52 minutes the wrong way. The access point is the public turn-off a car can actually be sent
+ * to; `places.access_lat/lng` holds it, null for almost everything.
+ *
+ * ⚠ EVERYTHING ELSE KEEPS THE REAL PIN — the map marker, `driveLabel`, `sameSpot`'s loop test,
+ * `routeSigOf`, and the coordinates frozen into the saved drive. That split is the point: the rider
+ * sees "Baldwin Beach" on the beach while their car is sent to the CA-89 turn-off 900 m short of it.
+ * The rejected alternative was to overwrite lat/lng, which routes correctly and then draws a pin named
+ * for a beach in the middle of a highway. If you find yourself reaching for `accessLat` anywhere but
+ * here, you are rebuilding that. docs/decisions/undrivable-endpoint-anchors.md
+ *
+ * ⚠ BOTH OR NEITHER. The pair is written atomically at the admin boundary, so a half-set pair should be
+ * impossible — but a lone latitude here would mean routing to a point that was never anywhere, so it
+ * falls back to the pin rather than trusting half a coordinate.
+ */
 function routeWaypoints(start: ResolvedEndpoint, end: ResolvedEndpoint, via?: ResolvedEndpoint[]): Waypoint[] {
-  return [start, ...(via ?? []), end].map((p) => ({ label: p.name, lat: p.lat, lng: p.lng }))
+  return [start, ...(via ?? []), end].map((p) => ({
+    label: p.name,
+    lat: p.accessLat != null && p.accessLng != null ? p.accessLat : p.lat,
+    lng: p.accessLat != null && p.accessLng != null ? p.accessLng : p.lng,
+  }))
 }
 
 /** "These two endpoints are the same spot" — ~11 m, the tolerance that makes an out-and-back readable as

@@ -6,7 +6,7 @@
 // interactive Curate button (Opus draft → prune → Places resolve). See docs/designs/places-endpoints-spec.md.
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, MapPin, Plus, Search, Sparkles, Star, Trash2 } from 'lucide-react'
+import { Loader2, MapPin, Navigation, Plus, Search, Sparkles, Star, Trash2 } from 'lucide-react'
 import { api, type CurateResult, type PlaceDraft, type PlaceRow, type ResolvedPlace } from '@/lib/api'
 import { errMsg } from '@/lib/format'
 import { qk } from '@/lib/queryKeys'
@@ -89,6 +89,9 @@ export function PlacesView() {
     onSettled: (_d, _e, vars) => void qc.invalidateQueries({ queryKey: vars.key }),
   })
 
+  /** The place whose access point is being edited, or null. */
+  const [accessFor, setAccessFor] = useState<PlaceRow | null>(null)
+
   const confirm = useConfirm()
   const deleteMut = useMutation({
     // Same reasoning as above: invalidate the list this delete actually came from.
@@ -128,6 +131,14 @@ export function PlacesView() {
             {p.name}
           </div>
           <div className="text-xs text-muted-foreground">{p.lat.toFixed(4)}, {p.lng.toFixed(4)}</div>
+          {/* The access point is shown UNDER the pin, never instead of it — the two are different
+              facts and the whole design rests on not confusing them. Only rendered when set, which is
+              almost never, so the table stays a list of places rather than a list of coordinates. */}
+          {p.accessLat != null && p.accessLng != null && (
+            <div className="text-xs" style={{ color: PLACE_PIN_COLORS.featured }}>
+              ↳ car routed to {p.accessLat.toFixed(4)}, {p.accessLng.toFixed(4)}
+            </div>
+          )}
         </>
       ),
     },
@@ -170,11 +181,28 @@ export function PlacesView() {
     },
     {
       header: '',
-      headClassName: 'w-10',
+      headClassName: 'w-20',
       cell: (p) => (
-        <Button variant="ghost" size="icon" aria-label={`Remove ${p.name}`} onClick={() => void onDelete(p)}>
-          <Trash2 className="h-4 w-4 text-muted-foreground" />
-        </Button>
+        <div className="flex items-center justify-end">
+          {/* Only offered on ENDPOINTS. An access point is where a DRIVE is routed; a break pitstop is
+              not an endpoint and giving it one would imply a routing rule that does not exist. */}
+          {p.endpointEligible && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Access point for ${p.name}`}
+              onClick={() => setAccessFor(p)}
+            >
+              <Navigation
+                className="h-4 w-4"
+                style={{ color: p.accessLat != null ? PLACE_PIN_COLORS.featured : undefined }}
+              />
+            </Button>
+          )}
+          <Button variant="ghost" size="icon" aria-label={`Remove ${p.name}`} onClick={() => void onDelete(p)}>
+            <Trash2 className="h-4 w-4 text-muted-foreground" />
+          </Button>
+        </div>
       ),
     },
   ]
@@ -268,7 +296,83 @@ export function PlacesView() {
           onAdded={() => { setAdding(false); void qc.invalidateQueries({ queryKey }) }}
         />
       )}
+
+      {accessFor && (
+        <AccessPointDialog
+          place={accessFor}
+          onClose={() => setAccessFor(null)}
+          onSaved={() => { setAccessFor(null); void qc.invalidateQueries({ queryKey }) }}
+        />
+      )}
     </div>
+  )
+}
+
+/* ── ACCESS POINT (where a car is sent when the pin itself is not drivable) ── */
+
+/**
+ * Set or clear one place's access point.
+ *
+ * ⚠ THE COPY IS THE GUARD HERE. Nothing on screen can show an operator that the coordinate they typed
+ * is on a public road — only Google knows that, and only when a drive is routed. What the dialog CAN
+ * do is make it obvious that this moves the CAR and not the PLACE, because an operator who thinks they
+ * are correcting a wrong pin will happily type the coordinates of a different town.
+ *
+ * The server bounds it near the place (`checkAccessPoint`, 422). This does not re-implement that bound
+ * — one expression, at the write — it just surfaces the refusal.
+ */
+function AccessPointDialog({ place, onClose, onSaved }: {
+  place: PlaceRow
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [lat, setLat] = useState(place.accessLat?.toString() ?? '')
+  const [lng, setLng] = useState(place.accessLng?.toString() ?? '')
+
+  const save = useMutation({
+    mutationFn: (body: { accessLat: number | null; accessLng: number | null }) =>
+      api.patchPlace(place.id, body),
+    onSuccess: onSaved,
+  })
+
+  const parsed = { lat: Number(lat), lng: Number(lng) }
+  const blank = lat.trim() === '' && lng.trim() === ''
+  // ⚠ Both or neither, mirroring the server: half a coordinate is a point that was never anywhere.
+  const valid = blank || (Number.isFinite(parsed.lat) && Number.isFinite(parsed.lng) && lat.trim() !== '' && lng.trim() !== '')
+
+  return (
+    <FormDialog
+      open
+      onOpenChange={(o) => { if (!o) onClose() }}
+      icon={Navigation}
+      title={`Access point — ${place.name}`}
+      description="Where a car is routed for this place. The pin, the map marker and the drive's title all keep the real location; only the Google Routes request uses this. Leave both blank to clear it."
+      contentClassName="sm:max-w-md"
+      onSubmit={() => save.mutate(blank ? { accessLat: null, accessLng: null } : { accessLat: parsed.lat, accessLng: parsed.lng })}
+      submitLabel={blank ? 'Clear access point' : 'Save access point'}
+      submitPendingLabel="Saving…"
+      submitDisabled={!valid}
+      pending={save.isPending}
+    >
+      <div className="text-xs text-muted-foreground">
+        Pin: {place.lat.toFixed(5)}, {place.lng.toFixed(5)}
+      </div>
+      <div className="flex gap-2">
+        <div className="flex-1 space-y-1.5">
+          <Label htmlFor="access-lat">Access latitude</Label>
+          <Input id="access-lat" autoFocus value={lat} onChange={(e) => setLat(e.target.value)} placeholder="39.10650" />
+        </div>
+        <div className="flex-1 space-y-1.5">
+          <Label htmlFor="access-lng">Access longitude</Label>
+          <Input id="access-lng" value={lng} onChange={(e) => setLng(e.target.value)} placeholder="-119.91647" />
+        </div>
+      </div>
+      <Callout variant="info">
+        Use it when the place's own pin is somewhere a car cannot go — a lake's water, a beach, a
+        building inside a park. `audit-endpoint-routability --snap` proposes the coordinate.
+      </Callout>
+      {save.error && <Callout variant="error">{errMsg(save.error)}</Callout>}
+    </FormDialog>
   )
 }
 

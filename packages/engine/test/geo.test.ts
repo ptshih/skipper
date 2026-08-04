@@ -5,6 +5,8 @@ import {
   parseRegionBbox,
   pointInRegionBbox,
   bearingDeg,
+  ACCESS_POINT_MAX_M,
+  checkAccessPoint,
   checkSpeakableAnchor,
   cumulativeMeters,
   haversineMeters,
@@ -104,6 +106,56 @@ describe('triggerRadiusForKind: tight when anchored, kind-floor when not', () =>
 
   test('anchor VALIDITY (speakableAnchorMaxM) is unchanged — it reads the un-conditional radius, not this floor', () => {
     expect(speakableAnchorMaxM('mountain')).toBe(Math.round(SPEAKABLE_ANCHOR_RADIUS_MULT * radiusForKind('mountain')))
+  })
+})
+
+describe('access point sanity — where a car is sent when the pin is not drivable', () => {
+  // Every number below is a measured proposal from the Tahoe routability sweep, not an invented case.
+  test('the real corrections all clear the bound, and not narrowly', () => {
+    // Hellman-Ehrman Mansion → the Sugar Pine Point park entrance: the closest correction there is.
+    const close = checkAccessPoint([-120.11409, 39.05301], [-120.1146, 39.05195])
+    expect(close.distanceM).toBeLessThan(200)
+    expect(close.ok).toBe(true)
+
+    // Baldwin Beach → its CA-89 turn-off: the FURTHEST real correction, and the one that sets the bound.
+    const far = checkAccessPoint([-120.0662, 38.9427], [-120.0646, 38.93471])
+    expect(far.distanceM).toBeGreaterThan(850)
+    expect(far.ok).toBe(true)
+    // Clears by more than 2×. If a future correction ever lands near the ceiling, that is the signal to
+    // re-derive the bound from data rather than to nudge it.
+    expect(far.distanceM * 2).toBeLessThan(ACCESS_POINT_MAX_M)
+  })
+
+  test('an access point on top of the pin is fine — null and zero mean the same thing here', () => {
+    const r = checkAccessPoint([-120.1, 39.05], [-120.1, 39.05])
+    expect(r.distanceM).toBeCloseTo(0, 5)
+    expect(r.ok).toBe(true)
+  })
+
+  test('A DIFFERENT PLACE IS REJECTED — the substitution this guard exists for', () => {
+    // Spooner Lake's pin with Carson City's coordinates: a plausible-looking "nearest town" correction
+    // that would route a rider 13 km from the place they asked for, and bill Routes to do it.
+    const r = checkAccessPoint([-119.908998, 39.107603], [-119.767403, 39.163798])
+    expect(r.distanceM).toBeGreaterThan(ACCESS_POINT_MAX_M)
+    expect(r.ok).toBe(false)
+  })
+
+  test('a transposed lat/lng is rejected rather than routed to', () => {
+    // The classic typo: [lng,lat] written as [lat,lng] puts Tahoe in the Indian Ocean.
+    expect(checkAccessPoint([-120.1, 39.05], [39.05, -120.1]).ok).toBe(false)
+  })
+
+  test('the bound is NOT kind-aware, unlike the speakable one', () => {
+    // An access point sits OUTSIDE the feature by design — on the nearest public road — so scaling it
+    // with the feature's own size would be measuring the wrong thing. The distance to a road is a fact
+    // about the road network, not about how big the lake is.
+    const near = checkAccessPoint([-120.1, 39.05], [-120.1, 39.051])
+    const far = checkAccessPoint([-120.1, 39.05], [-120.1, 39.065])
+    expect(near.maxM).toBe(far.maxM)
+    expect(near.maxM).toBe(ACCESS_POINT_MAX_M)
+    // And it is genuinely a different bound from the speakable one for the same place — a museum's
+    // vantage ceiling (900 m) would reject the Baldwin Beach turn-off this guard has to allow.
+    expect(ACCESS_POINT_MAX_M).toBeGreaterThan(speakableAnchorMaxM('museum'))
   })
 })
 

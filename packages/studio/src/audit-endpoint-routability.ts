@@ -88,7 +88,21 @@ interface Anchor {
   lat: number
   lng: number
   featured: boolean
+  accessLat: number | null
+  accessLng: number | null
 }
+
+/**
+ * The coordinate a DRIVE is actually routed to for this anchor.
+ *
+ * ⚠ IT MUST AGREE WITH `routeWaypoints` (apps/api/src/drives.ts) OR THIS SWEEP MEASURES FICTION. The
+ * two are separate copies of one rule — the repeated bug class in this codebase — and they fail in
+ * opposite, equally useless directions: probing the PIN after an access point is set re-flags every
+ * corrected anchor forever, so the exit code stops meaning anything; probing the access point when the
+ * API ignores it would pass anchors that still send riders up a gated road. Same fallback, same order.
+ */
+const routedPoint = (a: Anchor): { lat: number; lng: number } =>
+  a.accessLat != null && a.accessLng != null ? { lat: a.accessLat, lng: a.accessLng } : { lat: a.lat, lng: a.lng }
 
 /**
  * The origin a candidate is probed FROM: its nearest FEATURED anchor.
@@ -227,6 +241,8 @@ async function main() {
           lat: places.lat,
           lng: places.lng,
           featured: places.featured,
+          accessLat: places.accessLat,
+          accessLng: places.accessLng,
         })
         .from(places)
         .where(
@@ -303,9 +319,13 @@ async function main() {
       continue
     }
     try {
+      // ⚠ Both ends via `routedPoint`: an origin with its own access point must be probed the way a
+      // drive would leave it, or the leg measured is not a leg any rider takes.
+      const from = routedPoint(origin)
+      const to = routedPoint(anchor)
       const route = await materializeRoute([
-        { label: origin.name, lat: origin.lat, lng: origin.lng },
-        { label: anchor.name, lat: anchor.lat, lng: anchor.lng },
+        { label: origin.name, ...from },
+        { label: anchor.name, ...to },
       ])
       // ⚠ COUNTED HERE, THE INSTANT THE CALL RESOLVES — that resolve IS the bill, and a tally kept
       // anywhere below would lose exactly the probes that spent and then threw (CLAUDE.md: a paid run

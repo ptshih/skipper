@@ -184,7 +184,7 @@ are the ops CLIs" rather than "these are the ones anyone checked" — and the un
 | `snapshot-corpus.ts` | READ-ONLY | n/a | ✅ |
 | `audit-loudness.ts` | READ-ONLY on DB + R2 (ffmpeg probe); `--json` writes a local baseline file | preview (no R2 pull); `--run` measures | ✅ — ⚠ SOLO clips only (inner-joins `pois`, so fused tellings are invisible) |
 | `audit-speakable.ts` | READ-ONLY | n/a | ✅ |
-| `audit-endpoint-routability.ts` | SPENDS $ (~$0.005/anchor of Routes) on `--apply`; READ-ONLY on the DB in every mode | dry-run (free — prints the probe plan + estimate) | ✅ — writes nothing; exits 1 on a flag. ⚠ Re-run after any `curate-places`, which restores a corrected pin |
+| `audit-endpoint-routability.ts` | SPENDS $ (~$0.005/anchor of Routes; `--snap` adds up to 10 more per FLAGGED anchor) on `--apply`; READ-ONLY on the DB in every mode | dry-run (free — prints the probe plan + estimate) | ✅ — writes nothing; exits 1 on a flag. `--snap` PROPOSES an access point per flagged anchor (apply it in the admin). ⚠ Re-run after any `curate-places`: it overwrites a place's PIN, and a moved pin with a stale access point is a new way to be wrong |
 | `test-mastering-chain.ts` | READ-ONLY (local ffmpeg, synthetic input) | n/a | ✅ |
 | `judge-voice.ts` | SPENDS $ (charm judge) on `--apply` | dry-run (free by-ear worksheet + estimate) | ✅ — writes only a local markdown file |
 

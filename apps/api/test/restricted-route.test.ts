@@ -35,9 +35,14 @@ const FAR = '00000000-0000-4000-8000-000000000702'
 
 /** ⚠ START AND FAR SHARE NOTHING — `sameSpot` (drives.ts) reads these coordinates to decide whether the
  *  rider asked for a loop, and the ordering test below needs to be able to make one on demand. */
+const GATED = '00000000-0000-4000-8000-000000000703'
+
 const PLACES = [
-  { id: START, name: 'Start Pier', lat: 39.0, lng: -120.0 },
-  { id: FAR, name: 'The Lake Itself', lat: 39.2, lng: -120.2 },
+  { id: START, name: 'Start Pier', lat: 39.0, lng: -120.0, accessLat: null, accessLng: null },
+  { id: FAR, name: 'The Lake Itself', lat: 39.2, lng: -120.2, accessLat: null, accessLng: null },
+  // A place whose own pin is not drivable, carrying the public turn-off a car is sent to instead.
+  // The two are ~1.6 km apart, so a test that confused them could not pass by rounding.
+  { id: GATED, name: 'Gated Beach', lat: 39.31, lng: -120.31, accessLat: 39.3, accessLng: -120.3 },
 ]
 
 /* ------------------------------- the session ------------------------------ */
@@ -117,6 +122,10 @@ mock.module('@skipper/db', () => ({ ...realDb, db: dbProxy }))
 let nextWarnings: string[] = []
 /** The polyline the mocked Routes call returns — only the ordering test cares what shape it is. */
 let nextPolyline: LngLat[] = []
+/** Every waypoint list handed to the BILLED Routes call, in order. The access-point tests assert on
+ *  this rather than on a status code: "what did we actually ask Google to route?" is the question, and
+ *  nothing in the response can answer it. */
+let routeCalls: Waypoint[][] = []
 
 const realRouting = { ...(await import('@skipper/routing')) }
 mock.module('@skipper/routing', () => ({
@@ -127,6 +136,7 @@ mock.module('@skipper/routing', () => ({
         ? realRouting.materializeRoute(waypoints)
         : realRouting.materializeRoute(waypoints, apiKey)
     }
+    routeCalls.push(waypoints.map((w) => ({ ...w })))
     // ⚠ The BILL is modelled as having already landed — that is the whole situation this gate is in.
     // ⚠ `restricted` is computed by the REAL `hasRestrictedRoads`, never hand-set: if the mock decided
     // it, this file would be testing its own fixture and would stay green through a rewrite of the
@@ -198,6 +208,7 @@ afterEach(() => {
   nextPolyline = []
   reachedCorpus = false
   spendLines = []
+  routeCalls = []
   restore?.()
   restore = null
 })
@@ -291,6 +302,63 @@ describe('RESTRICTED IS ANSWERED BEFORE RETRACE — the ordering is the point', 
       expect(((await res.json()) as { error?: string }).error).toBe('restricted_route')
     })
   }
+})
+
+describe('the access point reaches GOOGLE and never the rider', () => {
+  // ⚠ THE SPLIT IS THE WHOLE DESIGN. `places.access_lat/lng` exists so a place whose own pin is not
+  // drivable can still be offered: the car is sent to the public turn-off while the map marker, the
+  // title and the saved drive keep the real pin. The rejected alternative — overwriting lat/lng —
+  // routes correctly and then draws a pin named for a beach in the middle of a highway. Both halves
+  // are asserted here, because a change that satisfies only one of them looks entirely fine from the
+  // other side.
+
+  test('the BILLED Routes call is given the access point, not the pin', async () => {
+    nextWarnings = []
+    await call('/propose', { start: START, end: GATED, idempotencyKey: crypto.randomUUID() }).catch(() => undefined)
+    expect(routeCalls).toHaveLength(1)
+    const destination = routeCalls[0]!.at(-1)!
+    expect(destination.lat).toBe(39.3)
+    expect(destination.lng).toBe(-120.3)
+  })
+
+  test('the place keeps its NAME through the substitution — only the coordinates move', async () => {
+    // The access point replaces WHERE the car goes, never WHICH place this is. `driveLabel` builds the
+    // drive's title from these labels, so a swap here would rename the rider's drive after a road.
+    //
+    // ⚠ The other half of the display rule — that the echoed endpoint and the saved drive's
+    // start/end coordinates keep the real pin — is NOT reachable from this fixture: both live past the
+    // corpus read, which this file deliberately carries no data for (see PAST_THE_GATE). It holds by
+    // construction rather than by assertion: `/propose` echoes `startEp`/`endEp` (the ResolvedEndpoint
+    // itself) and the insert reads `start.lat` / `start.lng`, while `accessLat` is read only inside
+    // `routeWaypoints`. If that ever stops being true, this comment is the thing that was wrong.
+    nextWarnings = []
+    await call('/propose', { start: START, end: GATED, idempotencyKey: crypto.randomUUID() }).catch(() => undefined)
+    expect(routeCalls[0]!.at(-1)!.label).toBe('Gated Beach')
+  })
+
+  test('a place with NO access point still routes to its own pin', async () => {
+    // The overwhelmingly common case. A null pair must mean "route to the pin", never "route to 0,0".
+    nextWarnings = []
+    await call('/propose', { start: START, end: FAR, idempotencyKey: crypto.randomUUID() }).catch(() => undefined)
+    const destination = routeCalls[0]!.at(-1)!
+    expect(destination.lat).toBe(39.2)
+    expect(destination.lng).toBe(-120.2)
+  })
+
+  test('an access point on a VIA is used too — the middle of a route bills the same as its ends', async () => {
+    // INV-1's lesson restated: guarding both ends and leaving the middle open is not a partial
+    // guarantee, it is none. The same applies to which coordinate the middle is routed through.
+    nextWarnings = []
+    await call('/propose', {
+      start: START,
+      end: FAR,
+      via: [GATED],
+      idempotencyKey: crypto.randomUUID(),
+    }).catch(() => undefined)
+    const mid = routeCalls[0]![1]!
+    expect(mid.lat).toBe(39.3)
+    expect(mid.lng).toBe(-120.3)
+  })
 })
 
 describe('the refusal still reports what it BILLED', () => {

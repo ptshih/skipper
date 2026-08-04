@@ -58,7 +58,7 @@ import {
 } from '@skipper/db/schema'
 import { user } from '@skipper/db/auth-schema'
 import { CLAUDE_MODELS, classifyStoryEligibility } from '@skipper/shared'
-import { checkSpeakableAnchor } from '@skipper/engine'
+import { checkAccessPoint, checkSpeakableAnchor } from '@skipper/engine'
 import { groundingHash } from '@skipper/db/hash'
 import { requireAdmin, type AdminEnv } from './auth'
 import { bboxError, bboxOverlapsRect, parseBbox, pointInBbox, type BboxCorners } from './bbox'
@@ -443,6 +443,10 @@ const placeCols = {
   endpointEligible: places.endpointEligible,
   breakEligible: places.breakEligible,
   featured: places.featured,
+  // Where a car is actually sent when the pin is not drivable — null for almost every place. Surfaced
+  // so the console can SHOW which endpoints carry a correction; it is the operator's only view of it.
+  accessLat: places.accessLat,
+  accessLng: places.accessLng,
 }
 
 /** Upsert one curated place (dedup by place_id). OR-merge the role flags so a role, once curated,
@@ -478,6 +482,12 @@ function upsertCuratedPlace(row: {
         // places on a path that advertises itself as additive (the two roles right above cannot be
         // dropped this way). Demotion stays possible, but only through an explicit PATCH.
         featured: sql`${places.featured} OR excluded.featured`,
+        // ⚠ `accessLat`/`accessLng` ARE DELIBERATELY ABSENT FROM THIS SET, and their absence is the
+        // whole mechanism — an access point is OPERATOR-OWNED, like `pois.speakable_lat/lng`. Adding
+        // them here (or to the `values` above) would let a re-curate revert a human's correction and
+        // send riders back up the gated road, which is exactly what already happens to lat/lng and is
+        // why the correction had to move out of lat/lng in the first place. Nothing fails if you add
+        // them; the drives just quietly go wrong again. docs/decisions/undrivable-endpoint-anchors.md
         updatedAt: new Date(),
       },
     })
@@ -509,12 +519,66 @@ app.patch('/admin/places/:id', async (c) => {
   const id = c.req.param('id')
   if (!UUID_RE.test(id)) return c.json({ error: 'bad_request' }, 400)
   const body = await c.req
-    .json<{ endpointEligible?: boolean; breakEligible?: boolean; featured?: boolean }>()
+    .json<{
+      endpointEligible?: boolean
+      breakEligible?: boolean
+      featured?: boolean
+      /** Both together, or both null to clear. See the access-point block below. */
+      accessLat?: number | null
+      accessLng?: number | null
+    }>()
     .catch(() => ({}) as Record<string, never>)
   const update: Record<string, unknown> = {}
   if (typeof body.endpointEligible === 'boolean') update.endpointEligible = body.endpointEligible
   if (typeof body.breakEligible === 'boolean') update.breakEligible = body.breakEligible
   if (typeof body.featured === 'boolean') update.featured = body.featured
+
+  // THE ACCESS POINT — where a car is sent when the place's own pin is not drivable.
+  //
+  // ⚠ THE PAIR IS ATOMIC. A lone latitude is not a location, and half-applying one would leave the row
+  // with an access longitude from a previous correction and a latitude from this one — a coordinate
+  // that was never anywhere. Both keys must be present, and both must be the same kind of thing:
+  // two numbers to set, two nulls to clear.
+  const wantsAccess = 'accessLat' in body || 'accessLng' in body
+  if (wantsAccess) {
+    const { accessLat: alat, accessLng: alng } = body
+    const clearing = alat === null && alng === null
+    const setting = typeof alat === 'number' && typeof alng === 'number'
+    if (!clearing && !setting) {
+      return c.json({ error: 'bad_request', message: 'accessLat and accessLng must both be numbers, or both null.' }, 400)
+    }
+    if (clearing) {
+      update.accessLat = null
+      update.accessLng = null
+    } else {
+      // ⚠ BOUNDED AGAINST THE PLACE'S OWN PIN, and read from the DB rather than from the request — a
+      // caller that supplied the pin too could authorise any coordinate by lying about where the place
+      // is. This is the same shape as the speakable-anchor guard above: the write boundary is where an
+      // implausible coordinate has to die, because past it the value is indistinguishable from a good
+      // one and the only symptom is a rider routed somewhere they never asked to go.
+      const [place] = await db
+        .select({ lat: places.lat, lng: places.lng })
+        .from(places)
+        .where(eq(places.id, id))
+        .limit(1)
+      if (!place) return c.json({ error: 'not_found' }, 404)
+      const check = checkAccessPoint([place.lng, place.lat], [alng!, alat!])
+      if (!check.ok) {
+        return c.json(
+          {
+            error: 'access_point_too_far',
+            message:
+              `That point is ${Math.round(check.distanceM)} m from the place (max ${check.maxM} m). ` +
+              `An access point is the same place's turn-off, not a different place.`,
+          },
+          422,
+        )
+      }
+      update.accessLat = alat
+      update.accessLng = alng
+    }
+  }
+
   if (!Object.keys(update).length) return c.json({ error: 'nothing to update' }, 400)
   update.updatedAt = new Date()
   const [row] = await db.update(places).set(update).where(eq(places.id, id)).returning(placeCols)

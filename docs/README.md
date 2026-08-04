@@ -169,8 +169,11 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   forest track and a Carson City round trip came back **143 min** instead of 39, with a "Make this
   drive" button under it. Routes has no avoid-unpaved/avoid-private, so `routes.warnings` is the only
   signal — now read in `@skipper/routing`, refused at both billed sites, and swept offline by
-  `audit-endpoint-routability` (9 of 111 Tahoe anchors flagged). ⚠ `curate-places` restores a corrected
-  pin (last-write-wins), so the sweep is the standing guard. ✅ ADOPTED + BUILT 2026-08-04.
+  `audit-endpoint-routability` (9 of 111 Tahoe anchors flagged). The durable fix is `places.access_lat/lng`
+  (migration `0044`) — where a car is ROUTED, read only by `routeWaypoints`, while the map marker, the
+  title and the saved drive keep the real pin; operator-owned, so neither upsert overwrites it. ⚠ Re-pinning
+  was measured NOT to work (a beach's own parking lot returns the identical warning). Tahoe verified clean:
+  108 anchors, 0 flagged. ✅ ADOPTED + BUILT 2026-08-04.
 - [corpus-enrichment.md](decisions/corpus-enrichment.md) — the paid `enrich` step that scouts story
   POIs into curated fact wells (`pois.fact_sheet`) every drive shares; ✅ BUILT 2026-06-15, RUN
   2026-06-16 (315 welled).

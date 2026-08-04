@@ -1,12 +1,15 @@
 # A curated endpoint must be a place a car can reach
 
-**Status:** ✅ **ADOPTED + BUILT 2026-08-04.** Three parts, all live: `@skipper/routing` asks Routes for
+**Status:** ✅ **ADOPTED + BUILT 2026-08-04.** Four parts, all live: `@skipper/routing` asks Routes for
 `routes.warnings` and derives `restricted` (`hasRestrictedRoads`); `apps/api` refuses a restricted route
 at BOTH billed sites (`POST /drives/propose`, `POST /drives`) before the corpus read and before the
-ledger batch; `packages/studio/src/audit-endpoint-routability.ts` sweeps a region's curated endpoints
-and names the bad ones. Extends [region-release-gate.md](region-release-gate.md) (what a rider may be
-offered) and sits beside [no-same-road-loops.md](no-same-road-loops.md) — the other post-materialize
-refusal, and the one whose ordering this record pins.
+ledger batch; `places.access_lat/lng` (migration `0044`) carries where a car is sent when the pin is not
+drivable, set in the admin and read only by `routeWaypoints`;
+`packages/studio/src/audit-endpoint-routability.ts` sweeps a region's curated endpoints, names the bad
+ones and `--snap` proposes their access points. Tahoe is clean as of the same day: 108 anchors, 0
+flagged. Extends [region-release-gate.md](region-release-gate.md) (what a rider may be offered) and sits
+beside [no-same-road-loops.md](no-same-road-loops.md) — the other post-materialize refusal, and the one
+whose ordering this record pins.
 
 ## What happened
 
@@ -78,24 +81,62 @@ Spooner probe (42 km/h, inflated by the highway portion). A gate tuned on one or
 passes the same bad anchor asked for from somewhere else.
 
 So the gate refuses on the warning alone, and **the eight are genuinely restricted too** — each has a
-gate, a fee station or a private road on its final approach. They are not false positives; they are
-imprecise pins that should point at the public lot rather than at the feature. Failing closed costs a
-rider an in-persona "pick another spot" on a recoverable turn; failing open costs them a
+gate, a fee station or a private road on its final approach. They are not false positives. Failing
+closed costs a rider an in-persona "pick another spot" on a recoverable turn; failing open costs them a
 non-refundable credit on a drive to a locked gate. Given the credit is non-refundable
 ([credit-ledger.md](credit-ledger.md)), the blunt gate is the right side to err on — and every refusal
-it causes is removable by re-pinning one row.
+it causes is removable, one row at a time, by the access point below. That is what makes a blunt gate
+affordable: it is strict, and there is a cheap per-place answer to each thing it catches.
 
-## The fragility that remains, and what covers it
+## The access point — the durable fix (BUILT 2026-08-04)
 
-`curate-places` upserts `lat`/`lng` **last-write-wins** on `place_id`, and `endpoint_eligible` is
-OR-merged (a role, once curated, is never cleared by a later run). So a corrected pin is restored to
-the bad one by the next curation of that region, and clearing the role does not stick either. Spooner
-was corrected by hand on 2026-08-04; that correction is **not** durable on its own.
+Correcting the pin was the wrong shape, and measurement is what showed it. Two things came out of the
+first sweep:
 
-What makes it survivable is that neither backstop depends on the pin staying fixed: the wire refuses
-the restricted route whenever it reappears, and the sweep names it again. **Re-run
-`audit-endpoint-routability` after any `curate-places` run** — the CLI's own summary says so.
+**Re-pinning does not work for most of them.** Kiva Beach has a real, free, dedicated Google parking
+lot 200 m from its pin; routing to that lot returns the *identical* warning on the *identical* route,
+because the restriction is the access road you drive either way. There is no coordinate at the place
+that clears it. So the earlier reading here — "imprecise pins that should point at the public lot" —
+was wrong, and is corrected rather than quietly dropped.
 
-A durable fix would be an operator-owned routable point that curation does not write — the shape
-`pois.speakable_lat/lng` already has (admin-owned, never sweep-set). That is a schema change and is NOT
-built; it is the obvious next step if hand-corrections start getting reverted in practice.
+**Overwriting `lat`/`lng` is dishonest even when it works.** It routes correctly and then draws a pin
+named for a beach in the middle of a highway, mis-titles the drive, and mis-saves the rider's own
+record of where they went.
+
+So `places` gained **`access_lat` / `access_lng`** (migration `0044`), nullable, the same contract
+`pois.speakable_lat/lng` already has:
+
+- **One reader.** `routeWaypoints` (`apps/api/src/drives.ts`) — the Google Routes request and nothing
+  else. The map marker, `driveLabel`, `sameSpot`'s loop test, `routeSigOf` and the `drives.start_lat` /
+  `end_lat` frozen into a saved drive all keep the real pin. A rider sees Baldwin Beach on the beach
+  while their car is sent to the CA-89 turn-off 900 m short of it.
+- **Operator-owned.** Deliberately absent from BOTH upserts (`curate-places` and the admin's
+  manual-add), which is the whole mechanism — those two overwrite `lat`/`lng` last-write-wins, and that
+  is exactly why the correction had to leave `lat`/`lng`. Both sites carry a comment saying so; nothing
+  fails if someone adds them, the drives just quietly go wrong again.
+- **Bounded.** `checkAccessPoint` (`@skipper/engine`, 2 km) at the admin write, 422 past it. Not
+  kind-aware, unlike `speakableAnchorMaxM`: a vantage must sit INSIDE the feature, whereas an access
+  point sits deliberately outside it, on the nearest public road — a fact about the road network, not
+  about how big the lake is. The bound is set from the measured corrections (126 m to ~900 m), so it
+  clears the worst real case by more than double while still failing a different-place substitution.
+- **Proposed, not guessed.** `audit-endpoint-routability --snap` binary-searches each restricted route
+  for the furthest point along it a car can still be sent to, and prints the coordinate with how far
+  short of the pin it falls. It writes nothing; a human reads the distance and signs it off.
+- **Measured by the same rule it is written under.** The sweep probes `routedPoint`, which mirrors
+  `routeWaypoints`. Two copies of one rule, and they fail in opposite useless directions if they drift:
+  probe the pin and every corrected anchor re-flags forever; probe the access point while the API
+  ignores it and a gated road passes.
+
+**Result:** all 8 remaining anchors were given access points on 2026-08-04 except California Main Lodge
+Parking, whose endpoint role was dropped instead — it is Heavenly's private parking structure and 500 m
+short of it is a spot on a road, not a place anyone names. Spooner Lake's pin was returned to the lake
+with the visitor centre as its access point. The verification sweep is **108 anchors, 0 flagged, exit
+0**, from 9 flagged at the start.
+
+## What still needs watching
+
+`endpoint_eligible` is OR-merged, so a re-curation can restore the role on a place an operator pruned
+(California Main Lodge Parking is the live example). The access point itself now survives a
+re-curation, but the PIN does not — and a moved pin with a stale access point is a new way to be
+wrong. **Re-run `audit-endpoint-routability` after any `curate-places` run**; it is the standing guard
+and its exit code is meaningful now that it measures the routed point.

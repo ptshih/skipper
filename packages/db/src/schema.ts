@@ -488,6 +488,26 @@ export const places = pgTable(
     // freshly-resolved row defaults to neither until the curator tags it.
     endpointEligible: boolean('endpoint_eligible').notNull().default(false),
     breakEligible: boolean('break_eligible').notNull().default(false),
+    // WHERE A CAR IS ACTUALLY SENT, when the place's own pin is not somewhere a car can go. Google
+    // Places answers with the FEATURE's location — for a lake, the water; for a beach, the sand — and
+    // Routes then snaps that to whatever it can find, which for `Spooner Lake` was a gated forest track
+    // 52 minutes the wrong way. Nullable, and null is the overwhelming norm: only an endpoint whose
+    // approach is restricted needs one.
+    //
+    // ⚠ THE ROUTES REQUEST READS THIS AND NOTHING ELSE DOES. lat/lng stay the truth for the map marker,
+    // the drive's title, the loop test and the coordinates frozen into a saved drive — so a rider still
+    // sees "Baldwin Beach" on the beach while their car is routed to the public turn-off. Letting this
+    // leak into DISPLAY would rebuild the dishonest version this column exists to avoid (a pin named for
+    // a beach sitting on a highway). apps/api/src/drives.ts `routeWaypoints` is the one reader.
+    //
+    // ⚠ OPERATOR-OWNED — the same contract as `pois.speakable_lat/lng`. Neither the curate-places CLI
+    // nor the admin's manual-add upsert may write it, or a re-curation silently reverts a human's
+    // correction the way it already does to lat/lng. Bounded near its pin at the admin write boundary
+    // (`checkAccessPoint`), because an unbounded one is a substitution: it would route a rider to a
+    // place they did not ask for and bill a Routes call to do it.
+    // docs/decisions/undrivable-endpoint-anchors.md
+    accessLat: doublePrecision('access_lat'),
+    accessLng: doublePrecision('access_lng'),
     // The popular subset floated to the TOP of the (short) curated picker — a curator judgment today
     // (usage-derived "most-picked floats up" is deferred; see the spec). Surfaced on the anchor DTO.
     featured: boolean('featured').notNull().default(false),

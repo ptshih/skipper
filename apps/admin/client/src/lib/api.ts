@@ -396,6 +396,10 @@ export interface PlaceRow {
   endpointEligible: boolean
   breakEligible: boolean
   featured: boolean
+  /** Where a car is routed when this place's own pin is not drivable — null for almost every place.
+   *  Display keeps `lat`/`lng`; only the Google Routes request reads these. */
+  accessLat: number | null
+  accessLng: number | null
 }
 
 // A live Google Places resolution (POST /admin/places/resolve) — the manual-add candidate before insert.
@@ -464,7 +468,18 @@ export const api = {
   // Curated places (the /places surface). `places` returns the region's set + its bbox (for the map).
   places: (region: string) =>
     req<{ places: PlaceRow[]; bbox: string | null }>(`/admin/places?region=${encodeURIComponent(region)}`),
-  patchPlace: (id: string, body: { endpointEligible?: boolean; breakEligible?: boolean; featured?: boolean }) =>
+  patchPlace: (
+    id: string,
+    body: {
+      endpointEligible?: boolean
+      breakEligible?: boolean
+      featured?: boolean
+      /** Both numbers to set an access point, both null to clear it. The server rejects a lone one —
+       *  half a coordinate is a point that was never anywhere. */
+      accessLat?: number | null
+      accessLng?: number | null
+    },
+  ) =>
     req<{ place: PlaceRow }>(`/admin/places/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deletePlace: (id: string) => req<{ ok: true }>(`/admin/places/${id}`, { method: 'DELETE' }),
   resolvePlace: (body: { region: string; query: string }) =>

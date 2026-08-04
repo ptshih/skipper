@@ -352,6 +352,12 @@ async function main(): Promise<void> {
               endpointEligible: sql`${places.endpointEligible} OR excluded.endpoint_eligible`,
               breakEligible: sql`${places.breakEligible} OR excluded.break_eligible`,
               featured: sql`excluded.featured`,
+              // ⚠ `accessLat`/`accessLng` ARE DELIBERATELY ABSENT, and their absence is the mechanism —
+              // an access point (where a car is sent when the pin is not drivable) is OPERATOR-OWNED,
+              // like `pois.speakable_lat/lng`. `lat`/`lng` right above ARE last-write-wins, so this run
+              // already reverts a hand-corrected pin; that is precisely why the correction lives in its
+              // own columns now. Adding them here re-opens the hole and nothing fails — the drives just
+              // quietly route up the gated road again. docs/decisions/undrivable-endpoint-anchors.md
               updatedAt: new Date(),
             },
           }),
