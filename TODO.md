@@ -23,6 +23,33 @@ Carry-forward **engineering** items (the near-term layer of the truth system —
 Each item has enough context to action without re-deriving the reasoning. **Delete items
 when done** — git history is the archive.
 
+## The Yosemite region row has an INVALID slug — needs a founder call (found 2026-08-03)
+
+The only non-Tahoe region is slugged **`Yosemite-national-park`** (capital Y). Two things make that a
+real defect rather than a cosmetic one:
+
+- It **fails the admin's own validator**. `POST /admin/regions` enforces
+  `^[a-z0-9]+(-[a-z0-9]+)*$`, so this row could not be created through the console today — it predates
+  the validation and was seeded another way.
+- `resolveRegion` matches **exactly and case-sensitively** (`eq(regions.slug, key)`), so
+  `--region=yosemite-national-park` resolves to nothing. Every CLI run, every `PATCH
+  /admin/regions/:slug` and the release route must use the capitalised string verbatim. Nobody has
+  exercised the slug path for this region.
+
+Mitigated but not fixed: `resolveRegion` now **lists the known slugs** on a miss, so the failure is
+self-correcting rather than a dead end (`no-default-region.md`).
+
+**Why it is not just fixed:** it is a write to the shared prod DB (dev and prod point at ONE Neon), and
+`apps/admin/server/index.ts` states the slug is PERMANENT — there is no rename route and no
+delete-region route. The rename itself looks low-risk (nothing FKs `regions.slug`; POI membership is
+point-in-bbox, and `drives` store no region), so the blast radius is historical `studio_jobs.target_id`
+/ `target_slug` strings, which are display-only. **A one-row `UPDATE regions SET slug='yosemite'` needs
+an explicit founder go**, ideally before any Yosemite corpus run makes the old string load-bearing in
+job history.
+
+Yosemite's discovery bbox IS set (`-119.8861,37.4944,-119.1969,38.1858`), so the removal of the Tahoe
+fallback bbox does not block it.
+
 ## Spatial context for the planner — MEASURED 2026-08-03, and the answer is NO
 
 **Do not build a drive-time matrix, a routing-engine dependency, or any per-place spatial context for
