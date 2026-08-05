@@ -46,9 +46,19 @@ error signatures" then means "none in the window I could see."
 CD runs on push via Cloud Build (`cloudbuild.yaml`). Find the run and wait for a
 terminal status rather than guessing at a duration:
 
+⚠ **`--region=us-east4` IS REQUIRED, and omitting it does not error — it lies.** The trigger is a
+REGIONAL 2nd-gen trigger (`docs/guides/gcp-cloud-run-deploy.md`), and both `gcloud builds list` and
+`gcloud builds triggers list` default to **global**, where this project has no triggers and no build
+since 2026-06-10. Run without the flag and CD looks like it never fired — a false "the push deployed
+nothing", reached on 2026-08-05 and only caught by re-checking against the deploy guide.
+
 ```bash
-gcloud builds list --limit 3 --format='table(id,status,createTime,source.repoSource.branchName)'
+gcloud builds list --region=us-east4 --limit 4 --format='table(id,status,createTime)'
 ```
+
+⚠ Expect **FOUR** builds per push, not one: `skipper-api-deploy`, `skipper-admin-deploy`,
+`skipper-site-deploy` and `skipper-studio-deploy` all fire on the same commit. A push that touches only
+the API still rebuilds the others, so "3 of 4 green" is normal-in-progress, not a partial failure.
 
 If it is `WORKING` or `QUEUED`, wait and re-check. If it is `FAILURE`, stop —
 there is nothing to canary, and the previous revision is still serving. Report
