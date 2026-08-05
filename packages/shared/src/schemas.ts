@@ -235,28 +235,10 @@ const resolvedEndpoint = z.object({
   lng: z.number().min(-180).max(180),
 })
 
-/** GET /drives/anchors?regionId= — the pickable START/END/MIDPOINT anchors for a region: a CURATED set
- *  of recognizable Google Places (towns, marinas, lookouts) with coords RESOLVED + STORED at curation,
- *  so the rider picks FROM / TO from a stored short list — no free text, no live geocoding/Places call,
- *  endpoints grounded by construction. `kind` is the humanized Google `primary_type` (display only);
- *  `rank` orders them by how likely a visitor is to name the place out loud. */
-export const regionAnchor = z.object({
-  /** The `places` row id — the ONLY thing a request may name an endpoint by (see `anchorId`). Already
-   *  existed in the DB; it simply was never projected to the wire, which is what let requests carry
-   *  free coordinates. */
-  id: z.uuid(),
-  name: z.string(),
-  lat: z.number(),
-  lng: z.number(),
-  kind: z.string().nullable(),
-  /** How likely a visitor is to NAME this place, 1 = most, ties allowed. Replaces the `featured`
-   *  boolean (2026-08-04) — the same judgment at a grain a two-valued field could not express.
-   *  ⚠ NULLABLE with null sorting LAST: a hand-added place carries no drafted rank, and inventing one
-   *  would put an operator's manual entry ahead of the model's considered order. `.nullish()` so an
-   *  older server that still sends nothing parses rather than 400ing a rider mid-conversation. */
-  rank: z.number().int().nullish(),
-})
-export type RegionAnchor = z.infer<typeof regionAnchor>
+// ⚠ THERE IS NO ANCHOR-LIST DTO HERE, and adding one back is an exposure rather than a convenience:
+// a region's curated anchors carry exact coordinates, which is the one thing that can bill a Routes
+// call (INV-1). The argument, and the guard that no longer covers such a route, are at
+// `loadRegionAnchors` (apps/api/src/drives.ts). A rider may see NAMES only — `region.exampleAnchors`.
 
 /**
  * An endpoint, as a REQUEST may name it: the id of a curated `places` row, never a coordinate.
@@ -321,8 +303,9 @@ export const isDegenerateRoute = (r: { start: string; end: string; via?: readonl
 const DEGENERATE_ROUTE_MSG = 'a route from a place back to itself needs somewhere in between'
 
 /** POST /drives/propose — preview the route for a picked START→END (+ optional via midpoints) before
- *  spending a credit. The endpoints were chosen from the region's anchors (GET /drives/anchors), so we
- *  just materialize the route + count stories. Persists nothing, no credit — the confirm interstitial.
+ *  spending a credit. The endpoints arrive as curated `places` ids the PLANNER resolved in
+ *  conversation and `hydrateAnchors` re-checks against the allowlist, so we just materialize the route
+ *  + count stories. Persists nothing, no credit — the confirm interstitial.
  *  ⚠ Refined against `isDegenerateRoute` so the zero-distance shape is refused BEFORE the billed Routes
  *  call, rather than after two of them. */
 export const driveProposeRequest = z
