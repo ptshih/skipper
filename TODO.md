@@ -25,7 +25,7 @@ the closing paren is the item, unchanged: a headline clause first, then as much 
 ⚠ **A section heading and its preamble are SHARED context for every item under it** — read the preamble
 before acting on an item, and put a new item under the section whose preamble already applies to it.
 
-**next-id: 75.** Ids are never reused, so this counter — not the highest id in the file — is what
+**next-id: 76.** Ids are never reused, so this counter — not the highest id in the file — is what
 survives deleting the newest item. `/todo` takes the max of the two.
 
 > ♻ **Re-baselined 2026-08-03: 2006 → ~700 lines.** Every finished build log was deleted per the rule
@@ -589,6 +589,23 @@ direction; the reverse is what gets rejected.
 
 Probably NO change needed: the **subtitle** is deliberately geography-free (`Scenic Drives & Local
 History`), which is the entire reason it was written that way — it survives new regions untouched.
+
+- [ ] #75 (api, med, blocked: yosemite release) **Every rider hears an EMERALD BAY clip on onboarding, whatever region they pick.**
+      `GET /sample` resolves ONE global `SAMPLE_NARRATION_QID` (apps/api/src/index.ts) — there is no
+      per-region sample and never has been. That was invisible while Tahoe was the only region, and it
+      was arguably right: the sample's stated job is "hear him regardless of where they are", for a
+      rider OUTSIDE any coverage, and one canonical clip stays canonical.
+      ⚠ **The 2026-08-04 onboarding merge made it far more visible**, which is why this is filed now:
+      the postcard and the region picker are one card and one screen, twelve points apart. A rider who
+      picks Yosemite will look at an Emerald Bay print sitting directly above their own choice.
+      ⚠ **The current copy does NOT claim otherwise, and that is load-bearing** — the caption names the
+      PLACE ("EMERALD BAY STATE PARK") and never the region, precisely so nothing implies the clip
+      belongs to whatever the rider picked. Do not "improve" it to "Emerald Bay, Lake Tahoe" without
+      solving this first; that phrasing is what surfaced the problem.
+      Options, cheapest first: leave it and keep the copy honest (defensible); OR make the sample follow
+      the picked region — which needs a per-region QID or a "top-ranked released narration in region X"
+      query, plus a re-fetch when the chip changes, since the rider has not chosen yet on arrival. Either
+      way it wants a `region` on the `Sample` DTO if the caption is ever to name one.
 
 - [ ] #73 (mobile, med, blocked: yosemite release) **Every rider who onboarded before Yosemite is never told it exists** — onboarding
       asks "where are we driving?" exactly ONCE per install (`onboarded`, `src/lib/client-flags.ts`), and
