@@ -10,66 +10,93 @@
  * do by itself is stop them disagreeing again — that is what the cross-check below is for.
  */
 import { describe, expect, test } from 'bun:test'
-import { PLANNER_EXAMPLE_NAME_COST, plannerCopy } from '@skipper/shared'
-import { PLANNER_COPY } from '../src/planner-copy'
+import { plannerExample } from '@skipper/shared'
+import { composeRegionCopy, PLANNER_COPY } from '../src/planner-copy'
 import { PLANNER_SYSTEM_PROMPT } from '../src/planner-prompt'
 
-describe('the payload', () => {
-  test('satisfies the DTO the client parses it with', () => {
-    // The client reads this through `plannerCopy`, whose fields all `.catch` to silence. So a shape
-    // mismatch does not throw at a rider — it DEGRADES, quietly, to no suggestions at all. Parsing the
-    // real constant here is what turns that silent failure into a red test.
-    expect(() => plannerCopy.parse(PLANNER_COPY)).not.toThrow()
-  })
+const EIGHT = [
+  'Tahoe City, California',
+  'Emerald Bay, California',
+  'Incline Village, Nevada',
+  'Kings Beach, California',
+  'Truckee, California',
+  'Stateline, Nevada',
+  'Carson City, Nevada',
+  'Genoa, Nevada',
+]
 
-  test('every example carries a rider line and a title, and no skipper prose', () => {
-    for (const e of PLANNER_COPY.examples) {
-      expect(e.ask.length).toBeGreaterThan(0)
-      expect(e.title.length).toBeGreaterThan(0)
-      // ⚠ THE REGRESSION GUARD. Each chip used to ship a hand-authored SKIPPER answer alongside the
-      // rider's line, and that answer is what drifted. A `reply` (or any other skipper-voiced field)
-      // reappearing on this type is the bug returning, so the absence is pinned rather than assumed.
-      expect(Object.keys(e).sort()).toEqual(
-        e.askRegion === undefined ? ['ask', 'shape', 'title'] : ['ask', 'askRegion', 'shape', 'title'],
-      )
-    }
-  })
-
-  test('only the open shape has a region form, and only it needs no place name', () => {
-    // The client fills names by SHAPE, so these two facts are structural rather than cosmetic: a row
-    // that suddenly needed `{r}` or stopped needing `{a}` would be filled wrong and silently.
-    for (const e of PLANNER_COPY.examples) {
-      if (e.shape === 'open') {
-        expect(e.ask).not.toMatch(/\{[abc]\}/)
-        expect(e.askRegion).toContain('{r}')
-      } else {
-        expect(e.ask).toMatch(/\{[abc]\}/)
-        expect(e.askRegion).toBeUndefined()
+describe('composition — names in, finished sentences out', () => {
+  test('NOTHING leaves with a placeholder in it', () => {
+    // ⚠ THE WHOLE REASON COMPOSITION MOVED HERE. The first cut shipped `{a}`/`{b}` templates for the app
+    // to fill, and the two sides disagreed about the budget on the first try: `toEnd` said
+    // "Take me to {b}." against a one-name row, so the app's brace guard dropped the row and the chip
+    // silently vanished. With the sentence finished here there is no budget to mismatch — and this is
+    // the assertion that says so, across every region size rather than the one that happens to ship.
+    for (let n = 0; n <= EIGHT.length; n++) {
+      for (const rotation of [0, 1, 5, 37]) {
+        for (const label of [null, 'Lake Tahoe']) {
+          for (const e of composeRegionCopy(EIGHT.slice(0, n), label, rotation).examples) {
+            expect(e.ask).not.toMatch(/\{[^}]*\}/)
+            expect(() => plannerExample.parse(e)).not.toThrow()
+          }
+        }
       }
     }
   })
 
-  test('every sentence uses exactly the tokens its name budget can fill', () => {
-    // ⚠ THE SEAM THIS FILE EXISTS TO WATCH, and it has already bitten once. The server writes the
-    // tokens; the client pours in PLANNER_EXAMPLE_NAME_COST names, positionally. Disagree and NOTHING
-    // fails — the client's leftover-brace guard drops the row, so the chip silently stops appearing.
-    // `toEnd` shipped as "Take me to {b}." against a one-name budget and vanished exactly that way.
-    const TOKENS = ['{a}', '{b}', '{c}'] as const
-    for (const e of PLANNER_COPY.examples) {
-      const cost = PLANNER_EXAMPLE_NAME_COST[e.shape]
-      const allowed = TOKENS.slice(0, cost)
-      const banned = TOKENS.slice(cost)
-      // Contiguous from {a}: a two-name row using {a} and {c} would leave {c} unfilled.
-      for (const t of allowed) expect(e.ask).toContain(t)
-      for (const t of banned) expect(e.ask).not.toContain(t)
+  test('a full region fills every shape and NO NAME IS SAID TWICE', () => {
+    const { examples } = composeRegionCopy(EIGHT, 'Lake Tahoe', 0)
+    expect(examples.map((e) => e.shape)).toEqual(['aToB', 'via', 'fromStart', 'toEnd', 'open'])
+    // ⚠ Five rows share one name pool, so the complaint this rotation exists for — one town saying
+    // itself in every slot — is one careless per-shape index away. Pinned as a property.
+    const said = examples.flatMap((e) => EIGHT.map((raw) => raw.split(',')[0]!).filter((n) => e.ask.includes(n)))
+    expect(said).toEqual([...new Set(said)])
+  })
+
+  test('names arrive CLEANED — a chip never says "Tahoe City, California"', () => {
+    // The raw rows carry the Wikipedia/Google state suffix. Cleaning used to happen in the app; the
+    // server has to produce the identical string now that it composes the sentence.
+    for (const e of composeRegionCopy(EIGHT, null, 0).examples) expect(e.ask).not.toMatch(/,\s+(California|Nevada)/)
+  })
+
+  test('a shape it cannot afford is SKIPPED, not terminal', () => {
+    // Three names cannot buy the three-name pass-through once A→B has taken two — but one is left, and
+    // a single-ended row still renders. Stopping at the first unaffordable shape would strip a thin
+    // region back to the open ask alone, which is the degradation that actually matters.
+    expect(composeRegionCopy(EIGHT.slice(0, 3), null, 0).examples.map((e) => e.shape)).toEqual([
+      'aToB',
+      'fromStart',
+      'open',
+    ])
+    expect(composeRegionCopy([], null, 0).examples.map((e) => e.shape)).toEqual(['open'])
+  })
+
+  test('the rotation reaches EVERY name, at every region size — not just at eight', () => {
+    // ⚠ THE MULTI-REGION BUG THIS REPLACED. The stride was a fixed 3 with a note that it must stay
+    // coprime with "the server's name count (8)" — but 8 is a MAXIMUM, and a region with fewer curated
+    // places sends fewer. At 6 names a stride of 3 reaches only 2 of the 6 windows and at 3 names only
+    // one, so the same town leads every launch: exactly the complaint the rotation was built to fix,
+    // and invisible while one region existed that happened to have 8.
+    for (let n = 1; n <= EIGHT.length; n++) {
+      const leads = new Set(
+        Array.from({ length: 60 }, (_, launch) => composeRegionCopy(EIGHT.slice(0, n), null, launch).names[0]),
+      )
+      expect(leads.size).toBe(n)
+    }
+  })
+
+  test('a corrupt rotation counter reads as zero rather than blanking the screen', () => {
+    // It arrives off the caller's disk. NaN indices would empty every row at once.
+    const good = composeRegionCopy(EIGHT, null, 0)
+    for (const bad of [Number.NaN, -1, Number.POSITIVE_INFINITY]) {
+      expect(composeRegionCopy(EIGHT, null, bad)).toEqual(good)
     }
   })
 
   test('no chip offers a LOOP — he may not offer a shape he cannot know the roads support', () => {
-    // docs/decisions/no-same-road-loops.md §8: a loop is an explicit-ask exception. A suggestion the
-    // app authored makes that offer in his voice, which is the thing the prompt stops him doing
-    // himself. The loop chip was removed once already; this is what stops it coming back as copy.
-    for (const e of PLANNER_COPY.examples) {
+    // docs/decisions/no-same-road-loops.md §8: a loop is an explicit-ask exception, so a suggestion the
+    // app authored makes that offer in his voice — the thing the prompt stops him doing himself.
+    for (const e of composeRegionCopy(EIGHT, 'Lake Tahoe', 0).examples) {
       expect(e.ask.toLowerCase()).not.toContain('loop')
       expect(e.ask.toLowerCase()).not.toContain('back around')
       expect(e.title.toLowerCase()).not.toContain('loop')

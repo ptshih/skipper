@@ -10,7 +10,7 @@ import {
   driveList,
   driveManifest,
   driveProposal,
-  plannerCopy,
+  bootstrap,
   regionList,
   sample,
   signedDriveAudio,
@@ -22,8 +22,8 @@ import type {
   DriveManifest,
   DriveProposal,
   DriveProposeRequest,
+  Bootstrap,
   DriveSummary,
-  PlannerCopy,
   Region,
   Sample,
   SignedDriveAudio,
@@ -208,27 +208,33 @@ export const getSample = async (): Promise<Sample> =>
 /*  mount — so do not "simplify" this file back to one blanket account rule.      */
 /* -------------------------------------------------------------------------- */
 
-/** The pickable regions for the Create-a-Drive region selector (anonymous; just id/slug/name). */
+/** The pickable regions, plain. ⚠ STILL USED — /sample needs region NAMES and nothing else, so it has
+ *  no business asking for composed cold-open copy or sending a launch rotation. `/regions` stays the
+ *  shared, memoized list it always was; `getBootstrap` below is the per-device one. */
 export const listRegions = async (): Promise<Region[]> =>
   parseDto(regionList, await fetchJson('/regions')).regions
 
 /**
- * The words the app says on the skipper's behalf: the cold-open suggestions, plus the two lines it
- * seeds into the transcript with no model call. Anonymous and static.
+ * Everything the cold open needs, in one call: the pickable regions, each region's suggestions already
+ * composed into finished sentences, and the two lines the app seeds into the transcript with no model
+ * call. Anonymous.
  *
- * ⚠ SERVED RATHER THAN COMPILED IN, and it is a bug fix rather than a refactor. A seeded line is
- * re-sent to the model as its OWN prior sentence, so copy held in the app could contradict the planner
- * prompt as in-context precedent — and on 2026-08-04 it did, for a day, invisible to every test
- * (there was no model turn to score) and unfixable by deploying (the words were in the binary). Served,
- * the prompt and the words it governs move together.
+ * ⚠ `rotation` is THIS DEVICE's launch counter and the answer varies with it, which is why this is not
+ * folded into `/regions` — that list is memoized and identical for every rider, and a per-device answer
+ * inside a shared cache is how a cache starts serving one rider another rider's screen.
  *
- * ⚠ THERE IS NO BAKED FALLBACK, deliberately. A default string in the app is exactly what this deletes,
- * so a failed fetch means the app says NOTHING rather than something possibly stale: no suggestion
- * rows, or a beat omitted. Both are safe — the composer works without chips and the no-stops card
- * states its own case — and both are visibly missing rather than quietly wrong.
+ * ⚠ THE SENTENCES ARRIVE FINISHED. Nothing here fills a placeholder any more (founder, 2026-08-04):
+ * the server chose the words AND the names, so there is no token budget for the two sides to disagree
+ * about. The first cut split that job and they disagreed immediately, silently dropping a chip.
+ *
+ * ⚠ NO BAKED FALLBACK on failure — a default string in the app is exactly what serving this deleted,
+ * because it is the copy nobody remembers to update and it fails by looking fine.
  */
-export const getPlannerCopy = async (): Promise<PlannerCopy> =>
-  parseDto(plannerCopy, await fetchJson('/planner/copy', undefined, { anonymous: true }))
+export const getBootstrap = async (rotation: number): Promise<Bootstrap> =>
+  parseDto(
+    bootstrap,
+    await fetchJson(`/bootstrap?rotation=${encodeURIComponent(String(rotation))}`, undefined, { anonymous: true }),
+  )
 
 // ⚠ THERE IS NO `listAnchors` ANY MORE, and re-adding one would be a real exposure, not a
 // convenience. GET /drives/anchors dumped a region's entire curated allowlist WITH exact lat/lng —

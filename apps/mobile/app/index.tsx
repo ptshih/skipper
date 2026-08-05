@@ -20,7 +20,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { StyleSheet, View, type TextInput } from 'react-native'
 import { Redirect, Stack, useFocusEffect, useIsFocused, useRouter } from 'expo-router'
-import { MAX_PLAN_DRAWN, type PlannedRoute, type PlannerCopy } from '@skipper/shared'
+import { MAX_PLAN_DRAWN, type PlannedRoute, type PlannerExample } from '@skipper/shared'
 // ⚠ The TYPED contract, and the only analytics surface there is (src/lib/analytics.tsx owns the raw
 // client, unexported). Every property below is a number, a boolean or a closed union — INV-13 applies
 // to analytics exactly as it applies to logs: no rider prose, no place name, no coordinate, no url, no
@@ -31,8 +31,7 @@ import {
   createDrive,
   errorMessage,
   listDrives,
-  getPlannerCopy,
-  listRegions,
+  getBootstrap,
   proposeDrive,
   type DriveProposal,
   type DriveSummary,
@@ -42,12 +41,6 @@ import { isSignedIn, useSession } from '@/lib/auth'
 import { useIsOffline } from '@/lib/connectivity'
 import { listDownloadedDrives } from '@/lib/offline'
 import { isPlanAborted, planTurn } from '@/lib/planner'
-import {
-  buildExampleAsks,
-  EXAMPLE_ROTATION_STRIDE,
-  rotateNames,
-  type ExampleAsk,
-} from '@/lib/planner-examples'
 import { shouldShowOnboarding } from '@/lib/client-flags'
 import { driveMinutes } from '@/lib/labels'
 import { useLatestRun } from '@/lib/useLatestRun'
@@ -107,9 +100,9 @@ import {
   type PreviewItem,
 } from '@/ui'
 
-// One glyph per ask SHAPE — keyed on `ExampleAsk.shape`, never on list position, because the list
+// One glyph per ask SHAPE — keyed on the shape, never on list position, because the list
 // degrades in regions with fewer than two curated names and position stops identifying a shape there.
-const EXAMPLE_ICONS: Record<ExampleAsk['shape'], IconName> = {
+const EXAMPLE_ICONS: Record<PlannerExample['shape'], IconName> = {
   aToB: 'trailSign', // a routed signpost: somewhere to somewhere
   via: 'map', // a route with a bend in it — somewhere ON the way
   fromStart: 'locate', // a pin on where they are setting off from
@@ -397,20 +390,20 @@ function HomeScreen() {
    *  ⚠ Deliberately NOT cached to disk beside the region: the chips are an online-only surface and the
    *  seeded lines only fire after a successful server turn, so a cache would buy nothing the network
    *  has not already provided by then. */
-  const [plannerCopy, setPlannerCopy] = useState<PlannerCopy | null>(null)
+  const [plannerCopy, setPlannerCopy] = useState<{ adjustSay: string; noStopsSay: string } | null>(null)
 
   const loadRegions = useCallback(async () => {
     setRegionsFailed(false)
-    // ⚠ RIDES THE REGIONS LOAD rather than owning its own effect, for two reasons. It inherits the
-    // offline→online self-heal for free — one reconnect path, not two that can disagree about whether
-    // the screen has recovered. And a second effect would have been a third `set-state-in-effect`
-    // against this file's budget of two (eslint-suppressions.json), a backlog to shrink, not grow.
-    // ⚠ NOT awaited alongside the regions: a copy failure must not fail the region load, and a slow one
-    // must not hold the composer up. It settles to `null`, which means silence.
-    void getPlannerCopy().then(setPlannerCopy, () => setPlannerCopy(null))
     try {
-      const rs = await listRegions()
+      // ⚠ ONE CALL, and the reason is consistency rather than round trips — the two it replaced already
+      // went out in parallel. The suggestions and the names they were built from are composed together
+      // server-side, so they cannot skew, and there is one failure mode instead of two half-loaded ones.
+      // ⚠ The rotation goes UP rather than being applied here: the server owns the window now, so the
+      // app's only remaining share of the selection is remembering which launch this is.
+      const boot = await getBootstrap(rotation)
+      const rs = boot.regions
       setRegions(rs)
+      setPlannerCopy({ adjustSay: boot.adjustSay, noStopsSay: boot.noStopsSay })
       // Read fresh rather than closing over the mount-time `cachedRegion` memo, so a region the rider
       // picked THIS session is still honoured by a later reload.
       const picked = rs.find((r) => r.id === pickRegionId(rs, readCachedRegion()?.regionId))
@@ -429,6 +422,9 @@ function HomeScreen() {
     } catch {
       // The message is never shown — the outage card speaks for itself, in persona.
       setRegionsFailed(true)
+      // ⚠ Copy goes with it, and stays null rather than reverting to anything baked: no suggestions and
+      // no seeded beats is the honest degraded state, and it is visible rather than quietly stale.
+      setPlannerCopy(null)
     }
     // `nextRotation` is derived from the mount-time cache read, so it is stable for the life of the
     // screen and this stays a once-per-mount load — the dependency is honesty for the hooks lint,
@@ -541,19 +537,17 @@ function HomeScreen() {
     () => region?.exampleAnchors ?? cachedRegion?.exampleAnchors ?? [],
     [region, cachedRegion],
   )
-  // The same names, rotated to this launch's window. Feeds BOTH the example asks and the composer
-  // placeholder so the two agree — they sit inches apart on the cold open, and the placeholder
-  // teaching "{a} to {b}" with a different pair from the chip directly above it reads as a bug.
-  // ⚠ The degraded cards keep the UNROTATED list: they render every name as a flat roster, where
-  // order carries no meaning and rotating it would only make the same card look different each launch.
-  // ⚠ Memoised for the identity reason the array above documents — a fresh array here would restart
-  // the placeholder rotation timer on every keystroke.
+  // The names the SERVER built this launch's suggestions from — cleaned, deduped and already rotated.
+  // ⚠ IT IS NOT ROTATED HERE ANY MORE (2026-08-04). It used to be, and the composer placeholder had to
+  // rotate identically to name the same places as the chip inches above it — two derivations of "which
+  // names is it this launch", which is precisely how those two drift apart. Now one composition answers
+  // both. ⚠ Falls back to the raw cached roster so a degraded launch still has something to say.
+  // ⚠ Memoised for identity, not speed: a fresh array would restart the placeholder rotation timer on
+  // every keystroke.
   const rotatedNames = useMemo(
-    () => rotateNames(anchorNames, rotation * EXAMPLE_ROTATION_STRIDE),
-    [anchorNames, rotation],
+    () => (region?.exampleNames?.length ? region.exampleNames : anchorNames),
+    [region, anchorNames],
   )
-  // The region's own display name, on the same live-then-cached ladder as the anchors above. Feeds the
-  // open-ended suggestion so all three rows name this region, and the chip so both read from one place.
   const regionLabel = region?.displayName ?? cachedRegion?.displayName ?? null
 
   const patchCard = useCallback((id: string, patch: Partial<PreviewItem>) => {
@@ -1017,22 +1011,11 @@ function HomeScreen() {
     composerRef.current?.focus()
   }, [resetSeq])
 
-  const exampleAsks: ExampleAsk[] = useMemo(
-    () =>
-      // ⚠ The SERVER decides which rows exist, in what order and in what words; this file decides only
-      // how many names each shape spends and which glyph it wears. No copy left to pass in.
-      plannerCopy
-        ? buildExampleAsks(
-            rotatedNames,
-            plannerCopy.examples,
-            // ⚠ The REGION name, not an anchor — it makes the open-ended row region-specific like the
-            // others while staying the one ask that still has a form when a region has no curated
-            // anchors at all.
-            regionLabel ?? undefined,
-          )
-        : [],
-    [rotatedNames, regionLabel, plannerCopy],
-  )
+  // ⚠ RENDERED, NOT BUILT. The suggestions arrive as finished sentences with this region's names
+  // already in them, so the app's whole remaining share is choosing a glyph per shape. Everything that
+  // used to live here — the templates, the name budget per shape, the greedy cursor, the degradation
+  // rules and the leftover-brace wall — is one composition on the server now (apps/api/planner-copy.ts).
+  const exampleAsks: PlannerExample[] = region?.examples ?? []
 
   /** A tapped example chip seeds BOTH halves of an authored exchange and makes NO model call — the
    *  app's highest-traffic turn costs zero dollars. Both ride the wire (the model must see the answer

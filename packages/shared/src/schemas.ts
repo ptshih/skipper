@@ -9,6 +9,27 @@ export type Coordinate = z.infer<typeof coordinate>
 export const polyline = z.array(coordinate)
 export type Polyline = z.infer<typeof polyline>
 
+/** Which ASK a cold-open suggestion demonstrates. The app maps this to a glyph and to nothing else. */
+export const plannerCopyShape = z.enum(['aToB', 'via', 'fromStart', 'toEnd', 'open'])
+
+/**
+ * One cold-open suggestion, FINISHED — `ask` is the exact sentence a tap sends, place names already
+ * in it.
+ *
+ * ⚠ NO PLACEHOLDERS ON THE WIRE, and that is the point (founder, 2026-08-04). The first cut shipped
+ * `{a}`/`{b}` templates for the app to fill, which split one job across two codebases: the server chose
+ * the tokens, the app chose how many names to pour in. They disagreed on the first try — `toEnd` said
+ * "Take me to {b}." against a one-name budget, and the app's leftover-brace guard DROPPED the row
+ * rather than render a brace, so the chip silently vanished. Composing server-side deletes the seam
+ * instead of guarding it: there is no budget to mismatch and no token left to leak onto a screen.
+ */
+export const plannerExample = z.object({
+  shape: plannerCopyShape,
+  title: z.string(),
+  ask: z.string(),
+})
+export type PlannerExample = z.infer<typeof plannerExample>
+
 /** A region — the minimal keying entity (a drive belongs to one). */
 export const region = z.object({
   id: z.uuid(),
@@ -48,76 +69,48 @@ export const region = z.object({
    *  clients (and under `.catch` it would silently blank the field, worse). The count is server
    *  policy — apps/api/src/example-anchors.ts. */
   exampleAnchors: z.array(z.string()).catch([]),
+  /** This region's cold-open suggestions, composed server-side and ready to render.
+   *  ⚠ `.catch([])` — no suggestions is a SAFE state (the composer works without them) while a stale
+   *  baked default is not, so this degrades to silence like everything else in this payload. */
+  examples: z.array(plannerExample).catch([]),
+  /** The same names those suggestions were built from: cleaned, deduped and rotated to this launch's
+   *  window. ⚠ It exists so the COMPOSER PLACEHOLDER can name the same places as the chip inches above
+   *  it without re-deriving the rotation client-side — two independent derivations of "which names is
+   *  it this launch" is exactly how those two would drift apart.
+   *  ⚠ Distinct from `exampleAnchors`, which stays RAW and unrotated: the degraded cards render that
+   *  as a flat roster where order carries no meaning. */
+  exampleNames: z.array(z.string()).catch([]),
 })
 export type Region = z.infer<typeof region>
 
 /** GET /regions — the pickable regions (for the Create-a-Drive region selector). Anonymous. */
 export const regionList = z.object({ regions: z.array(region) })
 
-/** Which ASK a cold-open suggestion demonstrates. ⚠ A shape's NAME COST and its icon stay in the app
- *  (two names for `aToB`, three for `via`, one for each single-ended row, none for `open`) — the server
- *  chooses the words, the client knows the structure. So the server may reword or reorder a chip
- *  freely, and only a genuinely NEW shape needs an app build. */
-export const plannerCopyShape = z.enum(['aToB', 'via', 'fromStart', 'toEnd', 'open'])
-
 /**
- * How many of a region's names each shape is handed — and therefore how many `{a}`/`{b}`/`{c}` tokens
- * its sentence may use.
+ * GET /bootstrap — everything the cold open needs, in one round trip.
  *
- * ⚠ IT LIVES IN SHARED BECAUSE BOTH SIDES NEED THE SAME NUMBER, and they used to hold it separately:
- * the SERVER writes the tokens, the CLIENT decides how many names to pour in, and a disagreement is
- * silent — the client's leftover-brace guard DROPS the row rather than rendering a brace, so a chip
- * simply stops appearing and nothing fails. That is not hypothetical; `toEnd` shipped as
- * "Take me to {b}." against a one-name budget and vanished exactly that way (2026-08-04, caught on the
- * live endpoint). One home, asserted from the server's own copy in apps/api/test/planner-copy.test.ts.
+ * ⚠ A SEPARATE ENDPOINT RATHER THAN FIELDS ON /regions, and the reason is caching. `/regions` is
+ * memoized and identical for every rider; this payload is composed PER REQUEST, because the suggestions
+ * are rotated to the caller's own launch counter. Folding a per-device answer into a shared cache is
+ * how a cache quietly starts serving one rider another rider's screen.
  *
- * ⚠ TOKENS ARE POSITIONAL, not roles: `{a}`/`{b}`/`{c}` are the 1st/2nd/3rd name a row was given. A
- * one-name row therefore uses `{a}`, however much `{b}` might read better for a destination.
+ * ⚠ THE TWO `*Say` LINES ARE THE SKIPPER'S OWN — seeded into the transcript with no model call and
+ * re-sent to the model as sentences he already said. That makes them prompt surface: held in the app
+ * they could contradict the planner prompt, and could only be corrected by an App Store release, which
+ * is exactly what happened on 2026-08-04. Served, they deploy with the prompt that governs them.
+ *
+ * ⚠ EVERY FIELD DEGRADES TO SILENCE rather than to a baked default. A fallback string in the app is
+ * what this deletes: it is the copy nobody remembers to update, and it fails by looking fine.
  */
-export const PLANNER_EXAMPLE_NAME_COST: Record<z.infer<typeof plannerCopyShape>, number> = {
-  aToB: 2,
-  via: 3,
-  fromStart: 1,
-  toEnd: 1,
-  open: 0,
-}
-
-/** One cold-open suggestion. `ask` still carries `{a}`/`{b}`/`{c}` and `askRegion` carries `{r}`:
- *  the SERVER owns the sentence, the CLIENT fills the names. Filling server-side would have moved the
- *  launch-rotation counter, the name cleaning and the degrade-by-shape rules across the wire with it,
- *  for no gain — none of that is prose and none of it drifts. */
-export const plannerExample = z.object({
-  shape: plannerCopyShape,
-  title: z.string(),
-  ask: z.string(),
-  /** Region-named variant, `open` only. Absent means the shape has no region-specific form. */
-  askRegion: z.string().optional(),
-})
-
-/**
- * GET /planner/copy — the words the app says on the PLANNER's behalf. Anonymous, static, unbilled.
- *
- * ⚠ WHY THIS IS SERVED RATHER THAN COMPILED IN. Two of these lines are SEEDED into the transcript as
- * the skipper's own prior sentences and re-sent to the model, so they are prompt surface: a line the
- * planner prompt forbids becomes in-context precedent contradicting it. Held in the app, they could
- * only be corrected by shipping a build, and on 2026-08-04 exactly that happened — a chip reply went
- * on asking "how long do you want to be out?" for a day after the prompt banned it, invisible to every
- * test and unfixable by deploying. Served, the prompt and the words it governs move together.
- *
- * ⚠ EVERY FIELD DEGRADES TO SILENCE, never to a baked default. A stale fallback string in the app is
- * the very thing this route exists to delete, so absent copy means the app SAYS NOTHING rather than
- * something possibly wrong: no suggestion rows, or a beat omitted. Both are safe — the composer works
- * without chips, and the no-stops CARD already states the case on its own.
- */
-export const plannerCopy = z.object({
-  examples: z.array(plannerExample).catch([]),
+export const bootstrap = z.object({
+  regions: z.array(region),
   /** "Change it up" — the skipper inviting a revision. ⚠ SEEDED + on the wire. */
   adjustSay: z.string().catch(''),
   /** The beat when a route comes back with nothing to tell. ⚠ SEEDED + on the wire. */
   noStopsSay: z.string().catch(''),
 })
-export type PlannerCopy = z.infer<typeof plannerCopy>
-export type PlannerExample = z.infer<typeof plannerExample>
+export type Bootstrap = z.infer<typeof bootstrap>
+
 
 /** Attribution snapshot frozen at generation time (keeps CC BY-SA / CC BY credit correct). */
 export const attribution = z.object({

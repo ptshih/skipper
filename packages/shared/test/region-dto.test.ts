@@ -44,9 +44,16 @@ describe('the rollout is additive in BOTH directions', () => {
     expect(parsed).toEqual(base)
   })
 
-  test('regionList round-trips a populated list', () => {
+  test('regionList round-trips a populated list, filling the composed fields with silence', () => {
+    // ⚠ THE OUTPUT GAINS KEYS THE INPUT DID NOT HAVE, and that is the deploy-order guarantee rather
+    // than a leak. `examples`/`exampleNames` are composed by GET /bootstrap; `/regions` never sends
+    // them, and an API deployed before this schema shipped would not either. Both land as `[]` — no
+    // suggestions — which is the safe degrade: the composer still works, and the alternative (a baked
+    // default in the app) is the stale-copy failure this whole payload exists to delete.
     const payload = { regions: [{ ...base, ready: true, exampleAnchors: ['Tahoe City'] }] }
-    expect(regionList.parse(payload)).toEqual(payload)
+    expect(regionList.parse(payload)).toEqual({
+      regions: [{ ...base, ready: true, exampleAnchors: ['Tahoe City'], examples: [], exampleNames: [] }],
+    })
   })
 })
 

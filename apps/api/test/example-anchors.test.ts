@@ -288,6 +288,8 @@ describe('the Region DTO requires exampleAnchors', () => {
       slug: 'lake-tahoe',
       displayName: 'Lake Tahoe',
       ready: true,
+      examples: [],
+      exampleNames: [],
       exampleAnchors: ['Tahoe City'],
     }
     expect(r.exampleAnchors).toEqual(['Tahoe City'])

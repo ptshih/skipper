@@ -40,7 +40,7 @@ import {
 } from './limits'
 import { planRoutes } from './plan-route'
 import { withSession, type ApiEnv } from './entitlements'
-import { PLANNER_COPY } from './planner-copy'
+import { composeRegionCopy, PLANNER_COPY } from './planner-copy'
 import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
 import { audioUnavailable, presignedClipFields } from './storage'
@@ -91,20 +91,8 @@ app.get('/health', (c) => c.json({ ok: true }))
 // `gateFor`) and shows a dismissible nudge or a blocking "update required" wall.
 app.get('/version', (c) => c.json({ policies: VERSION_POLICIES }))
 
-// The words the APP says on the skipper's behalf — the cold-open suggestions and the two lines it
-// seeds into the transcript without a model call. Anonymous + env-free, exactly like /version above,
-// and for the same reason: served from code so a wording fix lands on a BACKEND deploy rather than
-// waiting on an App Store release.
-//
-// ⚠ THAT WAIT IS THE BUG THIS EXISTS FOR, not a convenience. A seeded line is re-sent to the model as
-// its OWN prior sentence, so app-held copy could contradict the planner prompt as in-context
-// precedent — and on 2026-08-04 it did, for a day, with no test able to see it and no deploy able to
-// fix it. See ./planner-copy.
-//
-// ⚠ NO LIMITER, matching /version and /health: a constant with no DB read, no session resolve and no
-// model call has nothing to bound. If this ever grows a query or a per-region parameter, that decision
-// changes with it — see the REGIONS_RATE block in ./limits for what a limiter is actually protecting.
-app.get('/planner/copy', (c) => c.json(PLANNER_COPY))
+// ⚠ There is no `/planner/copy`. It existed for one afternoon, serving TEMPLATES for the app to fill,
+// and `/bootstrap` below replaced it when composition moved server-side — the app fills nothing now.
 
 // The pickable regions for the Create-a-Drive region selector. Anonymous + tiny (just
 // id/slug/name) — the create FLOW is gated, but listing region names to pick from is open.
@@ -162,13 +150,20 @@ export const regionsLimiter = rateLimit(REGIONS_RATE)
 // is narrower than "every request" — see the REGIONS_RATE block in ./limits for the exact path.
 app.use('/regions', regionsLimiter)
 app.use('/regions', withSession)
-app.get('/regions', async (c) => {
-  const canPreview = isAdmin(c.get('session'))
+// ⚠ The SAME pair, for the same reasons, and registered ABOVE the handler for the same ordering
+// reason: `/bootstrap` runs the identical region load and must not become the unbounded way to ask
+// for it. `withSession` is what lets an admin see staged regions here too.
+app.use('/bootstrap', regionsLimiter)
+app.use('/bootstrap', withSession)
+/** The region list, memoized. ⚠ EXTRACTED so `/regions` and `/bootstrap` cannot drift: they are the
+ *  same rows, and the second merely composes cold-open copy on top. Two handlers each doing their own
+ *  query is how one of them quietly stops seeing a region the other does. */
+async function loadRegionsPayload(canPreview: boolean): Promise<Region[]> {
 
   // Admins skip the cache entirely — they are asking a different question and there are a handful of
   // them. Riders, who are all of the traffic, get the memoized answer.
   if (!canPreview && regionsMemo && Date.now() - regionsMemo.at < REGIONS_MEMO_TTL_MS) {
-    return c.json({ regions: regionsMemo.payload })
+    return regionsMemo.payload
   }
 
   // ⚠ RUN IN PARALLEL. The anchors scan references nothing from the regions rows — the two only meet
@@ -228,11 +223,47 @@ app.get('/regions', async (c) => {
     // you don't. (`pickExampleAnchors` gives every region an entry, so this is belt to that brace.)
     ready: byRegion.get(r.id)?.ready ?? false,
     exampleAnchors: byRegion.get(r.id)?.names ?? [],
+    // ⚠ EMPTY HERE ON PURPOSE. The cold-open copy is composed per REQUEST from the caller's own launch
+    // rotation, so it cannot live in a memo shared by every rider — `/bootstrap` fills these. This
+    // endpoint stays what it always was: the plain, cacheable list.
+    examples: [],
+    exampleNames: [],
   }))
   // ⚠ Only the anonymous variant is stored. Memoizing a staged response here is the one edit that
   // would turn this cache into a release-gate leak.
   if (!canPreview) regionsMemo = { at: Date.now(), payload }
-  return c.json({ regions: payload })
+  return payload
+}
+
+app.get('/regions', async (c) => c.json({ regions: await loadRegionsPayload(isAdmin(c.get('session'))) }))
+
+// Everything the cold open needs, in ONE round trip: the regions, each region's suggestions already
+// composed into finished sentences, and the two lines the app seeds into the transcript with no model
+// call. Anonymous.
+//
+// ⚠ SEPARATE FROM /regions BECAUSE THIS ANSWER IS PER-DEVICE. `rotation` is the caller's own launch
+// counter, so the suggestions differ between two riders asking at the same moment — folding that into a
+// memo every rider shares is how a cache starts serving one rider another rider's screen. The DB read
+// underneath is still the shared memoized one; only the string work is per request.
+//
+// ⚠ NOT justified by round trips, and the note matters because that is the tempting reason. The client
+// already issued its two calls in PARALLEL over one connection, so merging them saves almost nothing.
+// What it buys is CONSISTENCY: the sentences and the names they were built from are composed in one
+// pass and cannot skew, and there is one failure mode instead of two half-loaded states.
+app.get('/bootstrap', async (c) => {
+  // ⚠ A CORRUPT COUNTER MUST NOT BLANK THE SCREEN. It arrives off the caller's disk, so anything
+  // non-numeric reads as 0 (the un-rotated window) rather than producing NaN indices — `rotate` guards
+  // this too, deliberately twice: this is the boundary, that is the arithmetic.
+  const rotation = Number(c.req.query('rotation') ?? 0)
+  const regions = await loadRegionsPayload(isAdmin(c.get('session')))
+  return c.json({
+    regions: regions.map((r) => {
+      const copy = composeRegionCopy(r.exampleAnchors, r.displayName, rotation)
+      return { ...r, examples: copy.examples, exampleNames: copy.names }
+    }),
+    adjustSay: PLANNER_COPY.adjustSay,
+    noStopsSay: PLANNER_COPY.noStopsSay,
+  })
 })
 
 // ⚠ The one exception to the no-CORS posture above, and it must be registered BEFORE the auth mount
