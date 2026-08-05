@@ -371,20 +371,30 @@ export const voice = {
   // front-door taste for everyone outside the corpus AND the App Review path. Fact-free (the poi
   // name is a FACT, served by the API, never baked here). Warm, corny, glanceable.
   sample: {
-    // The card's header — what this thing IS and what pressing it does (founder, 2026-08-04: "a label
-    // somewhere on the onboarding screen that tells the user this is a sample").
+    // ── The two labels of the ONE control this screen still has. They are a PAIR: the same button
+    // toggles between them, so they must always be read together.
     //
-    // ⚠ IT IS NOT THE 'A TASTE' BADGE COMING BACK, and the difference is why one was cut and this one
-    // earns its place. That badge's stated job was "this is a sample, not a live DRIVE" — it
-    // disambiguated against a concept a first-run rider has never met, on the first screen of a fresh
-    // install. This answers the question a newcomer actually has in front of an image and a play disc:
-    // what happens if I press it. Nothing else on the screen says so — the artwork, the place name and
-    // the transport all assume you already know.
-    //
-    // ⚠ Its predecessor here was 'POSTCARD FROM LAKE TAHOE', which named a region the chip twelve
-    // points below already named and hardcoded a place into `voice` besides. This names no place, so
-    // it survives the server swapping the sample clip.
-    kicker: 'HEAR A SAMPLE',
+    // ⚠ THE STOP HALF IS A REQUIREMENT, NOT A COURTESY. `/sample` takes exclusive `doNotMix` audio
+    // focus, so starting the clip INTERRUPTS whatever a stranger was already listening to. A rider
+    // who cannot stop it has had their podcast taken hostage by the app's opening move. Never reduce
+    // this to a one-way offer.
+    // ⚠ PLAIN, NOT IN PERSONA. These are the visible label AND (having no separate a11y string) the
+    // screen-reader label, and with the transport gone the WORD is the only feedback that the clip is
+    // running at all — so it says what the control does, in the fewest words that stay unambiguous.
+    // ⚠ "Stop the sample", not "Pause", and the BEHAVIOUR matches the word (founder, 2026-08-05: "the
+    // sample should reset from the beginning (not resume)"). There is no scrubber, no clock and no
+    // resume affordance, so "pause" would promise a position nothing on this screen can show or reach
+    // — and the next tap says "Hear a sample", which must not drop a stranger mid-sentence. Stopping
+    // rewinds to 0; a taste is heard from the top or not at all. See `togglePlay` in app/sample.tsx.
+    hearCta: 'Hear a sample',
+    stopCta: 'Stop the sample',
+    // ⚠ `kicker` ('HEAR A SAMPLE') WAS DELETED HERE (2026-08-05). It was a small-caps line printed on
+    // the artwork above the place name, and its job was the good one this file recorded at the time:
+    // "what happens if I press it", which the postcard and a play disc both assumed you already knew.
+    // What retired it was the founder's strip-out — with the player gone, the offer is made by a
+    // BUTTON that says the same four words, so the kicker became the label twice on the one screen
+    // where every point of height was fought for. ⚠ Its own predecessor was 'POSTCARD FROM LAKE
+    // TAHOE', which hardcoded a place into `voice`; if a kicker ever returns, it must still name none.
     // ⚠ `badge` ('A TASTE') WAS DELETED HERE (2026-08-04). Its job — be honest that "this is a sample,
     // not a live drive" — was true copy on the old `/sample`, which a rider reached from home already
     // knowing what a drive was. As the first screen of a fresh install it disambiguated against a
@@ -399,13 +409,15 @@ export const voice = {
     // the taste, friend.") outlived them by an hour and then went too: with the CTA lighting up to mark
     // the end, a sentence saying the same thing is a caption on something the rider just watched
     // happen — and it grew the layout by ~39pt exactly when the primary button appears.
-    // ⚠ VOICEOVER-ONLY, and the reason they exist is that `TransportBar`'s defaults are DRIVE copy:
-    // this control announced itself as "Let's roll" and then "Hold here" on the first screen of a
-    // fresh install, promising a drive that a one-minute postcard does not start. Caught reading the
-    // accessibility tree on the simulator, invisible to every test and to a sighted glance.
-    // Plain, not in persona: a screen-reader label's whole job is to say what the control does.
-    playA11y: 'Play the sample',
-    pauseA11y: 'Pause the sample',
+    // ⚠ `playA11y` / `pauseA11y` WERE DELETED HERE (2026-08-05) with the `TransportBar` they labelled.
+    // They were VoiceOver-only, and they existed because that component's DEFAULTS are drive copy:
+    // the disc announced itself as "Let's roll" and then "Hold here" on the first screen of a fresh
+    // install, promising a drive a one-minute postcard does not start. Caught by reading the
+    // accessibility tree on the simulator — invisible to every test and to a sighted glance.
+    // ⚠ THE LESSON OUTLIVED THE STRINGS, and it is why `hearCta`/`stopCta` above are plain rather than
+    // in persona: a control's spoken name must say what the control DOES. Those two are now visible
+    // text, so there is nothing separate to keep in sync — but any future control borrowed from the
+    // drive player arrives wearing drive copy, and this screen is not a drive.
     // ⚠ THE THREE `row*` STRINGS THAT SAT HERE ARE GONE (2026-08-04) — `rowKicker` / `rowTitle` /
     // `rowHint` dressed home's listen row, and the row was deleted when the taste became the first
     // screen of onboarding (founder). The reasoning they carried is worth keeping even though the
@@ -496,7 +508,23 @@ export const voice = {
   //
   // ⚠ Named BOTH modes until roam was removed (it had been co-equal on home, founder 2026-06-11).
   // Now there is one artifact, so the line says one thing.
-  tagline: 'You pick the road, I’ll do the talking.',
+  // ⚠ REWRITTEN 2026-08-05, and the change is what it NAMES, not its tone. It read "You pick the road,
+  // I'll do the talking." — one word away from working, and the missing word was the product. "Pick
+  // the road" implies a LIST to pick from (the same browse-expectation defect that made "Start
+  // exploring" the wrong CTA), and "do the talking" never says what he talks ABOUT. Neither clause
+  // said the rider was DRIVING. The replacement keeps the same you-X-I'll-Y rhythm and the same
+  // length — it still sets one line at 375pt, verified on an SE — while finally saying there is a car,
+  // it is moving, and he narrates what goes past it.
+  // ⚠ THIS IS THE SCREEN'S ONLY DESCRIPTOR, so it carries the whole category on its own. A small-caps
+  // "NARRATED ROAD TRIPS" kicker was built and rendered on both viewports and NOT taken: against this
+  // line it was a second explanatory line saying less, and store-listing nouns under a wordmark are
+  // the "landing page" register that got home's hero deleted on 2026-08-03.
+  // ⚠ It carried a descriptor once before — it opened "Narrated road trips. You pick the road…" until
+  // 2026-08-04, cut on the argument that a postcard, a transport bar and an "A TASTE" badge showed the
+  // category three ways. The badge was deleted the same day and the transport on 2026-08-05, so that
+  // argument had lost two of its three legs; this line is now the only thing that says what Skipper
+  // is. docs/designs/onboarding-first-screen-legibility.md §2.
+  tagline: 'You drive, I’ll tell you what you’re passing.',
   // The home hero's enamel flourish: a departures-board kicker ABOVE the headline
   // (deliberately NOT repeating the tagline). Warm, corny, glanceable, no facts.
   home: {

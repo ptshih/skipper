@@ -22,9 +22,14 @@ import { voice } from './voice'
 export interface AttributionButtonProps {
   /** The clip's frozen attribution array. Undefined/empty renders nothing. */
   items?: Attribution[]
+  /** Glyph colour ROLE. Defaults to the quiet `inkFaint` every existing caller wants; the one
+   *  reason to pass anything else is a surface where the ⓘ sits ON artwork rather than on paper,
+   *  where `inkFaint` would be a dark glyph on a dark scrim — i.e. invisible, which for a licence
+   *  obligation is worse than ugly. ⚠ Only ever a role, never a raw colour (lint:tokens). */
+  color?: React.ComponentProps<typeof Icon>['color']
 }
 
-export function AttributionButton({ items }: AttributionButtonProps) {
+export function AttributionButton({ items, color = 'inkFaint' }: AttributionButtonProps) {
   const [open, setOpen] = useState(false)
   const { colors } = useTheme()
   if (!items?.length) return null
@@ -41,7 +46,7 @@ export function AttributionButton({ items }: AttributionButtonProps) {
         // not a nicety, so it is the last affordance that should be hard to hit. 18 + 200d716 = 50.
         hitSlop={{ top: space.lg, bottom: space.lg, left: space.lg, right: space.lg }}
       >
-        <Icon name="info" size={18} color="inkFaint" />
+        <Icon name="info" size={18} color={color} />
       </Pressable>
       {/* A quiet bottom sheet — glanceable, dismissed by the scrim or Done. `onRequestClose` wires
           the Android back button. Tapping the sheet itself is swallowed so only the scrim closes. */}

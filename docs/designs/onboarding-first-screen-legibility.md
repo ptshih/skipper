@@ -1,12 +1,16 @@
 # Onboarding — the first screen is pretty but does not say what this is
 
-> **Status:** 🔨 **PARTLY BUILT 2026-08-05 — §3 and the styling half of §2 shipped; the CATEGORY
-> DESCRIPTOR (§2) and §4–§5 are still OPEN.** The founder took option A in two halves (*"i agree with
-> rename the CTA + inkFaint, lets do that first"*): the CTA is now **"Plan a drive"**
-> (`voice.region.setupCta`) and the tagline renders `inkDim` rather than `inkFaint`
-> (`app/sample.tsx`). ⚠ **The screen still never states the category** — the largest finding here is
-> the one NOT yet fixed, and a legible tagline that says nothing about driving can easily read as
-> though it were. Do not close this doc on the strength of the two edits above.
+> **Status:** ✅ **BUILT 2026-08-05 — §2, §3, §4 and §5 are all closed, and NOT by the option this
+> doc recommended.** Landed in three passes: (1) CTA → **"Plan a drive"** and the tagline promoted
+> `inkFaint` → `inkDim`; (2) the tagline REWRITTEN to name the activity and the payload — *"You drive,
+> I'll tell you what you're passing."*; (3) **every player control deleted** (founder, 2026-08-05:
+> *"i wonder if we should just get rid of all the player controls, and just have one 'secondary' cta
+> above the primary 'plan a drive' cta that says 'Hear a Sample'"*), so the card is a poster and the
+> two actions are stacked labelled buttons.
+> ⚠ **§7's recommended option A was NOT what shipped**, and §7.1 below records why — the category
+> descriptor it proposed was built, rendered, and rejected against a rewritten tagline.
+> ⚠ **One finding is deliberately left open: nothing signals playback but the button's label** (§7.2).
+> ⚠ **This retires `onboarding-taste-then-where.md` §8.4's quiet-CTA rule** — see that doc's status.
 > Prompted by the founder: *"i feel like the onboarding page is pretty but still a bit confusing as
 > the first screen a brand new user sees."* Read on a booted simulator (iPhone 17 Pro Max, iOS 26.5)
 > against `apps/mobile/app/sample.tsx` as it stood at `d5fd80f`.
@@ -151,11 +155,82 @@ and no layout risk. *Downside:* leaves §4 and §5 standing.
 > (`voice.plan.openingHint`) already uses for the identical job one screen later. The type SIZE stayed
 > `dim` (13.5pt) deliberately, to leave the SE line budget the descriptor will need.
 >
-> ⏳ **STILL OPEN — the descriptor itself**, which is the largest finding in this document. ⚠ The two
-> shipped edits make the tagline *legible*; they do not make it *informative*. A reader who sees a
-> darker tagline and a clearer button may conclude §2 is handled — it is not, and §2 is the reason the
-> screen was confusing in the first place. The open question is only what the line should say and
-> whether it is a third line or a restored clause, not whether it is needed.
+> ✅ **AND THEN SUPERSEDED.** The descriptor half never shipped as written — see §7.1.
+
+## §7.1 · What actually shipped, and why the recommendation lost
+
+Everything below was decided from **renders on two viewports** (iPhone 17 Pro Max, and an iPhone SE at
+375×667), not from argument. That is the whole reason the recommendation changed.
+
+**The descriptor was built and rejected.** A small-caps `NARRATED ROAD TRIPS` kicker between the
+wordmark and the tagline (option A) was rendered on both phones. It fits; it even suits the WPA poster
+idiom better than expected. It lost on two counts: against a tagline that *already* names the activity
+it is a second explanatory line saying less, and a store-listing noun under the wordmark is exactly the
+"landing page" register that got home's hero deleted on 2026-08-03.
+
+**The tagline carried the category instead.** *"You pick the road, I'll do the talking"* was one word
+away from working: "pick the road" implies a LIST to pick from (the same browse-expectation defect as
+"Start exploring"), and "do the talking" never says about what. Neither clause said the rider was
+DRIVING. **"You drive, I'll tell you what you're passing."** keeps the you-X-I'll-Y rhythm and the same
+length — still one line at 375pt — while saying there is a car, it is moving, and he narrates what goes
+past. ⚠ So the category never needed a *label*; it needed the sentence to stop gesturing.
+
+**§4 and §5 closed as side effects, exactly as predicted.** With the player gone the postcard kicker
+(`HEAR A SAMPLE`) became the label twice — the button now makes that offer by name — so it was deleted
+rather than reworded, which is §4. And with the tagline naming the category, the place name no longer
+reads as the app's subject, which is §5.
+
+**The real fix was structural, and it was the founder's.** The diagnosis that unlocked it: *a photo
+over a transport bar IS a media player*, so no copy above the picture could stop the screen reading as
+an audio app for a pretty place. Deleting the scrubber, the ±15 discs and the play disc deleted the
+idiom at its root. ⚠ An intermediate attempt — swapping `Scrubber` for `RouteTrack`, the app's own
+dashed-trail-and-rig motif, driven by the clip's real position — was built and rendered and is worth
+knowing about: it read *far* better than the media bar, but it was still a transport, and it silently
+dropped the screen's only `accessibilityRole="adjustable"` (`RouteTrack` is `accessibilityElementsHidden`).
+It was abandoned for the strip-out, not for that defect — but the defect is why it should not be
+casually revived.
+
+## §7.2 · The one finding left OPEN — playback has no signal but a word
+
+With the transport gone, **nothing on the screen moves while the clip plays.** The secondary button's
+label flips `Hear a sample` → `Stop the sample`, and that is the entire feedback surface.
+
+⚠ **This is known and deliberate, not an oversight** — but it is a real gap on the one screen whose
+whole purpose is being heard: a rider on silent, or with headphones not connected, taps and sees a
+word change. Three candidates were sketched and none built: a hairline progress fill along the
+poster's base; the rig creeping along that same base (drive metaphor, but reintroduces the motif just
+removed); or nothing at all, trusting audio to be its own feedback.
+
+⚠ **Do not "fix" this by putting the player back.** The register to stay inside is *ambient*, not
+*transport* — something that shows time passing without offering a control to grab.
+
+## §7.3 · Two audio defects the on-device testing found — both fixed 2026-08-05
+
+Neither was visible to `tsc`, to `bun test`, or to a screenshot. Both were caught by *timing the clip
+on a simulator*, which is the only method that can see either.
+
+**1. THE TASTE COULD NOT BE REPLAYED ONCE IT FINISHED — and this one PREDATES the redesign.** It is on
+`main` in the shipped build, on the first screen of a fresh install. `/sample` calls
+`applyExclusiveBackgroundAudio()` **only in its mount effect**, and calls `releaseAudioSession()` when
+the clip completes. That release is `setIsAudioActiveAsync(false)`, which in expo-audio's own words
+*"will pause all audio playback and PREVENT NEW AUDIO FROM PLAYING"* — so after the taste ran once,
+pressing play again did nothing at all until the app was relaunched. ⚠ `src/lib/audio-session.ts`
+already documents this **exact defect shipping once before** (a silent drive after "Pull over",
+founder 2026-08-04), which is why its header says every `apply*` turns the subsystem on FIRST rather
+than assuming it is on. The screen was assuming. Fixed by re-activating on every play.
+
+**2. "STOP" DID NOT REWIND, even though the label said it did.** The founder asked for stop-resets
+(*"the sample should reset from the beginning (not resume)"*). The obvious implementation —
+`player.pause()` then `player.seekTo(0)` on the stop path — **does not stick**: timed on device
+(stop at ~15s, replay, still-playing check at 55s of a 64s clip) the clip resumed from 15s and ended
+at 49s. ⚠ The seek belongs on the **play** side, where it can be awaited before playback starts:
+`activate → seekTo(0) → play`, chained. Every play on this screen begins at 0, because there is no
+resume concept here to preserve.
+
+⚠ **The lesson worth keeping is the method, not the two fixes.** A label ("Stop the sample") and a
+behaviour (resume) disagreed, and nothing in the type system, the tests, or a screenshot could tell
+them apart — the only thing that could was playing the clip and looking at the clock. Any future
+change to this screen's playback needs the same treatment.
 
 **B. A + a how-it-works beat.** Add a short three-beat under the card ("Say where you're driving → I'll
 ride along and talk"). Most explicit reading. *Downside:* costs ~40–60pt on the screen whose entire

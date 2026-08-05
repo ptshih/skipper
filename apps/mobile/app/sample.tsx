@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Image, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { Stack, useRouter } from 'expo-router'
@@ -16,12 +16,10 @@ import {
   AttributionButton,
   Button,
   Card,
-  Scrubber,
   Screen,
   StateView,
   Sunburst,
   Text,
-  TransportBar,
   voice,
 } from '@/ui'
 
@@ -45,13 +43,32 @@ import {
 //   • The SKIP control went with it. "Skip the sample" always read as an apology; when the forward CTA
 //     is permanently on screen it IS the skip, and it never has to say so.
 //
-// ⚠ THE ONE REAL COST OF MERGING, and the thing not to undo: a forward CTA and a play disc compete for
-// "what do I do now?", and a rider who taps past without pressing play defeats the entire purpose of
-// the screen. So the CTA ships QUIET (`secondary`) and promotes to the glowing primary once the clip
-// has been heard — see `finished` below. The disc is unmistakably the loudest thing on arrival; the
-// exit is always reachable and never shouts. Do not "tidy" that into one constant variant.
+// ⚠ THERE IS NO PLAYER ON THIS SCREEN ANY MORE (founder, 2026-08-05: "i wonder if we should just get
+// rid of all the player controls, and just have one 'secondary' cta above the primary 'plan a drive'
+// cta that says 'Hear a Sample'"). Scrubber, ±15 and the play disc are all GONE. The card is a
+// poster; hearing it is a SECONDARY button above the primary exit. The diagnosis that earned it:
+// a photo over a transport bar reads as a MEDIA PLAYER, so the app's first screen looked like an
+// audio app for a pretty place rather than a narrated road trip — and no amount of copy above the
+// picture argued that away (docs/designs/onboarding-first-screen-legibility.md).
 //
-// ⚠ NOTHING PLAYS UNTIL THE RIDER TOUCHES THE DISC (founder, 2026-08-04). It autoplayed after a 450 ms
+// ⚠ THIS REVERSES THE QUIET-CTA MITIGATION, deliberately — `onboarding-taste-then-where.md` §8.4 said
+// the forward CTA must ship `secondary` and promote only once the clip had been heard, because "a
+// forward CTA and a play disc compete for 'what do I do now?'". There is no disc to compete with now,
+// and that is what retires the rule rather than breaking it: with the two actions stacked and
+// LABELLED, the hierarchy is stated in words instead of being fought over by weight. "Plan a drive"
+// is primary from the first frame because planning genuinely IS the primary act and the sample is
+// optional. The `glow` still waits for the clip, so finishing it is acknowledged without gating exit.
+//
+// ⚠ THE SECONDARY BUTTON TOGGLES TO A STOP LABEL, and that is a REQUIREMENT, not a nicety: this
+// surface takes exclusive `doNotMix` focus (see the audio effect below), so a rider who cannot stop
+// the clip has had their podcast taken hostage by the app's opening move. Never let this become a
+// one-way "Hear a sample" that offers no way back.
+//
+// ⚠ NOTHING SIGNALS PLAYBACK EXCEPT THAT LABEL. Known and unresolved (2026-08-05): with the scrubber
+// gone there is no motion, so a rider on silent or with headphones unplugged taps and sees only a word
+// change. Filed in §7 of the legibility doc; do not mistake it for an oversight.
+//
+// ⚠ NOTHING PLAYS UNTIL THE RIDER ASKS FOR IT (founder, 2026-08-04). It autoplayed after a 450 ms
 // anti-jump-scare beat, which was defensible while it sat behind a deliberate tap on home's listen row
 // — the rider had already asked for audio. As the first screen of a fresh install it is not: this
 // surface takes EXCLUSIVE `doNotMix` focus (see the audio effect below), so autoplaying does not merely
@@ -59,9 +76,9 @@ import {
 // move. On a bus or at a desk that is a wince.
 //
 // ⚠ HOME REDIRECTS HERE, it does not push. So `canGoBack` is false and there is no back chevron: the
-// CTA is the ONLY exit, and it must never become a `router.back()` (that lands on a home which
-// redirects straight back — a loop). It is also why the CTA may not be gated on having a region:
-// see `finish`.
+// PRIMARY CTA is the ONLY exit, and it must never become a `router.back()` (that lands on a home which
+// redirects straight back — a loop). It is also why the CTA may not be gated on having a region, and
+// why it is never disabled: see `finish`.
 //
 // Deliberately NOT a simulated drive (which opens on proximity-roulette, can start silent, and ends in
 // dead air) — so it is structurally incapable of showing the dev diagnostics footer sim mode carries.
@@ -159,6 +176,9 @@ export default function SampleScreen() {
   // drive land". Averaging them would hide both. `startedRef` latches the start to one event per load,
   // so a pause/resume is not a second play.
   const startedRef = useRef(false)
+  // Set the instant the rider STOPS, cleared when they start again. It exists only to defend the
+  // end-of-clip fallback below against the stop's own pause→seek gap — see `togglePlay`.
+  const manualStopRef = useRef(false)
 
 
   // setAudioModeAsync is process-wide (shared with the drive player). ⚠ D35 (1.1, founder): the postcard
@@ -192,6 +212,7 @@ export default function SampleScreen() {
     setPhase('loading')
     endedRef.current = false
     startedRef.current = false // the retry path re-loads the clip — that is a new play
+    manualStopRef.current = false // a fresh clip has not been stopped
     setFinished(false)
     try {
       const s = await getSample()
@@ -224,8 +245,16 @@ export default function SampleScreen() {
     // autoplayed, "stopped at/near the end" could only mean a clip that had run; now the card can sit
     // at 0:00, not playing, indefinitely — and a clip whose duration failed to resolve would satisfy
     // `currentTime >= durSec - 0.35` at rest and promote the CTA for a rider who never pressed play.
+    // ⚠ `manualStopRef` is the second guard and it is NOT redundant with `startedRef`: a rider who
+    // stops inside the last 0.35s has started, is no longer playing, and is still sitting at a
+    // `currentTime` that satisfies the window — indistinguishable from a finished clip until the
+    // seek-to-zero lands. See `togglePlay` for why that gap exists at all.
     const atEnd =
-      startedRef.current && durSec > 0 && !status.playing && (status.currentTime ?? 0) >= durSec - 0.35
+      startedRef.current &&
+      !manualStopRef.current &&
+      durSec > 0 &&
+      !status.playing &&
+      (status.currentTime ?? 0) >= durSec - 0.35
     if (status.didJustFinish || atEnd) {
       endedRef.current = true
       setFinished(true)
@@ -239,23 +268,50 @@ export default function SampleScreen() {
     }
   }, [status.didJustFinish, status.playing, status.currentTime, durSec, phase])
 
-  const canSeek = !!status.isLoaded && durSec > 0
-  const seekToMs = (ms: number) => {
-    try {
-      player.seekTo(Math.max(0, Math.min(ms / 1000, durSec)))
-    } catch {}
-  }
-  const seekBy = (sec: number) => seekToMs(((status.currentTime ?? 0) + sec) * 1000)
+  // ⚠ THE SEEK HELPERS WENT WITH THE TRANSPORT (2026-08-05). `canSeek`, `seekToMs` and `seekBy`
+  // existed only for `Scrubber` and the ±15 discs; with the controls gone the clip is play/stop and
+  // nothing else, so `player.seekTo` has no caller here. Bringing back any scrubbing means bringing
+  // back a control, which is the decision this screen just made in the other direction.
+  /** ⚠ STOP MEANS BACK TO THE TOP, NOT PAUSE (founder, 2026-08-05). The control says "Stop the
+   *  sample", and with the transport gone there is no scrubber, no clock and no resume affordance —
+   *  so pausing would leave a position that nothing on the screen can show or reach, and the next tap
+   *  (labelled "Hear a sample") would drop a stranger into the middle of a sentence. A taste is heard
+   *  from the beginning or not at all. */
   const togglePlay = () => {
-    try {
-      if (status.playing) {
+    if (status.playing) {
+      try {
         player.pause()
-      } else {
-        player.play()
-        // Latched, so a resume after a pause is not counted as a second play.
-        markStarted()
-      }
-    } catch {}
+      } catch {}
+      // ⚠ THE REWIND DOES NOT HAPPEN HERE, and that is a MEASURED correction, not a preference.
+      // `player.pause()` followed immediately by `player.seekTo(0)` was tried and DOES NOT STICK:
+      // timed on device (stop at 15s, replay, still-playing check at 55s of a 64s clip) the clip
+      // resumed from 15s and ended at 49s. Rewinding on the PLAY side instead — where the seek can
+      // be awaited before playback starts — is what actually resets it.
+      // ⚠ HAND THE SESSION BACK on stop, same obligation the completion path has: under `doNotMix`
+      // we STOPPED the rider's music, and pausing our player does not give it back.
+      manualStopRef.current = true
+      releaseAudioSession()
+      return
+    }
+    manualStopRef.current = false
+    // ⚠ RE-ACTIVATE, SEEK, THEN PLAY — in that order, and every one of the three is load-bearing.
+    //   • RE-ACTIVATE: `releaseAudioSession` is `setIsAudioActiveAsync(false)`, which in expo-audio's
+    //     own words "will pause all audio playback and PREVENT NEW AUDIO FROM PLAYING". This screen
+    //     released on completion but only ever activated on MOUNT, so once the taste finished it
+    //     could never be replayed — dead until the app relaunched, on the first screen of a fresh
+    //     install. Found by testing on device 2026-08-05; it predates the player being removed.
+    //     `src/lib/audio-session.ts` documents this exact defect shipping once before (a silent drive
+    //     after "Pull over"), which is why every `apply*` turns the subsystem on FIRST.
+    //   • SEEK: every play on this screen starts at 0. There is no resume concept here at all — no
+    //     scrubber, no clock — so this is the one expression that makes "Stop" mean what it says.
+    //   • ORDER: chained rather than fired together, because `seekTo` is async; starting playback
+    //     before it lands is precisely the bug this replaced.
+    void applyExclusiveBackgroundAudio()
+      .then(() => player.seekTo(0))
+      .then(() => player.play())
+      .catch(() => {})
+    // Latched, so restarting after a stop is not counted as a second play.
+    markStarted()
   }
 
 
@@ -336,13 +392,14 @@ export default function SampleScreen() {
             ⚠ `inkDim` is NOT a hand-picked step up: it is what home's own one-line subhead under its
             headline already uses (`voice.plan.openingHint`, app/index.tsx). Two lines doing the same
             job on consecutive screens now read at the same weight.
-            ⚠ THE SIZE STAYS `dim` (13.5pt) ON PURPOSE. The tagline that named the category wrapped to
-            two lines at 375pt, which is part of why the descriptor was cut — and restoring it is still
-            open (docs/designs/onboarding-first-screen-legibility.md §2). Growing the type now would
-            spend the line budget that change needs.
-            ⚠ AND THE DESCRIPTOR IS STILL MISSING. This makes the line legible; it does not make it say
-            "narrated road trips". §2 of that doc is the open half of this fix — do not read a promoted
-            colour role as having closed it. */}
+            ⚠ THE SIZE STAYS `dim` (13.5pt) ON PURPOSE, and it is now load-bearing rather than
+            cautious: the rewritten `voice.tagline` sets on ONE line at 375pt at this size (verified
+            on an SE), which is exactly what let the category arrive without a second line of type.
+            ⚠ TWO LINES WERE TRIED HERE AND NOT TAKEN — a small-caps "NARRATED ROAD TRIPS" kicker
+            between the wordmark and this line, rendered on both viewports. It fits, and it still lost:
+            beside a tagline that already names the activity it says less in more space, in the
+            store-listing register that got home's hero deleted. See the tagline's own note in voice.ts
+            and docs/designs/onboarding-first-screen-legibility.md §2. */}
         <Text variant="dim" color="inkDim" align="center">
           {voice.tagline}
         </Text>
@@ -359,54 +416,38 @@ export default function SampleScreen() {
           image={postcardImageFor(sample?.qid)}
           colors={colors}
           imageHeight={postcardH}
-          kicker={voice.sample.kicker}
           name={sample ? cleanPlaceName(sample.name) : ''}
+          // ⚠ THE ⓘ LIVES ON THE ARTWORK NOW — a licence obligation finding a new home, not a
+          // decoration finding a prettier one. Deleting the transport deleted the row it used to
+          // ride; given its own row under the picture it floated in ~40pt of empty card and drew the
+          // eye to the least important thing on screen (founder, 2026-08-05: "can you hide the 'i'
+          // icon better"). Pinned to the poster's corner it reads as a photo credit, costs no height,
+          // and keeps its own 48pt tap floor.
+          // ⚠ `onPhoto` is REQUIRED here, not a preference: it sits on the caption scrim's opaque end,
+          // where the component's default `inkFaint` is a dark glyph on a dark band — invisible, which
+          // for the control that opens the CC BY-SA credit is worse than ugly.
+          // ⚠ ONE EXPRESSION decides both the glyph AND the caption's reserved corner. Passing the
+          // button unconditionally and letting its own empty guard hide it would inset the place
+          // name to dodge an icon that was never drawn — two copies of "is there a credit?" drifting
+          // apart, which is the bug class this repo keeps paying for.
+          credit={
+            sample?.attribution?.length ? (
+              <AttributionButton items={sample.attribution} color="onPhoto" />
+            ) : undefined
+          }
         />
         {/* ⚠ NO "A TASTE" BADGE HERE ANY MORE (founder, 2026-08-04). Its stated job was to be honest
             that "this is a sample, not a live drive" — which was true copy on the OLD `/sample`,
             reached from a row on home by a rider who already knew what a drive was. On the first
             screen of a fresh install it disambiguates against a concept the rider has never met, and
-            three other things on the same screen already say the clip is not the product: the tagline
-            ("you pick the road"), the section heading ("where are we driving?") and the CTA ("start
-            exploring"). A fourth signal cost ~28pt on the screen where vertical space is the whole
-            fight. It also took the app's only teal Badge with it — a real palette loss, and the
-            cheapest thing here to put back if the screen reads flat without it. */}
-
-        <Scrubber
-          positionMs={(status.currentTime ?? 0) * 1000}
-          durationMs={durSec * 1000}
-          onSeek={seekToMs}
-          disabled={!canSeek}
-        />
-        {/* ⚠ THE ⓘ RIDES THE TRANSPORT ROW rather than owning a row of its own (founder, 2026-08-04:
-            "that info icon also wastes a lot of vertical space"). It was a full-width Pressable on its
-            own line — ~43pt of height, gap included, for an 18pt glyph — on the one screen where
-            vertical space decides whether the CTA is visible without scrolling. The transport is three
-            discs centred in a wide row, so the space beside them was already empty.
-            ⚠ THE EMPTY SLOT ON THE RIGHT IS LOAD-BEARING, not filler: `TransportBar` centres its discs
-            within whatever width it is given, so without a matching slot the row would be 48pt wider
-            on the left and the play disc would sit visibly off-centre from everything above it.
-            ⚠ The ⓘ keeps its own 48pt tap floor (its `hitSlop` — see AttributionButton, where the
-            reasoning is a licence obligation rather than a preference); the slot only reserves the
-            space, it does not shrink the target. */}
-        <View style={styles.transportRow}>
-          <View style={styles.transportSlot}>
-            <AttributionButton items={sample?.attribution} />
-          </View>
-          <TransportBar
-            style={styles.transportFill}
-            playing={status.playing}
-            onPlayPause={togglePlay}
-            // ⚠ BOTH, never one — see `pauseLabel` on TransportBar. The defaults are drive copy, and
-            // on this screen the disc starts a one-minute postcard, not a drive.
-            playLabel={voice.sample.playA11y}
-            pauseLabel={voice.sample.pauseA11y}
-            canSeek={canSeek}
-            onSeekBack={() => seekBy(-15)}
-            onSeekForward={() => seekBy(15)}
-          />
-          <View style={styles.transportSlot} />
-        </View>
+            the rest of the screen already says the clip is not the product: the tagline ("you drive,
+            I'll tell you what you're passing"), the button that offers the sample BY NAME, and the
+            primary CTA beneath it ("Plan a drive"). A fourth signal cost ~28pt on the screen where
+            vertical space is the whole fight. It also took the app's only teal Badge with it — a real
+            palette loss, and the cheapest thing here to put back if the screen reads flat without it.
+            ⚠ Its "three other things" list named the 2026-08-04 strings, all three of which have since
+            been rewritten; updated rather than left, because a tombstone that quotes dead copy reads
+            as though the screen still says it. */}
       </Card>
 
       {/* ⚠ THE REGION QUESTION WAS HERE AND IS GONE (founder, 2026-08-04: "remove the region select
@@ -420,12 +461,23 @@ export default function SampleScreen() {
           ⚠ The rider is now NEVER asked, on any install — see TODO #73, which was already tracking the
           narrower version of this for riders who onboarded before region 2. Home's chip is the only
           place the question is asked at all, which is why it is being made more prominent there. */}
-      <Button
-        title={voice.region.setupCta}
-        variant={finished ? 'primary' : 'secondary'}
-        glow={finished}
-        onPress={finish}
-      />
+      <View style={styles.ctaStack}>
+        {/* ⚠ A TOGGLE, NEVER A STANDING OFFER — the stop half is a requirement. This surface takes
+            exclusive `doNotMix` focus, so a rider who cannot stop the clip has had their podcast
+            taken hostage by the app's opening move. The label is also the ONLY playback feedback the
+            screen has now (see the header's ⚠ on that), which is a second reason it must change. */}
+        <Button
+          title={status.playing ? voice.sample.stopCta : voice.sample.hearCta}
+          variant="secondary"
+          onPress={togglePlay}
+        />
+        {/* ⚠ PRIMARY FROM THE FIRST FRAME, which retires onboarding-taste-then-where §8.4's
+            quiet-until-heard rule. That rule existed because "a forward CTA and a play disc compete
+            for 'what do I do now?'" — there is no disc to compete with any more, so the hierarchy is
+            stated in labels instead of fought over by weight. `glow` still waits for the clip, so
+            finishing it is acknowledged without ever gating the only exit. */}
+        <Button title={voice.region.setupCta} variant="primary" glow={finished} onPress={finish} />
+      </View>
     </Screen>
   )
 }
@@ -444,15 +496,24 @@ function PostcardImage({
   image,
   colors,
   imageHeight,
-  kicker,
   name,
+  credit,
 }: {
   image: ImageSourcePropType | undefined
   colors: Theme['colors']
   /** Device-derived — see POSTCARD_SCREEN_FRACTION. */
   imageHeight: number
-  kicker: string
   name: string
+  /** The ⓘ, pinned into the artwork's own scrim like a photo credit.
+   *  ⚠ THE KICKER PROP WAS DELETED HERE (2026-08-05). It printed a small-caps line above the place
+   *  name ('HEAR A SAMPLE'), and the button below the card now makes that offer BY NAME — a kicker
+   *  saying the same thing on the artwork is the label twice, on the one screen where every point of
+   *  height was fought for.
+   *  ⚠ UNDEFINED IS A REAL STATE and it drives LAYOUT, not just the glyph: when there is no credit
+   *  the caption reclaims the corner (see `postcardCaptionInset`). That is why the caller decides
+   *  rather than leaning on AttributionButton's own empty guard — the inset and the icon have to be
+   *  the same fact, or the name is narrowed to dodge an icon that was never drawn. */
+  credit?: ReactNode
 }) {
   return (
     <View style={[styles.postcardImage, { height: imageHeight, backgroundColor: colors.surfaceSunken }]}>
@@ -474,15 +535,17 @@ function PostcardImage({
       <View
         style={[
           styles.postcardCaption,
+          // ⚠ RESERVE THE CORNER. The ⓘ is absolutely positioned OVER this full-width block, so
+          // without this a long second line runs straight under the glyph. "Emerald Bay State Park"
+          // happens to break short enough to miss it, which is exactly the kind of accident that
+          // ships. Padded on BOTH sides so the centring stays true.
+          credit ? styles.postcardCaptionInset : null,
           {
             experimental_backgroundImage: `linear-gradient(180deg, ${colors.photoScrimFade} 0%, ${colors.photoScrim} 78%)`,
           },
         ]}
         pointerEvents="none"
       >
-        <Text variant="label" color="onPhoto" align="center">
-          {kicker}
-        </Text>
         {/* ⚠ `display`, the heavy slab — the whole reason to move this onto the artwork. Below the
             image it had to stay small so it would not fight the picture; ON the picture, at poster
             weight, it IS the picture's title. Two lines max: a long place name at AX sizes must not
@@ -491,6 +554,14 @@ function PostcardImage({
           {name}
         </Text>
       </View>
+      {/* ⚠ OUTSIDE the caption block, so it is not laid out in that column and cannot push the name
+          around; it is pinned to the artwork's corner instead. It sits on the scrim's opaque end,
+          which is exactly why it can be a light glyph at all. */}
+      {credit ? (
+        <View style={styles.creditCorner} pointerEvents="box-none">
+          {credit}
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -509,10 +580,18 @@ const styles = StyleSheet.create({
   // elevation would otherwise cost a short phone 32pt of pure inset on top of the gaps it just saved.
   // `style` is applied after the primitive's own base, so this override lands.
   cardCompact: { gap: space.sm, padding: space.md },
-  transportRow: { flexDirection: 'row', alignItems: 'center' },
-  // Matches the ⓘ's own 48pt tap floor, and is mirrored empty on the right — see the call site.
-  transportSlot: { width: 48 },
-  transportFill: { flex: 1 },
+  // The ⓘ, pinned to the poster's bottom-right on the scrim's opaque end.
+  creditCorner: { position: 'absolute', right: space.sm, bottom: space.sm },
+  // ⚠ `xxxl` (32) clears the ⓘ's footprint: the `right: sm` inset (8) plus an 18pt glyph = 26, plus
+  // a little air. DERIVED from `creditCorner` above, not picked by eye — if that inset changes, this
+  // is the other half of the same measurement.
+  postcardCaptionInset: { paddingHorizontal: space.xxxl },
+  // ⚠ `sm`, not the body's `lg`: the two buttons are ONE decision surface (hear it, or go), so they
+  // group rather than reading as two separate sections of the screen.
+  ctaStack: { gap: space.sm, width: '100%' },
+  // ⚠ `transportRow` / `transportSlot` / `transportFill` WERE DELETED HERE (2026-08-05) with the
+  // transport itself. They centred the play disc between an ⓘ slot and a matching empty one; there
+  // is no disc to centre now. See the header for why the whole player left.
   // The postcard matte: a raised card holding the image, with the caption printed on its lower margin.
   postcardImage: {
     width: '100%',
