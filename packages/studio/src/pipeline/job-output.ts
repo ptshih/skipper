@@ -65,6 +65,17 @@ export interface JobOutputSynthesis {
 // client was: importing this module must not require a key, because sweep/refetch run without one
 // locally and a local CLI never synthesizes anyway (STUDIO_JOB_ID unset). A missing key now surfaces as
 // a thrown error inside the try below and lands in the same fallback an API failure does.
+// ⚠ THE PROMPT NO LONGER ASKS FOR A `estimatedCostUsd` FIELD (2026-08-04), and the reason is a
+// single-home rule rather than an observed failure. `studio_jobs.cost_usd` is written from the exact
+// token tally ("costUsd defaults to the process LLM tally"), and the admin renders this `data` object
+// verbatim — so a cost extracted from log PROSE sits next to a measured one, two authorities for one
+// number, which is the drift class CLAUDE.md calls the most-repeated bug here. The old field name was
+// ambiguous on top of that: a real job log carries BOTH a pre-flight estimate and a final actual.
+// ⚠ Probed before changing, and the model was already doing better than the hint: given a log with
+// both, it IGNORED `estimatedCostUsd` and produced `ttsEstimatedSpendUsd: 12.4` beside
+// `ttsActualSpendUsd: 9.83` and `llmSpendUsd: 4.15`, summing `totalSpendUsd` correctly. So this
+// removes a misleading hint and writes down the behaviour that was already right — it does not fix a
+// demonstrated bug, and should not be described as one.
 const REPORT = z.object({
   summary: z.string(),
   /** Free-form on purpose — the useful metrics differ per job kind, and the SYSTEM prompt asks for
@@ -77,9 +88,12 @@ You will be given stdout logs from a Cloud Run gen job. Extract:
 1. A plain-English summary (2–3 sentences) of what the job did and whether it succeeded cleanly.
 2. A structured JSON object of key metrics — be kind-specific and practical. Common fields:
    dryRun (bool), itemsProcessed (int), clipsGenerated (int), totalDurationSec (float),
-   estimatedCostUsd (float), warnings (string[]), errors (string[]).
+   warnings (string[]), errors (string[]).
    Include any kind-specific fields you can reliably extract (wpm, tailCollapses, groundingScore, etc.).
-   Omit fields you cannot determine.`
+   Omit fields you cannot determine.
+   Do NOT report one combined "cost" figure. The run's actual spend is recorded separately, from the
+   token tally, and a second number here would compete with it. Where the log distinguishes an ESTIMATE
+   from an ACTUAL, or LLM spend from TTS spend, keep them as separate clearly-named fields.`
 
 /** Summarize the captured log + extract structured metrics. Falls back on any error so the caller never
  *  has to handle null. Bounded by a request timeout so a hung call can't keep the job process alive past
