@@ -340,10 +340,13 @@ export default function SampleScreen() {
             ⚠ `inkDim`, deliberately NOT `accentWarm`: the screen's one amber is already spent on the
             place name below the image, and two amber lines inside one card is a card with no
             hierarchy. */}
-        <Text variant="label" color="inkDim" align="center">
-          {voice.sample.kicker}
-        </Text>
-        <PostcardImage image={postcardImageFor(sample?.qid)} colors={colors} imageHeight={postcardH} />
+        <PostcardImage
+          image={postcardImageFor(sample?.qid)}
+          colors={colors}
+          imageHeight={postcardH}
+          kicker={voice.sample.kicker}
+          name={sample ? cleanPlaceName(sample.name) : ''}
+        />
         {/* ⚠ NO "A TASTE" BADGE HERE ANY MORE (founder, 2026-08-04). Its stated job was to be honest
             that "this is a sample, not a live drive" — which was true copy on the OLD `/sample`,
             reached from a row on home by a rider who already knew what a drive was. On the first
@@ -353,20 +356,6 @@ export default function SampleScreen() {
             exploring"). A fourth signal cost ~28pt on the screen where vertical space is the whole
             fight. It also took the app's only teal Badge with it — a real palette loss, and the
             cheapest thing here to put back if the screen reads flat without it. */}
-        {/* ⚠ THE POSTCARD CAPTION'S TREATMENT, not a title's (founder, 2026-08-04) — `label` +
-            `accentWarm`, i.e. small tracked caps in burnt amber, exactly what "POSTCARD FROM LAKE
-            TAHOE" wore on the old matte. It keeps the print's warmth on a line that is now a FACT from
-            the API rather than a hardcoded place, and it drops the display-weight title that was
-            competing with the artwork directly above it.
-            ⚠ IT NAMES THE PLACE AND NOT THE REGION, and that is a constraint rather than a choice.
-            `Sample` carries no region (packages/shared: qid, name, url, contentType, durationMs,
-            attribution), so "…, Lake Tahoe" could only come from hardcoding it — a baked fact about a
-            clip the SERVER chooses and can swap — or from the picked region, which would be a lie the
-            day region 2 ships: this postcard is always the Tahoe clip while the chip below is the
-            rider's own, independent choice. Naming both honestly needs a region on the DTO. */}
-        <Text variant="label" color="accentWarm" align="center" numberOfLines={2}>
-          {sample ? cleanPlaceName(sample.name) : ''}
-        </Text>
 
         <Scrubber
           positionMs={(status.currentTime ?? 0) * 1000}
@@ -440,11 +429,15 @@ function PostcardImage({
   image,
   colors,
   imageHeight,
+  kicker,
+  name,
 }: {
   image: ImageSourcePropType | undefined
   colors: Theme['colors']
   /** Device-derived — see POSTCARD_SCREEN_FRACTION. */
   imageHeight: number
+  kicker: string
+  name: string
 }) {
   return (
     <View style={[styles.postcardImage, { height: imageHeight, backgroundColor: colors.surfaceSunken }]}>
@@ -455,6 +448,34 @@ function PostcardImage({
           <Sunburst size={132} opacity={0.16} />
         </View>
       )}
+      {/* ⚠ THE SCRIM IS NOT DECORATION — it is the only thing making the type below legible, and it
+          must not be "cleaned up" into a flat tint. The artwork is a different picture per QID
+          (@/lib/postcards) and a caption laid straight onto an unknown image is a coin flip: this one
+          has dark trees at the bottom, the next may have bright water. A gradient that reaches an
+          OPAQUE dark at the baseline guarantees the contrast the theme's own test asserts
+          (`onPhoto` on `photoScrim`), whatever is underneath.
+          ⚠ It fades from the TOP of the band so the picture is untouched above it — the reference
+          postcards all keep the scene clear and put the type in the last third. */}
+      <View
+        style={[
+          styles.postcardCaption,
+          {
+            experimental_backgroundImage: `linear-gradient(180deg, ${colors.photoScrimFade} 0%, ${colors.photoScrim} 78%)`,
+          },
+        ]}
+        pointerEvents="none"
+      >
+        <Text variant="label" color="onPhoto" align="center">
+          {kicker}
+        </Text>
+        {/* ⚠ `display`, the heavy slab — the whole reason to move this onto the artwork. Below the
+            image it had to stay small so it would not fight the picture; ON the picture, at poster
+            weight, it IS the picture's title. Two lines max: a long place name at AX sizes must not
+            eat the scene it is captioning. */}
+        <Text variant="display" color="onPhoto" align="center" numberOfLines={2}>
+          {name}
+        </Text>
+      </View>
     </View>
   )
 }
@@ -491,5 +512,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   postcardFill: { width: '100%', height: '100%' },
+  // Pinned to the image's lower edge; height comes from the type inside it, so a two-line name grows
+  // the band rather than clipping. `paddingTop` is the fade's runway — without it the gradient starts
+  // at the kicker and the first line sits on a half-dark wash.
+  postcardCaption: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingTop: space.xxxl,
+    paddingBottom: space.md,
+    paddingHorizontal: space.md,
+    gap: space.xs,
+  },
   postcardPlaceholder: { alignItems: 'center', justifyContent: 'center' },
 })

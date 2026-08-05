@@ -61,6 +61,20 @@ export interface ThemeColors {
   glow: string // campfire-amber halo (NOW card, dusk CTA, car token)
   shadowCast: string // neutral ambient cast shadow (daylight elevation)
   scrim: string // dim behind sheets / gates
+  // ── OVER A PHOTOGRAPH ──────────────────────────────────────────────────────────────────────────
+  // ⚠ THE ONE PAIR THAT DOES NOT FLIP BY THEME, and that is the entire point of it existing.
+  // Every other role here answers "what mood is the app in"; these answer "what is legible on top of a
+  // picture", and a picture is exactly as bright at dusk as it is at noon. The system had no such
+  // answer, and the gap has produced real defects: the onboarding postcard's stamp used
+  // `surfaceRaised` and read as a cream stamp in day and a dark hole punched in the artwork at dusk
+  // (fixed 2026-08-04 by moving it OFF the image, which is the other valid answer).
+  // ⚠ So the rule this pair encodes: anything drawn ON an image either uses these, or it moves off
+  // the image. Do not reach for a surface/ink role over a photograph — it cannot know what is under it.
+  photoScrim: string // opaque dark, the deep end of an over-image gradient
+  // `photoScrim` at 0 alpha — the transparent end. Same reason `surfaceFade` exists: a gradient must
+  // dissolve into its OWN colour, and fading to a different transparent leaves a grey cast at the seam.
+  photoScrimFade: string
+  onPhoto: string // cream that reads on `photoScrim` in both moods
   // ⚠ `areaFill`/`areaStroke` lived here until the 1.1 sweep. They coloured a DISTRICT's convex hull
   // on the map — the AREA trigger, deleted end-to-end in 1.1 (the mode was answering "a roamer can
   // arrive from any direction", which a drive never can). The `<Polygon>` that consumed them went with
@@ -91,6 +105,7 @@ export type TextColorRole = keyof Pick<
   | 'onAmber'
   | 'water'
   | 'onPrimary'
+  | 'onPhoto'
   | 'danger'
   | 'onDanger'
 >
@@ -148,6 +163,10 @@ export const lightTheme: Theme = {
     glow: 'rgba(221,122,51,0.30)',
     shadowCast: 'rgba(42,32,20,0.20)',
     scrim: 'rgba(42,32,20,0.42)',
+    // ⚠ Identical in both themes on purpose — see the pair's note on ThemeColors.
+    photoScrim: palette.inkBrown,
+    photoScrimFade: fade(palette.inkBrown),
+    onPhoto: palette.paperRaised,
     // lakeTeal at low alpha — the day basemap is bright paper, so the wash needs less to read
     // than it does at dusk (the same asymmetry `glow` carries at 0.30 light / 0.42 dark).
   },
@@ -183,6 +202,11 @@ export const darkTheme: Theme = {
     glow: 'rgba(235,163,81,0.42)',
     shadowCast: 'rgba(0,0,0,0.5)',
     scrim: 'rgba(0,0,0,0.55)',
+    // ⚠ The SAME values as day. A dusk-darkened caption over a daylit photograph would be a
+    // contrast failure that only appears at night, which is the class of bug this pair prevents.
+    photoScrim: palette.inkBrown,
+    photoScrimFade: fade(palette.inkBrown),
+    onPhoto: palette.paperRaised,
     // lakeTealNight, lifted — over the deep-pine night basemap a 0.14 wash disappears entirely.
   },
 }

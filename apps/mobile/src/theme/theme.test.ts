@@ -46,6 +46,11 @@ const ON_FILL: [keyof ThemeColors, keyof ThemeColors][] = [
   ['onPrimary', 'accent'], // Badge tone="pine" filled (accent ≠ primaryFill in dark)
   ['onPrimary', 'water'], // Badge tone="teal" filled
   ['ink', 'rule'], // Badge tone="neutral" filled
+  // ⚠ The over-a-photograph pair. It is checked HERE rather than in TEXT_ROLES because `onPhoto` is
+  // cream and would fail against the cream app surface — it is never meant to touch one. Both values
+  // are theme-independent, so this assertion is the only thing keeping "legible on the artwork" true
+  // if either palette constant is ever retuned.
+  ['onPhoto', 'photoScrim'],
 ]
 const AA = 4.5
 
