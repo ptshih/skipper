@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import type { DriveClip, SignedDriveAudio } from '@skipper/shared'
+import type { DriveClip } from '@skipper/shared'
 import {
   contentSignature,
   daysSinceIso,
+  decideDriveGate,
   driveIdsToSweep,
   expectedAudioSeqs,
   extForContentType,
@@ -20,8 +21,6 @@ import {
   storeFileName,
   storeKeepSet,
   storeKeyForClip,
-  urlMapFromDriveManifest,
-  urlMapFromDriveSigned,
   UNKNOWN_REV,
   type ManifestMigration,
   type StoredClipRef,
@@ -125,56 +124,44 @@ describe('extForContentType', () => {
 })
 
 
-describe('urlMapFromDriveManifest', () => {
-  const driveClip = (seq: number, form: DriveClip['form'], url: string | null): DriveClip => ({
-    seq,
-    form,
-    alongSec: seq * 60,
-    url,
-    contentType: url ? 'audio/mp4' : null,
-    durationMs: 90_000,
+// The gate that decides whether a rider may start a drive. Two callers ask it (the CTA and the
+// player), so every row is pinned here rather than re-reasoned at either site.
+describe('decideDriveGate', () => {
+  test('a COMPLETE copy plays, online or off', () => {
+    expect(decideDriveGate({ online: true, hasAnyLocal: true, missingCount: 0 })).toBe('play')
+    expect(decideDriveGate({ online: false, hasAnyLocal: true, missingCount: 0 })).toBe('play')
   })
 
-  test('keys narration stops by seq (the narration-only v2 manifest)', () => {
-    const m = urlMapFromDriveManifest({
-      clips: [
-        driveClip(0, 'story', 'https://r2/c0'),
-        driveClip(1, 'scenic', 'https://r2/c1'),
-        driveClip(2, 'scenic', 'https://r2/c2'),
-      ],
-    })
-    expect(m.get(0)).toBe('https://r2/c0')
-    expect(m.get(2)).toBe('https://r2/c2')
-    expect(m.size).toBe(3)
+  test('ONLINE + partial is the case the gate exists for', () => {
+    expect(decideDriveGate({ online: true, hasAnyLocal: true, missingCount: 1 })).toBe('needs-download')
   })
 
-  test('skips silent (url-null) beats', () => {
-    const m = urlMapFromDriveManifest({
-      clips: [
-        driveClip(0, 'story', 'https://r2/c0'),
-        driveClip(1, 'break', null), // a silent rest beat — no audio
-        driveClip(2, 'scenic', 'https://r2/c2'),
-      ],
-    })
-    expect(m.get(0)).toBe('https://r2/c0')
-    expect(m.has(1)).toBe(false)
-    expect(m.get(2)).toBe('https://r2/c2')
-    expect(m.size).toBe(2)
+  test('ONLINE + nothing saved gates too — including the unreadable-manifest drive', () => {
+    // `unreadable` is not a gate state: bytes on disk with no readable index reads as hasAnyLocal
+    // false, and the CTA layer picks repair-vs-download off `dirState`.
+    expect(decideDriveGate({ online: true, hasAnyLocal: false, missingCount: 0 })).toBe('needs-download')
+    expect(decideDriveGate({ online: true, hasAnyLocal: false, missingCount: 7 })).toBe('needs-download')
   })
-})
 
-describe('urlMapFromDriveSigned', () => {
-  test('maps the flat seq-keyed re-presign response directly', () => {
-    const signed: SignedDriveAudio = {
-      clips: [
-        { seq: 0, url: 'https://r2/c0', contentType: 'audio/mp4', durationMs: 1000 },
-        { seq: 3, url: 'https://r2/c3', contentType: 'audio/mp4', durationMs: 1000 },
-      ],
-    }
-    const m = urlMapFromDriveSigned(signed)
-    expect(m.get(0)).toBe('https://r2/c0')
-    expect(m.get(3)).toBe('https://r2/c3')
-    expect(m.size).toBe(2)
+  test('OFFLINE + partial PLAYS — the escape hatch, never block a rider we cannot help', () => {
+    // 19 of 20 stops at a trailhead with no signal: gating buys nothing and costs the drive. The
+    // gap is disclosed instead (Playback.expectedSeqs → the ready card's missing count).
+    expect(decideDriveGate({ online: false, hasAnyLocal: true, missingCount: 1 })).toBe('play')
+    expect(decideDriveGate({ online: false, hasAnyLocal: true, missingCount: 99 })).toBe('play')
+  })
+
+  test('OFFLINE + nothing saved is the one blocked state', () => {
+    expect(decideDriveGate({ online: false, hasAnyLocal: false, missingCount: 0 })).toBe('nothing-saved')
+    expect(decideDriveGate({ online: false, hasAnyLocal: false, missingCount: 3 })).toBe('nothing-saved')
+  })
+
+  test('an UNKNOWN connectivity verdict fails OPEN, so it gates (strict) rather than waving a stream through', () => {
+    // connectivity.ts reports unknown as ONLINE. Being wrong that way costs a download that
+    // succeeds; the reverse default would let a false-offline reading play every partial copy.
+    const unknownReadsAsOnline = true
+    expect(decideDriveGate({ online: unknownReadsAsOnline, hasAnyLocal: true, missingCount: 2 })).toBe(
+      'needs-download',
+    )
   })
 })
 

@@ -1,7 +1,10 @@
 # Skipper, from first principles — an architecture orientation
 
 **Status:** Snapshot — 2026-08-02, written against `main` during 1.1 step 12 by reading the route
-table, schema, engine and mobile source directly rather than summarizing the docs. **This is a
+table, schema, engine and mobile source directly rather than summarizing the docs. **Partly corrected
+2026-08-05** for the download-before-start build
+([download-before-start.md](../designs/download-before-start.md)): a live drive is gated on a complete
+local copy, drive audio never streams, and the re-sign route is gone. **This is a
 derived document and it will drift.** `CLAUDE.md` is operating truth, `docs/decisions/` is why, and
 the CODE is the rest of current truth — where any of them disagree with this file, this file is
 wrong. Its job is orientation: enough of the shape that a new agent or engineer can read the real
@@ -77,10 +80,19 @@ The public surface, in mount order (`apps/api/src/index.ts`):
 | `POST /drives/propose` | **none** | Google Routes |
 | `POST /drives/plan` | **none** | model tokens |
 | `POST /drives` | **account** | a credit |
-| `GET /drives`, `GET /drives/:id`, `DELETE /drives/:id`, `POST /drives/:id/assets/sign` | account | — |
+| `GET /drives`, `GET /drives/:id`, `DELETE /drives/:id` | account | — |
 
 **The wall is at `POST /drives`.** Everything before it is anonymous: a rider can plan an entire
 drive by talking, see the route drawn, and hear a real clip from it before making an account.
+`requireAccount` sits per-route on the **four** owner routes, never on the `/drives` mount.
+
+⚠ `POST /drives/:id/assets/sign` was **deleted 2026-08-05** — a drive's audio is now only ever played
+from disk, so nothing needs a fresh presign after the download
+([download-before-start.md](../designs/download-before-start.md) §10). **`GET /drives/:id` survives
+and is load-bearing:** it returns the drive manifest with each clip's presigned url **inline** — that
+is where the download gets its bytes. `POST /drives` returns the same manifest shape on create. Those
+two are now the only way a drive's audio url reaches the app; there is no re-presign after the fact,
+which is exactly why the download has to be complete before the drive can roll.
 
 ⚠ `/drives/plan` and `/drives/propose` are mounted **above** `app.route('/drives', driveRoutes)`,
 and that ordering is load-bearing — Hono matches in registration order, so below the mount they are
@@ -108,10 +120,16 @@ test runner. Full pass: **[mobile-internals.md](mobile-internals.md)**.
 3. **Propose.** The server re-asserts `endpoint_eligible` on every id it was handed; an unknown or
    ineligible id is a **400 before any billed Routes call**. This is what makes "grounded by
    construction" literally true — enforced at the wire, not in a prompt.
-4. **Preview.** One presigned clip from the rider's own route, server-chosen, release-filtered.
+4. **Preview.** One presigned clip from the rider's own route, server-chosen, release-filtered. It
+   **streams**, deliberately — it plays before a drive exists, so there is nothing on disk yet.
 5. **The wall.** `POST /drives` requires an account, consumes one credit, and runs `buildDrive` —
    deterministic selection and pacing of existing clips along the frozen route, frozen into the row.
-6. **Drive it.** The app downloads clips into a subject-keyed store; the trigger core fires each stop.
+6. **Save it, automatically.** The create handler starts the download the moment the drive exists, and
+   it survives navigation — so the copy usually lands while the rider reads the itinerary.
+7. **Drive it.** Clips come off the subject-keyed store on disk; the trigger core fires each stop.
+   ⚠ Starting a live drive **requires a complete local copy** (2026-08-05): a drive's audio is only
+   ever played from disk, never streamed. The gate steps aside only where it cannot help — offline
+   with a partial copy still rolls, disclosing the gap.
 
 ---
 
@@ -133,7 +151,12 @@ not a voice-over ducking the rider's music; ducking was built, tried and rejecte
 is process-wide, so only one surface may own it at a time.
 
 Offline is keyed by narration *subject id* and filled from the drive's own manifest — and only a
-drive's own manifest is authoritative for it, which is why there is no region-level pack.
+drive's own manifest is authoritative for it, which is why there is no region-level pack. Since
+2026-08-05 it is not optional either: **a drive's audio is only ever played from disk**, and one pure
+expression (`decideDriveGate`) answers "can this drive roll?" for *both* the detail CTA and the player
+— two call sites, one expression, because `skipper://drives/<id>/play` is a real deep link and a gate
+that lives only on the CTA is not a gate. ⚠ This governs DRIVE audio only. `GET /sample` and the
+route-preview clip play before a drive exists and still stream, by design.
 
 ---
 

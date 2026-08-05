@@ -7,7 +7,7 @@ import { ActionSheetProvider } from '@expo/react-native-action-sheet'
 import { AnalyticsProvider, captureError, track } from '@/lib/analytics'
 import { useAnonymousMint } from '@/lib/anon-session'
 import { sweepOrphanClips } from '@/lib/offline'
-import { SimModeProvider, readStoredSimMode } from '@/lib/sim-mode'
+import { DEFAULT_SIM_MODE, SimModeProvider, readStoredSimMode } from '@/lib/sim-mode'
 import { ThemeProvider, readStoredThemeMode, useAppFonts, useTheme, type ThemeMode } from '@/theme'
 import { fonts } from '@/theme/tokens'
 import { HEADER_FLOATS, HeaderIconButton, StateView, VersionGate, voice } from '@/ui'
@@ -115,7 +115,10 @@ export default function RootLayout() {
               it is here at all: `Alert` caps at THREE buttons on Android (RN docs), so a region
               list of any length silently lost rows on that path. */}
           <ActionSheetProvider>
-            <SimModeProvider initialSimMode={initialSimMode ?? false}>
+            {/* `?? DEFAULT_SIM_MODE` is unreachable — `ready` above already requires a non-null
+                read — but it reads the SAME expression the storage fallback and the provider's own
+                parameter default do, so the toggle's default cannot drift to a second value here. */}
+            <SimModeProvider initialSimMode={initialSimMode ?? DEFAULT_SIM_MODE}>
               <ThemedStack />
             </SimModeProvider>
           </ActionSheetProvider>

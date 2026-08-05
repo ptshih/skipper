@@ -41,8 +41,20 @@ export interface StopListProps {
   /** Optional trailing half of that header, right-aligned on the meta line (e.g. the SIM tag).
    *  Separate from `title` rather than concatenated so it lands in the meta column. */
   titleRight?: string
-  /** Tap a row to jump there (preview only); omit for a read-only itinerary. */
+  /** Tap a row to jump there; omit for a read-only itinerary. */
   onPressItem?: (seq: number) => void
+  /**
+   * Which rows may actually be pressed. Omit and every row is pressable (the drive-detail preview,
+   * where any stop can be auditioned).
+   *
+   * ⚠ IT EXISTS BECAUSE PRESSABILITY IS PER-ROW, NOT PER-LIST. The live player replays only stops the
+   * road has already PASSED, and `onPressItem` alone is all-or-nothing: without this every upcoming
+   * row would take `accessibilityRole: 'button'` (StopRow keys that off `onPress`), announce itself
+   * as actionable to VoiceOver, and then do nothing when tapped — a control that lies, on the one
+   * surface a driver is least able to investigate. Returning false hands StopRow `undefined`, which
+   * it already renders as `disabled` + role `text`.
+   */
+  canPressItem?: (seq: number) => boolean
   /** Drive-complete beat: passed rows "stamp" their check in, staggered down the list. */
   enterStamp?: boolean
   /** Fixed-shell mode: rows scroll inside the card (caller gives the card flex:1). */
@@ -67,6 +79,7 @@ function StopListBase({
   title,
   titleRight,
   onPressItem,
+  canPressItem,
   enterStamp,
   scroll,
   followRow = -1,
@@ -141,7 +154,7 @@ function StopListBase({
         metaLabel={it.metaLabel}
         icon={it.icon}
         state={it.state}
-        onPress={onPressItem ? handlerFor(it.seq) : undefined}
+        onPress={onPressItem && (canPressItem?.(it.seq) ?? true) ? handlerFor(it.seq) : undefined}
         enterStamp={!!enterStamp && it.state === 'passed'}
         stampDelayMs={i * 80}
       />

@@ -1,10 +1,11 @@
 // The live, GPS-triggered driving player. The skipper talks when the road reaches a
-// stop, not on a timer. TWO clocks behind one code path (the `?mode=` param), both in
-// `useDrive`: the couch SIMULATOR (default in dev — testable on the iOS Simulator, no
-// device GPS) and the real device GPS (`?mode=live`, Phase 4). (The old map-less couch
-// PREVIEW clock was cut — auditioning a drive is the native per-stop mini-preview on the
-// drive-detail page now; see docs/decisions/detail-page-mini-preview.md.) Reuses the @/ui
-// player primitives; the clock + fire-queue + source swap live in `useDrive`.
+// stop, not on a timer. TWO clocks behind one code path, both in `useDrive`: the real
+// device GPS (Phase 4) and the couch SIMULATOR (testable on the iOS Simulator, which has
+// no moving GPS). Which one runs is the persisted admin SETTING, never the route — see
+// `driveMode` below. (The old map-less couch PREVIEW clock was cut — auditioning a drive
+// is the native per-stop mini-preview on the drive-detail page now; see
+// docs/decisions/detail-page-mini-preview.md.) Reuses the @/ui player primitives; the
+// clock + fire-queue + source swap live in `useDrive`.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, Animated, Pressable, StyleSheet, View } from 'react-native'
 import { Stack, useLocalSearchParams, useNavigation, useRouter } from 'expo-router'
@@ -46,24 +47,18 @@ type PlayerView = 'map' | 'list'
 
 export default function DriveScreen() {
   const theme = useTheme()
-  const { id, mode } = useLocalSearchParams<{ id: string; mode?: string }>()
-  // 'live' = real device GPS (Phase 4); the default is the on-device SIMULATOR (couch-testable).
-  // An unrecognized/missing mode falls back to 'sim' in DEV but to 'live' in RELEASE — the dev
-  // clock must never be one malformed deep link away from a production rider (the couch PREVIEW
-  // that used to be that release fallback is gone; auditioning is the drive-detail mini-preview).
-  // The global Settings → Developer sim toggle swaps the real-GPS 'live' drive for the on-device
-  // SIMULATOR, so it wins over an explicit `?mode=live`.
+  const { id } = useLocalSearchParams<{ id: string }>()
+  // ⚠ THE GPS CLOCK IS A SETTING, NOT A ROUTE (§11). This used to resolve from THREE inputs — the
+  // persisted toggle, a `?mode=` query param and `__DEV__` — so the absence of the param was
+  // load-bearing and its meaning FLIPPED with build type, and neither push site could say what it
+  // wanted (the one labelled "Simulated drive" pushed a bare `/play` and leaned on `__DEV__`). One
+  // input, one expression: the deep link `skipper://drives/<id>/play?mode=live` now says nothing,
+  // because nothing reads it. The toggle itself is admin-only and defaults OFF everywhere
+  // (`DEFAULT_SIM_MODE`) — a dev build runs the REAL drive, which is what RISK-1 needs.
   const { simMode } = useSimMode()
-  const driveMode: 'sim' | 'live' = simMode
-    ? 'sim'
-    : mode === 'live'
-      ? 'live'
-      : __DEV__
-        ? 'sim'
-        : 'live'
-  // When the GLOBAL dev toggle forced sim, default the replay to fast (couch-testing a full drive
-  // at 1× is impractical); the plain dev-fallback sim keeps real-time so trigger-timing tests are
-  // unchanged. The pre-drive knob still lets the rider switch. (simMode ⟹ driveMode==='sim'.)
+  const driveMode: 'sim' | 'live' = simMode ? 'sim' : 'live'
+  // A simulated drive defaults to FAST replay — couch-testing a full drive at 1× is impractical —
+  // and the pre-drive knob below still lets it be switched back for a trigger-timing pass.
   const d = useDrive(id, { mode: driveMode, defaultFast: simMode })
 
   // Map ⇄ List — the real map (route + live puck) or the bare itinerary. List stays the
@@ -106,7 +101,7 @@ export default function DriveScreen() {
   const { data: session } = useSession()
 
   // Returning from /sign-in lands back on this STILL-MOUNTED screen, but useDrive's load
-  // effect watches only [driveId, reloadKey, mode] — nothing the session — so a rider who just
+  // effect watches only [driveId, reloadKey] — nothing about the session — so a rider who just
   // got their free ticket would otherwise sit on the same gate. Re-check ONCE per signed-in
   // user while gated; retry() bumps reloadKey → re-fetches → drops them straight into the drive.
   //
@@ -220,6 +215,22 @@ export default function DriveScreen() {
     [stopViews],
   )
 
+  /** Tap a stop the road has already PASSED to hear it again (§12.3). Both halves are the hook's —
+   *  `isReplayable` is the very predicate `replayStop` refuses on — so the row and the player can
+   *  never disagree about whether a tap does anything. Tapping an upcoming stop is a no-op by design:
+   *  playing ahead would spend the anticipate beat the planner manufactures, and the stop would then
+   *  fire AGAIN on approach (a replay deliberately never touches the fired set). A live GPS trigger
+   *  preempts a replay in flight — the road always wins. */
+  // Destructured so the two functions are the deps: called as `d.isReplayable(…)` the hooks lint reads
+  // the whole `d` as the dependency, and `d` is a fresh object on every audio tick.
+  const { isReplayable, replayStop } = d
+  const replayFromRow = useCallback(
+    (seq: number) => {
+      if (isReplayable(seq)) replayStop(seq)
+    },
+    [isReplayable, replayStop],
+  )
+
   // The Map ⇄ List header switch (real-map spec §4).
   // ⚠ STABLE, and it is load-bearing rather than tidy: it is the `headerRight` of the memoized
   // `screenOptions` below, so a fresh identity here would bust that memo on every render — which on
@@ -316,6 +327,29 @@ export default function DriveScreen() {
         secondaryAction={{
           label: voice.gate.secondary,
           onPress: () => router.replace('/sample'),
+        }}
+      />
+    )
+
+  if (d.needsDownload)
+    // THE GATE, asserted a second time (docs/designs/download-before-start.md §1/§10 N3). The
+    // drive-detail CTA already refuses to send anyone here without a complete local copy — but
+    // `skipper://drives/<id>/play` is a real deep link, so a gate that lives only on the CTA is not a
+    // guard. ⚠ It sits ABOVE the location prompts on purpose: asking a rider for their location for a
+    // drive that cannot roll spends the one permission prompt iOS gives us on nothing.
+    //
+    // The action goes back to the drive screen rather than starting a transfer from here: that screen
+    // owns the download — its progress, its size line, and the honest "no signal and nothing saved"
+    // message this screen cannot tell apart. `back()` when there is a stack (the ordinary route in),
+    // `replace` when there isn't (the deep link, where back would leave the app).
+    return (
+      <StateView
+        title="Drive"
+        message={voice.offline.saveHint}
+        action={{
+          label: voice.offline.save,
+          onPress: () =>
+            router.canGoBack() ? router.back() : router.replace(`/drives/${id}`),
         }}
       />
     )
@@ -443,21 +477,11 @@ export default function DriveScreen() {
       />
     )
 
-  // Offline chip (M7): a quiet "playing from download" flag when the drive loaded entirely off the
-  // saved copy (zero network). Same icon + accent tone as the drive-detail "Saved offline" chip, so
-  // the two surfaces read as one idea.
-  const offlineChip =
-    d.offline ? (
-      <View
-        style={[styles.offlineChip, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.rule }]}
-        accessibilityLiveRegion="polite"
-      >
-        <Icon name="downloaded" size={14} color="accent" />
-        <Text variant="label" color="accent">
-          {voice.player.offlinePlayback}
-        </Text>
-      </View>
-    ) : null
+  // ⚠ The "Playing from download" chip (M7) is GONE, along with the `offline` flag behind it. Every
+  // drive now plays from the saved copy — a drive's audio is only ever read off disk — so the chip
+  // asserted nothing a rider could act on, and a badge that is always lit is chrome, not a signal.
+  // What IS worth telling them survives elsewhere: an incomplete copy still says so on the ready card
+  // (`missingClipCount`), and a drive with no copy never gets here at all (the gate above).
 
   // The player card — now-playing + scrubber + transport in ONE elevated card. Shared by the
   // List dock and the Map mode's expanded sheet.
@@ -538,22 +562,18 @@ export default function DriveScreen() {
             recenterBottom={96}
           />
 
-          {/* Top-of-map status chips: the offline flag + (when acquiring) the GPS-searching cue,
-              stacked so they don't overlap. */}
-          {(offlineChip || (d.gpsSearching && !d.paused)) ? (
+          {/* Top-of-map status: the GPS-searching cue while a fix is being acquired. */}
+          {d.gpsSearching && !d.paused ? (
             <View style={styles.mapChips} pointerEvents="none">
-              {offlineChip}
-              {d.gpsSearching && !d.paused ? (
-                <View
-                  style={[styles.mapGps, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.rule }]}
-                  accessibilityLiveRegion="polite"
-                >
-                  <ActivityIndicator size="small" color={theme.colors.accent} />
-                  <Text variant="dim" color="inkFaint">
-                    {voice.player.gpsSearching}
-                  </Text>
-                </View>
-              ) : null}
+              <View
+                style={[styles.mapGps, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.rule }]}
+                accessibilityLiveRegion="polite"
+              >
+                <ActivityIndicator size="small" color={theme.colors.accent} />
+                <Text variant="dim" color="inkFaint">
+                  {voice.player.gpsSearching}
+                </Text>
+              </View>
             </View>
           ) : null}
 
@@ -646,9 +666,14 @@ export default function DriveScreen() {
       />
 
       {/* The itinerary (flex:1) — a FIXED shell: all four rounded corners stay put while only the
-          rows scroll; read-only on the drive (auditioning per-stop is the drive-detail mini-preview);
-          the drive-complete cascade stamps the passed checks in. (Map mode is a separate full-bleed
-          layout above.) */}
+          rows scroll; the drive-complete cascade stamps the passed checks in. (Map mode is a separate
+          full-bleed layout above.)
+          ⚠ It is no longer READ-ONLY here (§12.3, founder 2026-08-05): tapping a PASSED row re-hears
+          that stop. The old comment called the list read-only "because auditioning per-stop is the
+          drive-detail mini-preview" — a judgement call, not doctrine, and the doctrine permits this:
+          the rows are already the ≥48pt in-car tap target, this screen already carries a draggable
+          scrubber (a strictly harder in-car interaction), and the mechanism is `replayLast`'s, with a
+          seq. */}
       <StopList
         scroll
         // Phrased "N OF M" rather than "N/M" so a screen reader says it correctly (a slash reads as
@@ -659,6 +684,13 @@ export default function DriveScreen() {
         style={styles.listCard}
         enterStamp={d.phase === 'done' && !reduce}
         items={stopListItems}
+        onPressItem={replayFromRow}
+        // ⚠ PER-ROW, not per-list. Only stops the road has PASSED can replay, so an upcoming row must
+        // not take `accessibilityRole: 'button'` and announce itself as actionable to a driver who
+        // then taps it and gets nothing. `isReplayable` is the hook's predicate — deliberately a
+        // predicate and not `firedSeqs`, so no screen can reach for "the road got there" when it
+        // means "the rider heard it" (useDrive's comment on why that set stays internal).
+        canPressItem={d.isReplayable}
       />
 
       {/* ── PLAYER CARD ── now-playing + scrubber + transport, contained in ONE elevated card
@@ -667,10 +699,6 @@ export default function DriveScreen() {
           raised cards on paper with a gutter between them, so the fence was a third edge drawn
           between two that already read — and one more horizontal band on a screen whose problem
           was horizontal bands. */}
-
-      {/* Offline flag (M7): a quiet "playing from download" chip when the drive is running off the
-          saved copy. Centered, just above the card — mirrors the map mode's top chip. */}
-      {offlineChip ? <View style={styles.listChip}>{offlineChip}</View> : null}
 
       {/* GPS acquisition — a missing fix reads as a "still finding you" status, not a
           fault with the current clip. Sits just above the card. */}
@@ -735,17 +763,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.gutter,
     marginTop: space.md,
   },
-  // Offline "playing from download" chip (M7) — a quiet pill, shared by both modes' status rows.
-  offlineChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.xs,
-    paddingHorizontal: space.md,
-    paddingVertical: space.xs,
-    borderRadius: radius.pill,
-    borderWidth: border.hair,
-  },
-  listChip: { alignItems: 'center', marginTop: space.md }, // centers the offline chip in list mode
   simRow: { paddingHorizontal: space.gutter, marginTop: space.lg, gap: space.sm },
   simBtns: { flexDirection: 'row', gap: space.sm },
   // The fixed itinerary shell: fills the slack between the trail and the player dock, with the
@@ -753,7 +770,7 @@ const styles = StyleSheet.create({
   listCard: { flex: 1, marginHorizontal: space.gutter, marginTop: space.md },
   // ── Map mode: a full-bleed map with the player floating as a peek/expand sheet ──
   mapFill: { flex: 1 },
-  // Top-of-map status stack (offline flag + GPS-searching cue) — absolutely positioned, centered.
+  // Top-of-map status (the GPS-searching cue) — absolutely positioned, centered.
   mapChips: { position: 'absolute', top: space.md, left: 0, right: 0, alignItems: 'center', gap: space.sm },
   mapGps: {
     flexDirection: 'row',

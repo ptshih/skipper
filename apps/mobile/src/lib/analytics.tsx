@@ -143,16 +143,14 @@ export type StopSkipReason =
    *  actually being driven through, the same one the ready card's missingClipCount warns about
    *  while the rider is still parked. */
   | 'no_audio'
-  /** The clip HAD a url and never produced audio: the pre-start watchdog re-signed once and the
-   *  second pass still hadn't started (expired 403 / decode failure / a stream buffering forever). */
+  /** The clip HAD a local file and never produced audio before the pre-start watchdog fired. ONE
+   *  pass, not two: playback is disk-only, a file on disk cannot expire, and there is nothing to
+   *  re-sign. So this now means only a truncated or undecodable download — "our audio is broken",
+   *  never "no network here". */
   | 'load_timeout'
-  /** The same pre-start stall, except the re-sign itself failed (dead zone / 503), so the stop was
-   *  dropped immediately rather than hanging the sequential pump. Kept distinct from
-   *  'load_timeout' because it is the difference between "no network here" and "our audio is broken". */
-  | 'resign_failed'
   /** The clip STARTED and then froze mid-telling (call / Siri / a Bluetooth handoff / buffer death)
    *  and the one resume attempt didn't take. The rider heard PART of this stop — a materially
-   *  different defect from the three above, which are silence from the first second. */
+   *  different defect from the two above, which are silence from the first second. */
   | 'stalled_mid_clip'
   /** Never armed at all: the stop's snapped trigger point sat further off the route than
    *  OFF_ROUTE_MAX_M, so beginDrive never handed it to the engine. Silence decided before the
@@ -166,11 +164,9 @@ export type StopSkipReason =
  *  holes at the front? did it die after stop 3?); an id names a place. */
 type DriveStopProps = {
   mode: DriveMode
-  /** Playback came entirely off the on-disk download (zero network) — the axis most likely to
-   *  explain a cluster of skips. */
-  offline: boolean
-  /** Seconds since the drive began. In sim FAST mode this is compressed 8× along with everything
-   *  else; `mode` is what tells you not to read it as wall-clock pacing. */
+  /** Seconds since the drive began. In sim FAST mode this may be compressed 8× along with everything
+   *  else — "may" because the in-player speed knob moves that factor mid-drive; `mode` is what tells
+   *  you not to read it as wall-clock pacing. */
   elapsed_sec: number
   stop_index: number
   /** The clip's treatment. A CLOSED union with an explicit fallback rather than the wire string:
@@ -256,7 +252,6 @@ type AnalyticsEventProps = {
    *  triggered at all, which is a trigger/route signal rather than an audio one. */
   drive_completed: {
     mode: DriveMode
-    offline: boolean
     elapsed_sec: number
     stops_total: number
     stops_played: number

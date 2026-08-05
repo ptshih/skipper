@@ -6,8 +6,14 @@
 > mini-preview": expect to land on the detail page, toggle List/Map, and tap stops — NOT a full-screen
 > autostarting simulated drive. See [`../decisions/detail-page-mini-preview.md`](../decisions/detail-page-mini-preview.md).
 
-> **Status:** ⚠ **SUPERSEDED BY 1.1 (2026-08-02) — do not execute this as written.** Three of its
-> preconditions are now false: the FROM/TO **pickers are deleted** (home IS the conversation — D6), so
+> **Status:** ⚠ **SUPERSEDED BY 1.1 (2026-08-02) — do not execute this as written.** ⚠ **Further
+> superseded 2026-08-05 by the download-before-start gate**
+> ([../designs/download-before-start.md](../designs/download-before-start.md)): a drive's audio is now
+> only ever played from DISK, the streaming/re-sign path is DELETED, and Start is gated on a complete
+> local copy that begins downloading the instant the drive is created. Happy-path steps 5–6, the DEAD
+> CLIP edge case and two *Verified-sound* bullets were rewritten that day to check the gate instead of
+> the re-sign ladder that no longer exists. Three of its preconditions are also now false: the FROM/TO
+> **pickers are deleted** (home IS the conversation — D6), so
 > steps 1–2 have no screen; roam is gone, so "Roam is primary" describes nothing; and — the one that
 > can do damage — **"roam is the only anonymous surface" is now the OPPOSITE of the rule.** Anonymous
 > riders get plan, propose, and one preview clip from their own route; the wall is `POST /drives`
@@ -77,16 +83,43 @@ OK before firing.
 3. **Confirm → create.** "Make this drive" → `GENERATING_LINES` beat → it `router.replace`s onto the
    new drive's **detail page** (`/drives/[id]`) — NOT a player. Back should return home, not the spent
    create flow.
-4. **Detail mini-preview.** The detail page IS the preview: the placard + a **List/Map** toggle (List
-   default) + the route stops. Tap a stop (a List row or a Map pin) → the NOW PLAYING card plays that
-   one clip (scrubber + ±15 + its source credit). Confirm: stop names are clean (no ", California"),
-   audio plays, and switching to Map shows the route + pins with the playing stop highlighted.
-5. **Real sim drive.** From My Drives → open the drive → it loads in **sim** mode in dev (GPS-less
-   couch sim). "Real time" vs "8× faster" knob appears pre-drive. Play → confirm stops TRIGGER by
-   proximity (not on a timer), pace sanely (≥3-min gaps), the stop list auto-scrolls, and the drive
-   ends cleanly (done card with the stop tally).
-6. **Replay / offline.** Re-open the drive (GET /drives/:id re-presigns live). Download it, kill the
-   network, replay — clips load from `file://` with zero network (offline-first).
+4. **⚠ The copy comes down BY ITSELF, and Start waits for it (2026-08-05).** Do nothing — just watch
+   the placard's permit row on the screen you were just pushed onto. Expect: a `Saving k/total` label
+   appears within a second or two of landing (the CREATE HANDLER fired the download, not the screen —
+   `app/index.tsx`), the primary CTA reads **"Saving for the road…"** and is DISABLED with
+   "Start opens up the moment the last stop lands." under it, and then — with no tap from you — the
+   chip flips to `Saved offline` and the CTA turns itself into the live Start. On our largest drive
+   (~11 MB) that whole window is ten to twenty seconds on LTE. Watch-for: a `Not saved` chip that never
+   moves (the auto-download never fired, or failed silently); a CTA that stays disabled after the chip
+   says saved; a **"Start anyway"** button anywhere — that string was DELETED, and its reappearance
+   means the gate grew a bypass.
+   **⚠ Now back out to My Drives and come straight back in.** The transfer is module-level, so it must
+   still be running (or finished) — a download that restarts from zero, or a Start that has gone dead,
+   means the screen re-took ownership of a transfer it no longer owns.
+5. **Detail mini-preview — and it plays only what is on disk.** The detail page IS the preview: the
+   placard + a **List/Map** toggle (List default) + the route stops. Tap a stop (a List row or a Map
+   pin) → the NOW PLAYING card plays that one clip (scrubber + ±15 + its source credit). Confirm: stop
+   names are clean (no ", California"), audio plays, and switching to Map shows the route + pins with
+   the playing stop highlighted. ⚠ **Tap a stop DURING step 4's saving window too**: the mini-preview
+   resolves from the local store only, so a stop whose bytes have not landed must answer with the
+   unplayable line ("That stop didn't come down with the rest…") — never silence, and never a stream.
+   The row hint above the list says "Saving for the road…" instead of "Tap a stop to hear it" for
+   exactly that window.
+6. **The drive itself.** From My Drives → open the drive → tap Start. ⚠ **It is a LIVE, real-GPS drive
+   by default, in a dev build too** — `simMode` defaults FALSE everywhere and `__DEV__` does NOT seed
+   it (that default is what would otherwise have silently simulated the founder's real drive and
+   suppressed the admin trace recorder). For a couch pass, flip **Settings → Developer → SIMULATED
+   GPS** on first; the "Real time" vs "8× faster" knob then appears pre-drive. Either way confirm stops
+   TRIGGER by proximity (not on a timer), pace sanely (≥3-min gaps), the stop list auto-scrolls, and
+   the drive ends cleanly (done card with the stop tally). Also tap a stop the road has **already
+   passed** — it re-hears that clip (a live trigger preempts it); an **upcoming** row must not respond
+   at all.
+7. **Drive it with the network fully OFF — this is now the only way audio is ever served.** With the
+   drive saved, turn on **Airplane Mode** (Wi-Fi and any tunnel off too), reopen it and run the drive
+   end to end. Expect: the detail page still renders from the saved manifest, Start is enabled, every
+   clip plays from `file://`, and the drive completes with zero network. Watch-for: any request at all
+   during playback; a clip going quiet after ~an hour (a presigned URL got persisted instead of bytes);
+   the ready card claiming stops are missing when they are all there.
 
 ## Edge cases — the ones most likely to bite
 
@@ -112,9 +145,24 @@ Hit these deliberately; several are unproven and called out as findings below.
   path; it reports `granted` from the ledger, not the env value). The
   client surfaces the server message as-is. (Ledger model: `docs/decisions/credit-ledger.md`; the
   balance is `SUM(amount)` over `credit_entries`, `apps/api/src/credits.ts`.)
-- **DEAD CLIP / dead zone.** Mid-drive, a clip that won't start gets re-signed ONCE then SKIPPED
-  (the drive never hangs) — `useDrive.ts` watchdog + post-start stall recovery. Hard to force on a
-  sim; note it for the real drive.
+- **⚠ DEAD CLIP — one pass now, not two (2026-08-05).** The re-sign rung is GONE with the whole
+  streaming path, so a clip that never produces audio is skipped after ONE wait on the new
+  `LOCAL_CLIP_STALL_MS` (`packages/engine/src/player.ts`) instead of two waits on the 12 s remote
+  budget. A dead clip therefore costs a couple of seconds of dead air, not twenty-four, and the only
+  cause left is a truncated or undecodable **local** file — "our audio is broken", never "no network
+  here" (`StopSkipReason.load_timeout`; `resign_failed` was deleted as structurally unreachable).
+  ⚠ **The short value is a DESK ESTIMATE and still owes a device check** — see the device runbook's
+  §8 item; a device that reports local decode late would skip clips that were fine.
+- **⚠ OFFLINE, PARTIAL COPY — the one row where the gate steps aside.** Save a drive, then interrupt
+  it (Airplane Mode mid-download, or `⋯` → Cancel download) so some clips are missing. Stay offline and
+  open the drive. Expect: Start is **enabled** (blocking a rider we cannot help is pure loss), and the
+  player's ready card replaces its usual body with the count — *"N stops didn't finish saving, so I'll
+  be quiet when we pass them. The rest of the drive is all here."* Watch-for: the ready card showing
+  the ordinary body while stops are genuinely missing (the disclosure is the whole reason this row is
+  allowed to roll).
+- **OFFLINE, NOTHING SAVED.** Airplane Mode, open a drive that was never saved. Expect a line, not a
+  dead button: *"No signal out here, and this one isn't saved yet. We'll roll when the bars are back."*
+  Watch-for: a disabled Start with no explanation, or a Save button that fires a download it cannot run.
 - **BACK-OUT guard.** While driving, the back chevron + "Pull over" both confirm before ending; the
   edge-swipe is disabled while rolling.
 
@@ -158,12 +206,21 @@ each is a real edge. Severity is "how likely to bite a real rider."
   corpus map, so every selection item resolves (`drives.ts:451-462`).
 - Drive privacy/ownership holds: `loadOwnedDrive` 404s on not-yours; `GET /drives` filters by
   `userId` (`drives.ts:534-581`).
-- The "a drive never hangs on a dead clip" invariant is well-defended: pre-start watchdog (re-sign
-  once → skip), post-start interruption/stall recovery, and `buildDrive`'s queue-lag drop.
-- Offline-first load (`loadPlayback`) serves `file://` when downloaded, else inline presigned URLs.
+- The "a drive never hangs on a dead clip" invariant is well-defended: the pre-start watchdog (ONE
+  pass on `LOCAL_CLIP_STALL_MS` → skip, since 2026-08-05 — there is no re-sign left to try), post-start
+  interruption/stall recovery, and `buildDrive`'s queue-lag drop. ⚠ The post-start watchdog is NOT a
+  streaming feature and stays: `stalled_mid_clip` is call / Siri / Bluetooth-handoff recovery, which
+  happens to a local file just as readily.
+- ⚠ **`loadPlayback` is DISK-ONLY (2026-08-05).** Its online branch, `resignPlayback`, `signDriveAudio`
+  and the `POST /drives/:id/assets/sign` route are all deleted — a drive's audio never resolves to
+  `https` again, which is what the gate above is protecting. It still serves a PARTIAL local map rather
+  than error-walling a rider holding 39 of 40 stops. ⚠ **This is not "the app never streams":**
+  `GET /sample` and the anonymous route-preview clip play BEFORE a drive exists, with nothing on disk
+  to play from, and they deliberately still stream on the generous 12 s `PRE_START_STALL_MS`. Never
+  "simplify" the boundary away.
 
 ## Accept bar
 
-Happy path 1–6 clean; LOOP + SPARSE behaviors understood (and any Finding-1/2 fix applied); cap +
+Happy path 1–7 clean; LOOP + SPARSE behaviors understood (and any Finding-1/2 fix applied); cap +
 out-of-region messages correct. Then hand to the founder ear-pass (is the *selection* charming, are
 the stories well-ordered for the route?) and the real-device drive.

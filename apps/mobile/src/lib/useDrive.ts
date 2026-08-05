@@ -24,8 +24,8 @@ import {
   cumulativeMeters,
   decidePump,
   decideStall,
+  LOCAL_CLIP_STALL_MS,
   OFF_ROUTE_MAX_M,
-  PRE_START_STALL_MS,
   seekTargetReached,
   snapStopsToRoute,
   TraceRecorder,
@@ -37,12 +37,16 @@ import type { Attribution } from '@skipper/shared'
 import { track, type StopSkipReason } from './analytics'
 import { ApiError, errorMessage } from './api'
 import { isAdmin, useSession } from './auth'
+// ⚠ The IMPERATIVE read, not `useIsOffline`. The gate is an entry guard latched at load; subscribing
+// would make it live again and re-gate a rolling drive the moment coverage returns.
+import { isOfflineNow } from './connectivity'
 import { cleanPlaceName } from './labels'
-import { loadPlayback, resignPlayback } from './offline'
+import { loadPlayback } from './offline'
 // Pure + native-free (offline-util.ts's whole reason for existing), so importing it here costs this
-// hook nothing and keeps "which stops SHOULD have audio" a single definition shared with the
-// downloader — a second local predicate is how the count and the download disagree.
-import { expectedAudioSeqs } from './offline-util'
+// hook nothing and keeps both the GAP MATH and the GATE single definitions shared with the downloader
+// and the drive-detail CTA — a second local copy of either is how the count and the download, or the
+// CTA and the player, quietly disagree.
+import { decideDriveGate, missingAudioSeqs } from './offline-util'
 import Constants from 'expo-constants'
 import { getDrivePermission, liveSource, simulatedSource, type FixSubscription, type RawFix } from './gps'
 import { saveTrace } from './trace-export'
@@ -102,15 +106,14 @@ const startedDrives = new Set<string>()
 // ── THE IN-DRIVE TRACE ────────────────────────────────────────────────────────────────────────
 // One mutable record per drive RUN, carried in a ref and read by every emit site below.
 //
-// ⚠ THE REF IS THE POINT, not a shortcut. `offline`, `mode` and `data` are all state/props, and
-// reading them at the emit sites would put them into the dependency arrays of finishDrive → pump →
+// ⚠ THE REF IS THE POINT, not a shortcut. `mode` and `data` are both state/props, and reading them
+// at the emit sites would put them into the dependency arrays of finishDrive → pump →
 // handleFix — and handleFix is the callback the GPS source CAPTURES ONCE at beginDrive (audit
 // #377). Adding telemetry must not be able to move that callback graph: these events exist to
 // verify the player, so an instrumentation-induced change in WHEN a stop fires would corrupt the
 // very run they are measuring.
 interface DriveTrace {
   mode: 'sim' | 'live'
-  offline: boolean
   /** ms of beginDrive; 0 = no run in progress. Every emitter checks it first — without the
    *  sentinel a stray late callback would report `elapsed_sec` as seconds-since-the-epoch. */
   startedAt: number
@@ -118,14 +121,19 @@ interface DriveTrace {
    *  it is also what keeps a rider-tapped REPLAY — which legitimately re-runs the freshness edge on
    *  an already-heard clip — from landing a second `stop_fired` for the same stop. */
   played: Set<number>
-  skipped: number
+  /** Seqs already counted as SILENT — the mirror of `played`, and for the same reason. A stop fires at
+   *  most once per drive (the engine debounces), so a SECOND skip for one seq can only come from a
+   *  rider-tapped replay: tap a passed stop whose local clip is present but undecodable and it runs the
+   *  watchdog again, emitting a second `stop_skipped` and inflating the `stops_skipped` that
+   *  `drive_completed` reports. A funnel counter that over-fires corrupts silently. */
+  skippedSeqs: Set<number>
   /** `drive_completed` latch. pump() is re-entrant by design; a double completion would inflate the
    *  one number that says the drive worked, and a funnel event that over-fires corrupts silently. */
   completed: boolean
 }
 
-function newTrace(mode: 'sim' | 'live', offline: boolean, startedAt: number): DriveTrace {
-  return { mode, offline, startedAt, played: new Set(), skipped: 0, completed: false }
+function newTrace(mode: 'sim' | 'live', startedAt: number): DriveTrace {
+  return { mode, startedAt, played: new Set(), skippedSeqs: new Set(), completed: false }
 }
 
 const elapsedSec = (t: DriveTrace): number => Math.max(0, Math.round((Date.now() - t.startedAt) / 1000))
@@ -147,7 +155,6 @@ function stopProps(t: DriveTrace, stops: DriveStop[] | undefined, seq: number) {
     form === 'story' || form === 'scenic' || form === 'break' ? form : 'other'
   return {
     mode: t.mode,
-    offline: t.offline,
     elapsed_sec: elapsedSec(t),
     stop_index: index,
     stop_form: stopForm,
@@ -171,7 +178,10 @@ function emitStopSkipped(
   reason: StopSkipReason,
 ): void {
   if (t.startedAt === 0) return
-  t.skipped += 1
+  // ⚠ ONCE PER SEQ. See `skippedSeqs` — a replay of a passed-but-broken stop re-runs the watchdog, and
+  // without this the drive's own summary counts one silent stop twice.
+  if (t.skippedSeqs.has(seq)) return
+  t.skippedSeqs.add(seq)
   track('stop_skipped', { ...stopProps(t, stops, seq), reason })
 }
 
@@ -273,28 +283,35 @@ export interface UseDrive {
   stallNote: string | null
   /** True while a live drive is getting no usable GPS fixes — show a "searching" cue. (review #6) */
   gpsSearching: boolean
-  /** True when playback is served entirely from the on-disk download (no network) — drives a quiet
-   *  "playing from download" chip so the rider knows a dead zone won't interrupt the drive. (M7) */
-  offline: boolean
   /**
    * How many stops this session has NO audio for — the size of the silent gap, surfaced ONCE on the
    * ready card before the drive rolls.
    *
-   * ⚠ WHY THIS EXISTS AT ALL. `loadPlayback` deliberately serves a PARTIAL local map when the network
-   * is unreachable (offline.ts — the alternative was error-walling a rider who has 39 of 40 stops), and
-   * a seq with no uri is then skipped after 400 ms with NO note. So the gap was SILENT BY
-   * CONSTRUCTION: the rider drove past those stops hearing nothing while the offline chip said
-   * "Playing from download", the same words a COMPLETE copy shows. The drive-detail screen tracked the
-   * gap the whole time; it simply never reached the player.
+   * ⚠ WHY THIS EXISTS AT ALL. `loadPlayback` deliberately serves a PARTIAL local map rather than
+   * error-walling a rider who has 39 of 40 stops (offline.ts), and a seq with no uri is then skipped
+   * after 400 ms with NO note. So the gap was SILENT BY CONSTRUCTION: the rider drove past those stops
+   * hearing nothing while the player said only what a COMPLETE copy says. The drive-detail screen
+   * tracked the gap the whole time; it simply never reached the player.
    *
    * ⚠ It is deliberately NOT a mid-drive warning. The rider is told while PARKED, on the ready card,
    * where they could still act on it — and never again, because a note that fires at each silent stop
    * is exactly the eyes-off-the-road interruption the in-car doctrine forbids.
    *
-   * 0 whenever playback is streaming (the online map covers every clip that has a url), so this is a
-   * partial-download signal specifically, not a general "clips missing" count.
+   * Non-zero only on a PARTIAL copy: the gate below refuses to roll an incomplete drive wherever a
+   * download could fix it, so the count reaches a rider exactly on the offline escape hatch — the one
+   * path that rolls with a gap because blocking it would help nobody.
    */
   missingClipCount: number
+  /**
+   * The drive may NOT be driven from what is on disk — the copy is incomplete and a download could
+   * fix it (`decideDriveGate`). The screen shows the gate instead of the player; `start` refuses
+   * while it is true.
+   *
+   * ⚠ It is asserted HERE, not only on the drive-detail CTA, because `skipper://drives/<id>/play` is
+   * a real deep link: a gate that lives only on the CTA is not a guard. Same expression on both
+   * sides — authorising in one place and acting in another is the failure this repo keeps re-learning.
+   */
+  needsDownload: boolean
   paused: boolean
 
   // In-clip scrub (drive/quiet segments have no timeline).
@@ -305,10 +322,16 @@ export interface UseDrive {
   seekBy: (deltaSec: number) => void
   setScrubbing: (active: boolean) => void
 
-  // Replay the last COMPLETED stop — fills the between-stops gap the scrubber can't reach.
-  /** Re-play the last completed stop clip (live/sim only). No-op unless `canReplay`; a live GPS
+  // Re-hear a stop the road already passed — fills the between-stops gap the scrubber can't reach.
+  /** Re-play a PASSED stop's clip (live/sim only). No-op unless `isReplayable(seq)`; a live GPS
    *  trigger preempts an in-progress replay. Pure playback — does not alter trigger/fired state. */
+  replayStop: (seq: number) => void
+  /** Re-play the last completed stop clip — `replayStop` aimed at the replay-last control. */
   replayLast: () => void
+  /** May this seq be re-heard right now? True when the ROAD has already passed the stop, we hold its
+   *  audio, and we are in the between-stops quiet. The predicate is the surface; the "road got there"
+   *  set behind it is not (see `playedSeqs` for why that set never leaves this hook). */
+  isReplayable: (seq: number) => boolean
   /** True in the between-stops quiet when a completed clip exists to re-hear (drives the Replay button). */
   canReplay: boolean
 
@@ -334,9 +357,10 @@ export interface UseDrive {
 }
 
 export interface UseDriveOptions {
-  /** 'sim' = the on-device drive simulator (default, couch-testable); 'live' = real device GPS
-   *  (Phase 4). (The map-less couch 'preview' clock was cut — auditioning is the drive-detail
-   *  mini-preview now; see docs/decisions/detail-page-mini-preview.md.) */
+  /** 'live' = real device GPS (Phase 4, and the DEFAULT); 'sim' = the on-device drive simulator,
+   *  which no rider can reach — it is the admin-only Settings→Developer toggle. (The map-less couch
+   *  'preview' clock was cut — auditioning is the drive-detail mini-preview now; see
+   *  docs/decisions/detail-page-mini-preview.md.) */
   mode?: 'sim' | 'live'
   /** Seed the sim fast-replay (8×) ON. Used when the GLOBAL Settings→Developer sim toggle
    *  forced this drive into sim — couch-testing a full drive at real 1× is impractical (a
@@ -346,17 +370,41 @@ export interface UseDriveOptions {
 }
 
 export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}): UseDrive {
-  const mode = opts.mode ?? 'sim'
+  // ⚠ The default is 'live', and it is load-bearing. The caller's mode is now a one-liner off the
+  // (admin-only) sim setting, and a one-liner prop is exactly the kind a later cleanup drops as
+  // tidying — with a 'sim' default, dropping it would silently SIMULATE every production drive: real
+  // GPS never subscribed, the road never actually driven, and nothing anywhere reporting a fault.
+  const mode = opts.mode ?? 'live'
   const { data: session } = useSession()
   const [data, setData] = useState<DriveData | null>(null)
   const [urls, setUrls] = useState<Map<number, string>>(new Map())
-  // True when playback is served entirely from the on-disk download (zero network) — surfaced as a
-  // quiet "playing from download" chip so the rider knows a dead zone won't bite. (M7)
-  const [offline, setOffline] = useState(false)
   // See `missingClipCount` on the returned surface for why the gap is measured at all. Computed ONCE,
   // from the map actually handed to the player, so it counts what will really be silent rather than
   // what the manifest hoped for.
   const [missingClipCount, setMissingClipCount] = useState(0)
+  /**
+   * THE GATE'S VERDICT, LATCHED AT LOAD — deliberately NOT a live expression.
+   *
+   * ⚠ IT IS AN ENTRY GUARD: it answers "should this screen have opened at all", which is a question
+   * about how the player was REACHED. Deriving it at render time from a REACTIVE connectivity verdict
+   * made it a live condition, and that is a mid-drive catastrophe on exactly the rider §2's escape
+   * hatch exists for: park in a dead zone with 19 of 20 stops (offline+partial ⇒ 'play'), start
+   * driving, crest a ridge into coverage — the verdict flips to 'needs-download' and the player screen
+   * swaps itself for the save-it-first wall WHILE THE CAR IS MOVING. The hook stays mounted, so the
+   * clip keeps talking and the GPS keeps running; the rider just loses the map, the scrubber, pause
+   * and "Pull over", and the only offered action asks them to END the drive. Coverage flapping does it
+   * repeatedly.
+   *
+   * `play.tsx` had already learned this exact lesson one screen over — it latches `offlineAtOpen` with
+   * the note that "Tahoe coverage flaps — so reading the live verdict would re-lay-out the screen,
+   * mid-drive, repeatedly, with the rider touching nothing." Same reasoning, same latch.
+   *
+   * The other two inputs (`urls`, `missingClipCount`) are already frozen at load, so connectivity was
+   * the only thing that could move — which is why an imperative `isOfflineNow()` read at load is the
+   * whole fix. A rider who gains signal while PARKED here can back out; the drive-detail CTA reads the
+   * live verdict and will gate them properly on the way back in.
+   */
+  const [needsDownload, setNeedsDownload] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [needsAccount, setNeedsAccount] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
@@ -405,7 +453,6 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   const finishedSeq = useRef<number | null>(null) // guard didJustFinish double-fire per clip
   const replayingSeq = useRef<number | null>(null) // set while a REPLAY is the active clip — a live GPS trigger preempts it (replay-last-stop)
   const watchdog = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const clipRetried = useRef<Set<number>>(new Set()) // seqs re-signed once after a stall
   const scrubbing = useRef(false) // a drag is live — hold the clip-finished handler
   const seekTarget = useRef<number | null>(null) // last commanded seek (sec), so ±15 taps add up
   const finishedWhileScrubbing = useRef<number | null>(null) // didJustFinish fired DURING a drag — replay on release (audit #6)
@@ -418,7 +465,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   const resumeTried = useRef(false) // already attempted a resume for the current stall
   const dataRef = useRef<DriveData | null>(null) // current `data` for the source-captured handleFix (audit #377)
   // This run's analytics trace (see DriveTrace). Idle until beginDrive replaces it — `startedAt: 0`.
-  const trace = useRef<DriveTrace>(newTrace('sim', false, 0))
+  const trace = useRef<DriveTrace>(newTrace('sim', 0))
 
   // The black box for THIS run (dev-only, live drives only). Its metadata is captured at beginDrive
   // and carried here rather than read at flush time, which is what keeps `teardownSource`'s dep array
@@ -469,7 +516,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     }
   }, [])
 
-  // ---- load: drive geometry + presigned audio + the audio session ----
+  // ---- load: drive geometry + the saved audio + the audio session ----
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -478,12 +525,11 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       setNeedsAccount(false)
       try {
         await applyExclusiveBackgroundAudio()
-        // OFFLINE-FIRST: a downloaded drive loads its manifest + local file:// clips with zero
-        // network; otherwise this fetches the manifest (clips pre-signed inline) and streams. The
-        // url map keys place narrations by seq.
-        const { detail: manifest, urls, offline: fromDisk } = await loadPlayback(driveId)
+        // DISK ONLY, always: the saved manifest plus local file:// clips, zero network (offline.ts).
+        // A drive's audio is never streamed any more, so there is no "else" branch here to pick — the
+        // url map keys those local files by seq, and it throws when nothing is saved at all.
+        const { detail: manifest, urls, expectedSeqs } = await loadPlayback(driveId)
         if (cancelled) return
-        setOffline(fromDisk)
         const polyline = manifest.polyline as [number, number][]
         if (polyline.length < 2) throw new Error('This drive has no drivable route.')
         const cum = cumulativeMeters(polyline)
@@ -493,11 +539,22 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
           (c): c is typeof c & { lat: number; lng: number } => c.lat != null && c.lng != null,
         )
         setUrls(urls)
-        // The silent gap, measured against the map the player will actually read. `expectedAudioSeqs`
-        // is the downloader's own "should have audio" predicate, so this can never disagree with what
-        // the download tried to fetch. Streaming yields 0 (the online map covers every url-bearing
-        // clip), so a non-zero count means a partial download specifically.
-        setMissingClipCount(expectedAudioSeqs(manifest.clips).filter((s) => !urls.has(s)).length)
+        // The silent gap, measured against the map the player will actually read. ⚠ The expected list
+        // comes off the SAVED manifest (`Playback.expectedSeqs`, captured at download time) rather than
+        // being re-derived from `manifest.clips`: a saved clip has no `url` by TYPE, so the "should have
+        // audio" predicate reads every stop as un-downloadable and the count came out 0 — silent
+        // exactly where the offline escape hatch depends on the rider being told.
+        const missing = missingAudioSeqs(expectedSeqs, urls.keys()).length
+        setMissingClipCount(missing)
+        // THE GATE, decided ONCE, here — see the ⚠ on `needsDownload`. `isOfflineNow()` is the
+        // imperative read on purpose: subscribing would make an entry guard live again.
+        setNeedsDownload(
+          decideDriveGate({
+            online: !isOfflineNow(),
+            hasAnyLocal: urls.size > 0,
+            missingCount: missing,
+          }) !== 'play',
+        )
         setData({
           driveName: manifest.label,
           hostName: DRIVE_HOST_NAME,
@@ -525,21 +582,6 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     }
   }, [driveId, reloadKey])
 
-  // ---- re-sign expired presigned URLs (online stall only; downloaded files never expire) ----
-  const resign = useCallback(async (): Promise<boolean> => {
-    if (!driveId) return false
-    try {
-      // local map when downloaded, else freshly re-signed off the drive's clips
-      const fresh = await resignPlayback(driveId)
-      if (sawFresh.current) return true // clip started during the re-sign — leave it alone
-      loadedSeq.current = null
-      setUrls(fresh)
-      return true
-    } catch {
-      return false // offline / 503 — the caller skips the stop so the drive never hangs
-    }
-  }, [driveId])
-
   // ---- the whole drive finished (sim ran out + nothing left to play) ----
   const finishDrive = useCallback(() => {
     teardownSource()
@@ -550,20 +592,19 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     // ── drive_completed. HERE and nowhere else: finishDrive is only reachable from decidePump's
     // 'finish' (the road ran out AND the fire-queue drained), so a rider "Pull over" / back-out —
     // which runs resetForReady instead — stays an ABANDON and is not counted as an arrival.
-    // ⚠ Reads the trace ref, not `firedSeqs`/`offline`/`data` state, so this callback's deps are
-    // unchanged: pump and handleFix hang off it (see DriveTrace).
+    // ⚠ Reads the trace ref, not `firedSeqs`/`data` state, so this callback's deps are unchanged:
+    // pump and handleFix hang off it (see DriveTrace).
     const t = trace.current
     if (t.startedAt > 0 && !t.completed) {
       t.completed = true
       track('drive_completed', {
         mode: t.mode,
-        offline: t.offline,
         elapsed_sec: elapsedSec(t),
         // The itinerary's own length — `stops_played + stops_skipped` leaves the stops that never
         // triggered at all, which is a trigger/route question rather than an audio one.
         stops_total: dataRef.current?.stops.length ?? 0,
         stops_played: t.played.size,
-        stops_skipped: t.skipped,
+        stops_skipped: t.skippedSeqs.size,
       })
     }
   }, [endAudio, teardownSource])
@@ -646,23 +687,49 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     pump() // plays any remaining queued stop; ends the drive once the queue drains
   }, [pump])
 
-  // ---- replay the last COMPLETED stop (the "wait — what did he just say?" gap the scrubber can't
-  //      reach: the scrubber covers the ACTIVE clip, this covers the one that already ENDED). A pure
-  //      playback action — it feeds the existing queue → pump → clip-load path and does NOT touch
-  //      firedSeqs or the engine, so trigger/debounce state is untouched (the stop stays "fired").
-  //      `replayingSeq` marks it preemptible so a live GPS trigger wins (handleFix). (replay-last-stop) ----
+  // ---- re-hear a stop the road already PASSED (the "wait — what did he just say?" gap the scrubber
+  //      can't reach: the scrubber covers the ACTIVE clip, this covers one that already ENDED).
+  //
+  // ⚠ THE "ONLY IN THE BETWEEN-STOPS QUIET" HALF IS LOAD-BEARING, not a UX nicety, and it is the half
+  // a generalization drops. `replayingSeq` is a SINGLE ref, and it is set at ENQUEUE time — sound only
+  // because this refuses unless the queue is quiet, so the pushed seq becomes the active clip
+  // immediately. Allow two queued replays and one ref must mark both: the second is silently
+  // un-preemptible, and the ROAD stops winning over rider-initiated playback — which is the one
+  // priority rule the in-car doctrine actually has. Widen this to a queue and `replayingSeq` must
+  // become a Set in the same change; do not do the first half alone.
+  //
+  // ⚠ Audio we HOLD, too: replaying a stop with no local clip would re-run the no-audio branch and
+  // emit a second `stop_skipped` for a stop the rider already drove past in silence — a rewind that
+  // inflates the very number that measures the silence. You can't re-hear silence.
+  const isReplayable = useCallback(
+    (seq: number): boolean =>
+      driving && !paused && !done && activeSeq === null && firedSeqs.has(seq) && urls.has(seq),
+    [driving, paused, done, activeSeq, firedSeqs, urls],
+  )
+
+  // A pure playback action — it feeds the existing queue → pump → clip-load path and does NOT touch
+  // firedSeqs or the engine, so trigger/debounce state is untouched (the stop stays "fired").
+  // `replayingSeq` marks it preemptible so a live GPS trigger wins (handleFix). (replay-last-stop)
+  const replayStop = useCallback(
+    (seq: number) => {
+      if (!isReplayable(seq)) return
+      // Force the clip to RELOAD from its start: the clip-load effect skips replace() when loadedSeq
+      // already equals activeSeq, and didJustFinish is guarded by finishedSeq — both can still hold
+      // the seq we're replaying. The same reset restart uses to force a reload from the head.
+      loadedSeq.current = null
+      finishedSeq.current = null
+      replayingSeq.current = seq // mark it preemptible — a live GPS trigger wins (handleFix)
+      queue.current.push(seq)
+      pump()
+    },
+    [isReplayable, pump],
+  )
+
+  // The replay-last control's aim: the last clip that actually PLAYED. One mechanism, no second
+  // notion of "replayable" — `replayStop` re-asserts the predicate.
   const replayLast = useCallback(() => {
-    if (activeSeqRef.current !== null || lastCompletedSeq === null) return // only in the between-stops quiet
-    // Force the just-ended clip to RELOAD from its start: the clip-load effect skips replace() when
-    // loadedSeq already equals activeSeq, and didJustFinish is guarded by finishedSeq — both still hold
-    // the seq we're replaying. The same reset restart uses to force a reload from the head.
-    loadedSeq.current = null
-    finishedSeq.current = null
-    clipRetried.current.clear()
-    replayingSeq.current = lastCompletedSeq // mark it preemptible — a live GPS trigger wins (handleFix)
-    queue.current.push(lastCompletedSeq)
-    pump()
-  }, [lastCompletedSeq, pump])
+    if (lastCompletedSeq !== null) replayStop(lastCompletedSeq)
+  }, [lastCompletedSeq, replayStop])
 
   // ---- reset all drive state back to the pre-drive "ready" line ----
   const resetForReady = useCallback(() => {
@@ -681,7 +748,6 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     staleStatus.current = false
     finishedSeq.current = null
     replayingSeq.current = null
-    clipRetried.current.clear()
     seekTarget.current = null
     finishedWhileScrubbing.current = null
     pausedRef.current = false
@@ -737,7 +803,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     const triggerable = snapped.filter((s) => s.offRouteM <= OFF_ROUTE_MAX_M)
     // A fresh trace per RUN — `restart` produces a second complete trace, never a continuation of
     // the first. Set before the emits below, which are already part of this run.
-    trace.current = newTrace(mode, offline, Date.now())
+    trace.current = newTrace(mode, Date.now())
     // ── stop_skipped / 'off_route'. The ONE place this class of silence is visible: a stop dropped
     // here never enters the engine, so it is absent from firedSeqs exactly like a stop the road
     // hasn't reached yet — while the itinerary still lists it and the rider still drives past it.
@@ -788,11 +854,11 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     subRef.current = source(handleFix, handleEnd, handleSourceError)
     // ── drive_started. The engine is armed and the fix source is subscribed: this is the one line in
     // the app where a drive genuinely BEGINS. Every entry point either reaches it or ends in nothing
-    // — the detail page's "Start the drive" tap can dead-end in the unsaved-download alert, and
+    // — the detail page's "Start the drive" tap dead-ends while the copy is still coming down, and
     // "Let's roll" routes through the location prime and can terminate at the permission gate (whose
     // own Allow handler is a third caller of start()). Instrumenting any of those counts intentions.
-    // ⚠ `mode` is the DERIVED drive mode handed down by the player screen (the Settings sim toggle
-    // outranks `?mode=`, and one entry point carries no param at all) — do not re-derive it here.
+    // ⚠ `mode` is the DERIVED drive mode handed down by the player screen — one expression off the
+    // (admin-only) sim setting, with no route param in it — so do not re-derive it here.
     // Without it a simulated drive is indistinguishable from a real one on the launch dashboard,
     // because `app_env` tags the BUILD, not the clock.
     const startKey = `${driveId}:${mode}`
@@ -800,10 +866,7 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       startedDrives.add(startKey)
       track('drive_started', { mode })
     }
-    // `offline` joins the deps for the trace snapshot above. It settles in the load effect
-    // alongside `data` (already a dep) and never moves once the drive is ready, so this adds no
-    // new rebuild of beginDrive — and therefore none of handleFix.
-  }, [data, driveId, mode, offline, fast, resetForReady, handleFix, handleEnd, handleSourceError])
+  }, [data, driveId, mode, fast, resetForReady, handleFix, handleEnd, handleSourceError])
 
   // ---- location-permission priming (live mode) — the prime → prompt → result SHELL, shared with
   // useLocationPriming. This hook owns the pending-ref double-tap guard, the no-prompt
@@ -829,15 +892,29 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       },
     })
 
+  // ---- THE GATE, asserted here as well as on the drive-detail CTA ----
+  // ONE expression, shared with that CTA (`decideDriveGate`) — the player asks it because
+  // `skipper://drives/<id>/play` is a real deep link, so a gate that lives only on the CTA is not a
+  // guard at all. It asks nothing about MODE: a simulated drive plays the same local files.
+  // ⚠ Only meaningful once `data` is loaded; before that the empty url map would read as "nothing
+  // saved" on every drive. `loadPlayback` throws when the disk holds nothing, so a loaded drive
+  // always has SOME audio — leaving this a straight complete-vs-partial question, with the offline
+  // escape hatch (never block a rider we cannot help) inside the shared expression.
+  // (The verdict itself is latched at load — see `needsDownload`'s declaration for why it must not be
+  // a live expression. This block is only the record of WHERE it is asked and why the player asks at
+  // all.)
+
   // ---- start: live mode primes BEFORE the first (one-shot) OS prompt; sim starts at once ----
   const start = useCallback(() => {
-    if (!data) return
+    // The gate REFUSES, rather than merely being reported: a screen that forgot to render it would
+    // otherwise roll an incomplete drive, which is exactly the deep-link hole above.
+    if (!data || needsDownload) return
     if (mode !== 'live') {
       beginDrive()
       return
     }
     startPrimedDrive()
-  }, [data, mode, beginDrive, startPrimedDrive])
+  }, [data, needsDownload, mode, beginDrive, startPrimedDrive])
 
   const togglePause = useCallback(() => {
     // Keep the setState updater PURE — drive the GPS side effect off a ref mirror instead. (audit nit)
@@ -918,46 +995,39 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       return
     }
     player.play()
-    // A clip that never produces real audio (expired 403 / decode fail / dead zone /
-    // a stream buffering forever) never fires didJustFinish. After a grace, re-sign ONCE
-    // (reloads the clip); if it STILL won't start on the second pass, skip the stop.
+    // A clip that never produces real audio (a truncated or undecodable download) never fires
+    // didJustFinish, and clipBusy would stay set — the sequential pump, and the end of the drive,
+    // hang forever on a silent clip. So: one grace window, then skip the stop.
+    //
+    // ⚠ ONE PASS, and that HALVES THE DEAD AIR. The old ladder re-signed the url first and re-armed
+    // this same timer, so a dead clip cost 2× the window before the drive moved on. There is nothing
+    // to re-sign now — the uri is a `file://` on this device, it cannot expire, and reloading it
+    // re-resolves to the identical bytes.
+    // ⚠ And the window itself is the SHORT one (LOCAL_CLIP_STALL_MS, not the remote budget): a local
+    // file decodes or it does not. That value is still a desk estimate and owes a real-device check —
+    // if local decode state lags the way a stream's did, too short trades dead air for lost stops,
+    // which is the worse currency.
     watchdog.current = setTimeout(() => {
       if (sawFresh.current) return
-      if (!clipRetried.current.has(activeSeq)) {
-        clipRetried.current.add(activeSeq)
-        // Re-sign once. On SUCCESS the fresh URLs reload the clip and re-arm this watchdog
-        // (a still-dead clip is then skipped on the second pass). On FAILURE (offline / dead
-        // zone) there is no re-run, so skip the stop NOW — otherwise clipBusy stays set and
-        // the sequential pump (and the end-of-drive) hangs forever on a silent clip.
-        void resign().then((ok) => {
-          if (!ok && !sawFresh.current && loadedSeq.current === activeSeq) {
-            setStallNote(voice.player.stall)
-            // The re-sign never landed (dead zone / 503) — silence caused by the NETWORK, which is
-            // why it is not folded into 'load_timeout' below.
-            emitStopSkipped(trace.current, data.stops, activeSeq, 'resign_failed')
-            onClipDone(activeSeq)
-          }
-        })
-        return
-      }
       setStallNote(voice.player.stall)
-      // Second pass: a fresh url and the clip still never produced audio — our clip, not the road.
       emitStopSkipped(trace.current, data.stops, activeSeq, 'load_timeout')
       onClipDone(activeSeq)
-    }, PRE_START_STALL_MS)
+    }, LOCAL_CLIP_STALL_MS)
     return () => {
       if (watchdog.current) {
         clearTimeout(watchdog.current)
         watchdog.current = null
       }
     }
-  }, [activeSeq, urls, data, paused, player, onClipDone, resign])
+  }, [activeSeq, urls, data, paused, player, onClipDone])
 
   // ---- clip end → ducked-quiet (NOT next-stop): wait for the next GPS trigger ----
-  // FRESH means audio actually ADVANCED — expo-audio flips `playing` true on the play()
-  // INTENT while a stream buffers forever, so trusting it lets a stalled clip evade the
+  // FRESH means audio actually ADVANCED — expo-audio flips `playing` true on the play() INTENT,
+  // before a single sample has been decoded, so trusting it lets a clip that never starts evade the
   // watchdog. ⚠ This is a FIELD-OBSERVED failure, not a hypothetical: a sheet frozen at 0:00 on thin
-  // 5G, on this same player stack. Do not relax the freshness check back to `playing`.
+  // 5G, on this same player stack. That observation came from a STREAM, which a drive no longer has —
+  // but it is evidence about expo-audio's status reporting, not about the network, and the pre-start
+  // window it guards is now seconds rather than tens of them. Do not relax it back to `playing`.
   useEffect(() => {
     if (activeSeq === null) return
     const t = status.currentTime ?? 0
@@ -1274,8 +1344,9 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
   const nextSeq = data?.stops.find((s) => !firedSeqs.has(s.seq))?.seq ?? null
 
   // Offer replay only in the between-stops quiet, once a clip has completed — the scrubber
-  // (seek-to-0) already covers "restart the ACTIVE clip". (replay-last-stop §3)
-  const canReplay = driving && !paused && !done && activeSeq === null && lastCompletedSeq !== null
+  // (seek-to-0) already covers "restart the ACTIVE clip". (replay-last-stop §3) Asked THROUGH
+  // `isReplayable` so the button and the action can never disagree about what "replayable" means.
+  const canReplay = lastCompletedSeq !== null && isReplayable(lastCompletedSeq)
 
   return {
     phase,
@@ -1297,8 +1368,8 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     buffering,
     stallNote,
     gpsSearching,
-    offline,
     missingClipCount,
+    needsDownload,
     paused,
     positionMs,
     durationMs,
@@ -1306,7 +1377,9 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
     seekToMs,
     seekBy,
     setScrubbing,
+    replayStop,
     replayLast,
+    isReplayable,
     canReplay,
     fast,
     setFast,

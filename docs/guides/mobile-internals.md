@@ -1,7 +1,11 @@
 # `apps/mobile` internals
 
-**Status:** Snapshot — 2026-08-02, written by reading `apps/mobile` source directly during 1.1 step
-12. **Derived and it will drift** — the code wins, `apps/mobile/CLAUDE.md` + `DESIGN.md` own the
+**Status:** Snapshot — 2026-08-02, **partly re-read and corrected 2026-08-05** for the
+download-before-start build (`docs/designs/download-before-start.md`): a live drive is gated on a
+complete local copy, a drive's audio is only ever played from disk, the whole re-sign path is gone,
+and `?mode` is retired in favour of the `simMode` setting. The sections that moved say so; everything
+else is still the 2026-08-02 read. **Derived and it will drift** — the code wins,
+`apps/mobile/CLAUDE.md` + `DESIGN.md` own the
 design-system rules, and the root `CLAUDE.md` owns the player/audio/GPS landmines (they span
 `@skipper/engine` too). Its job is orientation: enough shape to read the real thing without getting
 lost. Split out of [architecture-overview.md](architecture-overview.md) so the detail has one home;
@@ -18,7 +22,7 @@ Expo Router, file-based, new arch.
 | `app/index.tsx` | **Home is the conversation.** The planner; MY DRIVES is the archive below it |
 | `app/sample.tsx` | The one ungated sample clip, with its postcard |
 | `app/sign-in.tsx` | The account wall's destination |
-| `app/settings.tsx` | Theme, sim mode, account, deletion |
+| `app/settings.tsx` | Theme, account, deletion, and the admin-only way into Developer |
 | `app/legal.tsx` | Sources & licenses (bundled, must render in a dead zone) |
 | `app/developer.tsx` | Dev-only affordances |
 | `app/drives/[id]/index.tsx` | Drive detail + the per-stop mini-preview |
@@ -117,36 +121,72 @@ owns only the React state.
 
 ## The player (`useDrive`)
 
-Owns four things: the trigger engine, the audio player, lock-screen Now Playing, and the fire-queue.
+Owns four things: the trigger engine, the audio player, lock-screen Now Playing, and the fire-queue —
+plus, since 2026-08-05, its half of the download gate (see Offline below), which it *refuses* on
+rather than merely reports, so a screen that forgot to render it cannot roll an incomplete drive.
 
 **The clock is the GPS fix stream.** Each `GpsFix` runs `engine.update(fix)`; any stop that fires is
 queued and played. Critically, **a finished clip returns to quiet and waits for the next GPS trigger
 — it never advances by a clip ending.** The drive is driven by the road, not by a playlist.
 
-The source is swappable behind `GpsFixSource` (`gps.ts`): `simulatedSource` replays a recorded Tahoe
-drive on a wall-clock timer (couch-testable on the iOS Simulator, with a fast scale so a full drive
-triggers in a couple of minutes), and `liveSource` wraps `expo-location`'s `watchPositionAsync`. The
-hooks subscribe to one or the other and nothing else changes. `?mode=live` on the play route picks.
+The source is swappable behind `GpsFixSource` (`gps.ts`; the pure half is `gps-source.ts`):
+`simulatedSource` walks **this drive's own route polyline** and emits synthetic fixes on a wall-clock
+timer (couch-testable on the iOS Simulator, with a fast scale so a full drive triggers in a couple of
+minutes), and `liveSource` wraps `expo-location`'s `watchPositionAsync`. The hooks subscribe to one or
+the other and nothing else changes. ⚠ The sim source is **not** a recorded trace and it exercises none
+of the mapping pipeline (`replaySource` is the one that replays a real recording) — `sim-mode.tsx`
+says the same thing at the definition, because copy that invites trusting a desk pass more than it
+deserves is worse than no copy.
 
-**The stall ladder has two deliberately different paths:**
+**Which one runs is the `simMode` SETTING, not the route.** `?mode` on the play route was retired
+2026-08-05: it resolved from three inputs (the persisted toggle, the param, `__DEV__`), so the
+*absence* of the param was load-bearing and its meaning flipped with build type. Now
+`driveMode = simMode ? 'sim' : 'live'` — one input, one expression, and the deep link
+`skipper://drives/<id>/play?mode=live` says nothing because nothing reads it. See the `sim-mode.tsx`
+bullet below for the default.
 
-- **URI present but will not play** (expired presign, decode failure, dead-zone stream buffering
-  forever): after the pre-start grace (`PRE_START_STALL_MS` in `@skipper/engine`'s `player.ts`),
-  re-sign **once** and reload. If it still will not start on the second pass — or the re-sign itself
-  fails, which is the dead-zone case — surface a visible stall note and skip the stop. Skipping *now*
-  on a failed re-sign matters: otherwise the clip stays busy and the sequential pump (and the end of
-  the drive) hangs forever on silence.
+**The stall ladder has two deliberately different paths — and neither is about the network any more,
+because a drive's audio is always a local `file://` (see Offline below):**
+
+- **URI present but will not play** (a truncated or undecodable download): **one pass.** Wait
+  `LOCAL_CLIP_STALL_MS` (`@skipper/engine`'s `player.ts`), then surface a visible stall note, emit
+  `stop_skipped` / `load_timeout`, and skip the stop. Skipping matters: otherwise the clip stays busy
+  and the sequential pump — and the end of the drive — hangs forever on silence.
+  ⚠ This *was* two passes on `PRE_START_STALL_MS`: wait 12 s, re-sign the url, reload, wait 12 s
+  again. There is nothing to re-sign now (the uri is a file on this device; it cannot expire, and
+  reloading re-resolves to the identical bytes), so deleting that rung **halved the dead air** rather
+  than merely deleting a line.
+  ⚠ The short value is a **desk estimate that still owes a real-device check** — the old number was
+  generous precisely because expo-audio's status reporting was not trusted here, and if local decode
+  state lags the way a stream's did, too short trades dead air for lost stops, which is the worse
+  currency.
 - **URI missing entirely**: advance after a short timer with **no note**. The stop passes in silence.
 
 ⚠ That second path is why `clip-store.ts` calls itself "the module that must never lose a rider's
 download": a missing clip is a silent hole *by construction*, on the theory that it is impossible if
-the store did its job. The corollary is that a store regression is invisible from both ends — the
-rider hears silence and never learns a stop was there, and no signal reaches us. See TODO.md's
-PostHog Stage 4.
+the store did its job. The corollary is that a store regression is invisible **to the rider** — they
+hear silence and never learn a stop was there. It does reach us: `stop_skipped{reason:'no_audio'}` is
+exactly that hole, and it is the one the gate exists to make rare.
+
+⚠ `PRE_START_STALL_MS` (12 s) is **not** dead — it survives for the surfaces that still stream, i.e.
+`useRoutePreview` and `GET /sample`, which play before a drive exists. **"Offline for everything" is a
+rule about DRIVE audio; it was never "delete all streaming".**
 
 A separate **post-start** watchdog (`POST_START_STALL_MS`) covers the other half: a clip that started
 and then froze, because `expo-audio` fires no `didJustFinish` across an OS interruption. The pure
-branch logic for it is `decideStall` in `@skipper/engine`.
+branch logic for it is `decideStall` in `@skipper/engine`. ⚠ It is not a streaming feature and never
+was — call / Siri / Bluetooth-handoff recovery happens to a local file just as readily — so it stays
+exactly as it is.
+
+**The player's stop list is tappable for stops the road has already PASSED** (`isReplayable` /
+`replayStop`), which is `replayLast` generalized off its hardcoded seq: it feeds the same queue → pump
+→ clip-load path, never touches `firedSeqs` or the engine, and marks the clip preemptible so a live
+GPS trigger wins — *the road always beats rider-initiated playback*. ⚠ Two halves of that must not be
+separated. It refuses unless the queue is quiet, because `replayingSeq` is a single ref set at ENQUEUE
+time: allow two queued replays and the second is silently un-preemptible and the road stops winning
+(widen it and that ref must become a Set in the same change). And it refuses a seq whose clip is not
+on this phone — replaying a silent stop would re-run the no-audio branch and emit a second
+`stop_skipped`, inflating the very number that measures the silence. You can't re-hear silence.
 
 ## Audio: who owns the channel
 
@@ -174,20 +214,37 @@ Every path that ends playback (dismiss, clip ran out, clip *failed*) must call
 `setIsAudioActiveAsync(false)`, or the rider is left in silence with no control on screen that fixes
 it. This was learned at the end of a drive and applies to every surface taking exclusive focus.
 
-### The two preview hooks differ in one structural way
+### The two preview hooks sit on OPPOSITE sides of the offline boundary
 
-`useStopPreview` resolves audio through `offline.loadPlayback`'s seq→uri map — **never `clip.url`
-directly**, because a downloaded drive nulls every presigned URL on disk, so a raw `clip.url` read is
-silently unplayable in exactly the dead-zone case the product exists for. It can re-sign on a miss.
+They share the pre-start watchdog machinery (`preview-audio.ts`) and the exclusive-focus flip. They do
+**not** share the budget, and the reason is the boundary itself.
 
-`useRoutePreview` **has no re-sign path, deliberately.** The URL arrives on the proposal, and the only
-endpoint that could mint a fresh one is an owner route behind `requireAccount` — which the anonymous
-rider, the entire audience for that surface, cannot call. A dead presign is therefore terminal, and
-the honest offer is "make the drive", not a retry that cannot work. ⚠ Which makes *reaching* that
-terminal state the whole job: it is bounded by a pre-start watchdog on a clock, not by the vendor
-populating `status.error` (whose behavior for an HTTP 403 on a remote source is device-unverified).
+`useStopPreview` (drive detail, tap a stop) resolves audio through `offline.loadPlayback`'s seq→uri
+map — **never `clip.url` directly**, because a downloaded drive nulls every presigned URL on disk, so
+a raw `clip.url` read is silently unplayable in exactly the dead-zone case the product exists for.
+Since 2026-08-05 that map is **local `file://` and nothing else**: a seq that is absent is genuinely
+not on this phone (the auto-download is still running, the copy is partial, or the drive was never
+saved), there is nothing to re-sign and nothing to stream, so the hook answers null and the row gets
+the unplayable hint. Turning "not yet" into a *saving…* row is the screen's job. Reading a local file,
+it takes the short `LOCAL_CLIP_STALL_MS`.
+
+`useRoutePreview` (in-conversation) **still streams, deliberately, and keeps the generous
+`PRE_START_STALL_MS`.** It plays *before a drive exists* — before the wall, before a credit, with
+nothing on disk to play from — so it is the one place the offline rule structurally cannot reach, and
+that is the rule's edge rather than an exception to it. It **has no re-sign path, deliberately**: the
+URL arrives on the proposal, and there is no endpoint that could mint a fresh one for anyone (the
+owner-only sign route was deleted with the rest of the re-sign path; even while it existed the
+anonymous rider — the entire audience for this surface — could not call it). A dead presign is
+therefore terminal, and the honest offer is "make the drive", not a retry that cannot work. ⚠ Which
+makes *reaching* that terminal state the whole job: it is bounded by a pre-start watchdog on a clock,
+not by the vendor populating `status.error` (whose behavior for an HTTP 403 on a remote source is
+device-unverified) — which is also why the 12 s budget stays generous here while the drive's shrank.
 
 ## Offline: three modules, one job
+
+**The rule, since 2026-08-05: a DRIVE's audio is only ever played from disk**
+(`docs/designs/download-before-start.md` §10). Not "the app never streams" — see the boundary in the
+preview hooks above.
 
 - **`download.ts`** — the single hardened byte-transfer primitive: one file to disk, bounded,
   verified, with the retry/backoff/cancel semantics a dead zone demands. Its second caller (the roam
@@ -201,8 +258,36 @@ populating `status.error` (whose behavior for an HTTP 403 on a remote source is 
   drive's own manifest is authoritative for that drive** (INV-6) — which is also why there is no
   region-level pack. Two drives down the same corridor share bytes instead of holding two copies.
 
-The store keeps **bytes, not URLs**: presigned R2 URLs expire, and a drive's manifest carries them
-inline, so a download needs no separate sign call.
+The store keeps **bytes, not URLs**: presigned R2 URLs expire, and a drive's manifest (`GET
+/drives/:id`, and the identical shape returned by `POST /drives`) carries them inline, so a download
+needs no separate sign call. ⚠ Those manifests are now the **only** way an audio url reaches the app —
+the re-sign endpoint they made redundant has been deleted, so nothing can mint a fresh one after the
+fact. That is precisely why the copy has to be complete before the drive rolls.
+
+**The gate.** A live drive is available only when this phone holds a complete copy. `decideDriveGate`
+(pure, `offline-util.ts`) answers `play` / `needs-download` / `nothing-saved` from three inputs —
+online, any-local, missing-count — and **both** the detail CTA and `useDrive` call that one
+expression. Two call sites, one expression, on purpose: `skipper://drives/<id>/play` is a real deep
+link, so a gate living only on the CTA is not a gate; and authorising on one value while the player
+acts on another is the failure this codebase keeps re-learning. ⚠ The gate keys on **completeness,
+never on freshness** — `isDownloadStale` / `isDownloadExpired` stay soft, because stranding a rider in
+Tahoe over a perfectly good but expired copy is worse than the copy being old
+(`offline-freshness-ttl.md`). It also steps aside where it cannot help: offline
+with a partial copy still rolls (a missing byte costs one stop, never a drive, and `missingClipCount`
+discloses the gap on the ready card); offline with nothing saved is the only hard block.
+
+**The download starts itself at CREATE and survives navigation.** The create handler in
+`app/index.tsx` fires it — not the push to the detail screen, which is byte-identical to three *open*
+pushes, one of them a rider re-entering a drive they backed out of — and it is fire-and-forget, so
+navigating away, or never arriving, does not stop it. A drive is small enough (the measurement is in
+`download-before-start.md`) that the copy normally lands while the rider is still reading the
+itinerary — which is what makes the gate invisible rather than a wall, and it is the whole reason the
+gate is defensible. The `AbortController`, the progress snapshot and a `canceled` tombstone live in a
+module-level registry (`activeDownload` / `subscribeDownload` / `cancelDownload`), never in a screen
+ref: a rider who backs out to check the map must not return to a drive they still cannot start, and an
+explicit Cancel is the only thing that may stop a transfer. ⚠ The tombstone is load-bearing — the abort path is
+deliberately silent, which made "the rider cancelled" indistinguishable from "nothing started", and
+under an auto-start that ambiguity re-fires the download the instant it is cancelled.
 
 ## Connectivity
 
@@ -278,8 +363,8 @@ rejections) and **native** crashes, with dSYM / source-map upload at build time 
 
 The event map is a **closed typed contract** — every property is a number, a boolean or a closed
 union. As of this writing: `planner_ready`, `plan_turn_sent`, `proposal_shown`, `preview_clip_played`,
-`sample_played`, `wall_shown`, `signup_completed`, `drive_created`, `drive_started`,
-`font_load_failed`.
+`sample_played`, `wall_shown`, `signup_completed`, `drive_created`, `drive_started`, `stop_fired`,
+`stop_skipped`, `drive_completed`, `font_load_failed`.
 
 ⚠ **INV-13 applies to analytics exactly as it applies to logs**: no rider prose, no place name, no
 coordinate, no URL, no drive id. A property that does not typecheck against the map is a signal to
@@ -292,9 +377,21 @@ restated in `planner.ts`, `say-buffer.ts`, `planner-transcript.ts`, `anon-sessio
 the completion *rate* is the ratio. Collapsing it to one event at the end would erase every abandoned
 clip, which is the half worth measuring.
 
-⚠ **The funnel ends at `drive_started`.** There is no event for a stop firing, a clip playing on the
-road, a stop skipped for missing audio, or a drive completing — so the measured part is everything
-*before* the thing the app exists to do. Filed as PostHog Stage 4 in TODO.md.
+⚠ **The funnel no longer ends at `drive_started`** — it runs through the drive itself: `stop_fired`
+(the heartbeat, emitted on the FRESHNESS edge, never on expo-audio's `playing`, which flips on the
+play() intent), `stop_skipped` carrying a closed reason union, and `drive_completed` for an arrival
+only — a "Pull over" is an ABANDON, and folding it in would make the number that says "the bet works"
+unable to tell finishing from quitting. ⚠ TODO.md still carries the item that asked for these
+(PostHog Stage 4); the events are in the code.
+
+⚠ **The skip reasons narrowed on 2026-08-05 and the narrowing is the signal.** `resign_failed` is
+gone — it meant "no network here" as distinct from "our audio is broken", and a drive that plays only
+from disk cannot have it — and `load_timeout` now means only a truncated or undecodable download.
+`DriveStopProps.offline` went with them: it rode `stop_fired`, `stop_skipped` AND `drive_completed`,
+and once every drive plays from download it is constant `true` — a dead axis on three funnel events.
+⚠ The consequence to keep in view: "does streaming lose stops on real roads?" can no longer be
+answered, because the real drive will exercise the gated path. That question closes permanently
+unanswered, knowingly (`download-before-start.md` Q3).
 
 ## Smaller modules worth knowing exist
 
@@ -313,9 +410,17 @@ road, a stop skipped for missing audio, or a drive completing — so the measure
   never-invents doctrine; a stylized poster does not claim to be real.
 - **`labels.ts`** — brand-voiced text for domain enums, mapped at the view boundary. DTOs keep raw
   enum values; screens never show them.
-- **`sim-mode.tsx`** — a developer toggle that swaps every real-GPS path for the simulated source,
-  persisted to secure-store and read at startup. Does not touch the anonymous preview (already
-  GPS-less) or any generation parameter.
+- **`sim-mode.tsx`** — the admin-only developer toggle (Settings → Developer) for **which clock
+  drives the GPS**, persisted to secure-store and read at startup so a sim session survives a cold
+  start with no live→sim flip race. ⚠ **Exactly one path acts on it** — `app/drives/[id]/play.tsx` →
+  `useDrive`, the live drive. It used to say "swaps every real-GPS path in the app", which was true
+  while roam was the second one; the Developer screen reads it only to draw its own switch, which is
+  the *writer*. Since `download-before-start.md` §11 it is also the ONLY input: the `?mode` param and
+  the `__DEV__` "Simulated drive" ⋯ item are both gone. ⚠ It **defaults false everywhere**,
+  single-sourced in `DEFAULT_SIM_MODE`, and `__DEV__` must **not** seed it (founder, 2026-08-05): the
+  real drive is run from a dev build on a real device, so a `__DEV__` default would silently simulate
+  it *and* record no trace, since the admin `TraceRecorder` is gated on `mode === 'live'`. Does not
+  touch the anonymous preview (already GPS-less) or any generation parameter.
 - **`connectivity-util.ts` / `gps-util.ts` / `offline-util.ts`** — the pure halves; the first place to
   look when changing behavior, because that is where the rules live.
 
@@ -323,9 +428,12 @@ road, a stop skipped for missing audio, or a drive completing — so the measure
 
 - **The conversation cannot survive an unmount.** Intended (founder, 2026-08-02), logged in TODO.md
   so the cost stays visible. The inline-rendering constraint on `app/index.tsx` follows from it.
-- **A missing clip is silent by construction**, and nothing measures it. The 400 ms no-note path plus
-  the absent in-drive analytics means a `clip-store` regression is invisible from both ends at once —
-  a drive that plays 3 of 11 stops looks exactly like a quiet stretch of road.
+- **A missing clip is still silent to the RIDER**, by construction: the 400 ms no-note path advances
+  past a stop with no uri and says nothing, so a drive that plays 3 of 11 stops looks to them exactly
+  like a quiet stretch of road. Two things now bound it — the gate refuses to start an incomplete
+  drive at all, and `stop_skipped{reason:'no_audio'}` means a `clip-store` regression is at least
+  visible to *us*. ⚠ It is not visible to the rider, and the in-persona line that would make the
+  failure attributable is still unbuilt (`download-before-start.md` §4).
 - **Hooks are untestable by construction.** Logic that matters must move into a pure module or it
   ships uncovered; the two audio watchdogs are the current examples.
 - **Process-wide audio mode** means any new surface that plays sound can silently break another one's

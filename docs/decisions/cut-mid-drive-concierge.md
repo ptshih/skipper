@@ -4,6 +4,10 @@
 > code changed by this decision except one charm beat it explicitly demotes to a copy edit (below). Scopes
 > a boundary CLAUDE.md already implies but never stated: the live Skipper answers WHERE, and a *utility*
 > ask is not WHERE just because its answer happens to be a place.
+>
+> ⚠ **AMENDED 2026-08-05 — the decision is UNCHANGED; its verbatim quotes are not.** The pause-control
+> strings this record cites were relabelled (the hold suspends the TOUR, not the audio), and the one
+> string that survived into code was itself rewritten. Dated addendum in place.
 
 ## What was proposed
 
@@ -89,6 +93,43 @@ audio was deleted in migration `0019` — the same wall that defers the callout 
 spoken lines have no home in v2; the only escape is bundling pre-baked clips as app assets, as
 `ask-the-skipper-spec.md` §3.6 proposes for its offline error copy. That was not worth a TTS run and a
 rotation policy for a beat heard three times a drive.
+
+### ⚠ ADDENDUM 2026-08-05 — the strings quoted above were relabelled; the decision is unchanged
+
+The verdict, the five objections and the "he does not recommend, he PERMITS" survivor all stand. **The
+verbatim quotes are stale**, so anyone grepping for them will not find them. Corrected here rather than
+in place, per the append-only rule. The cause is a player-logic pass, not a reversal:
+`docs/designs/download-before-start.md` §12.2.
+
+**What pausing actually does.** Holding a live drive calls `sub?.remove()` (`gps.ts`), which RELEASES
+the GPS watch. So while held the car keeps moving, no fix is processed, and a stop rolled past never
+enters the trigger engine at all — not fired, not skipped, invisible even to `stop_skipped`, whose
+reasons are all about AUDIO. **It suspends the TOUR, not the audio.** The category names this out
+loud: Shaka Guide ships the identical behaviour as a **"Tour Switch"**, described to riders as
+stopping the app from using their GPS. The mechanism is right and was NOT changed — only the copy,
+which had been promising a held clip.
+
+**The strings today** (`apps/mobile/src/ui/voice.ts`):
+
+| | was | now |
+|---|---|---|
+| `cta.pause` | `'Hold here'` | **`'Hold the drive'`** |
+| `cta.resume` | `'Roll on again'` | unchanged — resuming restores everything the hold released |
+| `player.paused` | — | **`'ON HOLD'`** (the NOW card must stop saying "NOW PLAYING" for a held DRIVE) |
+| `player.pausedBody` | `'Take your time. Nothing out here is going anywhere.'` | **`'Take your time. I’m not watching the road while we’re held, so anything we pass goes by unsaid.'`** |
+
+⚠ **The survivor string itself was rewritten, and this is the part worth reading.** Its second sentence
+was warm and FALSE in the way that costs a rider a stop — landscape permanence was the joke, and it
+rested on a claim the released GPS watch contradicts. The warmth stays in front; then he says the trade
+plainly. The shape this record describes is unchanged: still one string plus one conditional into the
+existing `card.body` slot (`play.tsx`), still not a feature and still not an ask surface.
+
+⚠ **This reinforces the cut rather than eroding it.** The line says nothing about WHERE the rider
+stopped or why — he has no eyes and no live data — and `voice.ts` cites this record by name at the
+string so the next person to warm it up finds the reason first. ⚠ `cta.pause`/`cta.resume` are
+VoiceOver-only (the icon-forward transport drops the visible label) AND are the transport's DEFAULTS,
+inherited by the drive-detail mini-preview, where there is no watch to release — which is why the
+label stays short and the explanation lives on the card.
 
 ## What would reopen this
 

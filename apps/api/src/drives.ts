@@ -5,7 +5,6 @@
 //   POST /drives                  -> generate + persist the confirmed drive (requireAccount; spends a credit)
 //   GET  /drives                  -> the caller's saved drives (requireAccount; one card each)
 //   GET  /drives/:id              -> replay a saved drive's frozen manifest (requireAccount; content resolves LIVE)
-//   POST /drives/:id/assets/sign  -> re-presigned clip URLs (requireAccount; offline refresh), keyed by seq
 //   DELETE /drives/:id            -> soft-delete (requireAccount); CAP-NEUTRAL — a spent credit is never refunded
 //
 // ⚠ THE WALL IS PER-ROUTE, NOT ON THE MOUNT (D15/INV-15). `POST /propose` is the OPEN ANONYMOUS FRONT
@@ -54,7 +53,6 @@ import {
   type DriveManifest,
   type DrivePreviewClip,
   type DriveProposal,
-  type SignedDriveAudio,
   isAdmin,
   varietyKey,
 } from '@skipper/shared'
@@ -120,7 +118,7 @@ function toClipForm(form: string): DriveClipForm {
  *  Google Routes call (INV-1). The client-facing `GET /drives/anchors` that used to serve it verbatim
  *  was DELETED in 1.1 along with the tap-to-pick create form: the rider now names endpoints in
  *  CONVERSATION and the planner emits ids. Do not resurrect it: `requireAccount` IS a PER-ROUTE guard
- *  (the five owner routes below) and the mount carries only `withSession`, so a re-added `/anchors`
+ *  (the four owner routes below) and the mount carries only `withSession`, so a re-added `/anchors`
  *  would inherit NOTHING and become an anonymous dump of the whole curated allowlist WITH coordinates.
  *  What a rider may see is NAMES, and only a handful (see ./example-anchors). */
 export async function loadRegionAnchors(bbox: string | null): Promise<RankableAnchor[]> {
@@ -999,8 +997,14 @@ function manifestClips(selection: DriveSelection, corpusById: Map<string, Narrat
  *
  *  ⚠ Same presign, same TTL as an owner clip — no anonymous variant. The RELEASE FILTER, not the TTL,
  *  is what makes this safe to serve anonymously; the TTL has one home (packages/storage, per INV-12),
- *  and a short URL would strand a rider who pauses mid-conversation, since the re-sign route is an owner
- *  route they cannot reach.
+ *  and a short URL would strand a rider who pauses mid-conversation, with nothing to re-sign it: the
+ *  re-sign route no longer exists for ANYONE (deleted with the offline rule, docs/designs/
+ *  download-before-start.md §10), so this URL is the only one this rider will get.
+ *
+ *  ⚠ AND THIS CLIP STREAMS, DELIBERATELY. "A drive's audio is only ever played from disk" (§10) stops
+ *  at the front door: this preview clip and `GET /sample` play BEFORE a drive exists — before the wall,
+ *  before a credit, with nothing on disk to play from. They are the taste that sells the thing, and
+ *  they keep streaming. A sweep reading "force offline for everything" must not take them with it.
  *
  *  ⚠ NULL, NEVER A THROW. An empty selection (a real 200 with estStopCount 0) and a presign failure both
  *  degrade to "no taste" — the route, distance and stop count are all still true and the wall is
@@ -1034,7 +1038,7 @@ export function previewClipFor(stops: readonly DriveStop[], corpus: BuildCorpus)
 export const driveRoutes = new Hono<ApiEnv>()
 
 // Session only — every route below reads c.get('session')/c.get('tier').
-// ⚠ DO NOT RE-ADD requireAccount HERE. The account wall is PER-ROUTE (the five owner routes below,
+// ⚠ DO NOT RE-ADD requireAccount HERE. The account wall is PER-ROUTE (the four owner routes below,
 // D15/INV-15); a blanket gate on this mount silently re-walls `POST /propose` — the entire anonymous
 // preview, the open front door — and it fails as a 401 that reads like an auth bug rather than a
 // routing one. The gate list is pinned by the route-table guard in test/drive-access.test.ts.
@@ -1432,12 +1436,12 @@ driveRoutes.get('/', requireAccount, withFreshSession, async (c) => {
 
 /** The predicate EVERY owner-scoped drive query is keyed on: this id, this owner, not soft-deleted.
  *
- *  ⚠ ONE EXPRESSION, and it is the same rule `ownedRef` below follows for the same reason — three
- *  queries (the full load, the lean selection load, and the DELETE) must agree about what "the
- *  caller's live drive" means, and the failure of disagreeing is SILENT: drop `isNull(deletedAt)` from
- *  one of them and a deleted drive quietly becomes loadable again, or scope one by id alone and it
- *  serves another user's row. Counting, authorising and acting from one expression is house doctrine
- *  precisely because the second copy is the one that drifts. */
+ *  ⚠ ONE EXPRESSION, and it is the same rule `ownedRef` below follows for the same reason — both
+ *  queries (the full load and the DELETE) must agree about what "the caller's live drive" means, and
+ *  the failure of disagreeing is SILENT: drop `isNull(deletedAt)` from one of them and a deleted
+ *  drive quietly becomes loadable again, or scope one by id alone and it serves another user's row.
+ *  Counting, authorising and acting from one expression is house doctrine precisely because the
+ *  second copy is the one that drifts. */
 const ownedDriveWhere = (id: string, userId: string) =>
   and(eq(drives.id, id), eq(drives.userId, userId), isNull(drives.deletedAt))
 
@@ -1525,7 +1529,10 @@ async function selectStopsForRoute(route: { polyline: LngLat[]; durationSeconds:
  *  ⚠ Via `selectionSubject`, which absorbs the pre-fused item shape AND resolves the subject kind — a
  *  fused telling is named by its `cluster_id`, not a member's `poi_id`. Reaching into the item for a
  *  poi id directly is the mistake that made `narrations.poi_id → 3rd Street Flats` for a clip about
- *  downtown Reno. One definition, shared by the replay manifest and the offline re-sign. */
+ *  downtown Reno. ⚠ It had TWO callers — the replay manifest and the offline re-sign — until the
+ *  re-sign route was deleted on 2026-08-05 (a drive's audio only ever plays from disk; see
+ *  docs/designs/download-before-start.md §10). Keeping it a shared definition is still the point:
+ *  `manifestForStoredDrive` is the live caller, and the next one must not re-derive the subject. */
 async function corpusForSelection(selection: DriveSelectionItem[]): Promise<Map<string, NarrationRow>> {
   // ⚠ PARTITIONED BY KIND, not handed to both loaders as one list. `selectionSubject` already answers
   // WHICH kind each item is — it has to, since a fused telling is named by its cluster id — so throwing
@@ -1571,10 +1578,10 @@ const ownerId = (c: Context<ApiEnv>): string | undefined =>
 /** The `(driveId, userId)` pair every owner-scoped query is keyed on, or null when either half is
  *  missing/malformed.
  *
- *  ⚠ ONE PLACE, because all three owner routes must agree and the failure of disagreeing is silent.
+ *  ⚠ ONE PLACE, because both `:id` owner routes must agree and the failure of disagreeing is silent.
  *  The UUID guard is not cosmetic: without it a `:id` like `not-a-uuid` reaches Postgres as a uuid
  *  comparison and comes back a DRIVER ERROR (500), not the 404 an unowned id is supposed to read as —
- *  so a fourth owner route added without it regresses 404→500 and leaks that the id was malformed
+ *  so a third owner route added without it regresses 404→500 and leaks that the id was malformed
  *  rather than simply not the caller's. Callers keep their own miss handling (a loader returns null, a
  *  route 404s) because that part legitimately differs. */
 function ownedRef(c: Context<ApiEnv>): { id: string; userId: string } | null {
@@ -1592,25 +1599,6 @@ async function loadOwnedDrive(c: Context<ApiEnv>) {
   return loadOwnedDriveById(ref.userId, ref.id)
 }
 
-/** Lean owner-scoped loader — only { id, selection }, for paths that re-presign but need no geometry
- *  (POST /:id/assets/sign). Same ownership scoping as loadOwnedDrive (id + userId + not-deleted +
- *  UUID guard); 404 on any miss. */
-async function loadOwnedSelection(c: Context<ApiEnv>) {
-  const ref = ownedRef(c)
-  if (!ref) return null
-  const { id, userId } = ref
-  const rows = await withRetry(
-    () =>
-      db
-        .select({ id: drives.id, selection: drives.selection })
-        .from(drives)
-        .where(ownedDriveWhere(id, userId))
-        .limit(1),
-    { label: 'drive.loadSelection' },
-  )
-  return rows[0] ?? null
-}
-
 /** GET /drives/:id — replay a saved drive: frozen STRUCTURE + LIVE narration content (a regenerated
  *  telling auto-improves it). Re-presigns every clip.
  *
@@ -1624,26 +1612,6 @@ driveRoutes.get('/:id', requireAccount, async (c) => {
     return c.json(await manifestForStoredDrive(drive))
   } catch (e) {
     return audioUnavailable(c, 'drive replay', e)
-  }
-})
-
-/** POST /drives/:id/assets/sign — re-presigned clip URLs (offline refresh), keyed by seq. Owner route:
- *  `requireAccount` first (D15/INV-15) — it re-presigns from the staged-inclusive replay corpus, so the
- *  gate is what makes that read safe (INV-5). */
-driveRoutes.post('/:id/assets/sign', requireAccount, async (c) => {
-  const drive = await loadOwnedSelection(c)
-  if (!drive) return c.json({ error: 'not_found' }, 404)
-  const corpus = await corpusForSelection(drive.selection ?? [])
-  try {
-    const clips = manifestClips(drive.selection ?? [], corpus).map((cl) => ({
-      seq: cl.seq,
-      url: cl.url!,
-      contentType: cl.contentType!,
-      durationMs: cl.durationMs,
-    }))
-    return c.json({ clips } satisfies SignedDriveAudio)
-  } catch (e) {
-    return audioUnavailable(c, 'drive sign', e)
   }
 })
 

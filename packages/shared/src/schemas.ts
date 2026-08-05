@@ -182,19 +182,6 @@ export const versionResponse = z.object({ policies: z.array(versionPolicy) })
 /*  API response DTOs (apps/api ⇄ clients). Lightweight, no internal columns.   */
 /* -------------------------------------------------------------------------- */
 
-/** A single presigned audio clip. */
-export const signedClip = z.object({
-  url: z.url(),
-  /** The clip's MIME type (e.g. "audio/mpeg"), derived server-side from the R2 key's
-   *  extension. The format is DATA, not an assumption: the player stays format-agnostic
-   *  and the offline download writes the right extension instead of hardcoding `.wav`. */
-  contentType: z.string(),
-  durationMs: z.number().int().nullish(),
-})
-
-/** A presigned stop clip, keyed by the stop's seq. */
-export const signedStopClip = signedClip.extend({ seq: z.number().int() })
-
 /** GET /sample — ONE curated "taste" clip, anonymous, for a rider OUTSIDE any coverage (the
  *  Cupertino reviewer, and every first-timer who opens the app 200 miles from Tahoe). A single
  *  hand-picked narration (server-side `SAMPLE_NARRATION_QID`) resolved to a presigned clip: no
@@ -506,6 +493,9 @@ export const driveClip = z.object({
   durationMs: z.number().int().nullish(),
   /** Presigned clip URL (short TTL); null for a silent rest beat. */
   url: z.url().nullish(),
+  /** The clip's MIME type, derived server-side from the R2 key's extension. The format is DATA, not
+   *  an assumption: the player stays format-agnostic and the offline download writes the extension
+   *  this names instead of hardcoding one. */
   contentType: z.string().nullish(),
   attribution: attributionList.optional(),
   /** Offline-staleness token — the narration's `updatedAt`, propagated to flag a stale offline clip. */
@@ -575,7 +565,3 @@ export const driveList = z.object({
   credits: driveCredits.nullish(),
 })
 export type DriveList = z.infer<typeof driveList>
-
-/** POST /drives/:id/assets/sign — re-presigned clip URLs (offline refresh), keyed by seq. */
-export const signedDriveAudio = z.object({ clips: z.array(signedStopClip) })
-export type SignedDriveAudio = z.infer<typeof signedDriveAudio>

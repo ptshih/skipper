@@ -1,24 +1,30 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Alert, Linking, StyleSheet, useAnimatedValue, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router'
 import { ApiError, deleteDrive, errorMessage, getDrive, type DriveManifest } from '@/lib/api'
 import { track } from '@/lib/analytics'
+import { useIsOffline } from '@/lib/connectivity'
 import { useStopPreview } from '@/lib/useStopPreview'
 import { DriveMap, type DriveMapStop } from '@/ui/DriveMap'
 import {
+  activeDownload,
+  cancelDownload,
   deleteDriveDownload,
   downloadDrive,
+  estimateDownloadBytes,
   InsufficientStorageError,
-  isDownloadExpired,
   isDownloadStale,
   loadManifest,
   offlineSnapshot,
   repairDownload,
+  subscribeDownload,
   topUpDrive,
   type DownloadDirState,
-  type DownloadProgress,
 } from '@/lib/offline'
+// Pure + unit-tested, and the SAME expression the player's own gate calls (useDrive) — the CTA and
+// the player must never authorise on one reading and act on another.
+import { decideDriveGate } from '@/lib/offline-util'
 import { cleanPlaceName, clipLength, driveLength, spokenLength, stopLabel, stopMeta } from '@/lib/labels'
 import { useTheme } from '@/theme'
 import { border, space } from '@/theme/tokens'
@@ -60,6 +66,12 @@ const SUPPORT_EMAIL = process.env.EXPO_PUBLIC_SUPPORT_EMAIL ?? 'hello@skipper.fm
 // stop to hear one clip, List/Map) + the live GPS drive (the M1 phone player, fed by real device
 // GPS) + offline download. Reached from "My Drives" or straight after creating one (Create-a-Drive
 // → here). docs/decisions/detail-page-mini-preview.md.
+//
+// ⚠ THE DRIVE IS GATED ON A COMPLETE LOCAL COPY (docs/designs/download-before-start.md). A drive's
+// audio is only ever played from disk, so this screen's Start CTA is a STATE, not a button that
+// always fires: it waits while the copy comes down (started automatically at CREATE, so the wait is
+// normally invisible), offers the save when nothing is running, and steps aside for a rider who is
+// offline with a partial copy — never blocking one we cannot help.
 export default function DriveDetailScreen() {
   const router = useRouter()
   const { id } = useLocalSearchParams<{ id: string }>()
@@ -105,6 +117,10 @@ export default function DriveDetailScreen() {
   const [loading, setLoading] = useState(true)
   // True when the manifest fetch failed but a saved download carried us (dead-zone fallback).
   const [offline, setOffline] = useState(false)
+  // The app-wide connectivity verdict, which fails OPEN (unknown reads as ONLINE). ⚠ A different
+  // question from `offline` above — that is a fact about THIS screen's fetch, while the gate has to
+  // ask what the device can do RIGHT NOW, including for a drive that loaded fine ten minutes ago.
+  const isOffline = useIsOffline()
   // Offline download state — Tahoe has dead zones, so a rider can save the whole drive.
   const [downloaded, setDownloaded] = useState(false)
   // Whether bytes are on disk AT ALL, independent of whether this build can read their manifest.
@@ -115,7 +131,6 @@ export default function DriveDetailScreen() {
   // A saved copy past its freshness TTL (OFFLINE_TTL_DAYS) — a SOFT, offline-safe nudge to re-pull
   // (fires even in a dead zone, where the content-diff `updatable` can't). Never blocks play.
   const [expired, setExpired] = useState(false)
-  const [downloading, setDownloading] = useState<DownloadProgress | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   // True when this drive IS downloaded but the server has re-cut its clips since (a re-synth or
   // regen). Detected on the online fetch; offers a re-pull. Never blocks offline play.
@@ -129,37 +144,75 @@ export default function DriveDetailScreen() {
   const parked = useAnimatedValue(0.06)
   // Mirror of `drive` so load() can skip the full-screen spinner on a refocus refetch. (audit #531)
   const driveRef = useRef<DriveManifest | null>(null)
-  // Cancels an in-flight download (Cancel tap / screen unmount). (audit #816)
-  const downloadAbort = useRef<AbortController | null>(null)
-  // The in-flight INV-6 top-up. Separate from `downloadAbort`: a rider-initiated download and a
-  // background top-up are different promises with different lifetimes, and aborting one must not
-  // cancel the other.
+  // The in-flight INV-6 top-up. A rider-initiated download and a background top-up are different
+  // promises with different lifetimes, and aborting one must not cancel the other — which is why this
+  // is still a component ref while the DOWNLOAD's controller moved into offline.ts (see below).
   const topUpAbort = useRef<AbortController | null>(null)
+
+  // Re-derive the offline state from DISK — the saved/partial/expired chip, the CTA's gate and the ⋯
+  // menu's gating. ONE derivation with FOUR readers (the focus pass, a finished download, a remove, a
+  // repair); each of those used to hand-set the same four flags from whatever it happened to know, and
+  // under the gate a divergence decides whether the rider can DRIVE, not just which chip shows.
+  // Presence is per-clip (a missing byte costs one stop, not the drive), so "downloaded" and "N left
+  // to save" both move as bytes land.
+  const refreshOfflineState = useCallback(() => {
+    if (!id) return
+    // ONE manifest read for all three answers — they are three readings of the same file, and asking
+    // them separately re-parsed it three times per refresh (see `offlineSnapshot`).
+    const { status, expired: isExpired, dirState: dir } = offlineSnapshot(id)
+    setDownloaded(status != null)
+    // Re-derive PARTIAL from disk so a half-download surfaces as partial after an app restart
+    // (when the in-memory download result is gone) instead of as a clean "Saved offline". (audit #1)
+    setPartial(
+      status && status.missingSeqs.length > 0
+        ? { failed: status.missingSeqs.length, total: status.expectedCount }
+        : null,
+    )
+    setExpired(isExpired) // offline-safe (reads savedAt) — fires even in a dead zone
+    setDirState(dir)
+  }, [id])
+
+  // The in-flight download, READ FROM offline.ts's module-level registry rather than held as state.
+  // ⚠ That is what makes §3a real: the transfer now outlives this screen (a rider who backs out to
+  // check the map must not return to a drive they still cannot start), so the screen can only OBSERVE
+  // it — and the run it is usually observing was started somewhere else entirely, by the CREATE
+  // handler on the home screen, before this screen ever mounted.
+  const download = useSyncExternalStore(
+    useCallback((cb: () => void) => (id ? subscribeDownload(id, cb) : () => {}), [id]),
+    useCallback(() => (id ? activeDownload(id) : null), [id]),
+  )
+  // RUNNING, not merely present: a cancel leaves a TOMBSTONE in the registry so an auto-start can tell
+  // "the rider said no" from "nothing has started" (offline.ts `ActiveDownload`). Null here is what
+  // flips the CTA from "wait" to "act".
+  const downloading = download && !download.canceled ? download.progress : null
+
+  // A run ENDING is the moment the manifest exists on disk — nothing before it is worth a re-read (the
+  // commit is the last write of the download), and nothing else notices, since the run that finished
+  // may have been started from another screen.
+  const running = downloading != null
+  const wasRunning = useRef(false)
+  useEffect(() => {
+    if (wasRunning.current && !running) {
+      refreshOfflineState()
+      // The "update ready" nudge is the one answer disk alone can't give (it needs the SERVER's cut),
+      // so it is re-ASKED against the manifest already in hand rather than assumed false: a pull that
+      // failed leaves a copy that really is still behind the server.
+      const fresh = driveRef.current
+      if (fresh && id) setUpdatable(isDownloadStale(id, fresh))
+    }
+    wasRunning.current = running
+  }, [running, refreshOfflineState, id])
 
   const startDownload = useCallback(async () => {
     if (!id) return
     setDownloadError(null)
     setNeedsAccount(false) // a prior gate latch must not outlive a fresh attempt (audit #278)
-    setDownloading({ done: 0, total: 0 })
-    const ctrl = new AbortController()
-    downloadAbort.current = ctrl
     try {
-      const res = await downloadDrive(id, setDownloading, ctrl.signal)
-      setDownloaded(true)
-      setExpired(false) // a fresh pull re-stamps savedAt — no longer past the TTL
-      if (res.failedSeqs.length > 0) {
-        // PARTIAL (H2): the playable clips are saved, but some didn't come down (thin signal). Record
-        // the gap so the chip + ⋯ re-pull can offer to grab the rest; the saved clips play meanwhile.
-        setPartial({ failed: res.failedSeqs.length, total: res.total })
-        setDownloadError(null)
-      } else {
-        setPartial(null)
-        setDownloadError(null)
-        setUpdatable(false) // a fresh pull writes the current tokens — no longer behind the server
-      }
+      // Progress and cancellation are the registry's (above); this only has to report the failure.
+      await downloadDrive(id)
     } catch (e) {
       if (e instanceof Error && e.name === 'AbortError') {
-        // Canceled (navigated away / Cancel tap) — silent, no error toast.
+        // Canceled (a Cancel tap) — silent, no error toast.
       } else if (e instanceof ApiError && e.needsAccount) {
         // A gated download 401s when the account lapsed. Route to sign-in instead of swapping the
         // whole detail for a full-screen gate — the loaded drive stays usable underneath. (audit #269)
@@ -170,53 +223,37 @@ export default function DriveDetailScreen() {
         // Network/verify failure — no useful raw message for a rider; speak the persona line.
         setDownloadError(voice.error.download)
       }
-    } finally {
-      if (downloadAbort.current === ctrl) downloadAbort.current = null
-      setDownloading(null)
     }
   }, [id, router])
 
-  // Start the LIVE drive — but warn once if nothing is saved. Tahoe's dead zones are the named
-  // landmine, and `useDrive`'s stall watchdog SKIPS any clip that won't stream (12s, one re-sign,
-  // then the stop is gone), so an unsaved drive loses stops silently — the rider just sails past
-  // Emerald Bay in quiet and never learns why. This is the last moment it's still fixable.
-  // Deliberately NOT a block: streaming is fine on a road with signal, and a rider mid-download or
-  // already saved goes straight through untouched.
+  // Start the LIVE drive. ⚠ NO WARNING AND NO "start anyway" — the three-way Alert this replaced was a
+  // gate a rider could talk their way past, and the stop it cost them was skipped in silence twenty
+  // minutes later. The CTA renders this only in the `play` state, and `useDrive` asserts the same
+  // expression for itself, because `skipper://drives/<id>/play` reaches the player without this screen.
   const startDrive = useCallback(() => {
-    const go = () => router.push(`/drives/${id}/play?mode=live`)
-    if (downloaded || downloading) {
-      go()
-      return
-    }
-    Alert.alert(voice.offline.unsavedTitle, voice.offline.unsavedBody, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: voice.offline.unsavedSave, onPress: () => void startDownload() },
-      { text: voice.offline.unsavedStart, onPress: go },
-    ])
-  }, [downloaded, downloading, id, router, startDownload])
+    router.push(`/drives/${id}/play`)
+  }, [id, router])
 
   const removeDownload = useCallback(() => {
     if (!id) return
     deleteDriveDownload(id)
-    setDownloaded(false)
-    setExpired(false)
-    setPartial(null) // the saved copy (whole or partial) is gone
-    // The drive's directory went with it. ⚠ Load-bearing now that the ⋯ menu gates repair/remove on
-    // `dirState !== 'none'`: a stale 'ok'/'unreadable' would keep offering to remove a dir that no
-    // longer exists. (The shared clip bytes are freed by the sweep inside deleteDriveDownload, which
-    // is fail-closed — a rider may see less space returned than they expect, by design.)
-    setDirState('none')
-  }, [id])
+    // Re-read DISK rather than hand-setting the flags: the drive's directory went with the delete, and
+    // the ⋯ menu gates repair/remove on `dirState !== 'none'`, so a stale 'ok'/'unreadable' would keep
+    // offering to remove a dir that no longer exists. (The shared clip bytes are freed by the sweep
+    // inside deleteDriveDownload, which is fail-closed — a rider may see less space returned than they
+    // expect, by design.)
+    refreshOfflineState()
+  }, [id, refreshOfflineState])
 
-  const cancelDownload = useCallback(() => {
-    downloadAbort.current?.abort()
-  }, [])
-
-  // Cancel an in-flight download if the screen is torn down (audit #816). NOT on blur — the screen
-  // stays mounted under the pushed player, so a download keeps running while the rider previews.
+  // Cancel an in-flight TOP-UP if the screen is torn down. NOT on blur — the screen stays mounted
+  // under the pushed player, so a top-up keeps running while the rider previews.
+  //
+  // ⚠ THE DOWNLOAD IS DELIBERATELY NOT ABORTED HERE ANY MORE (audit #816's cleanup, inverted by the
+  // gate): with Start gated on a complete copy, tearing the transfer down on unmount means a rider who
+  // backs out to check the map comes back to a drive they still cannot start. Only an explicit Cancel
+  // stops it now, through offline.ts's module-level `cancelDownload`.
   useEffect(
     () => () => {
-      downloadAbort.current?.abort()
       topUpAbort.current?.abort()
     },
     [],
@@ -280,26 +317,24 @@ export default function DriveDetailScreen() {
         setDownloadError(voice.offline.repairFailed)
         return
       }
-      setDownloaded(true)
-      setDirState('ok')
-      setPartial(
-        status.missingSeqs.length > 0
-          ? { failed: status.missingSeqs.length, total: status.expectedCount }
-          : null,
-      )
-      setExpired(isDownloadExpired(id)) // repair dates the copy from the BYTES, so this can fire
+      // The manifest it just wrote is on disk, so the one derivation reads it — including the expiry,
+      // which a repair CAN fire: it dates the copy from the BYTES, not from now.
+      refreshOfflineState()
       setUpdatable(false) // the manifest we just wrote IS the server's current cut, by construction
     } catch (e) {
       setDownloadError(errorMessage(e, voice.error.download))
     }
-  }, [id])
+  }, [id, refreshOfflineState])
 
-  // Secondary/utility actions live in a header ⋯ menu (native iOS action sheet) instead of
-  // stacked buttons — the offline download (state-aware) + the dev-only on-device simulator.
+  // Secondary/utility actions live in a header ⋯ menu (native iOS action sheet) instead of stacked
+  // buttons — the offline download's state-aware re-pull / repair / remove. (The main-path save and
+  // the drive itself are the CTA below; the ⋯ menu never gates the drive.)
   const openMenu = useCallback(() => {
     const actions: { label: string; onPress: () => void; destructive?: boolean }[] = []
     if (downloading) {
-      actions.push({ label: 'Cancel download', onPress: cancelDownload, destructive: true })
+      // ⚠ MODULE-LEVEL, not a controller this screen holds: the transfer outlives the screen now, so
+      // an explicit Cancel is the only thing left that may stop it.
+      actions.push({ label: 'Cancel download', onPress: () => cancelDownload(id), destructive: true })
     } else if (downloaded) {
       if (updatable) {
         // Re-pull overwrites the saved manifest + clips with the server's fresh cut.
@@ -334,9 +369,10 @@ export default function DriveDetailScreen() {
       }
     }
     actions.push({ label: 'Report an issue', onPress: reportIssue })
-    if (__DEV__) {
-      actions.push({ label: voice.cta.simDrive, onPress: () => router.push(`/drives/${id}/play`) })
-    }
+    // ⚠ The __DEV__ "Simulated drive" item is GONE (§11). It pushed a BARE `/play` and leaned on
+    // `__DEV__` to be read as sim — so the button labelled "Simulated drive" never actually said
+    // "sim", and was one guard removal from starting a real GPS drive. The sim clock is now a
+    // SETTING (Settings → Developer, admin-gated and persisted): one control, one value.
     // The one truly irreversible action — always last, above Cancel.
     actions.push({ label: 'Delete drive', onPress: deleteDriveAction, destructive: true })
     if (actions.length === 0) return
@@ -372,36 +408,12 @@ export default function DriveDetailScreen() {
     partial,
     expired,
     id,
-    router,
     startDownload,
     repair,
     removeDownload,
-    cancelDownload,
     reportIssue,
     deleteDriveAction,
   ])
-
-  // Re-derive the offline state from DISK — the saved/partial/expired chip and the ⋯ menu's gating.
-  // Extracted so the focus pass and the top-up's completion share ONE reading: presence is now
-  // per-clip (a missing byte costs one stop, not the drive), so "downloaded" and "N left to save"
-  // both move as bytes land, and a top-up that closes a gap in the background must update the chip
-  // without waiting for the rider to leave and come back.
-  const refreshOfflineState = useCallback(() => {
-    if (!id) return
-    // ONE manifest read for all three answers — they are three readings of the same file, and asking
-    // them separately re-parsed it three times per refresh (see `offlineSnapshot`).
-    const { status, expired: isExpired, dirState: dir } = offlineSnapshot(id)
-    setDownloaded(status != null)
-    // Re-derive PARTIAL from disk so a half-download surfaces as partial after an app restart
-    // (when the in-memory download result is gone) instead of as a clean "Saved offline". (audit #1)
-    setPartial(
-      status && status.missingSeqs.length > 0
-        ? { failed: status.missingSeqs.length, total: status.expectedCount }
-        : null,
-    )
-    setExpired(isExpired) // offline-safe (reads savedAt) — fires even in a dead zone
-    setDirState(dir)
-  }, [id])
 
   const load = useCallback(async () => {
     if (!id) return
@@ -433,9 +445,10 @@ export default function DriveDetailScreen() {
       // are already in, which the chip already tells the truth about and the ⋯ re-pull already offers
       // to fix. Surfacing a second error for a background repair the rider never asked for is noise.
       // ⚠ CANCELLABLE, and that is not tidiness. The detail screen stays MOUNTED under the pushed
-      // player, so a top-up started on focus would otherwise keep transferring while the live drive
-      // streams its clips and the stall watchdog re-signs — the exact contention the "never on the
-      // play path" bound exists to prevent, which without this is only enforced for STARTING one.
+      // player, so a top-up started on focus would otherwise keep transferring for the whole length of
+      // a live drive — competing for the network and for the very disk the player is reading its clips
+      // off. That is the contention the "never on the play path" bound exists to prevent, which
+      // without this is only enforced for STARTING one.
       // It also bounds the worst case: after a whole-drive re-synth `needed` is the entire drive,
       // tens of MB, with no progress UI and no rider action beyond opening the screen.
       const topUpCtrl = new AbortController()
@@ -577,6 +590,41 @@ export default function DriveDetailScreen() {
       ? null
       : (drive.clips.find((c) => c.seq === preview.activeSeq) ?? null)
 
+  // THE GATE (docs/designs/download-before-start.md §1/§2), in ONE expression shared with the player.
+  // A drive's audio only ever plays from disk, so "can this be driven?" is "is a complete copy here?"
+  // — with the one row that steps aside: a rider who is OFFLINE with a partial copy rolls anyway,
+  // because blocking a rider we cannot help is pure loss. `missingSeqs` is exactly what `partial`
+  // carries, so nothing is re-derived here.
+  const gate = decideDriveGate({
+    online: !isOffline,
+    hasAnyLocal: downloaded,
+    missingCount: partial?.failed ?? 0,
+  })
+  // REPAIR, never a fresh download, when bytes exist for this drive but NOTHING PLAYABLE resolves from
+  // them: the audio is the expensive half and much of it may already be on the phone (possibly pulled
+  // by ANOTHER drive down the same corridor), so re-writing the few-KB manifest and re-adopting them
+  // beats pulling it all again.
+  //
+  // ⚠ `&& !downloaded` IS THE WHOLE GUARD, and omitting it made the gate INESCAPABLE from the main
+  // path. A PARTIAL copy is readable (`dirState === 'ok'`) and playable (`downloaded === true`), so a
+  // bare `dirState !== 'none'` matched it — and offered "Recover it without downloading again", which
+  // provably cannot close the gap: `repairDownload` re-adopts bytes ALREADY on disk and fetches none.
+  // The rider tapped it, the state re-derived identically, and the button re-rendered unchanged,
+  // forever, on a drive they had spent a credit on. The branch that actually fixes a partial copy is
+  // Save — `downloadDrive` is a TOP-UP that skips what is present and pulls only what is missing.
+  //
+  // So: repair is for "bytes with no readable index" (`unreadable`) and for "readable index, zero
+  // bytes resolve" (`ok` + not downloaded — the shared-store case the ⋯ menu already handled). Both
+  // have `downloaded === false`. A partial copy has `downloaded === true` and belongs to Save.
+  const repairable = dirState !== 'none' && !downloaded
+  // §3's size disclosure — a COURTESY label, never a gate (there is no "download over cellular?"
+  // prompt; that founder call rests on the measurement that our largest drive is ~11 MB). The bytes
+  // come from `estimateDownloadBytes`, the SAME expression the free-space pre-flight sizes against, so
+  // the number a rider is shown can never disagree with the guard that blocks. It sizes the whole
+  // drive, the honest ceiling: the shared clip store often makes the real transfer far smaller.
+  const estBytes = estimateDownloadBytes(drive.clips.map((c) => c.durationMs))
+  const sizeLine = estBytes > 0 ? voice.offline.sizeHint((estBytes / 1_000_000).toFixed(1)) : null
+
   // The route's ONE chrome row — what to do with the list (left) + the List/Map toggle (right).
   //
   // ⚠ The "THE ROUTE · N STOPS" label that used to lead this row is gone, and the hint moved up onto
@@ -587,7 +635,11 @@ export default function DriveDetailScreen() {
   const routeHead = (
     <View style={styles.previewHead}>
       <Text variant="dim" color="inkFaint" style={styles.previewHint}>
-        {voice.preview.hint}
+        {/* ⚠ The hint tells the truth about what a tap will do RIGHT NOW. The mini-preview plays only
+        what is already on this phone (§10 N1), so while the copy is still coming down "tap a stop to
+        hear it" promises audio that is not here yet — a tap in that window gets the unplayable line
+        instead of a clip. */}
+        {downloading ? voice.offline.gateSaving : voice.preview.hint}
       </Text>
       <Segmented
         accessibilityLabel={voice.preview.viewLabel}
@@ -662,7 +714,9 @@ export default function DriveDetailScreen() {
               <Text variant="monoStrong" color="inkDim">
                 {stops.length} STOPS{length ? ` · ~${length}` : ''}
               </Text>
-              {/* Offline state rides here as a compact chip — the ACTION lives in the ⋯ menu. */}
+              {/* Offline state rides here as a compact chip — the re-pull/repair/remove ACTIONS live in
+              the ⋯ menu, and the CTA below carries the gate. This is also where the download's PROGRESS
+              is counted out, one line above the disabled Start it explains. */}
               {downloading ? (
                 <Text variant="label" color="inkFaint">
                   {downloading.total
@@ -712,10 +766,9 @@ export default function DriveDetailScreen() {
                   </Text>
                 </View>
               ) : (
-                // NOT saved. This branch used to be `null`, which made "this drive will stream, and a
-                // dead zone will silently skip stops" the one state with no visual at all. Rendered
-                // faint, not warm/amber: it's a fact about the drive, not a warning to act on — the
-                // Save button below and the Start guard carry the actual nudge.
+                // NOT saved. Rendered faint, not warm/amber: it's a fact about the drive, not a
+                // warning to act on — the CTA below is where the rider is told what it MEANS (this
+                // drive cannot be driven until it is saved) and given the one thing to do about it.
                 <View style={styles.savedChip}>
                   <Icon name="notDownloaded" size={14} color="inkFaint" />
                   <Text variant="label" color="inkFaint">
@@ -732,34 +785,53 @@ export default function DriveDetailScreen() {
             </Text>
           ) : null}
 
-          {/* The live drive is the M1 headline. The couch "simulated drive" is CUT — auditioning is now the
-          native mini-preview below (tap a stop to hear it). The dev simulator lives in the header ⋯ menu
-          so this stays glanceable; offline download does NOT — it earned a main-path button below,
-          because hiding it made streaming the silent default on roads that can't stream. */}
-          {/* ⚠ The caption under this button ("The skipper talks as you reach each stop on the real
+          {/* The live drive is the M1 headline, and it is now ONE control carrying the gate's whole
+          state — the separate "Save for offline" button below it collapsed into this, which also
+          recovers the row of screen the itinerary wanted. Auditioning is the native mini-preview below
+          (tap a stop to hear it); the ⋯ menu still owns re-pull / repair / remove.
+          ⚠ The caption under the Start button ("The skipper talks as you reach each stop on the real
           roads.") is GONE, not moved: the player's own ready card says the same thing one tap later
           — "Mount up and start when you're on the road. I'll pipe up when we reach the good stuff."
           — at the moment the rider can act on it, and in the persona's voice rather than as a
-          product description. Two captions plus two buttons were pushing the route below the fold. */}
-          <Button icon="car" title={voice.cta.drive} onPress={startDrive} />
-
-          {/* Save for offline — a REAL button on the main path. It lived only in the header ⋯ menu,
-          which meant the default first drive STREAMED and every dead-zone stop was dropped in
-          silence. Shown only when there's something to save: a downloaded (or downloading) drive
-          keeps this space clean, and the ⋯ menu still owns re-pull / remove. */}
-          {!downloaded && !downloading ? (
+          product description.
+          ⚠ THE TWO NON-PLAY CASES ARE OPPOSITES, and getting that backwards is the worst version of
+          this feature. While a download RUNS the rider is not being asked to do anything — only to
+          wait ten seconds — so Start stays put and DISABLES itself, and a control that turns itself
+          on describes that better than a button swapping identity under their thumb. With NOTHING
+          running (it failed, was cancelled, or §2 says we cannot) a disabled control with no
+          explanation is exactly what the "never disable" instinct is about, so the CTA becomes the
+          actionable thing instead. */}
+          {gate === 'play' ? (
+            <Button icon="car" title={voice.cta.drive} onPress={startDrive} />
+          ) : downloading ? (
             <View style={styles.ctaGroup}>
-              <Button
-                variant="secondary"
-                icon="update"
-                title={voice.offline.save}
-                onPress={() => void startDownload()}
-              />
+              {/* The count itself rides the placard chip directly above ("Saving 3/12") — one number,
+              one home, rather than a second copy under the button that could disagree with it. */}
+              <Button icon="car" title={voice.offline.gateSaving} disabled />
               <Text variant="dim" color="inkFaint" align="center">
-                {voice.offline.saveHint}
+                {voice.offline.gateSavingHint}
               </Text>
             </View>
-          ) : null}
+          ) : gate === 'nothing-saved' ? (
+            // Offline with nothing on disk — the one row of §2's table that blocks, and there is no
+            // action to offer honestly: a download needs a network, and rolling would be a silent
+            // drive from end to end. So this is a line, not a dead button.
+            <Text variant="body" color="inkDim" align="center">
+              {voice.offline.gateNothingSaved}
+            </Text>
+          ) : (
+            <View style={styles.ctaGroup}>
+              <Button
+                icon="update"
+                title={repairable ? voice.offline.repair : voice.offline.save}
+                onPress={() => void (repairable ? repair() : startDownload())}
+              />
+              <Text variant="dim" color="inkFaint" align="center">
+                {/* The size rides along only when this really is a download; a repair moves no bytes. */}
+                {[voice.offline.saveHint, repairable ? null : sizeLine].filter(Boolean).join(' ')}
+              </Text>
+            </View>
+          )}
 
           {downloadError ? (
             <Text variant="dim" color="danger">
@@ -767,7 +839,11 @@ export default function DriveDetailScreen() {
             </Text>
           ) : null}
 
-          {/* THE ROUTE — browse the stops as a List or a Map; tap any stop / pin to hear that one clip. */}
+          {/* THE ROUTE — browse the stops as a List or a Map; tap any stop / pin to hear that one clip.
+          ⚠ ONE handler for BOTH surfaces (`playStop`, also the map's `onPressStop`): a row and its pin
+          are the same tap on the same stop, and under §10 they answer the same way when the audio is
+          not on the phone yet — the unplayable line above, never one surface playing and the other
+          going quiet. */}
           {routeHead}
           {unplayableLine}
           <StopList items={listItems} onPressItem={playStop} />

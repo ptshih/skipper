@@ -14,7 +14,11 @@
 > is authoritative for that drive", and it's nearly free since `createDrive`/`getDrive` already return
 > a full `DriveManifest`) — that survives as INV-6. The pack's *purpose* was ambient proximity
 > playback, which dies with roam: a drives-only rider can only play clips that are in some drive's
-> manifest. So "no new endpoint" is true again. Line numbers drift — **code wins**.
+> manifest. So "no new endpoint" is true again. ⚠ **PARTLY SUPERSEDED 2026-08-05: one shipped route is
+> gone.** `POST /drives/:id/assets/sign` was deleted when a drive's audio became disk-only, so the access
+> matrix is **four** owner routes, not five ([download-before-start.md](./download-before-start.md) §10) —
+> INV-6's per-drive top-up is untouched and now load-bearing rather than merely nearly-free, since the
+> download GATES the drive. Nothing else in this doc moved. Line numbers drift — **code wins**.
 
 ## Objectives
 
@@ -210,8 +214,11 @@ WRONG CONTROL, and was replaced in step 8** (review §1.3/§3.3, confirmed again
 independent design passes). Today *and after a correct 8a*, `GET /drives` sits behind a gate and the
 mint is harmless regardless of deploy order. **The hazard is INTRA-8a**: it opens only if 8a drops the
 gate from a route that WRITES. Deploy ordering cannot detect a missing gate; a test can.
-→ **THE CONTROL IS `apps/api/test/drive-access.test.ts`.** It asserts the five owner routes 401 for an
-anonymous session, that an anonymous `GET /drives` never reaches `ensureFreeGrant` (the hazard is a
+→ **THE CONTROL IS `apps/api/test/drive-access.test.ts`.** It asserts the four owner routes 401 for an
+anonymous session — ⚠ **five when this was written; `POST /:id/assets/sign` was deleted 2026-08-05** when
+drive audio became disk-only ([download-before-start.md](./download-before-start.md) §10), and the
+route-table guard below is exactly what made that a one-line edit to an explicit set rather than a hole —
+that an anonymous `GET /drives` never reaches `ensureFreeGrant` (the hazard is a
 WRITE — a 401 issued *after* the ledger row was written is still a 401), and — the highest-value part —
 a **route-table completeness guard** that pins the gated set and fails when any NEW route is added
 without a gate. Deploying 8a before the mint remains the correct operational sequence; it is simply no
@@ -292,10 +299,17 @@ Destructive is fine (D4). These must exist:
 | `POST /drives/propose` | ✅ rate-limited | ✅ |
 | Preview clip presign (one, own route, release-filtered) | ✅ | ✅ |
 | `POST /drives` (**spends a credit**) | ❌ | ✅ |
-| `GET /drives`, `GET /:id`, `/assets/sign`, `DELETE` | ❌ | ✅ |
+| `GET /drives`, `GET /:id`, `DELETE` | ❌ | ✅ |
 
 `requireAccount` moves off `driveRoutes.use('*', …)` onto individual routes. Get this wrong and either
 the wall vanishes or the preview stays locked.
+
+⚠ **The matrix shipped with a fourth owner route, `POST /drives/:id/assets/sign`, deleted 2026-08-05.**
+A drive's audio is now only ever played from disk, so there is nothing left to re-sign
+([download-before-start.md](./download-before-start.md) §10). ⚠ Note what did NOT move: the two
+anonymous rows above it — `GET /sample` and the one route-preview clip — play BEFORE a drive exists and
+deliberately still stream on the same presign. "Offline for everything" is a DRIVE rule; reading it as
+"delete all streaming" takes the front door with it.
 
 ## The planner
 
@@ -584,7 +598,7 @@ Also landed, and each was a decision rather than an inheritance:
   ⚠ The escape hatch out of a not-ready region is the region chip, gated on `hasRegions` and never on
   the selection. Remove that and this becomes a dead screen.
 - **`GET /drives/anchors` deleted end to end.** Not deferred: step 8a moves `requireAccount` off the
-  `/drives*` mount and `/anchors` is not one of the five owner routes, so it would have become an
+  `/drives*` mount and `/anchors` is not one of the four owner routes, so it would have become an
   unauthenticated dump of the curated allowlist **with exact lat/lng** the day 8a deployed.
 - **SINGLE-REGION is now a decision, not an accident** (review §1.11's open half). The server has always
   been single-region; `create.tsx`'s selector dying made that implicit. Auto-select at one region, a

@@ -5,14 +5,23 @@
 // stateful hooks can't give it. (The hook-level extraction was declined because the surrounding
 // state lifecycles legitimately differ; the DECISIONS do not.)
 
-/** A clip that never produces audio AT ALL within this window is dead — an expired presign (403), a
- *  decode failure, or a dead-zone stream that buffers forever. Generous on purpose: the clips are 64k
- *  AAC-LC over ~1h presigned URLs, and the callers' shared asymmetry is that a false "unavailable" is
- *  a lie printed over audio that would have played, while a late verdict costs only a few seconds of
- *  waiting. ⚠ Every surface that plays a presigned clip needs this, because expo-audio surfacing
- *  `status.error` for an HTTP 403 on a remote source is DEVICE-UNVERIFIED — without a timer, a
- *  surface that trusts `status.error` alone shows nothing at all when it doesn't fire. */
+/** A REMOTE clip that never produces audio AT ALL within this window is dead — an expired presign
+ *  (403), a decode failure, or a dead-zone stream that buffers forever. Generous on purpose: the
+ *  clips are 64k AAC-LC over ~1h presigned URLs, and the callers' shared asymmetry is that a false
+ *  "unavailable" is a lie printed over audio that would have played, while a late verdict costs only
+ *  a few seconds of waiting. ⚠ Every surface that plays a presigned clip needs this, because
+ *  expo-audio surfacing `status.error` for an HTTP 403 on a remote source is DEVICE-UNVERIFIED —
+ *  without a timer, a surface that trusts `status.error` alone shows nothing at all when it doesn't
+ *  fire. Now that a DRIVE only ever plays from disk, this budget remains for the surfaces that still
+ *  stream — the anonymous route-preview clip. Anything reading a `file://` uses the constant below. */
 export const PRE_START_STALL_MS = 12_000
+/** The same "never produced audio" verdict for a clip loaded from disk. A local file decodes or it
+ *  does not: neither reason the remote budget is generous survives — there is no presign to expire
+ *  and nothing to buffer — so waiting it out only buys the rider ten extra seconds of dead air before
+ *  the stop is skipped. The timeout still EXISTS because a decode failure is real, and expo-audio may
+ *  not report one either. ⚠ The short value is a desk estimate (worst case: a cold read of a ~1 MB
+ *  m4a while the OS is busy elsewhere) and still owes a real-device check. */
+export const LOCAL_CLIP_STALL_MS = 2_500
 /** No playback progress for this long AFTER a clip started (sawFresh) ⇒ an OS interruption (call /
  *  Siri / Bluetooth handoff) or a mid-clip buffer death — expo-audio fires no didJustFinish, so the
  *  player must recover or the rest of the drive/session goes silent. (audit #1) */

@@ -386,9 +386,14 @@ it in unusually good shape; everything it fixed is now pinned by a test that nam
 - [ ] #16 (api, med, founder) **The auth-DB path is uncapped on the `/drives` owner routes** — found by the 2026-08-03
       guard-ordering audit, NOT fixed (a new rider-facing cap is a founder call, CLAIM/STOP).
       `driveRoutes.use('*', withSession)` runs for every `/drives/*` route, but only `POST /` carries a
-      limiter (`createDriveLimiter`). `GET /`, `GET /:id`, `POST /:id/assets/sign` and `DELETE /:id` have
-      none — so an attacker-controlled resolve (mint an anonymous token, send it WITHOUT `sessionData`)
-      reaches the auth DB on those routes, uncapped, and only THEN gets its 401 from `requireAccount`.
+      limiter (`createDriveLimiter`). `GET /`, `GET /:id` and `DELETE /:id` have none — so an
+      attacker-controlled resolve (mint an anonymous token, send it WITHOUT `sessionData`) reaches the
+      auth DB on those routes, uncapped, and only THEN gets its 401 from `requireAccount`.
+      ⚠ **The surface SHRANK on 2026-08-05 — three uncapped routes now, not four.**
+      `POST /:id/assets/sign` was deleted when a drive's audio became disk-only
+      ([docs/designs/download-before-start.md](docs/designs/download-before-start.md) §10). ⚠ That is a
+      smaller surface, **not a smaller decision** — the mount is still uncapped and the founder still owes
+      this a call. Nothing about the shape changed; one fewer door does not close the corridor.
       ⚠ `withSession` cannot simply be moved below `requireAccount` to dodge this — `requireAccount` READS
       the session that `withSession` sets, so that order is required, not incidental. The options are a
       limiter on the `/drives` mount or accepting it; both are decisions, not refactors. Same class as the
@@ -583,7 +588,10 @@ direction; the reverse is what gets rejected.
       weakest. ⚠ Keep the subtitle/keywords geography coupling in mind (§5): between them they are the only
       indexed fields, so don't end up with no place name anywhere.
 - [ ] #41 (store, med, blocked: yosemite release) **Screenshots.** The map frame is captioned "Starting in Lake Tahoe" and shows the Tahoe basin.
-      Recapture per §9 (live GPS, never `?mode=sim` — it renders a SIMULATED badge).
+      Recapture per §9 (live GPS, never the simulator — it still renders a SIMULATED badge).
+      ⚠ **`?mode` was RETIRED 2026-08-05** — there is no query param to omit. Sim is now the persisted
+      `simMode` setting (Settings → Developer, admin-gated, default OFF everywhere), so "not sim" means
+      leaving that toggle alone.
 - [ ] #42 (store, low, blocked: yosemite release) **App Preview.** The 28s video is an Emerald Bay postcard. Still honest, still fine; revisit only if
       Yosemite is the better hook.
 
@@ -959,8 +967,17 @@ below carries its own full context.
       [what-is-a-drive-endpoint](docs/designs/what-is-a-drive-endpoint.md). Wikidata knows what is NOTABLE,
       Google knows where people GO, and neither set contains the other. Resolve the class, not these two.
 
-- [ ] #72 (mobile, med, founder) **Should a drive be fully downloaded BEFORE it can start, the way Shaka Guide does?** (founder,
-      2026-08-04.) Shaka gates the whole tour behind a download; we stream and fill the offline store from
+- [ ] #72 (mobile, med, founder) **✅ ANSWERED AND BUILT 2026-08-05 — this item is SPENT; delete it.** The answer is YES.
+      The measurement the item asked for is in
+      [docs/designs/download-before-start.md](docs/designs/download-before-start.md): the largest drive we
+      have ever built is **~11 MB** — ten to twenty seconds on LTE — which is what made the gate
+      defensible. ⚠ The "middle reading" below was REJECTED and the wall it feared was dissolved a
+      different way: the download starts automatically **at CREATE**, not at Start, so the wait normally
+      happens while the rider reads the itinerary and the gate is invisible. ⚠ The item's own premise —
+      "we stream and fill the offline store opportunistically" — is also gone: a drive's audio is now only
+      ever played from disk. (`GET /sample` and the route-preview clip still stream; they play before a
+      drive exists.) The question below is kept only until someone confirms the delete.
+      **The original question, for the record:** Shaka gates the whole tour behind a download; we streamed and filled the offline store from
       the `DriveManifest` opportunistically. Their rule trades a wait at the trailhead for never dropping a
       word in a canyon — and canyons are exactly where our stops are, so the failure it prevents is the one
       we would actually hit. **Answer the question, don't just copy the rule**: what does a Tahoe drive's

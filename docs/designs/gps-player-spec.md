@@ -1,11 +1,23 @@
 # M1 GPS Phone Player — Build Spec / Handoff
 
+> **Status (2026-08-05) — the STREAMING and RE-SIGN parts of this spec are SUPERSEDED; the trigger,
+> GPS-source and in-car parts stand.** A live drive's audio is now played ONLY from disk: the download
+> starts automatically at CREATE, survives navigation, and GATES Start. `POST /drives/:id/assets/sign`
+> — the endpoint §4 and §9 below were written around — is **deleted**, with the client `signDriveAudio` /
+> `resignPlayback` and the `signedDriveAudio` → `signedStopClip` → `signedClip` DTO chain. Read every
+> "prefer local, else the presigned URL / re-sign if the TTL lapsed" line below as historical.
+> ⚠ **This is a DRIVE rule, not an app-wide one** — `GET /sample` and the anonymous route-preview clip
+> play BEFORE a drive exists and deliberately still stream, still on the 12 s `PRE_START_STALL_MS`,
+> while a drive clip now takes ONE pass on the short `LOCAL_CLIP_STALL_MS`. ⚠ `?mode` is retired too:
+> the GPS clock is a persisted `simMode` SETTING, default FALSE everywhere, so §1's `__DEV__`-only
+> simulator button is gone. See [`download-before-start.md`](./download-before-start.md).
+
 > **Status update (2026-07-16):** the couch PREVIEW clock (§3.5, `?mode=preview`) is **CUT** — deleted along with `packages/engine/src/preview.ts` / `buildPreviewTimeline` and the preview branches in `useDrive` (mode is `sim | live` now). Auditioning a drive is the native per-stop mini-preview on the drive-detail page; read §3.5 as historical. See [`../decisions/detail-page-mini-preview.md`](../decisions/detail-page-mini-preview.md).
 
 > **Schema-names note (2026-06-13):** identifiers below predate later refactors — read `corridors`→`tours` (merged; `corridor.polyline`→`tour.polyline`) and `poiContentId`→dropped (`poi_content` is gone; narration lives on a `tracks` row). **(V2 2026-06-18):** the segments/tracks model was further collapsed — read `tracks`→`narrations`, `tours`→user-owned `drives`, and the `/tours*` routes → `/drives*`; hand-authored tours are deferred.
 >
 > **(V2 API/DTO + screen drift — 2026-06-19, read before §3/§4/§9):** the data contract this spec describes is the dissolved V1 surface. Map it forward:
-> - **Endpoints:** `GET /tours/:tourId` → `GET /drives/:id`; `POST /tours/:tourId/assets/sign` → `POST /drives/:id/assets/sign` (both under `withSession` + `requireAccount`, [`apps/api/src/drives.ts`](../../apps/api/src/drives.ts)).
+> - **Endpoints:** `GET /tours/:tourId` → `GET /drives/:id` (under `withSession` + a PER-ROUTE `requireAccount`, [`apps/api/src/drives.ts`](../../apps/api/src/drives.ts)). ⚠ **`POST /tours/:tourId/assets/sign` maps to NOTHING.** Its V2 successor `POST /drives/:id/assets/sign` existed until 2026-08-05 and was deleted when drive audio became disk-only — the manifest itself carries each clip's presigned `url`, and that url is what the DOWNLOAD fetches. There is no second call and no re-sign.
 > - **DTO:** the `tourStopView` stop array + inline `corridor.polyline` → a **`drives.selection` jsonb manifest** of `DriveSelectionItem`s (`kind: 'narration'` entries only — the `DriveSelection` type in [`packages/db/src/schema.ts`](../../packages/db/src/schema.ts)); `poiContentId` is gone (a selection item carries `poiId`/`narrationId` and resolves content live). The drive's `polyline` is the top-level `drives.polyline` column.
 > - **Screens:** `app/preview/[id].tsx` / `app/tour/[id].tsx` no longer exist — the live player screens are **`app/drives/[id]/index.tsx`** (detail) + **`app/drives/[id]/play.tsx`** (the driving player). Read every `preview/[id].tsx` reference below as the `drives/[id]/` equivalent.
 > - **Engine-function correction:** this spec calls **`generateDrive` in `@skipper/engine`** "the simulated drive" — but `generateDrive` ([`packages/engine/src/simulate.ts`](../../packages/engine/src/simulate.ts)) only produces the synthetic **GPS-fix stream** for the simulator. The DRIVE *assembler* (pick + order the reused shared narrations along an A→B route) is **`buildDrive`** ([`packages/engine/src/drive-select.ts`](../../packages/engine/src/drive-select.ts)). Where the prose below says `generateDrive` builds a drive, read `buildDrive`; `generateDrive` is only the sim fix source the simulated player replays.
@@ -240,7 +252,7 @@ the API does **not** return the persisted `triggerLat/triggerLng` (they exist in
 `schema.ts:~224`, but aren't exposed). → the player **re-snaps** (see §3.2). The corridor `polyline`
 (`[lng,lat][]`) comes inline in the same tour fetch.
 
-**Audio** comes separately: `POST /tours/:tourId/assets/sign` → `{ urls: [{ seq, url, contentType, durationMs }] }`
+**Audio** came separately in V1: `POST /tours/:tourId/assets/sign` → `{ urls: [{ seq, url, contentType, durationMs }] }`
 (one presigned R2 GET per stop with audio). **Presign TTL = 1 hour** (`apps/api/src/storage.ts`).
 `contentType` is the clip's MIME (e.g. `audio/mp4`), derived server-side from the R2 key — use it to
 pick the on-disk extension; do NOT hardcode the format.
@@ -257,6 +269,24 @@ contentType). At playback prefer the local `file://` if present, else the presig
 1 h TTL lapsed). Note: clips are now **AAC-LC `.m4a` (`audio/mp4`)** (an order of magnitude smaller than the old LINEAR16 WAVs — a few MB/tour),
 but still budget storage + download time + a progress UI that gates "Start drive". Gating is real: a
 non-preview tour needs a signed-in (free) account at prep time (the `/tours` + `/sign` tier check).
+
+> **⚠ V2 CORRECTION (2026-08-05) — the audio half of this section changed shape.** Three claims above are
+> now false, and they fail in the same direction: each assumes a live drive can still reach the network.
+> - **There is no sign call.** `POST /drives/:id/assets/sign` is deleted. `GET /drives/:id` returns a
+>   `DriveManifest` whose every `DriveClip` already carries `url` + `contentType`
+>   (`packages/shared/src/schemas.ts`). Prep is `1× GET /drives/:id` + `N` audio GETs — no `POST /sign`.
+> - **"Prefer the local `file://`, else the presigned URL, re-sign if the TTL lapsed" is gone.** A drive's
+>   audio is only ever played from disk, so there is no online branch left to fall back to and nothing to
+>   re-sign. The presigned url is used ONLY by the download and never has to outlive the transfer.
+> - **The progress UI is no longer a budgeting note — it IS the gate.** The download starts automatically
+>   at CREATE and Start renders disabled with progress beside it until the local copy is complete. §7
+>   Phase 3's throwaway "gate Start drive on download-complete" turned out to be the real design.
+>
+> ⚠ UNCHANGED: the 1 h TTL, the account gate, and the format-is-DATA rule (`contentType` still picks the
+> on-disk extension). ⚠ And this is a DRIVE rule, not an app rule — `GET /sample` and the anonymous
+> route-preview clip play before a drive exists and still stream. Full record, including the two accepted
+> regressions (the mini-preview can only play what is on disk; an OLD undownloaded drive auditions
+> nothing until saved): [`download-before-start.md`](./download-before-start.md) §10 N1/N2.
 
 ---
 
@@ -411,7 +441,11 @@ Pins (`apps/mobile/package.json`): `expo ~56.0.9`, `react-native 0.85.3`, `expo-
 - `apps/mobile/src/lib/api.ts` — `getTour`, `signTourAudio`.
 - `apps/mobile/src/ui/` — `RouteTrack`, `StopRow`, `NowCard`, `Scrubber`, `voice` (use these, follow DESIGN.md).
 - `apps/api/src/index.ts` — `GET /tours/:tourId` (polyline + stops), `POST /tours/:tourId/assets/sign`.
-- `packages/shared/src/schemas.ts` — `tourStopView`, `tourDetail`, `signedClip` DTOs.
+  ⚠ V2: the drive routes live in `apps/api/src/drives.ts`, and the sign route has **no successor** —
+  `GET /drives/:id` alone carries the presigned clip urls (see the §4 correction).
+- `packages/shared/src/schemas.ts` — `tourStopView`, `tourDetail` DTOs. ⚠ V2: read those as `driveClip` /
+  `driveManifest`. The `signedDriveAudio` → `signedStopClip` → `signedClip` chain this line used to name
+  was deleted 2026-08-05 with the sign route.
 - New code you'll add: `apps/mobile/src/lib/gps.ts` (the `GpsFixSource` + `liveSource`/`simulatedSource`
   + the `LocationObject→GpsFix` adapter), `apps/mobile/src/lib/offline.ts` (download + manifest), and the
   driving screen/hook (e.g. `apps/mobile/app/drive/[id].tsx` + `useDrive`).

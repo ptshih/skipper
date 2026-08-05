@@ -8,13 +8,12 @@
 //   POST /drives                     -> generate + persist a user-owned drive (free account; counts a credit)
 //   GET  /drives                     -> the caller's saved drives (one card each)
 //   GET  /drives/:id                 -> replay a saved drive (frozen structure + live narration content)
-//   POST /drives/:id/assets/sign     -> re-presigned clip URLs for offline refresh
 //   POST /drives/plan                -> one turn of planning a drive by talking (ANONYMOUS; spends)
 //   GET  /sample                     -> one curated "taste" clip (anonymous; no location)
 //
 // The app runs on ONE rider artifact: the user-owned DRIVE, assembled from the region's shared
 // narration corpus. Hand-authored tours are deferred and free-roam was removed in 1.1. OWNING a
-// drive needs a free account — the wall is per-route on the five owner routes (D15/INV-15), never on
+// drive needs a free account — the wall is per-route on the four owner routes (D15/INV-15), never on
 // the `/drives*` mount. The open anonymous front door is the planner, `/drives/propose` (route,
 // stop count, and one release-filtered clip from the rider's own route — INV-5), and `/sample`.
 // Audio is private in R2 — presigned on demand after the tier check.
@@ -348,7 +347,7 @@ app.use('/drives/plan', planMinuteLimiter, planHourLimiter)
 app.route('/drives/plan', planRoutes)
 
 // Create-a-Drive: user-owned, on-demand A→B drives over the shared narration corpus. ⚠ The sub-app
-// is NOT blanket-walled — `requireAccount` sits on the five OWNER routes individually (D15/INV-15,
+// is NOT blanket-walled — `requireAccount` sits on the four OWNER routes individually (D15/INV-15,
 // step 8a) so `POST /drives/propose` can serve the anonymous preview. Do NOT add a wall here; it
 // would re-wall the whole funnel, and test/drive-access.test.ts is what catches it.
 app.route('/drives', driveRoutes)

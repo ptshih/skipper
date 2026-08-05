@@ -1,7 +1,7 @@
 // Request-level proof of the /drives ACCESS BOUNDARY (1.1 step 8a — D15/INV-15).
 //
 // ⚠ THIS FILE IS THE PRIMARY CONTROL FOR INV-15, not the deploy ordering. The hazard is INTRA-8a:
-// 8a moved `requireAccount` off the `/drives*` mount onto five individual owner routes, and if it
+// 8a moved `requireAccount` off the `/drives*` mount onto the four individual owner routes, and if it
 // missed ONE, the route that lost its gate WRITES — `GET /` materializes the free grant, `POST /`
 // spends a credit — against an anonymous user id better-auth HARD-DELETES at link with no FK, no
 // cascade and no `purgeUserData` (INV-4), stranding a row forever in an append-only ledger that has
@@ -29,8 +29,9 @@ import { ACCOUNT, ANON, type FakeSession } from './fixtures'
 // inferred Session type.
 //
 // ⚠ ANON/ACCOUNT are SHARED (./fixtures), and ANON is load-bearing in two different ways that are not
-// the same field — the mutation check that keeps this file honest (flip `isAnonymous` and 8 tests here
-// must go red) is written out there. Read it before editing either fixture.
+// the same field — the mutation check that keeps this file honest (flip `isAnonymous` and the
+// anonymous-wall tests here must go red) is written out there, with the count. Read it before editing
+// either fixture.
 
 /** What this file wants the session resolver to answer.
  *  - a FakeSession → that session
@@ -128,13 +129,12 @@ const call = (method: string, path: string, body?: unknown) =>
     }),
   )
 
-/** The five OWNER routes. `POST /propose` is deliberately NOT here — it is the open anonymous front
+/** The four OWNER routes. `POST /propose` is deliberately NOT here — it is the open anonymous front
  *  door (D14). Each body/path is chosen so an ungated request early-returns without touching the DB. */
 const OWNER_ROUTES: [name: string, method: string, path: string, body?: unknown][] = [
   ['POST /drives', 'POST', '/', { start: 'x' }],
   ['GET /drives', 'GET', '/'],
   ['GET /drives/:id', 'GET', `/${BAD_UUID}`],
-  ['POST /drives/:id/assets/sign', 'POST', `/${BAD_UUID}/assets/sign`],
   ['DELETE /drives/:id', 'DELETE', `/${BAD_UUID}`],
 ]
 
@@ -266,7 +266,7 @@ describe('POST /drives/propose is the OPEN anonymous front door (D14)', () => {
 /* -------------------------------------------------------------------------- */
 
 describe('⚠ the route table itself is PINNED (the guard that catches the NEXT route)', () => {
-  // The five hard-coded cases above can only see routes that exist today. This block is what makes a
+  // The four hard-coded cases above can only see routes that exist today. This block is what makes a
   // route added later — `POST /drives/:id/ask` is already named in ../src/entitlements — impossible to
   // land unwalled. Hono records `{ basePath, path, method, handler }` per registered handler and never
   // wraps it, so handler IDENTITY is comparable (verified by this suite passing).
@@ -280,10 +280,11 @@ describe('⚠ the route table itself is PINNED (the guard that catches the NEXT 
    *  should be argued in review — that is the entire point of it being explicit. */
   const OPEN = new Set(['POST /propose'])
 
-  test('exactly the five OWNER routes carry requireAccount', () => {
-    expect(gated).toEqual(
-      new Set(['POST /', 'GET /', 'GET /:id', 'POST /:id/assets/sign', 'DELETE /:id']),
-    )
+  test('exactly the four OWNER routes carry requireAccount', () => {
+    // ⚠ AN EXACT SET, NEVER A SUBSET CHECK. This is the standing guard that catches the NEXT unwalled
+    // route, so a route added later must FAIL here and be argued in, not silently satisfy a "contains
+    // the ones we thought of" assertion. Editing this line is a security-surface diff.
+    expect(gated).toEqual(new Set(['POST /', 'GET /', 'GET /:id', 'DELETE /:id']))
   })
 
   test('⚠ the MOUNT is not walled — a blanket gate would re-wall the anonymous preview', () => {
@@ -334,7 +335,7 @@ describe('⚠ the route table itself is PINNED (the guard that catches the NEXT 
     // `ensureFreeGrant`, which INSERTS the free-allotment row. It is also the likelier vector of the
     // two — the home screen hits it on every launch. If someone "optimises" it back off this list
     // because it is a GET, that is the bug this test exists to stop.
-    // The other three owner routes only touch rows `purgeUserData` already deleted, so they 404 and
+    // The other two owner routes only touch rows `purgeUserData` already deleted, so they 404 and
     // orphan nothing — they stay cached deliberately, which is what preserves the win.
     expect(fresh).toEqual(new Set(['POST /', 'GET /']))
   })

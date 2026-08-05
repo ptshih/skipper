@@ -6,8 +6,8 @@ import { expoClient } from '@better-auth/expo/client'
 import * as SecureStore from 'expo-secure-store'
 // ⚠ AN IMPORT CYCLE, TAKEN KNOWINGLY: auth → offline → api → auth. It is benign under exactly one
 // condition — none of the three may use a binding from the other two at MODULE-EVALUATION time
-// (`api.ts` reads `API_URL`/`authClient` inside `fetchJson`; `offline.ts` calls `getDrive` and
-// `signDriveAudio` inside functions), so the live bindings all resolve at call time under either
+// (`api.ts` reads `API_URL`/`authClient` inside `fetchJson`; `offline.ts` calls `getDrive` inside
+// functions), so the live bindings all resolve at call time under either
 // entry order. Break that and the cycle stops being free: it becomes an `undefined` at boot in
 // whichever module happened to load second, which reads as a mystery crash rather than as a cycle.
 // The acyclic alternative is a separate `sign-out.ts` — rejected because it files `signOut` where no

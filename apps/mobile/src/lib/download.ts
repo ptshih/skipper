@@ -122,16 +122,31 @@ export async function downloadFileWithRetry(
 }
 
 /**
+ * Roughly how many bytes a set of clips will occupy, from their durations alone. The free-space
+ * pre-flight and the rider-facing size disclosure ("~11 MB") are the two readers.
+ *
+ * ⚠ ONE EXPRESSION, TWO CALLERS, deliberately: this used to live INSIDE `assertFreeSpaceFor`, which
+ * computes the estimate and then throws — returning nothing — so a screen wanting to SHOW the number
+ * had no way to ask for it and would have re-implemented `durationMs × APPROX_BYTES_PER_SEC` beside
+ * it. Two copies of one number is how the disclosure ends up disagreeing with the guard that blocks.
+ * The 1.5× headroom stays in the guard: it is a safety margin on a decision, not part of the estimate
+ * a rider is shown.
+ */
+export function estimateDownloadBytes(durationsMs: (number | null | undefined)[]): number {
+  return durationsMs.reduce<number>(
+    (sum, ms) => sum + Math.max(0, (ms ?? 0) / 1000) * APPROX_BYTES_PER_SEC,
+    0,
+  )
+}
+
+/**
  * Pre-flight free-space guard: estimate total bytes from clip durations and require comfortable
  * headroom, so a doomed download fails fast with an actionable message instead of filling the disk
  * and then reporting a misleading "network" error. Skipped entirely when the OS can't report free
  * space (a zero/non-finite reading is "don't know", never "no room"). (audit #174)
  */
 export function assertFreeSpaceFor(durationsMs: (number | null | undefined)[], message?: string): void {
-  const estBytes = durationsMs.reduce<number>(
-    (sum, ms) => sum + Math.max(0, (ms ?? 0) / 1000) * APPROX_BYTES_PER_SEC,
-    0,
-  )
+  const estBytes = estimateDownloadBytes(durationsMs)
   if (estBytes <= 0) return
   let free = 0
   try {

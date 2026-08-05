@@ -46,7 +46,7 @@ export const withSession: MiddlewareHandler<ApiEnv> = async (c, next) => {
  *  ⚠ APPLIED TO EXACTLY TWO ROUTES, and the second one is the surprise: `POST /` (drives + a consume
  *  + `ensureFreeGrant`) and **`GET /`**, which looks like a pure read but calls `ensureFreeGrant` and
  *  therefore INSERTS the free-allotment row. It is also the likelier vector of the two — the home
- *  screen hits it on every launch, while creating a drive is rare and rate-limited. The other three
+ *  screen hits it on every launch, while creating a drive is rare and rate-limited. The other two
  *  owner routes only touch rows the purge already deleted, so they keep the cache and keep the win.
  *
  *  ⚠ IT RUNS AFTER the blanket `driveRoutes.use('*', withSession)` and OVERWRITES what that set. The
@@ -106,9 +106,9 @@ export const ACCOUNT_REQUIRED = {
 
 /**
  * Free-account wall: reject anonymous callers. (Requires withSession upstream.)
- * Applied PER-ROUTE on the five owner routes in drives.ts (D15/INV-15, 1.1 step 8a) — `POST /`,
- * `GET /`, `GET /:id`, `POST /:id/assets/sign`, `DELETE /:id`. It is NOT on the `/drives*` mount,
- * which carries `withSession` alone.
+ * Applied PER-ROUTE on the four owner routes in drives.ts (D15/INV-15, 1.1 step 8a) — `POST /`,
+ * `GET /`, `GET /:id`, `DELETE /:id`. It is NOT on the `/drives*` mount, which carries `withSession`
+ * alone.
  * ⚠ NEVER PUT IT BACK ON THE MOUNT. `POST /drives/propose` is the anonymous preview (D14) and a
  * blanket wall silently re-walls it — as a 401 that reads like an auth bug rather than a routing
  * one. The route table is pinned by test/drive-access.test.ts, which also fails when a NEW route is

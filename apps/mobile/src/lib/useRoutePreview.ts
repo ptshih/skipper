@@ -4,14 +4,17 @@
 // CARD id, because the conversation stacks N proposal cards and N cards must never mean N native
 // players (expo-audio allocates one per useAudioPlayer()).
 //
-// ⚠ THE ONE STRUCTURAL DIFFERENCE FROM useStopPreview: there is no re-sign path. useStopPreview
-// resolves through offline.loadPlayback/resignPlayback and can recover an expired presign; here the
-// url arrives ON THE PROPOSAL and the only endpoint that could mint a fresh one
-// (`POST /drives/:id/assets/sign`) is an OWNER route behind requireAccount — which an anonymous
-// rider, the entire audience for this surface, cannot call. So a dead presign is TERMINAL: mark the
-// card failed and let it say voice.proposal.clipUnavailable. That is the right answer, not a gap —
-// the clip is a taste, not a download, and the honest offer is "make the drive", not a retry that
-// cannot work.
+// ⚠ THE ONE STRUCTURAL DIFFERENCE FROM useStopPreview: THIS CLIP STREAMS, AND HAS TO. It plays BEFORE
+// a drive exists — before the wall, before a credit — so there is nothing on disk it could ever be
+// resolved from. That is the deliberate EDGE of the offline rule ("a DRIVE's audio is only ever played
+// from disk", docs/designs/download-before-start.md §10), not a hole someone forgot to close: a sweep
+// reading "force offline for everything" must not take the front door with it. useStopPreview reads a
+// drive's stops out of offline.loadPlayback's local `file://` map; here the presigned url arrives ON
+// THE PROPOSAL and there is no endpoint that can mint a fresh one for anyone. So a dead presign is
+// TERMINAL: mark the card failed and let it say voice.proposal.clipUnavailable. That is the right
+// answer, not a gap — the clip is a taste, not a download, and the honest offer is "make the drive",
+// not a retry that cannot work. It is also why the pre-start budget below stays the generous remote
+// PRE_START_STALL_MS while useStopPreview dropped to the local one.
 //
 // ⚠ WHICH MAKES REACHING THAT STATE THE WHOLE JOB, and it used to depend on the vendor's goodwill:
 // every failure path ran through `status.error`, whose population for an HTTP 403 on a remote source

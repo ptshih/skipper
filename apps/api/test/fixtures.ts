@@ -44,8 +44,9 @@ export const thereAndBack = (km: number): LngLat[] => [...road(km), ...[...road(
  *
  * `isAnonymous: true` is what makes the access tests real TODAY: it is what `tierOf` reads, so it is
  * what every gate and every backstop keys on. MUTATION-CHECKED 2026-08-01 — flipping it to `false`
- * against an UNMODIFIED drives.ts turns 8 tests red. If it ever stops doing that, the session mock is
- * not driving `tierOf` and those files are theatre.
+ * against an UNMODIFIED drives.ts turns 7 tests red (was 8 until `POST /:id/assets/sign` was deleted
+ * with the streaming path, 2026-08-05). If it ever stops doing that, the session mock is not driving
+ * `tierOf` and those files are theatre.
  *
  * The TRUTHY `id` is the other half, and it guards a FUTURE regression rather than a present one.
  * After the anonymous mint (D16) an anonymous session IS a real `user` row with a real id, so an

@@ -3,11 +3,16 @@
 > **Update (2026-07-16):** the couch **PREVIEW is CUT.** Any step that says to tap **"Take the simulated
 > drive"** or open a `?mode=preview` player is OBSOLETE — that CTA and mode are gone. Auditioning is now
 > the drive-detail mini-preview (List/Map toggle + tap a stop to hear one clip); the "Preview drive"
-> header and tappable-rows-only-in-preview checks below no longer apply (the live/sim player's list is
-> always read-only). The dev `⋯ → "Simulate the drive"` sim path is unchanged. See
+> header and tappable-rows-only-in-preview checks below no longer apply. ⚠ **Two clauses of this
+> banner went stale on 2026-08-05:** the player's list is NO longer "always read-only" (a PASSED stop
+> is tappable — §4), and the dev `⋯ → "Simulate the drive"` item is DELETED, not unchanged (§11 of the
+> download-before-start doc). See
 > [`../decisions/detail-page-mini-preview.md`](../decisions/detail-page-mini-preview.md).
 
-> **Status:** guide (written 2026-06-10) — ⚠ **written against the M1 player, BEFORE the conversation
+> **Status:** guide (written 2026-06-10) — ⚠ **PARTLY SUPERSEDED 2026-08-05** by the
+> download-before-start gate: the unsaved-drive alert, the `?mode` param and drive-audio streaming are
+> all gone, and §§2–4, §6–§8 were rewritten that day against what replaced them (the banner below
+> carries the deltas). ⚠ **written against the M1 player, BEFORE the conversation
 > was the home screen. For a 1.1 submission pass, execute
 > [1-1-submission-sweep.md](1-1-submission-sweep.md) instead**, which supersedes this file's ordering and
 > adds the two desk passes that stand in for RISK-1's real drive. This one stays useful for the
@@ -19,12 +24,34 @@
 > the dev build) and `docs/designs/gps-player-spec.md` §6–§7 (the engineering accept bar this reports
 > against).
 
-> **Update (2026-07-30):** the offline download is **no longer `⋯`-only.** The placard now always shows
-> an offline state (a faint `Not saved` chip when it isn't downloaded — that slot used to render
-> nothing), a **"Save for offline"** button sits on the main path under the Start CTA, and starting a
-> live drive that isn't saved raises a one-time **"This drive isn't saved yet"** alert (Save it first /
-> Start anyway / Cancel) — never a block. Steps that expect Start to open the player *immediately*, or
-> an empty permit row before a download, are updated below. The `⋯` entry itself is unchanged.
+> **Update (2026-07-30, ⚠ half of it SUPERSEDED 2026-08-05 — read the next banner):** the offline
+> download is **no longer `⋯`-only.** The placard now always shows an offline state (a faint
+> `Not saved` chip when it isn't downloaded — that slot used to render nothing). The **"Save for
+> offline"** button that sat under the Start CTA, and the one-time *"This drive isn't saved yet"*
+> alert, are both GONE — see below. The `⋯` entry itself is unchanged.
+
+> **Update (2026-08-05) — THE DOWNLOAD IS THE GATE, and the alert is deleted.**
+> ([`../designs/download-before-start.md`](../designs/download-before-start.md)). Three things change
+> what a tester does:
+> - **A drive's audio is only ever played from DISK.** The streaming path for a drive is gone with the
+>   whole re-sign ladder (`POST /drives/:id/assets/sign`, `resignPlayback`, `signDriveAudio`, the
+>   "Playing from download" chip, the `resign_failed` skip reason). Any step below that says "it
+>   streams", "it re-signs", or reads the chip is checking something that no longer exists.
+> - ⚠ **This is NOT "the app never streams".** `GET /sample` and the anonymous route-preview clip play
+>   BEFORE a drive exists, with nothing on disk to play from — they deliberately still stream, on the
+>   generous 12 s `PRE_START_STALL_MS`. §6's one-off-clip checks still exercise a real network fetch.
+> - **Start stopped being an Alert and became a STATE.** *"This drive isn't saved yet" /
+>   Save it first / Start anyway / Cancel* is deleted — `'Start anyway'` was deleted as a STRING, not
+>   relocated, because a live one is how a gate quietly grows a bypass. The copy now downloads
+>   automatically the moment a drive is CREATED, Start renders disabled with progress beside it while
+>   that runs, and it turns itself on when the last clip lands. The separate "Save for offline" button
+>   collapsed INTO that CTA: it appears only when nothing is running and a download is what's owed.
+> - **`?mode` is retired.** The GPS clock is a SETTING (Settings → Developer → SIMULATED GPS,
+>   admin-gated + persisted) defaulting **false everywhere, `__DEV__` included**, and the `__DEV__`
+>   "Simulated drive" ⋯ item is gone. The steps below were rewritten off the param that day; any
+>   `?mode=…` still visible is quoted as HISTORY, never as something to type. The deep link
+>   `skipper://drives/<id>/play` now says nothing about mode, on purpose — which is what closes the
+>   bypass structurally rather than by adding a check.
 
 ## Why this exists
 
@@ -190,46 +217,84 @@ verified — they share the build, so do them together.
   and a StopRow truncates to one line, so a legit long name ending in `…` on the row is **expected**,
   not un-cleaned cruft. (`apps/mobile/src/lib/labels.ts:29-32`)
 - [ ] **Offline permit chip.** Do: signed in, open an UNDOWNLOADED drive and read the placard's permit
-  row *before* doing anything; then tap "Save for offline" (or `⋯` → "Download for offline"). Expect:
-  a faint `Not saved` chip with a vector cloud icon at rest → a faint `Saving k/total` label while it
-  runs → a `Saved offline` chip with the "downloaded" icon; the `⋯` item flips to a destructive
-  "Remove download". Watch-for: the chip colliding with the `N STOPS · ~M MIN` text on a narrow
-  device — **the permit row now ALWAYS carries a chip, so this collision is far likelier than when the
-  slot could be empty**; tofu icon (must be vector, not emoji); the row not wrapping at large text.
+  row *before* doing anything; then tap the "Save for offline" CTA (or `⋯` → "Download for offline").
+  Expect: a faint `Not saved` chip with a vector cloud icon at rest → a faint `Saving k/total` label
+  while it runs → a `Saved offline` chip with the "downloaded" icon; the `⋯` item flips to a
+  destructive "Remove download". Watch-for: the chip colliding with the `N STOPS · ~M MIN` text on a
+  narrow device — **the permit row now ALWAYS carries a chip, so this collision is far likelier than
+  when the slot could be empty**; tofu icon (must be vector, not emoji); the row not wrapping at large
+  text; the count under the button disagreeing with the chip (there is only ONE count, on the chip).
   (`apps/mobile/app/drives/[id]/index.tsx` — the permit-row chip ladder + `styles.permitRow`)
-- [ ] **Unsaved-drive guard (2026-07-30).** Do: signed in, on an UNDOWNLOADED drive tap the primary
-  "Start the drive". Expect: a one-time alert "This drive isn't saved yet" with **Save it first** /
-  **Start anyway** / Cancel — *not* the player. "Start anyway" opens the live drive; "Save it first"
-  begins the download and stays put (progress in the permit row). Then repeat on a SAVED drive and on
-  one mid-download: both must go straight into the player with **no alert at all**. Watch-for: the
-  alert firing on a saved drive (the guard reading stale state); three buttons stacking badly at large
-  text; "Save it first" navigating anywhere. (`apps/mobile/app/drives/[id]/index.tsx` — `startDrive`)
+- [ ] **★ The download GATE, in its three states (2026-08-05 — replaces the deleted unsaved-drive
+  alert).** Do: signed in, walk one drive through all three. Expect —
+  **(a) nothing saved, online:** there is no Start at all; the CTA is **"Save for offline"** with the
+  `saveHint` and a courtesy **"About N MB."** size line under it. Tap it. (⚠ If bytes for this drive
+  already exist on disk the same slot reads **"Recover it without downloading again"** and the size
+  line is correctly absent — a repair moves no bytes.)
+  **(b) while it runs:** the CTA becomes **"Saving for the road…"**, *disabled*, with
+  "Start opens up the moment the last stop lands." under it and `Saving k/total` on the placard chip.
+  **(c) when it lands:** the CTA turns itself into the live Start with **no tap from you**.
+  Watch-for: **any "Start anyway" / "This drive isn't saved yet" alert** — that string was deleted, and
+  its return means the gate grew a bypass; a size prompt or a "download over cellular?" dialog (the
+  size line is a LABEL, never a gate — founder call, made on the measurement that our largest drive is
+  ~11 MB); a disabled Start with nothing running and no explanation (the one case the "never disable"
+  instinct is actually about — it should be an actionable CTA instead).
+  (`apps/mobile/app/drives/[id]/index.tsx` — `decideDriveGate` + the CTA ladder)
+- [ ] **★ The download survives navigation, and only Cancel stops it.** Do: start a download, then back
+  out to MY DRIVES and re-enter the drive; then start another and use `⋯` → "Cancel download". Expect:
+  the first is still running (or finished) on re-entry — progress continues from where it was, never
+  from zero; the second stops and STAYS stopped (it must not silently auto-restart). Watch-for: a
+  transfer that dies on unmount (the screen still owns an `AbortController` it shouldn't); a cancelled
+  download re-firing the instant you cancel it. (`apps/mobile/src/lib/offline.ts` — the module-level
+  in-flight + progress registry)
+- [ ] **★ Auto-download at CREATE, and only at create.** Do: create a NEW drive from the home
+  conversation and watch the detail screen you are pushed onto without touching anything; then open an
+  OLD, never-saved drive from MY DRIVES. Expect: the new one starts saving by itself within a second or
+  two and Start enables when it lands; the old one starts NOTHING and shows the "Save for offline" CTA
+  until you ask. Watch-for: an old drive spending tens of MB on a glance (the auto-start got keyed on
+  the navigation push instead of the create handler — the two pushes are byte-identical, which is the
+  whole trap). (`apps/mobile/app/index.tsx` — the create handler's `downloadDrive`)
 
 ## §3 — The gate: anonymous vs signed-in (the honest sample ride)
 
-Preview is the open funnel; the wall is the **live drive + offline download** for an anonymous user.
+⚠ **The open funnel MOVED in 1.1 and again on 2026-08-05.** The anonymous taste is no longer a couch
+preview of somebody's drive: it is the planner conversation, ONE server-chosen preview clip from the
+rider's own proposed route, and `GET /sample` — all of which **stream**, because they play before a
+drive (and therefore any download) exists. The wall is `POST /drives`. A DRIVE is user-owned, so
+opening one at all needs an account; that is what the gates below catch.
 
-- [ ] **Every drive previews with no account.** Do: signed out, open any drive → tap "Take the
-  simulated drive". Expect: detail renders fully (placard + summary + itinerary) anonymously; the
-  preview player opens and autostarts; header "Preview drive". **No gate, ever, on this path.**
-  Watch-for: a 401 gate appearing on detail or preview (preview must never 401).
-  (`apps/mobile/app/drives/[id]/index.tsx:120-121`, `play.tsx:45-47`)
-- [ ] **Live-drive gate keeps its promise.** Do: signed out, tap the primary "Start the drive"
-  (`?mode=live`); the fetch 401s → AccountGate. Read it, then tap the ghost "Just take the sample
-  ride". Expect: gate titled "Grab your ticket", FREE badge, note "This is the live, on-the-road
-  drive.", primary "Get my free ticket", ghost "Just take the sample ride" — and the ghost **routes
-  into the open couch preview** (`?mode=preview`), no bounce back. Watch-for: the ghost being a
-  no-op `back()` (the exact regression `6ee056c` fixed); gate body + note both saying "needs a free
-  ticket" (stutter). (`apps/mobile/app/drives/[id]/play.tsx:150-163`, `src/ui/AccountGate.tsx:43-47`)
+- [ ] **The anonymous taste never 401s.** Do: signed out, from the home conversation ask for a real
+  in-region route, then play the clip under **A TASTE OF THIS ONE**; separately, tap
+  "Not near Tahoe? Hear a quick sample." Expect: both play, streamed, with **no sign-in and no
+  location prompt anywhere on the path**. Watch-for: any account gate on either (they are the front
+  door — a gate here is the funnel's numerator dropping to zero); either one going silent because
+  someone "forced offline for everything" and took the streaming front door with it.
+- [ ] **Live-drive gate keeps its promise.** Do: signed out, open a drive deep link or tap
+  "Start the drive"; the owner-scoped fetch 401s → AccountGate. Read it, then tap the ghost
+  "Just take the sample ride". Expect: gate titled "Grab your ticket", note "This is the live,
+  on-the-road drive.", primary "Get my free ticket", ghost "Just take the sample ride" — and the ghost
+  routes to **`/sample`** (the curated postcard). ⚠ It used to route into a `?mode=preview` player of
+  THIS drive, which re-hit the same account-gated fetch and looped the rider back onto the gate
+  forever; `?mode` no longer exists at all. Watch-for: the ghost being a no-op `back()` (the exact
+  regression `6ee056c` fixed); gate body + note both saying "needs a free ticket" (stutter).
+  (`apps/mobile/app/drives/[id]/play.tsx` — the `phase === 'gate'` branch, `src/ui/AccountGate.tsx`)
+- [ ] **★ The player's OWN download gate (the deep-link case).** Do: signed in, with a drive that is
+  NOT fully saved, open `skipper://drives/<id>/play` directly (no detail screen in the stack). Expect:
+  the download gate, **not** the player and **not** a location prompt — the message is the save hint
+  and the action takes you to the drive screen (which owns the download, its progress and its honest
+  offline message). Watch-for: the player starting anyway (the gate lives only on the CTA — that is a
+  bypass, and it was the reason the gate was put in two places keyed on one expression); the iOS
+  location prompt firing first, spending the one prompt we get on a drive that cannot roll.
+  (`apps/mobile/app/drives/[id]/play.tsx` — the `needsDownload` branch, above `locationPrime`)
 - [ ] **Download gate "Keep browsing" restores the drive.** Do: signed out, `⋯` → "Download for
   offline"; the 401 swaps detail for the AccountGate. Tap the ghost "Keep browsing". Expect: it
   returns to the fully-rendered drive-detail **in place** (`setNeedsAccount(false)`) — it does NOT pop
   to home. Watch-for: wrong ghost label, or it popping the stack to the drives list.
   (`apps/mobile/app/drives/[id]/index.tsx:51-67,150-157`)
 - [ ] **Signed-in user never sees the gate.** Do: sign in (free account), tap "Start the drive" and
-  separately "Save for offline" (or `⋯` → "Download for offline"). Expect: live drive opens (⚠ on an
-  UNSAVED drive the "This drive isn't saved yet" alert comes first — that's the offline guard above,
-  not the account gate; dismiss with "Start anyway"), and a *location* permission gate may follow —
+  separately "Save for offline" (or `⋯` → "Download for offline"). Expect: the live drive opens (⚠ on
+  an UNSAVED drive there is no Start to tap at all — the download gate above owns that CTA; save it
+  first, which is a wait, not an alert to dismiss), and a *location* permission gate may follow —
   that's GPS, §7. Download shows the not-saved→saving→saved chip; no AccountGate. Watch-for: a signed-in user still hitting "Grab your ticket" (session cookie not sent);
   or staying stuck on the gate after signing in from it (the play-screen session-retry should drop
   them into the drive). (`tierOf` in `packages/shared/src/access.ts` — the one implementation both the
@@ -242,6 +307,17 @@ Preview is the open funnel; the wall is the **live drive + offline download** fo
 
 Same component (`apps/mobile/src/ui/StopList.tsx`) in two modes.
 
+⚠ **How to get a simulated drive now (2026-08-05):** the `__DEV__` `⋯` → "Simulated drive" item is
+GONE — and note it never said "sim" in the first place: it pushed a BARE `/play` and leaned on
+`__DEV__` to be read that way, which is precisely why the param was retired. Sign in as an **admin**,
+then **Settings → Developer → SIMULATED
+GPS → "Simulated"** (the alternative is "Real GPS", which is the default in every build, `__DEV__`
+included). It is one persisted value that the player reads, so the drive you get from "Start the
+drive" IS the simulated one; the "Real time / 8× faster" knob appears on the ready card. ⚠ **Turn it
+back to Real GPS afterwards** — leaving it on silently simulates the next real drive and suppresses
+the admin trace recorder, which is gated on a `live` drive. And note the drive still has to be
+DOWNLOADED first: sim behaves exactly as live, deliberately, so our own QA runs the gate riders run.
+
 - [ ] **Detail = one card, page scrolls.** Do: on drive detail, scroll to the itinerary (under the
   hint + List/Map row). Expect: a single raised card of hairline-ruled ONE-LINE rows (glyph + name +
   a mono clip length on the right; a type word — `View` / `Pit stop` — appears before the length only
@@ -251,8 +327,8 @@ Same component (`apps/mobile/src/ui/StopList.tsx`) in two modes.
   looking active/checked on the static screen; the same type label repeating down every row (the
   wallpaper this replaced).
   (`apps/mobile/app/drives/[id]/index.tsx:283`, `src/ui/StopList.tsx:105`)
-- [ ] **Player = fixed shell, rows scroll inside.** Do: open the player (Preview, or dev `⋯` → "Sim
-  drive"); drag up/down inside the route card between the trail (top) and the player dock (bottom).
+- [ ] **Player = fixed shell, rows scroll inside.** Do: open the player (a saved drive, sim or live);
+  drag up/down inside the route card between the trail (top) and the player dock (bottom).
   Expect: the card's outer rounded rect (all four corners) stays anchored and fills the gap; only the
   rows slide inside it. Watch-for: the whole card scrolling with the page; the card collapsing to
   content height and leaving a gap (flex:1 not applied); rows not scrolling at all (clipped out of
@@ -262,7 +338,7 @@ Same component (`apps/mobile/src/ui/StopList.tsx`) in two modes.
   stays a clean rounded rect, nothing spills past the corners. Watch-for: content leaking over square
   corners (`overflow:hidden` not honoured on iOS for the rounded card).
   (`apps/mobile/src/ui/StopList.tsx`, `src/ui/Card.tsx`)
-- [ ] **Active "now" row is a TICK, not a filled row.** Do: play a preview/sim drive; find the current
+- [ ] **Active "now" row is a TICK, not a filled row.** Do: play a sim drive; find the current
   stop's row. Expect: a short **pine rule in the row's left margin** (aligned with the divider rules'
   own inset), pine/accent glyph (never amber), bold name, and `NOW` where other rows show their
   length; passed rows dimmed with the check in place of the glyph; only one active at a time.
@@ -295,11 +371,19 @@ Same component (`apps/mobile/src/ui/StopList.tsx`) in two modes.
   list snapping back every ~0.5s (the pre-fix regression — stops array rebuilt each tick); a jump the
   instant you release; auto-scroll never resuming (grace timer stuck).
   (`apps/mobile/app/drives/[id]/play.tsx:101,113,128`)
-- [ ] **Rows tappable only in preview.** Do: in *preview*, note the faded hint line above the list
-  and tap a row; then in a *sim/live* drive, try tapping a row. Expect: preview rows jump the drive
-  to that stop (brief pressed dim); drive rows are read-only — no hint line, no pressed feedback,
-  nothing happens. Watch-for: a real/sim row tap jumping the clock; preview taps doing nothing.
-  (`apps/mobile/app/drives/[id]/play.tsx:346,358`, `src/ui/StopRow.tsx:64-65`)
+- [ ] **★ Rows are tappable for PASSED stops only (2026-08-05 — replaces "read-only on the drive").**
+  Do: mid-drive, in the quiet between clips, tap a stop the road has already gone by; then tap an
+  UPCOMING row; then tap a passed row *while a clip is playing*; then tap a passed row and, before it
+  finishes, let the car reach a real stop. Expect: the passed row re-hears that stop (brief pressed
+  dim) on the same mechanism as "Replay that"; the upcoming row does **nothing** and does not even
+  announce itself as a button to VoiceOver (the pressability is PER-ROW, not per-list); a tap over a
+  playing clip is refused, exactly as the Replay button is; and a live GPS trigger **preempts** the
+  replay — the road always wins. Watch-for: an upcoming row playing ahead (it would then fire AGAIN on
+  approach and the rider hears it twice, since a replay deliberately never touches the fired set); two
+  taps in a row queueing two replays, the second of which the road can no longer preempt; a tap
+  resetting the retry state for every other stop in the drive.
+  (`apps/mobile/app/drives/[id]/play.tsx` — `replayFromRow` + `canPressItem={d.isReplayable}`,
+  `src/lib/useDrive.ts` `isReplayable`/`replayStop`)
 
 ## §5 — The drive-complete moment (reach it via the 8× sim)
 
@@ -352,7 +436,7 @@ conflate them. Use a real device with a real music app; the simulator can't run 
 
 **Drive player** (`doNotMix`, unchanged):
 - [ ] **Rider's music pauses for the drive, resumes at the end.** Do: start Spotify; return to
-  Skipper, start a sim/preview drive. Expect: the music **pauses** when the drive's audio takes over
+  Skipper, start a sim or live drive. Expect: the music **pauses** when the drive's audio takes over
   and **resumes** when you end the drive / leave the player. Watch-for: music ducking instead of
   pausing (wrong mode); never resuming after the drive ends (the resume landmine — report it).
   (`apps/mobile/src/lib/useDrive.ts:67`)
@@ -374,24 +458,33 @@ conflate them. Use a real device with a real music app; the simulator can't run 
 > (`useStopPreview.ts`, `useRoutePreview.ts`, `useDrive.ts`) instead of one.
 
 - [ ] **★ A one-off clip pauses the rider's music and gives it back.** Do: start Spotify; return to
-  Skipper and play the free sample, then a stop from a drive-detail page. Expect: the music **pauses**
-  when the skipper starts and **resumes** within a beat of the clip ending — from EACH surface, tested
-  separately. Watch-for: music **staying paused** after the clip (the hand-back didn't take — the core
-  risk, and the failure this section exists for); ducking instead of pausing; the skipper overlapping.
-- [ ] **A clip that never sounds never touches the music.** Do: play one on thin/no signal, or
-  interrupt it mid-load. Expect: focus is taken only on real audio, so the rider's music is untouched.
-  Watch-for: music pausing for a clip that then fails to play. (⚠ `preview-util.ts` calls this out as
-  "the obligation that was missed, twice" — a clip that merely ATTEMPTED to play still owes the
-  hand-back.)
-- [ ] **Same behaviour in live mode.** Do: re-confirm in a real `?mode=live` session (the audio session
-  is mode-agnostic). Watch-for: any `live`↔`sim` divergence (would be surprising — report it).
-  (`apps/mobile/app/drives/[id]/play.tsx:45`)
+  Skipper and play the free sample, then the route-preview clip under **A TASTE OF THIS ONE**, then a
+  stop from a drive-detail page (that drive must be SAVED — the mini-preview plays only from disk).
+  Expect: the music **pauses** when the skipper starts and **resumes** within a beat of the clip
+  ending — from EACH of the three surfaces, tested separately. Watch-for: music **staying paused**
+  after the clip (the hand-back didn't take — the core risk, and the failure this section exists for);
+  ducking instead of pausing; the skipper overlapping.
+- [ ] **A clip that never sounds never touches the music.** Do: play the sample or the route-preview
+  clip on thin/no signal (those two still STREAM, so the network is the way to force this), or
+  interrupt one mid-load. Expect: focus is taken only on real audio, so the rider's music is
+  untouched. Watch-for: music pausing for a clip that then fails to play. (⚠ `preview-util.ts` calls
+  this out as "the obligation that was missed, twice" — a clip that merely ATTEMPTED to play still
+  owes the hand-back.)
+- [ ] **Same behaviour on a live drive.** Do: re-confirm with SIMULATED GPS off (the audio session is
+  mode-agnostic). Watch-for: any `live`↔`sim` divergence — surprising by construction now, since the
+  mode is one persisted boolean the player reads and nothing else branches on it. Report it.
+  (`apps/mobile/app/drives/[id]/play.tsx` — `driveMode = simMode ? 'sim' : 'live'`)
 
 ## §7 — Real GPS, outdoors & in motion (Phase 4 — the bike/drive test)
 
-Foreground When-In-Use only. Mode resolves to `live` via "Start the drive" (`index.tsx:263` →
-`?mode=live`). A missing/malformed `?mode` falls back to `sim` only in `__DEV__`, else `preview` —
-**never `live`** — so a release build never lands a rider on the sim clock.
+Foreground When-In-Use only. ⚠ **`?mode` is retired (2026-08-05)** — the clock is now one expression,
+`driveMode = simMode ? 'sim' : 'live'`, read from the persisted Settings → Developer toggle. That
+toggle is **false everywhere by default, `__DEV__` included** (a `__DEV__` default would have silently
+simulated the founder's own real drive and produced no admin trace of a drive that cannot be
+re-recorded). So "Start the drive" on any build is a LIVE, real-GPS drive unless someone deliberately
+flipped it — and `skipper://drives/<id>/play?mode=live` no longer says anything, because nothing reads
+it. ⚠ Every live drive here needs the drive SAVED first; the player's own download gate sits ABOVE the
+location prompts, so a drive that cannot roll never spends iOS's one-shot permission prompt.
 
 - [ ] **Permission prompt on first live drive.** Do: fresh permission state, tap "Start the drive",
   satisfy the account gate, tap Play. Expect: the iOS When-In-Use dialog with "Skipper uses your
@@ -409,11 +502,14 @@ Foreground When-In-Use only. Mode resolves to `live` via "Start the drive" (`ind
   fix fails the 50m gate — a silent dead drive, exactly what the reduced gate prevents); staying
   stuck on the stale gate after returning from Settings.
   (`apps/mobile/src/lib/gps.ts:140`, `useDrive.ts:854`)
-- [ ] **Live mode uses REAL GPS.** Do: start a live drive; observe the ready screen, then stand still
-  vs move. Expect: **no** "Real time / 8× faster" toggle (that's sim-only), header reads "live drive";
-  the route dot stays put while stationary and advances proportionally to real distance as you move.
-  Watch-for: the 8× toggle appearing (fell back to sim); the dot advancing on a timer while still;
-  header saying "simulated drive". (`apps/mobile/src/lib/useDrive.ts:523`, `play.tsx:325,404`)
+- [ ] **Live mode uses REAL GPS.** Do: with Settings → Developer → SIMULATED GPS on **Real GPS**,
+  start a drive; observe the ready screen, then stand still vs move. Expect: **no** "Real time / 8×
+  faster" toggle (that's sim-only), **no `SIM` tag** beside the stop counter in the itinerary header
+  (only the simulator half is ever announced — a live drive says nothing, which is the un-newsworthy
+  case); the route dot stays put while stationary and advances proportionally to real distance as you
+  move. Watch-for: the 8× toggle or the `SIM` tag appearing (the persisted toggle is on — check
+  Settings, since nothing else can put you in sim any more); the dot advancing on a timer while still.
+  (`apps/mobile/src/lib/useDrive.ts`, `app/drives/[id]/play.tsx` — `driveMode`)
 - [ ] **iOS −1 sentinel is handled.** Do: watch the first seconds before GPS settles (cold start
   outdoors / stepping out from indoors); also crawl/stand near a stop. Expect: a "Looking for the
   satellites — hang tight." cue after ~8s of no usable fix, **not** a frozen screen or a spuriously
@@ -472,18 +568,42 @@ Foreground When-In-Use only. Mode resolves to `live` via "Start the drive" (`ind
   controls — if so that's a **missing background-audio mode** (a native add + rebuild), not a GPS
   bug. (`apps/mobile/src/lib/useDrive.ts:276`, `app.json:11`)
 
-## §8 — Offline (Phase 3) — airplane-mode acceptance
+## §8 — Offline — airplane-mode acceptance (⚠ no longer a Phase-3 extra: it is the ONLY way a drive plays)
 
-- [ ] **Download, then drive with zero network.** Do: signed in, on tour detail `⋯` → "Download for
-  offline"; wait for completion; turn on **Airplane Mode** (confirm Wi-Fi/Tailscale off); reopen the
-  tour and start preview/live, and pull up the home list. Expect: the `⋯` item flipped to "Remove
-  offline download"; in Airplane Mode the detail still renders (from the saved manifest) and audio
+- [ ] **Download, then drive with zero network.** Do: signed in, save a drive (the CTA, or `⋯` →
+  "Download for offline"); wait for completion; turn on **Airplane Mode** (confirm Wi-Fi/Tailscale
+  off); reopen the drive and start it, and pull up the home list. Expect: the `⋯` item flipped to
+  "Remove download"; in Airplane Mode the detail still renders (from the saved manifest) and audio
   plays from local `file://` bytes (intro/outro brackets + every stop) with no network; the home list
-  still shows the downloaded drive. Watch-for: download "finishes" but playback is silent/errors
-  (clips not actually on disk); files written to OS-evictable cache instead of the document dir;
-  manifest storing absolute `file://` URIs (must be **relative** filenames) or presigned R2 URLs
-  (~1h TTL) instead of bytes → playback dies after an hour offline; a half/failed download reading as
-  ready. (`apps/mobile/src/lib/offline.ts:112-176,287-299`)
+  still shows the downloaded drive. ⚠ There is no longer a "Playing from download" chip to look for —
+  it was deleted because a chip asserting what is now always true asserts nothing. Watch-for: download
+  "finishes" but playback is silent/errors (clips not actually on disk); files written to OS-evictable
+  cache instead of the document dir; manifest storing absolute `file://` URIs (must be **relative**
+  filenames) or presigned R2 URLs (~1h TTL) instead of bytes → playback dies after an hour offline; a
+  half/failed download reading as ready; **any network request at all while a drive plays**.
+  (`apps/mobile/src/lib/offline.ts` — `loadPlayback` is disk-only now)
+- [ ] **★★ THE ONE CHECK THE BUILD STILL OWES: does a real local clip start inside
+  `LOCAL_CLIP_STALL_MS`?** ⚠ The pre-start watchdog dropped from the 12 s remote budget
+  (`PRE_START_STALL_MS`) to **2.5 s** for a file on disk (`packages/engine/src/player.ts`), and
+  **2.5 s is a DESK ESTIMATE** — a guess at the worst case, a cold read of a ~1 MB `.m4a` while the OS
+  is busy elsewhere. It has never been measured on a phone. Do: drive a saved drive end to end on the
+  oldest/coldest device you have, cold-launched, ideally with the phone otherwise busy (a big download
+  in another app, low power mode, Airplane Mode so nothing else competes). Expect: **every** stop's
+  audio starts — no stop announced and then skipped. Watch-for: **`stop_skipped` with reason
+  `load_timeout` on a clip that is provably on disk** — replay that stop from its row (§4) and if it
+  plays fine, the watchdog fired early. That is the failure mode that matters: the generous 12 s
+  existed because expo-audio's status reporting was NOT trusted here (`sawFresh` exists because
+  `playing` flips true on the play() *intent*), so if local decode state lags the same way, the short
+  value **skips clips that would have played — trading dead air for LOST STOPS, which is the worse
+  currency.** If you see even one, report the value, don't quietly raise it: this is the precondition
+  the shorter threshold shipped on. (`packages/engine/src/player.ts` `LOCAL_CLIP_STALL_MS`,
+  `apps/mobile/src/lib/useDrive.ts` — the clip-load watchdog)
+- [ ] **A genuinely dead local clip still skips, once.** Do: force one (remove a clip file from the
+  drive's directory, or interrupt a download so a stop's bytes never land) and drive past it. Expect:
+  ~2.5 s of quiet, then the drive **moves on** — one pass, not two. ⚠ The re-sign rung is gone, so a
+  dead clip costs a couple of seconds, not the old 24 s. Watch-for: the drive hanging on it; a second
+  wait (the deleted rung came back); the skip reason reading `resign_failed` (deleted — a local file
+  cannot expire, so the only cause left is a truncated or undecodable download).
 
 ---
 
@@ -498,11 +618,19 @@ Foreground When-In-Use only. Mode resolves to `live` via "Start the drive" (`ind
 
 ## Map notes for the tester / next agent (current code, not stale memory)
 
-- The drive/preview/sim screen is **one file**: `apps/mobile/app/drives/[id]/play.tsx`, switched by
-  `?mode=` (`live | preview | sim`). There is no `app/drive/[id].tsx` or `app/preview/[id].tsx`
-  (older memory names them — they don't exist). Tour detail is `apps/mobile/app/drives/[id]/index.tsx`.
+- The drive player is **one file**: `apps/mobile/app/drives/[id]/play.tsx`, and since 2026-08-05 it is
+  **one route with one meaning** — no `?mode`, no couch preview, just `driveMode = simMode ? 'sim' :
+  'live'` off the persisted Settings toggle. There is no `app/drive/[id].tsx` or `app/preview/[id].tsx`
+  (older memory names them — they don't exist). Drive detail is `apps/mobile/app/drives/[id]/index.tsx`.
 - No dedicated drive-complete component — composed inline in `play.tsx` + the StopList/StopRow stamp
   path. The completion tally is a **static `{N} STOPS`**, not an animated odometer. The "passport
   cascade" is the existing itinerary's checkmarks stamping in, not a separate passport screen.
-- The active "now" row is a **surfaceSunken well**, not a raised chip (changed in `1f449e0`).
-- A missing/malformed `?mode` falls back to `sim` only in `__DEV__`, else `preview` (never `live`).
+- The active "now" row is a **pine tick in the row's left margin** — no background fill. (It WAS a
+  `surfaceSunken` well; that drew a rounded rect inside the card's own rounded rect and read as two
+  overlapping selections. See §4's check, which is the current truth.)
+- **There is no `?mode` to be missing or malformed.** The sim clock is a persisted SETTING, default
+  false in every build including `__DEV__`, and the player carries no build-type branch — the
+  environment picks a *default value*, it does not participate in *deciding*.
+- **A drive's audio is only ever played from disk**, so there is no streaming fallback, no re-sign, and
+  no `POST /drives/:id/assets/sign`. ⚠ `GET /sample` and the anonymous route-preview clip are the
+  deliberate exception and still stream — they play before a drive (and any download) exists.

@@ -121,8 +121,12 @@ function TranscriptCardBase({
   const previewClip = useMemo((): ReactNode => {
     const clip = item.proposal?.previewClip
     if (!clip) return null
-    // The presign is DEAD and this surface cannot mint another (`/drives/:id/assets/sign` is an owner
-    // route), so the disc goes with it.
+    // The presign is DEAD and this surface cannot mint another, so the disc goes with it. ⚠ That used
+    // to be true because re-signing was an OWNER route an anonymous rider could not reach; since
+    // 2026-08-05 there is no re-sign route at all (a drive's audio only ever plays from disk — see
+    // docs/designs/download-before-start.md §10). The conclusion is unchanged and now unconditional.
+    // ⚠ This clip is on the OTHER side of that boundary: it plays BEFORE a drive exists, so it has no
+    // disk to come from and deliberately still streams — which is exactly why its TTL is generous.
     if (clipFailed) {
       return (
         <View style={styles.clipRow}>

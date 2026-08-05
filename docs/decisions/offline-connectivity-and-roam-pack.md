@@ -18,6 +18,11 @@ seam, which 1.1 re-keyed by **narration subject id + revision** (`<kind>-<subjec
 at — a region-level pack — was CUT; `docs/designs/offline-region-packs.md` records why no bbox rule
 can cover a selection frozen under a different one. Unverified on a real device — see *Still open*.
 
+⚠ **AMENDED 2026-08-05:** two claims below were overtaken by the download gate — the `signDriveAudio`
+pre-flight opt-out (that function is deleted) and *"Offline is a NUDGE, never a block"* (which now
+has one carved-out exception). Both are addressed in the dated addendum in place; the connectivity
+verdict itself is unchanged.
+
 ## The problem, as surveyed rather than assumed
 
 A downloaded DRIVE was already offline-complete and well-hardened, and was not the gap. The gap was
@@ -88,6 +93,49 @@ comparable call in this repo is a nudge ("never strand a rider mid-Tahoe", "Star
 the roam pack, **Ride Along genuinely works offline**, so dimming it would have been a lie — and
 dimming the anonymous front door contradicts what roam is for. The one control still disabled offline
 is Settings' *save the stories*, where the whole action IS the request.
+
+### ⚠ ADDENDUM 2026-08-05 — the re-sign caller is gone, and the nudge now has ONE exception
+
+Landed with *a drive's audio is only ever played from disk* plus the start gate
+(`docs/designs/download-before-start.md` §1, §2, §10). **Two premises above no longer exist. The
+arguments they were carrying do.** Left in place rather than reworded, per the append-only rule.
+
+- **The VERDICT itself is untouched.** `connectivity.ts` / `connectivity-util.ts`, the push-only
+  feed, the fail-OPEN asymmetry, `OFFLINE_TRUST_MS`, and the probe-not-a-TTL self-heal all survive
+  verbatim, as does every line of *Three native landmines*. The gate is simply a new CONSUMER:
+  `app/drives/[id]/index.tsx` reads `useIsOffline()` to pick which row of §2 applies.
+
+- **`signDriveAudio` is DELETED, so the pre-flight opt-out has no caller.** It ran from
+  `resignPlayback` — the mid-drive stall watchdog's re-sign rung — and both went with the disk-only
+  rule, along with the server route `POST /drives/:id/assets/sign` behind them: a local file never
+  expires, so there is nothing to re-sign, and the pre-start stall ladder is now ONE pass on the
+  short `LOCAL_CLIP_STALL_MS` rather than two on the 12 s remote budget. ⚠ **`ignoreOffline` was
+  deliberately LEFT IN PLACE with no caller** rather than swept with it, and `api.ts` says so at the
+  definition, pointing back here: the escape hatch this paragraph NAMES — a call whose seconds of
+  waiting are the FEATURE, because the caller's fallback is worse than the wait — outlives the one
+  caller that had it. It is a recorded decision, not a leftover; do not delete it as dead code
+  without re-opening this record.
+
+- **⚠ "Offline is a NUDGE, never a block" now has exactly one carved-out exception — and the
+  precedent this section cited for the doctrine is one of the strings that exception deleted.**
+  *"Start anyway"* is gone: the unsaved-drive Alert became the gate, and on ONE row the gate really
+  does block — **online + an incomplete local copy**. That row is the entire point of it, and it is
+  defensible only because blocking there costs the rider ten seconds of download rather than their
+  drive. **The escape hatch is stated in the same expression** (`decideDriveGate`, `offline-util.ts`,
+  shared by the CTA and the player): **offline + a partial copy still PLAYS**, with the gap disclosed
+  on the ready card — the gate never blocks a rider it cannot help. Offline + nothing on disk blocks,
+  but streaming with no signal was never a thing to allow. Every other control keeps the nudge; this
+  is the drive's Start CTA and nothing else.
+
+⚠ Note which way the fail-OPEN asymmetry points for this new consumer: an UNKNOWN verdict reads as
+ONLINE, so a device that cannot tell gets GATED rather than waved through. That is the strict
+direction and the correct one here — the cost is a download that succeeds, where the reverse default
+would have waved a stream through, and there is no longer a stream to wave.
+
+⚠ **The boundary, stated positively so a future sweep cannot misread the rule:** all of the above is
+about a DRIVE's audio. `GET /sample` and the anonymous route-preview clip play BEFORE a drive exists,
+with nothing on disk to play from — they **still stream**, on the same presign, and `useRoutePreview`
+keeps the generous 12 s stall budget. "Offline for everything" is not "delete all streaming".
 
 ### The roam pack is ONE artifact: pins AND audio
 

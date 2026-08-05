@@ -1,7 +1,7 @@
 // Pure, native-free offline helpers (no expo-file-system / api / auth imports) so they
 // unit-test under `bun test`. offline.ts (which IS native) re-uses these.
 
-import type { DriveClip, SignedDriveAudio } from '@skipper/shared'
+import type { DriveClip } from '@skipper/shared'
 
 /** MIME → on-disk extension. Driven by the sign response's `contentType`, never hardcoded. */
 const EXT_BY_TYPE: Record<string, string> = {
@@ -18,44 +18,19 @@ export function extForContentType(contentType: string): string {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Drive playback url maps (seq-keyed)                                          */
-/* -------------------------------------------------------------------------- */
-
-/**
- * The seq → url map for a V2 DRIVE manifest. A driveManifest carries its clips' presigned URLs
- * inline (GET /drives/:id already signs), so online playback maps straight off the manifest —
- * no separate sign call. Every clip is a place narration keyed by its `seq`. (V2 has no placeless
- * framing — asides were deleted; see docs/decisions/geometry-first-regions.md.)
- */
-export function urlMapFromDriveManifest(manifest: { clips: DriveClip[] }): Map<number, string> {
-  const m = new Map<number, string>()
-  for (const c of manifest.clips) {
-    if (!c.url) continue // a silent beat (rest) carries no audio
-    m.set(c.seq, c.url)
-  }
-  return m
-}
-
-/**
- * The seq → url map for a drive's re-presign response (the offline-refresh / stall-recovery path).
- * `signedDriveAudio` is flat — keyed by the same `seq` the manifest used — so this is a direct map.
- */
-export function urlMapFromDriveSigned(signed: SignedDriveAudio): Map<number, string> {
-  return new Map<number, string>(signed.clips.map((c) => [c.seq, c.url]))
-}
-
-/* -------------------------------------------------------------------------- */
 /*  Offline completeness (pure set math; offline.ts wires in the on-disk set)   */
 /* -------------------------------------------------------------------------- */
 
 /** A clip has downloadable audio iff it carries BOTH a url and a contentType — a silent beat (rest)
  *  has neither and is never fetched. A TYPE GUARD (narrows url/contentType to non-null), so the download
  *  list AND the completeness check share ONE predicate and "what we should have" can't drift between them.
- *  Intentionally STRICTER than online playback (`urlMapFromDriveManifest` streams on a url ALONE): the
- *  downloader needs the contentType for the on-disk extension, so a clip with no contentType is genuinely
- *  un-downloadable and is correctly NOT "expected" offline (re-pulling could never land it). The two
- *  predicates only diverge on a url-without-contentType clip, which the API never emits (it signs the url
- *  and sets the contentType together) — so completeness never under-counts a downloadable stop. */
+ *  ⚠ The contentType half is not incidental bookkeeping: the downloader derives the ON-DISK EXTENSION
+ *  from it, so a clip carrying a url but no contentType is genuinely un-downloadable and is correctly NOT
+ *  "expected" — re-pulling could never land it. The API never emits that pair anyway (it signs the url and
+ *  sets the contentType in the same row), so completeness never under-counts a downloadable stop.
+ *  (This doc used to justify the pair by calling the predicate stricter than ONLINE playback, which
+ *  streamed on a url alone. There is no online playback of a drive any more — a drive's audio is only
+ *  ever played from disk — so the reason above is the whole reason.) */
 export function hasDownloadableAudio<T extends { url?: string | null; contentType?: string | null }>(
   c: T,
 ): c is T & { url: string; contentType: string } {
@@ -78,6 +53,62 @@ export function expectedAudioSeqs(clips: DriveClip[]): number[] {
 export function missingAudioSeqs(expectedSeqs: number[], savedSeqs: Iterable<number>): number[] {
   const saved = new Set(savedSeqs)
   return expectedSeqs.filter((seq) => !saved.has(seq))
+}
+
+/* -------------------------------------------------------------------------- */
+/*  THE DRIVE GATE — one expression, asked in two places                        */
+/* -------------------------------------------------------------------------- */
+
+/** What a drive's local copy allows right now.
+ *  - `play` — roll: either a complete copy, or the offline escape hatch below.
+ *  - `needs-download` — the gate holding, which is the only reason it exists.
+ *  - `nothing-saved` — offline with no bytes: there is nothing to allow and nothing we can fetch.
+ *
+ *  ⚠ `unreadable` is deliberately NOT a state here. A drive with bytes on disk but an unreadable
+ *  manifest yields `needs-download`; the CTA then picks the ACTION (repair when `dirState !== 'none'`,
+ *  download otherwise). Never offer a fresh download for bytes we already hold. */
+export type DriveGate = 'play' | 'needs-download' | 'nothing-saved'
+
+/**
+ * Does this drive have a complete-enough local copy to drive? ONE expression, asked by the drive-detail
+ * CTA *and* by the player — the CTA so the rider is told why and can act, the player so it is true
+ * however the screen was reached (`skipper://drives/<id>/play` is a real deep link, so the CTA alone
+ * would not be a guard). Authorising in one place and acting in another is the failure CLAUDE.md names;
+ * this function is how that second value is deleted rather than kept in sync.
+ *
+ * | online | hasAnyLocal | missingCount | →                |
+ * |--------|-------------|--------------|------------------|
+ * | any    | true        | 0            | `play`           |
+ * | true   | true        | >0           | `needs-download` | ← the case the gate exists for
+ * | true   | false       | —            | `needs-download` |
+ * | false  | true        | >0           | `play`           | ← escape hatch
+ * | false  | false       | —            | `nothing-saved`  |
+ *
+ * ⚠ THE ESCAPE HATCH IS THE HALF THAT MUST NOT BE "SIMPLIFIED" INTO A BARE COMPLETENESS CHECK. The gate
+ * exists to stop an AVOIDABLE stream; where a download is impossible, blocking is pure loss — it would
+ * strand a rider at a trailhead holding 19 of 20 stops. The rider is still told what is missing (that is
+ * what `Playback.expectedSeqs` feeds), which is what makes rolling partial honest rather than silent.
+ *
+ * ⚠ `online` FAILS OPEN — an unknown connectivity verdict reads as ONLINE (connectivity.ts), which
+ * points STRICT here: a device that cannot tell is GATED. That is the right direction, because the cost
+ * of being wrong is a download that succeeds, whereas a false OFFLINE reading would wave every stream
+ * through — which is the thing being prevented.
+ *
+ * ⚠ The offline + nothing-saved row is only reachable when the drive loaded ONLINE and connectivity
+ * dropped after; a cold open with no manifest error-walls upstream. Don't build UI for a state that
+ * cannot render.
+ */
+export function decideDriveGate(s: {
+  /** The app-wide connectivity verdict; fails OPEN (unknown ⇒ true). */
+  online: boolean
+  /** Any of this drive's clips present on disk (a partial copy counts). */
+  hasAnyLocal: boolean
+  /** Expected-but-missing clips; 0 = complete. */
+  missingCount: number
+}): DriveGate {
+  if (s.hasAnyLocal && s.missingCount === 0) return 'play'
+  if (!s.online) return s.hasAnyLocal ? 'play' : 'nothing-saved'
+  return 'needs-download'
 }
 
 /* -------------------------------------------------------------------------- */

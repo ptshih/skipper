@@ -30,7 +30,7 @@
 
 import { Directory, File, Paths } from 'expo-file-system'
 import type { DriveClip, DriveManifest, DriveSummary } from '@skipper/shared'
-import { getDrive, signDriveAudio } from './api'
+import { getDrive } from './api'
 import {
   clipStoreDir,
   deleteAllStoredClips,
@@ -59,8 +59,6 @@ import {
   type ManifestMigration,
   type Saved,
   type StoredClipRef,
-  urlMapFromDriveManifest,
-  urlMapFromDriveSigned,
 } from './offline-util'
 
 // Manifest schema version. ⚠ Bumping this is NOT a free action — see the migration table below. An
@@ -203,7 +201,7 @@ function planDriveClips(detail: DriveManifest): PlannedClip[] {
     if (!hasDownloadableAudio(c)) continue // a silent beat (rest) carries no audio — nothing to fetch
     // Every place narration downloads under its OWN seq (V2 has no placeless framing; see
     // docs/decisions/geometry-first-regions.md), which is what makes these on-disk keys line up with
-    // offline-util's `urlMapFromDriveManifest`.
+    // the seqs the player reads out of the drive manifest.
     const seq = c.seq
     const key = storeKeyForClip(c)
     let storeName: string | null = null
@@ -287,8 +285,9 @@ const DOWNLOAD_CONCURRENCY = 4
 // The per-clip transfer (timeout, retry/backoff, nonzero-size verify, cancel semantics) and the
 // free-space guard live in ./download — extracted so a second downloader can never drift from this
 // one. `InsufficientStorageError` is re-exported because the drive-detail screen catches it
-// by name and this module is its established import site.
-export { InsufficientStorageError } from './download'
+// by name and this module is its established import site; `estimateDownloadBytes` rides along for the
+// same reason — the screen shows the size the free-space guard sizes against, from ONE expression.
+export { estimateDownloadBytes, InsufficientStorageError } from './download'
 
 // In-flight downloads by driveId — dedupes concurrent downloadDrive calls for the same drive so two
 // taps (a fast double-select before React commits the busy state) can't race on the same files (one
@@ -327,8 +326,109 @@ const writingStoreNames = new Set<string>()
  */
 const transfers = new Map<string, Promise<void>>()
 
+/* -------------------------------------------------------------------------- */
+/*  The download REGISTRY — in-flight state that outlives the screen            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A drive's download as the UI sees it.
+ *
+ * ⚠ `canceled` EXISTS BECAUSE A CANCEL USED TO BE INVISIBLE. `runDownload`'s AbortError path is
+ * deliberately silent (no error, no toast — a rider who taps Cancel asked for nothing to happen), which
+ * made "the rider cancelled" indistinguishable from "nothing has started". Under a gate that starts the
+ * download automatically, that ambiguity re-fires the download the instant it is cancelled. So a cancel
+ * leaves a TOMBSTONE here — an entry with `canceled: true` and no live transfer behind it — and the
+ * auto-start reads it as "the rider said no". A fresh `downloadDrive` clears it.
+ */
+export interface ActiveDownload {
+  progress: DownloadProgress
+  /** True once the rider cancelled this drive's download; the entry is then a tombstone, not a run. */
+  canceled: boolean
+}
+
+interface DownloadEntry {
+  ctrl: AbortController
+  /** ⚠ IMMUTABLE AND REPLACED, NEVER MUTATED IN PLACE. `activeDownload` is written to be read as a
+   *  `useSyncExternalStore` snapshot, which compares by IDENTITY — handing back a freshly-built object
+   *  on every read is an infinite render loop, and mutating this one in place is an update React can
+   *  never see. Both failures are silent in a typecheck. */
+  snapshot: ActiveDownload
+}
+
+/** ⚠ NOT the sweep's "is anything writing?" guard — that reads `inFlight`/`topUps`, and it must keep
+ *  doing so: a canceled tombstone is not a live transfer, and treating it as one would disable the
+ *  sweep for the rest of the process. */
+const registry = new Map<string, DownloadEntry>()
+const downloadWatchers = new Map<string, Set<() => void>>()
+
+function publishDownload(driveId: string): void {
+  for (const cb of downloadWatchers.get(driveId) ?? []) cb()
+}
+
+/** Swap in a new snapshot and notify — identity-checked, so a settled run can never publish over the
+ *  entry of the run that replaced it. */
+function commitDownload(driveId: string, entry: DownloadEntry, next: ActiveDownload): void {
+  if (registry.get(driveId) !== entry) return
+  entry.snapshot = next
+  publishDownload(driveId)
+}
+
+/** This drive's live download, or the tombstone a cancel left behind; null when neither. RUNNING is
+ *  `activeDownload(id) != null && !activeDownload(id)!.canceled` — the CTA's "a download is running"
+ *  question. Stable by identity between changes (see `DownloadEntry.snapshot`). */
+export function activeDownload(driveId: string): ActiveDownload | null {
+  return registry.get(driveId)?.snapshot ?? null
+}
+
+/** Watch one drive's download state. Returns the unsubscribe. Keyed per drive so a list screen doesn't
+ *  re-render on another drive's progress ticks (progress fires per clip, per drive). */
+export function subscribeDownload(driveId: string, cb: () => void): () => void {
+  let set = downloadWatchers.get(driveId)
+  if (!set) {
+    set = new Set()
+    downloadWatchers.set(driveId, set)
+  }
+  set.add(cb)
+  return () => {
+    const s = downloadWatchers.get(driveId)
+    if (!s) return
+    s.delete(cb)
+    if (s.size === 0) downloadWatchers.delete(driveId)
+  }
+}
+
+/**
+ * Cancel a rider's download. ⚠ MODULE-LEVEL, not a screen ref, and that is the whole point of the
+ * registry: the transfer must survive the detail screen unmounting (a rider who backs out to check the
+ * map and returns must not find a drive they still cannot start), so an explicit Cancel is the ONLY
+ * thing that may stop it. No-op when there is nothing to cancel.
+ */
+export function cancelDownload(driveId: string): void {
+  const entry = registry.get(driveId)
+  if (!entry) return
+  entry.ctrl.abort()
+  // ⚠ MARK, BUT DO NOT PUBLISH — the "stopped" edge belongs to the run's teardown, not to this tap.
+  // Publishing here flipped watchers to not-running while `runDownload` was still unwinding, and two
+  // things broke in that window:
+  //   1. The drive dir exists with NO manifest until the very last write, and teardown is what removes
+  //      it — so a screen refreshing on the early edge read `dirState: 'unreadable'` and offered a
+  //      Repair for a drive that was about to have no directory at all.
+  //   2. `inFlight` still held the aborting promise, so a rider taking the Save the UI had just
+  //      offered got that promise handed back: no bytes, tombstone intact, a silent no-op.
+  // Letting the `.finally` publish means the single not-running edge fires when the disk and
+  // `inFlight` actually agree with it. The tombstone is recorded now because the rider's "no" is a
+  // fact the moment they tap, and `downloadDrive` reads it directly rather than through a watcher.
+  entry.snapshot = { progress: entry.snapshot.progress, canceled: true }
+}
+
 /**
  * Download a drive (manifest + clip bytes) to persistent storage and write the manifest.
+ *
+ * ⚠ IT OWNS ITS OWN AbortController (in the registry above) rather than taking one. A caller-supplied
+ * signal would be a second cancel path that leaves no `canceled` mark, so the auto-start would re-fire
+ * over the rider's Cancel — the exact two-copies-of-one-decision failure the registry deletes. Progress
+ * goes to `subscribeDownload`, for the same reason: the screen that started a download is not
+ * necessarily the screen watching it.
  *
  * ⚠ IT IS A TOP-UP, NOT A WIPE-AND-REFETCH (step 9). It used to open with `deleteDriveDownload` for a
  * "clean re-pull"; under a shared store that is the single most likely way to destroy another drive's
@@ -345,19 +445,38 @@ const transfers = new Map<string, Promise<void>>()
  *
  * Throws ONLY when the run can't start (manifest fetch failed / no audio / no free space) or NOTHING is
  * on disk afterwards (a true network-down) or it was canceled. ⚠ On any of those it leaves an EXISTING
- * saved manifest alone — a failed "Update" must never cost the rider the copy they already had. Pass
- * `signal` to cancel. Concurrent calls for the same drive share one in-flight run. Needs network + a
- * signed-in account (the /drives tier check enforces it — a drive is owned).
+ * saved manifest alone — a failed "Update" must never cost the rider the copy they already had.
+ * `cancelDownload(driveId)` cancels. Concurrent calls for the same drive share one in-flight run. Needs
+ * network + a signed-in account (the /drives tier check enforces it — a drive is owned).
  */
-export function downloadDrive(
-  driveId: string,
-  onProgress?: (p: DownloadProgress) => void,
-  signal?: AbortSignal,
-): Promise<DownloadResult> {
+export function downloadDrive(driveId: string): Promise<DownloadResult> {
   const existing = inFlight.get(driveId)
+  // ⚠ A CANCELED run is NOT a run to join. Returning it hands the rider back the very promise their
+  // own Cancel aborted — no bytes move, the tombstone survives, and Save is a silent no-op. Wait for
+  // the aborting run to finish unwinding, then start a real one. Safe to recurse: `existing` is the
+  // promise returned by `.finally(...)`, so by the time it settles that callback has already cleared
+  // `inFlight`, and the re-entry takes the fresh-run path below (which clears the tombstone).
+  if (existing && registry.get(driveId)?.snapshot.canceled) {
+    return existing.catch(() => undefined).then(() => downloadDrive(driveId))
+  }
   if (existing) return existing
-  const p = runDownload(driveId, onProgress, signal).finally(() => {
+  const entry: DownloadEntry = {
+    ctrl: new AbortController(),
+    // A fresh run clears any tombstone: the rider asked again, so their earlier no is spent.
+    snapshot: { progress: { done: 0, total: 0 }, canceled: false },
+  }
+  registry.set(driveId, entry)
+  publishDownload(driveId)
+  const onProgress = (progress: DownloadProgress) =>
+    commitDownload(driveId, entry, { progress, canceled: entry.snapshot.canceled })
+  const p = runDownload(driveId, onProgress, entry.ctrl.signal).finally(() => {
     if (inFlight.get(driveId) === p) inFlight.delete(driveId)
+    // The run is over: drop the entry so nothing reads as running — unless it was CANCELED, whose
+    // tombstone is the only record that the rider said no (see ActiveDownload).
+    if (registry.get(driveId) === entry && !entry.snapshot.canceled) registry.delete(driveId)
+    // ⚠ PUBLISH EITHER WAY. This is the ONE not-running edge — see `cancelDownload`, which deliberately
+    // stays silent so that a cancel's edge lands here, once the disk and `inFlight` have caught up.
+    if (registry.get(driveId) === entry || !registry.has(driveId)) publishDownload(driveId)
   })
   inFlight.set(driveId, p)
   return p
@@ -616,10 +735,10 @@ function clipRefsEqual(a: Record<string, StoredClipRef>, b: Record<string, Store
  *  3. It reuses the download guards verbatim — the free-space pre-flight, `downloadFileWithRetry`,
  *     DOWNLOAD_CONCURRENCY, the caller's AbortSignal, and a per-drive in-flight dedupe. Its hard
  *     ceiling is the drive's own clip count: it can never legitimately need more.
- *  4. ⚠ IT NEVER RUNS ON THE PLAY PATH. Mid-drive it would compete with clip streaming AND with the
- *     stall watchdog's own re-sign. Call it from the drive-detail screen's ONLINE load, never from
- *     `loadPlayback`/`resignPlayback`. In a dead zone the caller's `getDrive` has already thrown, so
- *     it simply never runs.
+ *  4. ⚠ IT NEVER RUNS ON THE PLAY PATH. Mid-drive it would compete with the player for the network and
+ *     for the disk it is reading clips off. Call it from the drive-detail screen's ONLINE load, never
+ *     from `loadPlayback`. In a dead zone the caller's `getDrive` has already thrown, so it simply
+ *     never runs.
  */
 export function topUpDrive(
   driveId: string,
@@ -883,8 +1002,8 @@ export function downloadDirState(driveId: string): DownloadDirState {
  * The seqs whose bytes are actually on disk right now.
  *
  * ⚠ THIS REPLACES AN ALL-OR-NOTHING PREDICATE, and it is the cheapest safety in step 9. The old
- * `clipsPresentOnDisk` was `clips.every(...)` and gated `offlineStatus`, `loadPlayback`,
- * `resignPlayback` and `listDownloadedDrives` — so ONE missing byte made a 40-stop drive vanish from
+ * `clipsPresentOnDisk` was `clips.every(...)` and gated `offlineStatus`, `loadPlayback` and
+ * `listDownloadedDrives` — so ONE missing byte made a 40-stop drive vanish from
  * the dead-zone home list, read as "not downloaded" on its own screen, and error-wall the player, with
  * 39 perfectly good clips sitting on disk and "Download" (which needs network) as the only offered
  * recovery. A missing byte must cost ONE STOP. It was already a latent bug; the shared store is what
@@ -918,11 +1037,6 @@ function localUrlMap(driveId: string, m: OfflineManifest): Map<number, string> {
     if (uri) urls.set(seq, uri)
   }
   return urls
-}
-
-/** Does the local map cover every seq this drive expects audio for? */
-function isLocallyComplete(m: OfflineManifest, urls: Map<number, string>): boolean {
-  return urls.size > 0 && m.audioSeqs.every((seq) => urls.has(seq))
 }
 
 /** Whether a drive has a usable offline copy AND, for a PARTIAL download, which clips never landed. */
@@ -1182,60 +1296,50 @@ export function deleteDriveDownload(driveId: string): void {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Playback resolution — offline-first, with the online stream as fallback     */
+/*  Playback resolution — a DRIVE's audio is only ever played from DISK         */
 /* -------------------------------------------------------------------------- */
 
 export interface Playback {
+  /** The manifest as SAVED. Clip `url`s are absent by type; the map below is the only source of uris. */
   detail: DriveManifest
-  /** seq → uri (local `file://` when downloaded, presigned https when streaming). */
+  /** seq → local `file://` uri. Only seqs whose bytes are actually on disk appear — a partial copy
+   *  yields a partial map, exactly as `localUrlMap` builds it. */
   urls: Map<number, string>
-  /** true when served entirely from disk (no network used to load). */
-  offline: boolean
+  /**
+   * The seqs this drive SHOULD have audio for, straight off the saved manifest's `audioSeqs`.
+   *
+   * ⚠ IT IS HERE BECAUSE THE PLAYER CANNOT DERIVE IT ANY MORE, and deriving it was already wrong.
+   * `useDrive` measured the silent gap as `expectedAudioSeqs(detail.clips)` — a predicate that needs a
+   * `url`, which a SAVED manifest does not have (stripped by TYPE: `Saved<T> = Omit<T,'url'>`). So the
+   * count read 0 on the offline path, and every path is now the offline path: the gap would have gone
+   * silent exactly where the escape hatch (a partial copy played with no signal) depends on the rider
+   * being TOLD what is missing. `audioSeqs` is captured at download time from the fresh manifest and is
+   * already precisely the right list.
+   */
+  expectedSeqs: number[]
 }
 
 /**
- * Load a drive for playback, OFFLINE-FIRST: a COMPLETE download returns the saved manifest + local
- * `file://` uris with ZERO network.
+ * Load a drive for playback. DISK ONLY — zero network, always. The gate (`decideDriveGate`) is what
+ * decides whether a drive may be driven at all; this just serves whatever is on disk, partial included,
+ * and reports the gap through `expectedSeqs`.
  *
- * ⚠ A PARTIAL copy tries the network first and falls back to what is on disk. Two halves, both
- * deliberate: online, streaming plays every stop including the ones that never landed; offline, the
- * `getDrive` throw is CAUGHT and the partial local map is served rather than error-walling the player.
- * That catch is the whole point — the old code fell straight through to `await getDrive(driveId)` the
- * moment one byte was missing, so a rider at a trailhead with 39 of 40 stops on disk got an error
- * screen whose only offered recovery was "Download".
+ * ⚠ BEHAVIOUR CHANGE, worth stating because it is invisible from the call site: an ONLINE-but-partial
+ * drive used to fetch and play the SERVER's fresh manifest (streaming the stops that never landed). It
+ * now always plays the FROZEN saved one. Nothing here refreshes content any more — that job belongs
+ * entirely to the drive-detail screen's `topUpDrive` / `isDownloadStale` pass, which runs while the
+ * rider is parked and online.
+ *
+ * Throws only when there is nothing on disk to play. ⚠ Still `async`: the call sites are effects with
+ * `cancelled` guards built around an await, and making it sync would quietly retire those.
  */
 export async function loadPlayback(driveId: string): Promise<Playback> {
   const m = loadManifest(driveId) // load ONCE (don't check-then-reload the manifest)
-  const local = m ? localUrlMap(driveId, m) : null
-  if (m && local && isLocallyComplete(m, local)) {
-    return { detail: m.detail, urls: local, offline: true }
+  const urls = m ? localUrlMap(driveId, m) : null
+  if (!m || !urls || urls.size === 0) {
+    throw new Error('This drive is not saved on this device.')
   }
-  try {
-    const detail = await getDrive(driveId)
-    return { detail, urls: urlMapFromDriveManifest(detail), offline: false }
-  } catch (e) {
-    if (m && local && local.size > 0) return { detail: m.detail, urls: local, offline: true }
-    throw e
-  }
-}
-
-/**
- * A fresh url map for the stall-recovery path. When the drive is fully downloaded it returns the LOCAL
- * file:// map (which never expires — and re-points a player that loaded ONLINE at the now-downloaded
- * files); otherwise it re-signs the presigned URLs (~1h TTL), falling back to whatever IS on disk when
- * that fails. Always returns a map when anything at all is playable.
- */
-export async function resignPlayback(driveId: string): Promise<Map<number, string>> {
-  const m = loadManifest(driveId)
-  const local = m ? localUrlMap(driveId, m) : null
-  if (m && local && isLocallyComplete(m, local)) return local
-  try {
-    const signed = await signDriveAudio(driveId)
-    return urlMapFromDriveSigned(signed)
-  } catch (e) {
-    if (local && local.size > 0) return local
-    throw e
-  }
+  return { detail: m.detail, urls, expectedSeqs: m.audioSeqs }
 }
 
 // ⚠ `reclaimLegacyRoamPack()` LIVED HERE until 2026-08-02. It deleted `Paths.document/roam-pack/` at

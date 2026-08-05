@@ -64,11 +64,26 @@ export const voice = {
   },
   cta: {
     play: 'Let’s roll', // short: the center CTA is now flanked by the ±15s skip buttons
-    pause: 'Hold here',
-    resume: 'Roll on again',
+    // ⚠ THE HOLD SUSPENDS THE TOUR, NOT THE AUDIO, and the label has to survive knowing that
+    // (docs/designs/download-before-start.md §12.2 — COPY only, the mechanism is right). Holding a
+    // live drive calls `sub?.remove()` in gps.ts: the GPS watch is RELEASED. So while held the car
+    // keeps moving, no fix is processed, and a stop rolled past never enters the trigger engine at
+    // all — not fired, not skipped, invisible even to `stop_skipped`, whose reasons are all about
+    // AUDIO. The category names this out loud (Shaka Guide's "Tour Switch", described to riders as
+    // stopping the app using your GPS); ours said "Hold here", which promises a held clip.
+    // ⚠ SHORT ON PURPOSE — the explanation lives on the card (`player.paused` + `pausedBody`), for
+    // two reasons. These two are VoiceOver-only: the icon-forward transport drops the visible text
+    // label (see TransportBar), so no sighted rider ever reads them. And they are TransportBar's
+    // DEFAULTS, inherited by the drive-detail mini-preview — where there is no watch to release, so
+    // a label spelling out the GPS here would be a false sentence on that surface.
+    pause: 'Hold the drive',
+    resume: 'Roll on again', // resuming restores everything the hold released — nothing to qualify
     restart: 'Run it again, skipper',
     drive: 'Start the drive', // open the live, GPS-triggered player (real device GPS)
-    simDrive: 'Simulate the drive (dev)', // dev-only: the on-device drive simulator, no real GPS
+    // ⚠ `simDrive` ('Simulate the drive (dev)') LIVED HERE, labelling a __DEV__-only ⋯ action that
+    // pushed a BARE /play and relied on `__DEV__` being read as "sim". Deleted with that item: the
+    // GPS clock is a SETTING now, not a route, and Settings → Developer is its single control.
+    // (docs/designs/download-before-start.md §11 — two controls for one boolean is how they drift.)
     endDrive: 'Pull over', // stop the drive and head back to the start line
     backToTrailhead: 'Back to the trailhead', // leave the drive-complete card without replaying
   },
@@ -349,13 +364,19 @@ export const voice = {
     // The itinerary ROW's version of the same idea. Short because it shares a line with a stop
     // name: the card can afford "NOW PLAYING", a 48pt row next to "Round Hill Village" cannot.
     now: 'NOW',
-    paused: 'PAUSED', // a held clip — the NOW card must not keep saying "NOW PLAYING"
-    // The one beat the pause control was missing: he's still in the car while you're stopped. Pairs with
-    // the CTAs, which already speak as him ('Hold here' / 'Roll on again'). Deliberately says NOTHING
-    // about where you stopped or why — he has no eyes and no live data, and a concierge who names places
-    // was cut on purpose (docs/decisions/cut-mid-drive-concierge.md). Landscape permanence is the joke;
-    // it's the one observation he can always make without perceiving anything.
-    pausedBody: 'Take your time. Nothing out here is going anywhere.',
+    paused: 'ON HOLD', // the whole drive is held, not just this clip — the NOW card must not keep saying "NOW PLAYING"
+    // ⚠ THE ONLY PLACE THE HOLD IS EXPLAINED, which is why it is worth two lines of comment for one
+    // of copy. The transport labels above are VoiceOver-only, so this body is what a sighted rider
+    // actually reads about what holding does.
+    // ⚠ IT READ "Take your time. Nothing out here is going anywhere." — warm, and the second
+    // sentence was FALSE in the way that costs a rider a stop: the hold releases the GPS watch
+    // (see `cta.pause`), so anything passed while held goes by unheard and is never even counted as
+    // skipped. Landscape permanence was the joke and it had to go with the claim it rested on; the
+    // warmth stays in front, and then he says the trade plainly, which is the honest streak that IS
+    // the persona rather than an apology bolted onto it.
+    // ⚠ Still says NOTHING about where you stopped or why — he has no eyes and no live data, and a
+    // concierge who names places was cut on purpose (docs/decisions/cut-mid-drive-concierge.md).
+    pausedBody: 'Take your time. I’m not watching the road while we’re held, so anything we pass goes by unsaid.',
     rolling: 'ROLLING', // between stops — road-trip, not the flat "DRIVING"
     rollingOpen: 'On the open road', // rolling-card title when there's no next stop queued yet
     replay: 'Replay that', // re-hear the stop that just ended — plain chrome, NOT the skipper's voice (replay-last-stop)
@@ -363,9 +384,9 @@ export const voice = {
     gpsError: 'Lost the GPS signal, folks. Pull over and give her another go.', // live watch failed
     driveCompleteKicker: 'DRIVE COMPLETE', // the done-card kicker
     arrived: 'You’ve arrived', // the done-card title
-    // A quiet, non-alarming chip in the live player (M7): the drive is running entirely off the saved
-    // download (so a dead zone won't bite). Mirrors the drive-detail "Saved offline" chip's tone.
-    offlinePlayback: 'Playing from download',
+    // ⚠ `offlinePlayback` ('Playing from download') LIVED HERE. Deleted with its chip: a drive's audio
+    // now only ever plays from disk, so a chip saying so asserts nothing — it was informative only
+    // while streaming was the other possibility. (docs/designs/download-before-start.md §10.)
   },
   // The "postcard" — one curated Tahoe clip a stranger anywhere can hear (the /sample screen). The
   // front-door taste for everyone outside the corpus AND the App Review path. Fact-free (the poi
@@ -592,18 +613,39 @@ export const voice = {
     // something true about the ROAD, which is route information, not a fact about a place on it.
     // ⚠ ONE LINE, deliberately (founder, 2026-08-03) — it is a caption tucked under a button, and the
     // two-line version it replaced wrapped mid-thought and cost the itinerary a row of screen. The
-    // full argument still gets made where it can act on it: the unsaved-drive alert in front of Start.
+    // full argument gets made by the gate below instead, where the rider can act on it.
     // "Signal's thin" is the same phrasing `error.download` uses — one road, one voice.
     saveHint: 'Signal’s thin out there — best saved now.',
-    // The one warning in front of a live drive that hasn't been saved. NEVER a block: the rider may
-    // be on a road with good signal, or just auditioning from the couch. `useDrive`'s stall watchdog
-    // skips any clip that won't load, so an unsaved drive through a dead zone loses those stops
-    // SILENTLY — this is the only moment we can say so while it's still fixable.
-    unsavedTitle: 'This drive isn’t saved yet',
-    unsavedBody:
-      'Out where the signal drops, any stop that can’t load gets skipped, and you’d drive right past it in silence. Saving it first takes a moment, and then the whole drive plays off your phone.',
-    unsavedSave: 'Save it first',
-    unsavedStart: 'Start anyway',
+    // ⚠ THE UNSAVED-DRIVE ALERT IS GONE, and with it `unsavedTitle` / `unsavedBody` / `unsavedSave` /
+    // `unsavedStart` (docs/designs/download-before-start.md §1, §6). Start stopped being a three-way
+    // Alert a rider talks their way past and became a STATE: the copy comes down automatically at
+    // create, and the CTA turns itself on when it lands.
+    // ⚠ `unsavedStart` ('Start anyway') was DELETED, not relocated, and recording that is the whole
+    // point of this tombstone — a live string is how a gate quietly grows a bypass back. The
+    // argument its body carried (a stop that cannot load is skipped in silence and you drive right
+    // past it) was never refuted; it is now made by the gate existing at all, and by
+    // `voice.drive.readyBodyPartial` on the one path that can still roll with a gap — §2's offline
+    // escape hatch, which never blocks a rider we cannot help.
+    //
+    // ── The gate's own copy. Same road, same voice as the notes above.
+    //
+    // The primary CTA while the copy is coming down. ⚠ A LABEL ON A DISABLED CONTROL, not an ask:
+    // the rider is not being told to DO anything, only that a few seconds are passing, and a control
+    // that turns itself on describes that better than a button swapping identity under their thumb.
+    gateSaving: 'Saving for the road…',
+    // …and the line beneath it, because a disabled control with no explanation is the worst version
+    // of this feature. Names the one thing the rider actually wants to know: when Start comes alive.
+    gateSavingHint: 'Start opens up the moment the last stop lands.',
+    // Offline with NOTHING on disk — the one row of §2's table that blocks, and it blocks honestly:
+    // with no signal and no saved bytes there is no drive to allow, only silence. Opens on "No signal
+    // out here" like its three siblings above so the four read as one idea.
+    gateNothingSaved: 'No signal out here, and this one isn’t saved yet. We’ll roll when the bars are back.',
+    // The size disclosure (§3). ⚠ COURTESY, NEVER A GATE — there is no "download over cellular?"
+    // prompt, and adding one would be re-litigating a founder call made on the measurement (the
+    // largest drive we have ever built is ~11 MB). Plain and short: a caption under a button, and a
+    // number the rider only glances at. The megabytes are a FACT, computed by the caller from the
+    // clip durations — this is only how they are said.
+    sizeHint: (mb: string) => `About ${mb} MB.`,
   },
   auth: {
     // "folks" is the skipper's address everywhere else (loading, GPS, drive-complete) — keep

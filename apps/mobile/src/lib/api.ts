@@ -13,7 +13,6 @@ import {
   bootstrap,
   regionList,
   sample,
-  signedDriveAudio,
   versionResponse,
 } from '@skipper/shared'
 import type {
@@ -26,7 +25,6 @@ import type {
   DriveSummary,
   Region,
   Sample,
-  SignedDriveAudio,
   VersionPolicy,
 } from '@skipper/shared'
 import { API_URL, authClient } from './auth'
@@ -86,21 +84,21 @@ export const errorMessage = (e: unknown, fallback: string): string =>
 
 // Time-box every request. RN's fetch has NO default timeout, so a half-open connection in a
 // cellular dead zone (the core Tahoe-drive concern — CLAUDE.md "Offline-first… Tahoe dead zones")
-// would hang FOREVER: the load effect's await never settles (an infinite spinner, no retry
-// surfaced), and a mid-drive re-sign never rejects, so the skip-the-stop fallback in useDrive that
-// keeps the drive moving never runs. We use an AbortController + timer — the portable RN pattern;
-// AbortSignal.timeout()'s Hermes support is uncertain — and keep it armed across BOTH the response
-// AND the body read (res.json()), so a body that stalls mid-stream aborts too. A fired abort
-// rejects with an AbortError the callers already handle (errorMessage → retryable error on load;
-// resign's catch → skip-the-stop). 15s: generous enough not to false-abort a slow-but-alive
-// request; the in-drive path inherits it (worst case ~CLIP_STALL_MS + this before a dead-zone stop
-// skips — BOUNDED, vs the infinite hang today). A shorter per-call override is a future refinement.
+// would hang FOREVER: the load effect's await never settles, leaving an infinite spinner with no
+// retry surfaced and no honest "no signal" line. We use an AbortController + timer — the portable RN
+// pattern; AbortSignal.timeout()'s Hermes support is uncertain — and keep it armed across BOTH the
+// response AND the body read (res.json()), so a body that stalls mid-stream aborts too. A fired
+// abort rejects with an AbortError the callers already handle (errorMessage → a retryable error on
+// load). 15s: generous enough not to false-abort a slow-but-alive request. ⚠ This used to bound a
+// MID-DRIVE call too (the re-sign, whose failure skipped a stop) and no longer does: a drive's audio
+// is served from disk, so nothing on this path sits between a rolling rider and a stop. A shorter
+// per-call override is a future refinement.
 const REQUEST_TIMEOUT_MS = 15_000
 
 // `anonymous: true` deliberately OMITS the session Cookie so an intentionally-anonymous call — the
 // ?preview=1 funnel, GET /sample, and (in 1.1) the planner — never links a signed-in identity to
-// preview activity. Authenticated calls (drive/offline sign without preview) leave it false so the
-// cookie still rides.
+// preview activity. Authenticated calls (the rider's own drives) leave it false so the cookie still
+// rides.
 //
 // ⚠ THE RULE THAT OUTLIVED THE HEADER IT WAS WRITTEN FOR: a client-identity header used to ride every
 // call, including anonymous ones, and that was defensible only because it carried a version and a
@@ -118,6 +116,12 @@ async function fetchJson(
   // then the saved copy" into an instant disk read — without any of them changing shape. The
   // verdict is push-based, fails OPEN, and self-heals via a probe (see connectivity.ts), so an
   // unknown — or merely stale — state still tries.
+  //
+  // ⚠ `ignoreOffline` HAS NO CALLER TODAY and is kept deliberately — it is a recorded decision
+  // (docs/decisions/offline-connectivity-and-roam-pack.md), not a leftover. Its one caller was the
+  // drive re-sign, deleted when a drive's audio became disk-only; the escape hatch it names (a call
+  // whose seconds of waiting are the FEATURE, because the caller's fallback is worse than the wait)
+  // outlives it. Do not delete it as dead code without re-opening that record.
   if (!opts?.ignoreOffline && shouldSkipRequest()) throw new OfflineError()
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
@@ -265,22 +269,6 @@ export const listDrives = async (): Promise<DriveList> =>
 export const getDrive = async (driveId: string): Promise<DriveManifest> =>
   parseDto(driveManifest, await fetchJson(`/drives/${encodeURIComponent(driveId)}`))
 
-/** Re-presign a saved drive's clips (offline refresh), keyed by seq.
- *
- *  ⚠ The ONLY call that opts OUT of the offline pre-flight, and deliberately. This runs from
- *  useDrive's mid-drive stall watchdog, where a FAILED re-sign skips the stop immediately — and the
- *  skip is guarded on `!sawFresh`, so the seconds this call spends waiting are a real second chance
- *  for a slow-but-alive clip to start and save the stop. Short-circuiting it instantly would delete
- *  that window in exactly the marginal coverage it exists for, and silently drop stops. Here the
- *  request timeout is the FEATURE, not the cost. */
-export const signDriveAudio = async (driveId: string): Promise<SignedDriveAudio> =>
-  parseDto(
-    signedDriveAudio,
-    await fetchJson(`/drives/${encodeURIComponent(driveId)}/assets/sign`, { method: 'POST' }, {
-      ignoreOffline: true,
-    }),
-  )
-
 /** Remove a saved drive from the caller's list. Soft-delete on the server — it does NOT refund a
  *  credit (a credit is spent at generation). 404 if it's already gone or not yours. */
 export const deleteDrive = async (driveId: string): Promise<void> => {
@@ -300,6 +288,5 @@ export type {
   DriveProposeRequest,
   DriveSummary,
   Region,
-  SignedDriveAudio,
   VersionPolicy,
 }

@@ -39,7 +39,7 @@ import {
 } from '@/lib/api'
 import { isSignedIn, useSession } from '@/lib/auth'
 import { useIsOffline } from '@/lib/connectivity'
-import { listDownloadedDrives } from '@/lib/offline'
+import { downloadDrive, listDownloadedDrives } from '@/lib/offline'
 import { isPlanAborted, planTurn } from '@/lib/planner'
 import { shouldShowOnboarding } from '@/lib/client-flags'
 import { driveMinutes } from '@/lib/labels'
@@ -743,6 +743,23 @@ function HomeScreen() {
           // Flip to `made` BEFORE navigating: a rider who backs out of the drive lands on a card that
           // offers to OPEN it, never a second charged tap.
           patchCard(cardId, { state: 'made', driveId })
+          // SAVE IT FOR THE ROAD, STARTING NOW. A drive plays only from disk, so the copy has to
+          // exist before Start can enable — and this is the moment the rider is provably online (they
+          // just finished the planner and a create) and about to spend ~10 s reading the itinerary.
+          // The gate is invisible when it lands in that window.
+          //
+          // ⚠ IT FIRES FROM HERE, NOT FROM THE PUSH OR A ROUTE PARAM, and that is the whole design:
+          // the push below is byte-identical to the three that merely OPEN a drive (one of them a
+          // rider re-entering a drive they backed out of), so keying on it would make "auto-download
+          // at CREATE only" false and start tens of MB on cellular for a glance. This handler is the
+          // one place in the app that knows a drive was just made. The detail screen only OBSERVES
+          // (offline.ts's registry), so navigating away — or never arriving — doesn't stop it.
+          //
+          // Fire-and-forget, and the failure is swallowed on purpose: a download that can't run
+          // leaves exactly the state the drive-detail CTA already describes and offers to fix, and
+          // there is no surface here to report it on. `downloadDrive` dedupes per driveId, so this
+          // can never race the rider tapping Save.
+          void downloadDrive(driveId).catch(() => {})
           // ⚠ `push`, NOT `replace`. create.tsx replaced because it was a spent screen; home is not,
           // and a replace would destroy the only copy of the transcript.
           navigateOnce(() => router.push({ pathname: '/drives/[id]', params: { id: driveId } }))

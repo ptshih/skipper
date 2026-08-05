@@ -6,13 +6,18 @@
 // One reused expo-audio player across every stop (mirrors sample.tsx's single-clip shell, extended for
 // multi-stop). Audio is resolved through offline.loadPlayback's seq→uri map — NEVER `clip.url` directly:
 // a downloaded drive nulls every presigned url on disk (offline.ts strips credentials), so a raw clip.url
-// read is silently un-playable in exactly the dead-zone case the product is built for. The map is local
-// `file://` when downloaded, presigned https when streaming; we re-sign on a miss (a screen can sit open
-// past the ~1h presigned TTL) and give up gracefully when a seq is genuinely absent (a partial download).
+// read is silently un-playable in exactly the dead-zone case the product is built for.
+//
+// ⚠ THE MAP IS LOCAL `file://` AND NOTHING ELSE (docs/designs/download-before-start.md §10 N1): this
+// surface plays only what is already saved on this phone. A seq missing from the map is genuinely not
+// here — an auto-download still running, a partial copy, or a drive the rider never saved — and there is
+// nothing left to re-sign and nothing to stream, so resolveUri answers null and the row gets the
+// unplayable hint. Turning "not yet" into a saving… row is the SCREEN's job; the hook only ever answers
+// "have it" or "don't".
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
-import { PRE_START_STALL_MS } from '@skipper/engine'
-import { loadPlayback, resignPlayback } from './offline'
+import { LOCAL_CLIP_STALL_MS } from '@skipper/engine'
+import { loadPlayback } from './offline'
 import { applyExclusiveForegroundAudio, releaseAudioSession } from './audio-session'
 import { useStartWatchdog } from './preview-audio'
 import { decideFail, decideToggle, sawFreshAudio } from './preview-util'
@@ -20,7 +25,8 @@ import { decideFail, decideToggle, sawFreshAudio } from './preview-util'
 export interface StopPreview {
   /** The stop whose clip is loaded (playing OR paused). Drives the row/pin "now playing" highlight. */
   activeSeq: number | null
-  /** The last stop tapped whose audio couldn't be resolved (a partial-download miss) — for a soft hint. */
+  /** The last stop tapped whose audio isn't on this phone (not saved yet, or a partial copy) — for a
+   *  soft hint. */
   unplayableSeq: number | null
   playing: boolean
   positionMs: number
@@ -64,9 +70,10 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
   // clip's error. Acting on that would light the unplayable hint under a clip playing fine.
   const handledErrorRef = useRef<string | null>(null)
   // ⚠ THE PRE-START WATCHDOG. Without it this surface has NO way to notice a clip that never produces
-  // audio. It and the exclusive-focus flip are SHARED with useRoutePreview (./preview-audio) — same
-  // shape, same constant, and the same rule useDrive keys on, because it is the same clip over the
-  // same kind of url. Change it there, not here.
+  // audio. The MACHINERY is shared with useRoutePreview (./preview-audio), as is the exclusive-focus
+  // flip — change those there, not here. The BUDGET is NOT shared: this surface reads a local file
+  // (§10 N1), so it takes the short LOCAL_CLIP_STALL_MS useDrive takes, while useRoutePreview still
+  // streams a presigned url and keeps the generous remote one.
   const { arm: armStartWatchdog, clear: clearStartWatchdog } = useStartWatchdog()
 
   /** The ONE terminal state for a stop whose audio will not play, whatever the cause. */
@@ -94,22 +101,24 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
     async (seq: number): Promise<string | null> => {
       if (!driveId) return null
       if (!urlsRef.current) {
-        const pb = await loadPlayback(driveId) // offline-first: local file:// map, else presigned https
+        const pb = await loadPlayback(driveId) // DISK ONLY, zero network; THROWS when nothing is saved here
         urlsRef.current = pb.urls
       }
-      let uri = urlsRef.current.get(seq)
+      const uri = urlsRef.current.get(seq)
       if (uri) return uri
-      // Absent from the cached map — a presigned url that expired past its short TTL, or a not-yet-signed
-      // seq. Re-sign once (a downloaded drive returns the never-expiring local map). Still absent = the
-      // clip genuinely isn't available here (a partial download that never landed this seq).
+      // Absent from the cached map = those bytes are not on this phone — the auto-download is still
+      // running, the copy is partial, or the rider never saved this drive (§10 N1/N2). Nothing to
+      // re-sign, nothing to stream; the ONE recovery left is that the file may have LANDED since the
+      // map was built, so re-read it from disk (still zero network) and answer once. Without this
+      // re-read the map taken during a download would keep saying "unplayable" for the whole life of
+      // the screen, which is exactly the ~10s window §3 creates.
       try {
-        const fresh = await resignPlayback(driveId)
-        urlsRef.current = fresh
-        uri = fresh.get(seq)
+        const fresh = await loadPlayback(driveId)
+        urlsRef.current = fresh.urls
       } catch {
-        // network/sign failure — fall through to null (the caller shows an unplayable hint)
+        // the drive's directory went away underneath us — keep the map we hold and answer null
       }
-      return uri ?? null
+      return urlsRef.current.get(seq) ?? null
     },
     [driveId],
   )
@@ -151,10 +160,11 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
       clearStartWatchdog()
       applyExclusiveForegroundAudio() // exclusive focus + foreground-only (a prior live drive left background-on)
       void (async () => {
-        // resolveUri can THROW on the first tap (its loadPlayback → getDrive hits the network for a
-        // not-fully-downloaded drive) — a signal drop after the page loaded lands here. Treat any throw
-        // as "no audio" so it degrades to the unplayable hint instead of a stuck highlight + unhandled
-        // rejection (the Tahoe dead-zone case). (audit)
+        // resolveUri can THROW on the first tap: loadPlayback throws when NOTHING of this drive is on
+        // disk, which after §10 is the ordinary state of a drive the rider never saved (N2) and of a
+        // fresh one whose auto-download hasn't written its first clip yet. Treat any throw as "no
+        // audio" so it degrades to the unplayable hint instead of a stuck highlight + unhandled
+        // rejection. (audit)
         let uri: string | null = null
         try {
           uri = await resolveUri(seq)
@@ -172,13 +182,14 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
           playbackAttempted.current = true
           // Armed only once the clip is actually in the player. The guard inside is what makes a
           // superseded timer harmless if a later tap has already taken over.
-          armStartWatchdog(PRE_START_STALL_MS, () => {
+          armStartWatchdog(LOCAL_CLIP_STALL_MS, () => {
             if (activeSeqRef.current !== seq) return
             failSeq(seq)
           })
         } catch {
-          // A synchronous throw is a malformed source; the presign 403 arrives asynchronously via
-          // status.error or, if the vendor stays silent, via the watchdog above. Same terminal state.
+          // A synchronous throw is a malformed source; a file that fails to DECODE arrives later —
+          // asynchronously via status.error or, if the vendor stays silent, via the watchdog above.
+          // Same terminal state.
           playbackAttempted.current = true
           failSeq(seq)
         }
@@ -193,11 +204,11 @@ export function useStopPreview(driveId: string | undefined): StopPreview {
     if (sawFresh) clearStartWatchdog()
   }, [sawFresh, clearStartWatchdog])
 
-  // The asynchronous half of failure — an expired/denied presign or an undecodable body never throws
-  // out of replace(). ⚠ This surface had NO reader for it until 2026-08-02: the row simply stayed lit
-  // "now playing" in silence. Whether iOS populates status.error for an HTTP 403 on a remote source is
-  // device-unverified, which is exactly why the watchdog above is the backstop and this is only the
-  // fast path.
+  // The asynchronous half of failure — a file that decodes to nothing never throws out of replace().
+  // ⚠ This surface had NO reader for it until 2026-08-02: the row simply stayed lit "now playing" in
+  // silence. Whether expo-audio populates status.error for an undecodable LOCAL file is just as
+  // device-unverified as it was for a remote 403, which is exactly why the watchdog above is the
+  // backstop and this is only the fast path.
   useEffect(() => {
     const err = status.error ?? null
     if (!err || err === handledErrorRef.current) return
