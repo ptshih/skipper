@@ -100,6 +100,40 @@ Both are cents, and each settles a question rather than adding a mitigation on f
 proposed from reading rather than measuring had to be reverted, and a mitigation for a bias this repo does
 not actually exhibit would cost a re-calibration for nothing.
 
+## ✅ Both probes RUN, 2026-08-04 — and neither bias is present
+
+Total ~7¢. The founder bumped `CLAUDE_MODELS.opus` 4.8 → 5 immediately before, which handed probe 2 a
+cleaner design than the one proposed above.
+
+**Probe 2 — self-preference: NO evidence.** The bump made the experiment free. The two sample clips were
+written by Opus **4.8**; this morning's baseline had Opus **4.8** judging them, which is the *self*
+condition (8 and 9, overall 8, "ship"). Re-scored by Opus **5** — the *cross* condition on identical text —
+they came back **8 and 8, overall 8, "ship"**. A one-point drop on one clip is noise for a stochastic
+judge, so the flattery effect is not visible here.
+⚠ n=1 per model, and 4.8→5 is a capability change as well as an identity change, so this rules the effect
+*out* only weakly. It is enough to stop treating it as an open risk; it is not enough to prove absence.
+⚠ Incidental: Opus 5 volunteered a `biggestRisk` where 4.8 omitted one — *"Both stops land the same way — a
+dry one-line zinger as the closer"* — which is a real pattern in those two clips. That reads as the
+now-optional field being used correctly rather than as the sweep's charm-judge fix regressing.
+
+**Probe 1 — verbosity: NO bias, and the sags overturned the premise.** A padded variant (2.4× the words,
+no groaner, no image, no new information — filler only) scored **4/10** against the terse original's
+**3/10**. Within noise. But the judge's reasoning is the actual result:
+
+- It **named the padding as padding**: *"'start to finish, just the way you asked for it' is padding with a
+  service-desk cadence."* It was not fooled by length, which is stronger than the +1 suggests.
+- Its complaint about the terse version was **not brevity**: *"A verbatim repeat of the prior turn's first
+  line with nothing added… This was the free square — one dry send-off line and the whole exchange lands."*
+  Both variants were flagged `canned: true`.
+
+⚠ **So the "flat middle" is a REPETITION finding, not a length one.** The draw turn scores low because it
+restates the read-back's sentence verbatim — and the planner prompt already carries the rules that would
+prevent it (*"If a phrasing has already been used once in this conversation, it is the one to skip"*, and
+once a plan is settled *"say back only the part that CHANGED"*). They are simply not landing on that turn.
+⚠ **That is NOT a licence to add a rule.** Two changes made from exactly this kind of reading were reverted
+on 2026-08-04, and the judge's own prescription ("one dry send-off line") is a taste instruction whose
+failure mode is a quip on every turn. The honest next step is a targeted eval arm, not an edit.
+
 ## Sources
 
 - [Self-Preference Bias in LLM-as-a-Judge](https://arxiv.org/pdf/2410.21819)
