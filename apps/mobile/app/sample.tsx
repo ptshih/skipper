@@ -251,7 +251,16 @@ export default function SampleScreen() {
           <Text variant="display" color="ink" align="center" numberOfLines={2}>
             {sample ? cleanPlaceName(sample.name) : ''}
           </Text>
-          <Badge tone="teal" label={voice.sample.badge} />
+          {/* ⚠ A ROW WITH `justifyContent`, not the parent's `alignItems: 'center'`, and the difference
+              is why this looked broken for months under a centred title. `Badge` sets
+              `alignSelf: 'flex-start'` on its own pill — correct there, since it stops the pill
+              stretching full-width in the COLUMN containers it usually lands in — and a child's
+              `alignSelf` always beats its parent's `alignItems`. So the column could never centre it;
+              only the main axis can, which means a row. Do not "fix" this by editing Badge: every
+              other caller depends on that flex-start. */}
+          <View style={styles.badgeRow}>
+            <Badge tone="teal" label={voice.sample.badge} />
+          </View>
         </View>
 
         <Scrubber
@@ -263,6 +272,10 @@ export default function SampleScreen() {
         <TransportBar
           playing={status.playing}
           onPlayPause={togglePlay}
+          // ⚠ BOTH, never one — see `pauseLabel` on TransportBar. The defaults are drive copy, and on
+          // this screen the disc starts a one-minute postcard, not a drive.
+          playLabel={voice.sample.playA11y}
+          pauseLabel={voice.sample.pauseA11y}
           canSeek={canSeek}
           onSeekBack={() => seekBy(-15)}
           onSeekForward={() => seekBy(15)}
@@ -341,6 +354,7 @@ const styles = StyleSheet.create({
   card: { gap: space.lg, width: '100%' },
   endCard: { gap: space.md },
   titleRow: { gap: space.sm, alignItems: 'center' },
+  badgeRow: { flexDirection: 'row', justifyContent: 'center' },
   // The postcard matte: a raised card holding the image, with the caption printed on its lower margin.
   postcard: {
     width: '100%',

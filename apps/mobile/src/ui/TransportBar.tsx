@@ -40,6 +40,14 @@ export interface TransportBarProps {
    *  for a mid-drive pause. The icon-forward center drops the visible text label, so this
    *  rides only on the accessibilityLabel. */
   playLabel?: string
+  /** Playing-state accessibility label. Same job as `playLabel`, and it exists for the same reason
+   *  that one does: the defaults here are DRIVE copy ("Let's roll" / "Hold here"), which is right in
+   *  a car and wrong on a surface that is not a drive.
+   *
+   *  ⚠ THE PAIR MUST BE OVERRIDDEN TOGETHER. Passing only `playLabel` leaves a control that announces
+   *  itself sensibly at rest and as "Hold here" the moment it is pressed — a half-fix that is harder
+   *  to notice than no fix, because the wrong half only speaks while audio is running. */
+  pauseLabel?: string
   onSeekBack?: () => void
   onSeekForward?: () => void
   canSeek?: boolean
@@ -92,6 +100,7 @@ export function TransportBar({
   playing = false,
   onPlayPause,
   playLabel = voice.cta.play,
+  pauseLabel = voice.cta.pause,
   onSeekBack,
   onSeekForward,
   canSeek = false,
@@ -129,7 +138,7 @@ export function TransportBar({
         <Pressable
           onPress={onPlayPause}
           accessibilityRole="button"
-          accessibilityLabel={playing ? voice.cta.pause : playLabel}
+          accessibilityLabel={playing ? pauseLabel : playLabel}
           // The center disc is the enamel CTA color but GLOW-LESS — the card's halo is
           // the one amber glow on screen (DESIGN §8). A neutral cast gives it lift.
           style={({ pressed }) => [

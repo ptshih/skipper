@@ -360,6 +360,13 @@ export const voice = {
     // an optional row on home, and is a lie in onboarding — there is no later, because nothing links
     // to this screen any more. It says what it does: move on to the next question.
     skip: 'Skip the sample',
+    // ⚠ VOICEOVER-ONLY, and the reason they exist is that `TransportBar`'s defaults are DRIVE copy:
+    // this control announced itself as "Let's roll" and then "Hold here" on the first screen of a
+    // fresh install, promising a drive that a one-minute postcard does not start. Caught reading the
+    // accessibility tree on the simulator, invisible to every test and to a sighted glance.
+    // Plain, not in persona: a screen-reader label's whole job is to say what the control does.
+    playA11y: 'Play the sample',
+    pauseA11y: 'Pause the sample',
     // ⚠ THE THREE `row*` STRINGS THAT SAT HERE ARE GONE (2026-08-04) — `rowKicker` / `rowTitle` /
     // `rowHint` dressed home's listen row, and the row was deleted when the taste became the first
     // screen of onboarding (founder). The reasoning they carried is worth keeping even though the
