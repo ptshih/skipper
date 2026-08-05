@@ -6,7 +6,7 @@
   },
   "app/sample.tsx": {
     "react-hooks/set-state-in-effect": {
-      "count": 2
+      "count": 1
     }
   },
   "app/settings.tsx": {

@@ -5,7 +5,6 @@ import { Stack, useRouter } from 'expo-router'
 import type { ImageSourcePropType } from 'react-native'
 import { applyExclusiveBackgroundAudio, releaseAudioSession } from '@/lib/audio-session'
 import { track } from '@/lib/analytics'
-import { markSamplePlayed } from '@/lib/client-flags'
 import { getSample } from '@/lib/api'
 import { cleanPlaceName } from '@/lib/labels'
 import { postcardImageFor } from '@/lib/postcards'
@@ -15,6 +14,7 @@ import { useTheme, type Theme } from '@/theme'
 import {
   AttributionButton,
   Badge,
+  Button,
   Scrubber,
   Screen,
   StateView,
@@ -29,16 +29,28 @@ import {
 // Cupertino) can talk to the Skipper and still never reach a road he has stories for. This is the way
 // out of that wall: a deterministic taste that lands in the first breath, then a "plan a drive" door.
 //
+// ⚠ IT IS ALSO STEP ONE OF ONBOARDING, AND SINCE 2026-08-04 THAT IS ITS ONLY ENTRANCE. Home's listen
+// row was deleted when the taste moved here (founder), so nothing else pushes this route: every rider
+// arrives on their first launch, from home's redirect, and leaves through `/region-setup`. Two things
+// follow that a future editor must not undo piecemeal — the forward CTA may not be a `router.back()`
+// (there is nothing behind it but the redirect that sent us, i.e. a loop), and the SKIP affordance is
+// load-bearing rather than polite (without it a rider who does not want a minute of audio has no way
+// out of onboarding at all). See docs/designs/onboarding-taste-then-where.md.
+//
 // Deliberately NOT a simulated drive (which opens on proximity-roulette, can start silent, and ends
 // in dead air) — so it is structurally incapable of showing the
 // dev diagnostics footer that sim mode carries. It's a small standalone player over one presigned clip.
 //
 // The clip is chosen server-side (SAMPLE_NARRATION_QID → GET /sample). If it isn't configured the
 // endpoint 404s and this screen shows a reachable retry — never a white void.
-
-// A short beat after the screen paints before audio starts — so a stranger in a quiet room isn't
-// jump-scared by a voice the instant they tap, and reads the "A TASTE" badge first.
-const AUTOPLAY_BEAT_MS = 450
+//
+// ⚠ NOTHING PLAYS UNTIL THE RIDER TOUCHES THE DISC, and that reverses this screen's original design
+// (founder, 2026-08-04). It autoplayed after a 450 ms anti-jump-scare beat, which was defensible while
+// it sat behind a deliberate tap on home's listen row — the rider had already asked for audio. As the
+// FIRST screen of a fresh install it is not: this surface takes EXCLUSIVE `doNotMix` focus (see the
+// audio effect below), so autoplaying here does not merely make noise, it STOPS whatever a stranger
+// was already listening to, unasked, as the app's opening move. On a bus or at a desk that is a wince.
+// One tap is the price of not hijacking a podcast to introduce ourselves.
 
 // ⚠ A MODULE CONSTANT, not an inline literal, and it is the same defect step 1 of
 // docs/designs/chat-render-performance.md fixed on the chat screen. `Screen` pushes `options` through
@@ -56,19 +68,19 @@ export default function SampleScreen() {
   const player = useAudioPlayer()
   const status = useAudioPlayerStatus(player)
 
-  const [phase, setPhase] = useState<'loading' | 'playing' | 'ended' | 'error'>('loading')
+  // ⚠ `postcard` is the surface, NOT "audio is running" — the transport's own `status.playing` is the
+  // only thing that knows that. It was called `playing` while this screen autoplayed, where the two
+  // were the same thing on arrival; naming it that now would be a lie in the one state that matters
+  // most here, the freshly-painted card with the disc still untouched.
+  const [phase, setPhase] = useState<'loading' | 'postcard' | 'ended' | 'error'>('loading')
   const [sample, setSample] = useState<Sample | null>(null)
   // didJustFinish can double-fire; latch the end exactly once.
   const endedRef = useRef(false)
-  const beatTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // `sample_played` is a SEPARATE event from the conversation's preview_clip_played on purpose: this
-  // screen AUTOPLAYS, so its plays are zero-intent by default, while a tap on the rider's OWN
-  // proposed route is the sharpest charm signal the release has. Averaging the two together would
-  // hide both. `startedRef` latches the start to one event per load (a pause/resume is not a new
-  // play); `autoplayRef` carries the initiator forward to the completion event, which fires far away
-  // in the end-latch effect below.
+  // `sample_played` is a SEPARATE event from the conversation's preview_clip_played on purpose: they
+  // answer different questions — this one is "did the VOICE land" on a stranger, that one is "did
+  // THEIR drive land". Averaging them would hide both. `startedRef` latches the start to one event per
+  // load, so a pause/resume is not a second play.
   const startedRef = useRef(false)
-  const autoplayRef = useRef(true)
 
   // setAudioModeAsync is process-wide (shared with the drive player). ⚠ D35 (1.1, founder): the postcard
   // is pre-drive SKIPPER audio, so it takes EXCLUSIVE focus like a drive rather than mixing under the
@@ -91,23 +103,12 @@ export default function SampleScreen() {
     }
   }, [])
 
-  // Fire sample_played's START exactly once per load. `auto` records WHO began playback — the beat
-  // timer (true) or the rider's own tap on the transport (false) — and it must be truthful: a screen
-  // that autoplays produces plays nobody asked for, and a tap after a failed/blocked autoplay is a
-  // different, much stronger signal. Whichever fires first wins, so a rider who taps during the
-  // autoplay beat is correctly recorded as deliberate. (The beat's length lives on its constant —
-  // restating it here would be a second copy that lies the day it moves.)
-  const markStarted = useCallback((auto: boolean) => {
+  // Fire sample_played's START exactly once per load. Every play is deliberate now — there is no
+  // autoplay to distinguish it from — so this is simply "the rider pressed play", once per clip load.
+  const markStarted = useCallback(() => {
     if (startedRef.current) return
     startedRef.current = true
-    autoplayRef.current = auto
-    track('sample_played', { completed: false, autoplay: auto })
-    // ⚠ RIDES THIS LATCH RATHER THAN ADDING ONE — it is already exactly "the sample began playing",
-    // once per load, for both the autoplay beat and a deliberate tap. A second latch would be a
-    // second definition of the same fact, and the two would drift the first time either moved.
-    // This is the PLAYED half of home's listen-row rule (the SEEN half is marked on home itself):
-    // heard it once and the row never greets you again, whichever came first.
-    markSamplePlayed()
+    track('sample_played', { completed: false })
   }, [])
 
   const load = useCallback(async () => {
@@ -117,27 +118,19 @@ export default function SampleScreen() {
     try {
       const s = await getSample()
       setSample(s)
+      // Pre-buffers, and deliberately does NOT play: `replace` only cues the source. The disc is the
+      // rider's, and buffering ahead of it is what makes their tap feel instant rather than polite.
       player.replace({ uri: s.url })
-      // Pre-buffer is implicit in replace(); the beat is purely the anti-jump-scare pause.
-      beatTimer.current = setTimeout(() => {
-        try {
-          player.play()
-          markStarted(true)
-        } catch {}
-      }, AUTOPLAY_BEAT_MS)
-      setPhase('playing')
+      setPhase('postcard')
     } catch {
       // A soft 404 (no sample configured) or a network blip — both are a retryable hiccup here, not a
       // persona dead-end. Show the retry surface.
       setPhase('error')
     }
-  }, [player, markStarted])
+  }, [player])
 
   useEffect(() => {
     void load()
-    return () => {
-      if (beatTimer.current) clearTimeout(beatTimer.current)
-    }
   }, [load])
 
   // Fill the trail as the story plays (RouteTrack snaps this under Reduce Motion on its own).
@@ -150,8 +143,14 @@ export default function SampleScreen() {
   // stopped at/near the very end. Without this, a dropped event strands the rider on the postcard
   // with no CTA — the exact funnel the screen exists to close. Guarded so it can't fire at 0:00.
   useEffect(() => {
-    if (endedRef.current || phase !== 'playing') return
-    const atEnd = durSec > 0 && !status.playing && (status.currentTime ?? 0) >= durSec - 0.35
+    if (endedRef.current || phase !== 'postcard') return
+    // ⚠ `startedRef` gates the fallback, and it is new with tap-to-play. While this screen autoplayed,
+    // "stopped at/near the end" could only mean a clip that had run; now the card can sit at 0:00,
+    // not playing, indefinitely — and a clip whose duration failed to resolve would satisfy
+    // `currentTime >= durSec - 0.35` at rest and jump a rider who never pressed play straight to the
+    // end card. Requiring a start makes the fallback mean what it says.
+    const atEnd =
+      startedRef.current && durSec > 0 && !status.playing && (status.currentTime ?? 0) >= durSec - 0.35
     if (status.didJustFinish || atEnd) {
       endedRef.current = true
       setPhase('ended')
@@ -159,7 +158,7 @@ export default function SampleScreen() {
       // atEnd fallback for a didJustFinish dropped across an OS interruption) rather than a second
       // mechanism of its own — so the event can never disagree with the end card the rider is
       // looking at, and a dropped native event doesn't silently drop the completion too.
-      track('sample_played', { completed: true, autoplay: autoplayRef.current })
+      track('sample_played', { completed: true })
       // Hand the audio session back the moment the taste is over, not on unmount: the rider sits on
       // the end card deciding, and under `doNotMix` their own music stays paused for as long as they
       // do. The unmount teardown above is the backstop for leaving mid-clip.
@@ -180,10 +179,8 @@ export default function SampleScreen() {
         player.pause()
       } else {
         player.play()
-        // A no-op once the beat timer already started the clip (startedRef). It matters only when
-        // the autoplay never took — a silenced/interrupted session — and the rider reached for the
-        // button themselves, which is a deliberate play, not an autoplay.
-        markStarted(false)
+        // Latched, so a resume after a pause is not counted as a second play.
+        markStarted()
       }
     } catch {}
   }
@@ -228,20 +225,21 @@ export default function SampleScreen() {
         <TransportBar
           single={{
             title: voice.sample.endCta,
-            // ⚠ Every route into this screen now arrives from home, so BACK is always correct — the
-            // `?from=roam` fork existed only because the roam rescue put roam on the stack beneath us.
-            // Do not "restore" a replace() here: with one entry point, replacing would drop the
-            // rider's history for no gain.
-            onPress: () => router.back(),
+            // ⚠ FORWARD, NEVER `router.back()`, and this is the trap the old code left loaded. Back
+            // used to be right because home pushed this screen; home now REDIRECTS to it on a
+            // first launch, so going back lands on a home that immediately redirects here again — an
+            // onboarding loop with no exit. `replace` also drops this screen from the stack, which is
+            // what stops the region step's back chevron offering a rider a second listen they did not
+            // ask for. There is exactly one way out of onboarding and it points at `/region-setup`.
+            onPress: () => router.replace('/region-setup'),
             glow: true,
-            secondary: { title: voice.sample.endSecondary, onPress: () => router.back() },
           }}
         />
       </Screen>
     )
 
-  // ── PLAYING: the postcard proper. The framed image is the hero; the scrubber is the ONE progress
-  // bar (the old RouteTrack motif was a redundant second one). ──
+  // ── THE POSTCARD PROPER. The framed image is the hero; the scrubber is the ONE progress bar (the
+  // old RouteTrack motif was a redundant second one). Nothing is playing yet — the disc is the ask. ──
   return (
     <Screen padded center contentContainerStyle={styles.body}>
       <Stack.Screen options={BLANK_HEADER} />
@@ -273,6 +271,19 @@ export default function SampleScreen() {
         {/* The ⓘ source affordance — same reveal as the drive player (unified). */}
         <AttributionButton items={sample?.attribution} />
       </View>
+
+      {/* ⚠ THE WAY OUT, AND IT IS A REQUIREMENT RATHER THAN A COURTESY. This screen is the first thing
+          a fresh install shows and it has no back chevron (home redirected here, so `canGoBack` is
+          false) — without this control a rider who does not want to stand still for a minute of audio
+          has NO exit from onboarding at all. `ghost` keeps it quiet enough that the disc stays the
+          obvious move; it is an escape, not an alternative.
+          ⚠ It goes FORWARD to the region step, not home: skipping the taste is not skipping
+          onboarding, and jumping home would leave `onboarded` unwritten and bounce them right back. */}
+      <Button
+        variant="ghost"
+        title={voice.sample.skip}
+        onPress={() => router.replace('/region-setup')}
+      />
     </Screen>
   )
 }

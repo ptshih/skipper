@@ -355,22 +355,22 @@ export const voice = {
     endBody:
       'One stop of a few hundred up around the lake. Point me at a road up there and I’ll do this the whole drive.',
     endCta: 'Plan a drive',
-    endSecondary: 'Maybe later',
-    // ⚠ REPLACES `homeLink`, and the change is a reclassification, not a rewording. As a ghost text
-    // link this was a FOURTH text CTA competing with the asks and the composer, which is what "too
-    // prominent" meant. As a playable ROW it is a different object class — the one piece of real
-    // CONTENT on the screen — so it stops competing while becoming easier to reach. It is also the
-    // "worked example" the empty-state research puts first: for an audio product, letting a newcomer
-    // HEAR the thing should outrank asking them to type at it.
+    // The escape hatch on the postcard itself, for a rider who does not want to stand still for a
+    // minute of audio. ⚠ NOT 'Maybe later' (which this replaces): that was honest when the sample was
+    // an optional row on home, and is a lie in onboarding — there is no later, because nothing links
+    // to this screen any more. It says what it does: move on to the next question.
+    skip: 'Skip the sample',
+    // ⚠ THE THREE `row*` STRINGS THAT SAT HERE ARE GONE (2026-08-04) — `rowKicker` / `rowTitle` /
+    // `rowHint` dressed home's listen row, and the row was deleted when the taste became the first
+    // screen of onboarding (founder). The reasoning they carried is worth keeping even though the
+    // strings are not: the taste is the "worked example" the empty-state research puts first, because
+    // for an audio product letting a newcomer HEAR the thing outranks asking them to type at it. That
+    // argument is exactly why it moved to the front of the app rather than being dropped.
     // ⚠ NAMES NO PLACE. The sample clip is server-chosen and swappable, and voice is delivery, never
     // facts — so this copy sells the VOICE, not the location, and survives the clip changing. That is
     // also what lets one canonical sample stay canonical once there is more than one region.
-    rowKicker: 'Have a listen',
-    // ⚠ see `region` below for the picker's copy — kept out of `sample` so a future region sheet does
-    // not inherit postcard framing.
-
-    rowTitle: 'A minute of the real thing',
-    rowHint: 'This is what the whole drive sounds like',
+    // ⚠ see `region` below for the picker's copy — kept out of `sample` so the region sheet does not
+    // inherit postcard framing.
   },
   // The region sheet behind the home chip. ⚠ Names NO region — the list is server data; this is only
   // the framing around it, and it has to stay true the day there are six.
@@ -389,6 +389,21 @@ export const voice = {
     // sounds like — an ADMIN is served staged regions too (apps/api GET /regions, `canPreview`), so
     // this ships the moment a second region is seeded, released or not.
     unset: 'Pick a region',
+    // ── Onboarding step 2. The screen asks WHERE, once, before the rider ever reaches the composer.
+    // ⚠ NO LOCATION ANYTHING HERE, and that is the decision the copy has to hold up (founder,
+    // 2026-08-04): the rider picks by hand, and iOS's one-shot permission prompt is still spent
+    // exactly where 1.1 put it — at "Let's roll", and only if we don't already have it. A line like
+    // "we'll find the closest roads for you" would be writing a cheque this flow deliberately cannot
+    // cash. See docs/designs/onboarding-taste-then-where.md.
+    setupTitle: 'Where are we driving?',
+    // ⚠ Says the LIMIT out loud rather than hiding it. A newcomer who picks from a list of one has
+    // learned something true about the app in the one moment they are most forgiving of it; the same
+    // fact discovered later, mid-plan, reads as a dead end. The postcard right before this is what
+    // buys the goodwill to be straight here.
+    setupBody: 'Pick the roads you want stories on. More are coming — this is where I know every turn.',
+    setupCta: 'Start exploring',
+    // The chip is the control, so the label beside it names the field rather than repeating the ask.
+    setupLabel: 'REGION',
   },
   greeting: 'Hop in. I’ll do the talking.',
   // The cold-open descriptor: a newcomer should know WHAT this is before any audio
@@ -547,6 +562,13 @@ export const voice = {
     // desk pass more than it deserves is worse than no copy. docs/designs/desk-drive-harness.md.
     developerHint:
       'Simulated GPS walks this drive’s route at a steady speed and fires the stops, no car required. It tests the triggering and the audio, not the GPS itself. Takes effect next time you start a drive.',
+    // ── First-run reset. ⚠ Plain and literal, not in persona: an admin tool's copy has one job, which
+    // is to say exactly what the button does to this phone before it is pressed.
+    onboardingLabel: 'FIRST-TIME EXPERIENCE',
+    onboardingHint:
+      'Onboarding — the postcard, then the region question — runs once per install. Reset it to see those two screens again on the next launch. Your drives, downloads and account are untouched; the region you already picked stays selected in the picker.',
+    onboardingReset: 'Reset first-time experience',
+    onboardingResetDone: 'Reset. Relaunch the app to see onboarding again.',
     tracesLabel: 'DRIVE TRACES',
     // Says what it is FOR, because the value is not obvious from the file list: a trace is the only
     // way a drive that already happened can be driven again.

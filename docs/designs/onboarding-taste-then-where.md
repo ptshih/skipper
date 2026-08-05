@@ -1,9 +1,14 @@
 # Onboarding — a taste, then where
 
-> **Status:** 💡 **IDEA — 2026-08-04** (founder brainstorm, decisions made live in the session below).
-> Two screens in front of the cold open: hear the skipper, then say which roads. **The location
-> permission is NOT part of it** — that question was asked and settled the other way (§2), which
-> reverses one third of the original brief. Nothing here is built.
+> **Status:** ✅ **BUILT 2026-08-04.** Two screens in front of the cold open: hear the skipper
+> (`apps/mobile/app/sample.tsx`), then say which roads (`apps/mobile/app/region-setup.tsx`), gated by
+> `onboarded` in `src/lib/client-flags.ts` and entered from the redirect at the top of `app/index.tsx`.
+> **The location permission is NOT part of it** — asked and settled the other way twice (§2), which
+> reverses one third of the original brief.
+>
+> ⚠ **TWO THINGS IN THE TEXT BELOW WERE REVERSED BY THE FOUNDER DURING THE BUILD, and §8 is the list.**
+> Read §8 before §4 — it deletes §4 outright, including the region-`center` wire field that section
+> recommends. The rest of this document shipped as written.
 
 ## What it is
 
@@ -146,5 +151,52 @@ the cheaper truth.
 
 **No new paid call.** `GET /sample` already exists and is anonymous and free (a presigned clip, no
 model call); `GET /regions` is free. Onboarding adds no rider-triggered spend, so the caps in
-`apps/api/src/limits.ts` are untouched and this needs no founder go on that axis. The only contract
-change is the region centre in §4.
+`apps/api/src/limits.ts` are untouched and this needs no founder go on that axis. ⚠ And per §8 there is
+now **no wire change at all** — the region centre §4 proposed was cut, so this shipped as a pure client
+change against two endpoints that already existed.
+
+## §8 · What changed during the build (2026-08-04) — READ THIS BEFORE §2 AND §4
+
+Two founder calls landed after the sections above were written. Both narrow the flow; neither was a
+preference.
+
+**1. No location affordance anywhere in onboarding — §4 IS DELETED.** §2 dropped the dedicated
+permission *screen* but kept a "Use my location" button on the region screen, and §4 built a whole
+mechanism behind it: a region `center` on the `Region` DTO, derived from the bbox, plus a
+`nearestRegionId` pure function on the phone. The founder cut the button — *"we should not ask for
+location but just show the region picker so they can choose a default region"*, and separately:
+*"location is still only asked right when they click 'start a drive' (and we don't already have
+permission)"*.
+
+That deletes §4 rather than deferring it, and the reason is worth keeping because §4's own recommendation
+now reads as a trap. With no location ask there is **no rider coordinate on any onboarding screen**, so
+nothing could ever consume either half: `nearestRegionId` would have had no caller and `center` no
+reader. This repo has been bitten specifically by *"a constant or function with no production reader and
+green tests around its definition"* — and §4 had even pre-authorised that state ("a no-op that cannot be
+observed on device until region 2 exists... the tests are the only thing holding it upright"). Both were
+written, tested green, and then backed out the same day; the wire is unchanged and `Region` still carries
+no geometry. The tombstone that stops the next reader rebuilding it is in
+`apps/mobile/src/lib/region-select.ts`, beside the `pickRegionId` it would have joined.
+
+⚠ **Reopening "land them on their nearest roads" means reopening the PERMISSION question first**, not
+the geometry question. The geometry was the easy half.
+
+**2. The listen row is gone from home, not merely duplicated.** The brief said "move the sample screen
+to this flow" and the founder confirmed the second half of that: *"we no longer need the sample chip on
+the home screen since it was moved to onboarding."* So `ListenRow`, `voice.sample.row*` and the two
+client flags that governed the row (`listenRowSeen`, `samplePlayed`) were all deleted, and
+`home-cold-open-declutter.md` §14.2 is now history. `/sample` has exactly one entrance — the redirect —
+and exactly one exit, forward to `/region-setup`.
+
+⚠ **That is what makes the postcard's SKIP control load-bearing rather than polite.** With home no
+longer pushing it, `canGoBack` is false on the first screen a fresh install shows; without the skip a
+rider unwilling to stand still for a minute of audio would have no way out of onboarding at all. For the
+same reason neither exit may be a `router.back()` — back lands on a home that immediately redirects
+here, which is a loop.
+
+**Also worth recording: the sample no longer autoplays** (§1 called this, and it survived the build).
+The 450 ms anti-jump-scare beat was defensible behind a deliberate tap on home's listen row; as the
+first screen of a fresh install it is not, because this surface takes exclusive `doNotMix` focus and
+would stop a stranger's podcast as the app's opening move. One consequence rippled into telemetry:
+`sample_played` lost its `autoplay` property, since every play is now deliberate and a field with one
+possible value reads like a signal while carrying none.

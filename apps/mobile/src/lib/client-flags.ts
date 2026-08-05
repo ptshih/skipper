@@ -1,27 +1,34 @@
 // CLIENT FLAGS — the one home for tiny, DEVICE-scoped UI facts that must outlive a relaunch.
 //
-// Today it holds exactly the two booleans that decide the home listen row: hide it after the first
-// launch OR once the sample has actually been played, whichever lands first
-// (docs/designs/home-cold-open-declutter.md §14.2). It is deliberately written so a SECOND flag is an
-// added FIELD rather than an added file — that is what makes "no future flag can pick the cache dir"
-// structurally true instead of remembered.
+// Today it holds exactly one boolean: has this phone been through first-run onboarding. It is
+// deliberately written so a SECOND flag is an added FIELD rather than an added file — that is what
+// makes "no future flag can pick the cache dir" structurally true instead of remembered.
+//
+// ⚠ IT HELD TWO OTHER FLAGS UNTIL 2026-08-04 — `listenRowSeen` and `samplePlayed`, which together
+// decided whether home's cold open offered the listen row. Both were deleted with the row itself
+// (founder: "we no longer need the sample chip on the home screen since it was moved to onboarding").
+// Recorded because the deletion looks like a simplification and is actually a MOVE: the sample is not
+// gone, it is now the first thing a new install sees, and the question "has this rider heard him yet"
+// is answered by `onboarded` below rather than by two flags racing each other. Anything tempted to
+// re-add a "show the sample again" affordance should re-open that decision, not this file.
 //
 // Document dir, NEVER the cache dir. The OS evicts the cache dir on its own schedule, and an eviction
-// here would silently RESURRECT a row the rider already dismissed by seeing it. `region-cache.ts`
-// carries the same sentence for the same reason; the value of having ONE flags file is that the
-// choice gets made once, here.
+// here would silently RESURRECT onboarding for a rider who already finished it — worse now than it was
+// for the listen row, because this is a whole flow rather than a single dismissible row.
+// `region-cache.ts` carries the same sentence for the same reason; the value of having ONE flags file
+// is that the choice gets made once, here.
 //
 // ⚠ NEVER keyed on the user id. The Better Auth anonymous plugin hard-DELETES the anonymous user row
 // at link-to-account and mints a fresh one (CLAUDE.md), so a user-keyed flag vanishes the instant a
-// rider signs up — the listen row would pop straight back the moment they made an account. These are
-// facts about what this PHONE has already shown, not account state.
+// rider signs up — onboarding would reappear the moment they made an account, which is the single
+// worst moment for it. These are facts about what this PHONE has already shown, not account state.
 //
 // ⚠ NOT purged on sign-out, and the `signOut` wrapper in `./auth` leaves it alone on purpose:
-// clearing it resurrects the listen row through the back door, and there is nothing in here that
+// clearing it walks a signed-out rider back through onboarding, and there is nothing in here that
 // belongs to an account. (Nor is there anything to purge for privacy — no ids, no timestamps, no
 // place data, no rider content.)
 //
-// Nothing here throws. The total loss of this file costs one re-shown row, so a caller has nothing to
+// Nothing here throws. The total loss of this file costs one re-shown flow, so a caller has nothing to
 // act on and no way to recover — which is also why there is no `version` field: migrations for state
 // this cheap would cost more than the state is worth.
 //
@@ -31,23 +38,21 @@
 //
 // ⚠ No test file, by the house pattern: `expo-file-system` will not load under `bun test` (the same
 // reason `region-cache.ts`, `offline.ts` and `clip-store.ts` have none). The only logic here is one
-// boolean OR. If the rule ever grows a second input or a re-show TTL, extract the DECISION to
+// boolean read. If the rule ever grows a second input or a re-show TTL, extract the DECISION to
 // `client-flags-util.ts` and test that.
 //
 // Backup note, not a problem: `Paths.document` is included in iCloud/device backups, so a restored
-// device arrives with the row already hidden — correct, the rider has heard him. A reinstall wipes
-// the container and the row returns.
+// device arrives already onboarded — correct, the rider has met him. A reinstall wipes the container
+// and onboarding returns.
 
 import { File, Paths } from 'expo-file-system'
 
 interface ClientFlags {
-  /** The listen row was RENDERED on a previous launch. */
-  listenRowSeen: boolean
-  /** The sample clip actually BEGAN PLAYING at least once. */
-  samplePlayed: boolean
+  /** First-run onboarding ran to completion — the rider heard the taste and picked a region. */
+  onboarded: boolean
 }
 
-const DEFAULTS: ClientFlags = { listenRowSeen: false, samplePlayed: false }
+const DEFAULTS: ClientFlags = { onboarded: false }
 
 /** The only place in the module that names a directory — see the header. */
 const flagsFile = (): File => new File(Paths.document, 'client-flags.json')
@@ -63,14 +68,14 @@ function readFlags(): ClientFlags {
     // half-written file parses to junk as readily as it fails to parse, so anything that is not
     // literally a boolean (a string, a number, a key this build has never heard of) lands on false
     // rather than being coerced truthy. Unknown keys are ignored so an older build can share the file.
-    return { listenRowSeen: o.listenRowSeen === true, samplePlayed: o.samplePlayed === true }
+    return { onboarded: o.onboarded === true }
   } catch {
     return DEFAULTS
   }
 }
 
-/** Only ever set to true — a flag that could be cleared would need a reason to be, and none of the
- *  callers has one, so there is no `value` parameter to get backwards. */
+/** Only ever set to TRUE — there is no `value` parameter, so no caller can pass the wrong one. Clearing
+ *  is a separate, deliberately-named function below rather than an argument here. */
 function setFlag(field: keyof ClientFlags): void {
   const current = readFlags()
   // Already set: skip the write entirely. Otherwise every launch pays an IO write — and a fresh
@@ -79,50 +84,69 @@ function setFlag(field: keyof ClientFlags): void {
   try {
     flagsFile().write(JSON.stringify({ ...current, [field]: true }))
   } catch {
-    // Best-effort, and the failure is bounded: an unwritten flag costs the listen row re-appearing
-    // next launch, never a crash and never a broken screen (`writeCachedRegion`'s posture exactly).
+    // Best-effort, and the failure is bounded: an unwritten flag costs onboarding re-appearing next
+    // launch, never a crash and never a broken screen (`writeCachedRegion`'s posture exactly).
   }
 }
 
 /**
- * Should the home cold open render the listen row?
+ * Should this launch open on first-run onboarding rather than on home?
  *
- * §14.2's union, negated and single-sourced here so no second predicate can ever disagree with it:
- * the row is offered until the rider has EITHER seen it on a previous launch OR actually played the
- * sample.
+ * Fails toward SHOWING it — `true` when the file is absent, unreadable, half-written or holds junk.
+ * That is the honest default for the case that dominates by orders of magnitude (a fresh install, where
+ * the file legitimately does not exist), and the two error branches are indistinguishable from it
+ * without keeping state we deliberately do not keep. The cost of being wrong is a returning rider
+ * seeing two screens they can clear in two taps, one of which is a region picker whose answer is
+ * already correct; the cost the other way is a first-timer never hearing the skipper at all, which is
+ * the entire reason the flow exists.
  *
- * Fails OPEN — `true` when the file is absent, unreadable, half-written or holds junk. Re-showing the
- * row costs a rider one glance; hiding it forever is unrecoverable from inside the app and invisible
- * from outside it.
- *
- * ⚠ CALLER CONTRACT: call this ONCE, in a lazy `useState` initialiser. A live call re-evaluates
- * mid-mount and yanks the row out from under a rider returning from `/sample` — home stays mounted
- * under a push, so the flag written by that visit is otherwise never re-read until next launch, which
- * is the correct behaviour.
+ * ⚠ CALLER CONTRACT: call this ONCE, in a lazy `useState` initialiser, and never as a live read. Home
+ * is what gates on it, and home stays MOUNTED under a push — a live call would re-evaluate mid-session
+ * and could bounce a rider who is mid-conversation back into onboarding.
  */
-export function shouldShowListenRow(): boolean {
-  const f = readFlags()
-  return !(f.listenRowSeen || f.samplePlayed)
+export function shouldShowOnboarding(): boolean {
+  return !readFlags().onboarded
 }
 
 /**
- * Record that the listen row was rendered.
+ * Record that onboarding finished.
  *
- * ⚠ Call from an effect on the mount that ACTUALLY RENDERED the row, never on every home mount: the
- * offline home carries no listen row, so marking it there would burn the one launch the rider is owed
- * on a screen that never offered him anything.
+ * ⚠ WRITE IT BEFORE NAVIGATING HOME, not after, and not on each step. Home decides whether to redirect
+ * in a lazy initialiser at mount, so a flag written after `router.replace('/')` races the mount that
+ * reads it — and losing that race sends the rider straight back into onboarding, which is a loop, not
+ * a glitch. Writing it on step ONE would be worse in the other direction: a rider who quit during the
+ * taste would never be offered a region.
  */
-export function markListenRowSeen(): void {
-  setFlag('listenRowSeen')
+export function markOnboarded(): void {
+  setFlag('onboarded')
 }
 
 /**
- * Record that the sample clip began playing.
+ * Forget that onboarding ever ran, so the next launch opens on it again. **Developer tool only**
+ * (Settings → Developer, admin-gated), and it exists because the flow is otherwise a once-per-INSTALL
+ * surface: without this, re-checking a copy tweak on the first two screens a stranger ever sees means
+ * deleting and reinstalling the app, which also throws away the drives, the downloads and the session.
  *
- * Belongs next to `app/sample.tsx`'s existing "playback began" latch, which already fires exactly
- * once per load for BOTH the autoplay beat and a deliberate tap — so it is precisely "has been
- * PLAYED" with no second latch to keep in sync.
+ * ⚠ THE ONLY CLEARING PATH IN THIS MODULE, and it must stay that way. Every other writer is
+ * one-directional on purpose: a flag that ordinary code can un-set is a flag that gets un-set by
+ * accident, and the accident here — onboarding reappearing for a rider mid-use — is exactly what the
+ * "never keyed on the user id" and "not purged on sign-out" rules in the header are protecting against.
+ * If a second caller ever wants this, that is a design question, not an import.
+ *
+ * ⚠ DELETES THE FILE rather than writing `{ onboarded: false }`, so a reset lands on the same state a
+ * fresh install does — byte-identical, not merely equivalent. A future flag added to this module is
+ * then covered automatically, instead of quietly surviving a "reset everything" that only knew about
+ * the fields someone remembered to enumerate.
+ *
+ * ⚠ IT DOES NOT TOUCH THE REGION CACHE, deliberately: `region-cache.ts` is a different fact (which
+ * roads the rider chose) with a different lifetime, and onboarding re-seeds its picker FROM that cache
+ * (`pickRegionId`). So a reset replays the flow with the previous answer pre-selected — which is the
+ * honest simulation of a rider who restored from a backup, and one tap from the fresh-install case.
  */
-export function markSamplePlayed(): void {
-  setFlag('samplePlayed')
+export function resetOnboarding(): void {
+  try {
+    flagsFile().delete()
+  } catch {
+    // Nothing to act on: the file may simply not exist yet, which is already the desired end state.
+  }
 }

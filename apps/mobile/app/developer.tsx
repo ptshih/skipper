@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { Alert, StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect } from 'expo-router'
 import { isAdmin, useSession } from '@/lib/auth'
+import { resetOnboarding } from '@/lib/client-flags'
 import { useSimMode } from '@/lib/sim-mode'
 import { deleteTrace, listTraces, shareTrace, type StoredTrace } from '@/lib/trace-export'
 import { space } from '@/theme/tokens'
@@ -22,6 +23,10 @@ export default function DeveloperScreen() {
   const { data: session, isPending } = useSession()
   const { simMode, setSimMode } = useSimMode()
   const [traces, setTraces] = useState<StoredTrace[]>([])
+  // Latches the "done" line rather than timing it out: the instruction it carries (relaunch) stays
+  // true for as long as this screen is up, so hiding it after N seconds would only take the
+  // explanation away from someone still reading it.
+  const [onboardingReset, setOnboardingReset] = useState(false)
 
   // Re-read on focus rather than once on mount: the whole point is to come here straight after a
   // drive, and a list that still says "no traces yet" would read as the recorder having failed.
@@ -30,6 +35,11 @@ export default function DeveloperScreen() {
       setTraces(listTraces())
     }, []),
   )
+
+  const onResetOnboarding = useCallback(() => {
+    resetOnboarding()
+    setOnboardingReset(true)
+  }, [])
 
   const onDelete = useCallback((name: string) => {
     Alert.alert(voice.settings.tracesDeleteConfirmTitle, voice.settings.tracesDeleteConfirmBody, [
@@ -68,6 +78,29 @@ export default function DeveloperScreen() {
         <Text variant="dim" color="inkFaint">
           {voice.settings.developerHint}
         </Text>
+      </View>
+
+      {/* ⚠ NOT DESTRUCTIVE, so no confirm — unlike the trace delete below, which loses the only copy of
+          a real drive's GPS. This throws away one boolean, and the worst case is seeing two screens
+          you have already seen. A confirm dialog on a harmless action trains the habit of dismissing
+          them on the harmful one. */}
+      <View style={styles.section}>
+        <Text variant="label" color="inkFaint">
+          {voice.settings.onboardingLabel}
+        </Text>
+        <Text variant="dim" color="inkFaint">
+          {voice.settings.onboardingHint}
+        </Text>
+        <Button title={voice.settings.onboardingReset} variant="secondary" onPress={onResetOnboarding} />
+        {/* ⚠ CONFIRMATION MATTERS HERE SPECIFICALLY because nothing else changes on screen. Home decides
+            whether to redirect in a lazy initialiser at MOUNT and stays mounted underneath Settings, so
+            the reset cannot take effect until the app is relaunched — without this line a tester taps,
+            sees nothing happen anywhere, and reasonably concludes the button is broken. */}
+        {onboardingReset ? (
+          <Text variant="dim" color="accent">
+            {voice.settings.onboardingResetDone}
+          </Text>
+        ) : null}
       </View>
 
       <View style={styles.section}>

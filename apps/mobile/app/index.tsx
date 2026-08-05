@@ -19,7 +19,7 @@
 // of it is persisted — not to disk, not to the region cache (which holds public place NAMES only).
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { StyleSheet, View, type TextInput } from 'react-native'
-import { Stack, useFocusEffect, useIsFocused, useRouter } from 'expo-router'
+import { Redirect, Stack, useFocusEffect, useIsFocused, useRouter } from 'expo-router'
 import { MAX_PLAN_DRAWN, type PlannedRoute, type PlannerCopy } from '@skipper/shared'
 // ⚠ The TYPED contract, and the only analytics surface there is (src/lib/analytics.tsx owns the raw
 // client, unexported). Every property below is a number, a boolean or a closed union — INV-13 applies
@@ -48,7 +48,7 @@ import {
   rotateNames,
   type ExampleAsk,
 } from '@/lib/planner-examples'
-import { markListenRowSeen, shouldShowListenRow } from '@/lib/client-flags'
+import { shouldShowOnboarding } from '@/lib/client-flags'
 import { driveMinutes } from '@/lib/labels'
 import { useLatestRun } from '@/lib/useLatestRun'
 import { useNavigateOnce } from '@/lib/useNavigateOnce'
@@ -99,7 +99,6 @@ import {
   useRegionPicker,
   type IconName,
   SuggestionRow,
-  ListenRow,
   Text,
   TranscriptCard,
   TurnBubble,
@@ -131,7 +130,29 @@ const WATERMARK_TOP = 4
 // ⚠ `PreviewItem` MOVED to `src/ui/TranscriptCard.tsx` and is imported from `@/ui` — the card owns
 // its own contract, and `src/ui` may not import from `app/`.
 
-export default function HomeScreen() {
+/**
+ * The onboarding gate, and the ONLY reason it is a separate component wrapping the screen below.
+ *
+ * ⚠ IT CANNOT LIVE INSIDE `HomeScreen` — that is a rule of React, not a preference. Home runs dozens
+ * of hooks and none of them may be skipped, so a `<Redirect>` decided in its body would still fire a
+ * `/regions` load, a `/planner/copy` load and the whole conversation machine for a rider we are about
+ * to send somewhere else. Deciding one level up means a first launch does none of that work twice.
+ *
+ * ⚠ LAZY INITIALISER, NEVER A LIVE READ — the contract `shouldShowOnboarding` states. Home stays
+ * MOUNTED under a push, so re-evaluating this mid-session could yank a rider out of a conversation and
+ * back into onboarding. Read once, at mount, and the answer cannot change underneath them.
+ *
+ * The flow `replace`s its way back to `/` when it finishes, which remounts this — and by then the flag
+ * and the rider's region choice are both on disk, so the fresh mount reads a settled world.
+ */
+export default function HomeRoute() {
+  const [onboarding] = useState(shouldShowOnboarding)
+  // The postcard first, the region question second; `app/sample.tsx` owns the hand-off between them.
+  if (onboarding) return <Redirect href="/sample" />
+  return <HomeScreen />
+}
+
+function HomeScreen() {
   const router = useRouter()
   const { data: session } = useSession()
   // ⚠ INV-9 — the ONE client-side "is this rider signed in?" (src/lib/auth.ts). A truthy `session` is
@@ -293,8 +314,8 @@ export default function HomeScreen() {
   // example asks are TAPPABLE, so unlike the composer placeholder beside them they must hold
   // absolutely still while the rider is deciding: a chip that re-labels itself under a thumb sends a
   // sentence the rider did not choose. Home also stays MOUNTED under a push, so this correctly
-  // survives a trip to /sample and back rather than re-rolling on return (the same reasoning
-  // `showListenRow` is built on).
+  // survives a trip to settings or a drive and back rather than re-rolling on return (the same
+  // reasoning the onboarding gate at the top of this file is built on).
   //
   // ⚠ `nextRotation` is written rather than incremented in place, which makes the write IDEMPOTENT:
   // the regions load and the region picker both persist the cache, and both storing the same computed
@@ -1060,12 +1081,6 @@ export default function HomeScreen() {
   const uncuratedRegion = !!region && !region.ready
   const showExamples = coldOpen && !plannerDown && !sending && !uncuratedRegion
 
-  // ⚠ LAZY INITIALISER, NOT A LIVE CALL — the contract `shouldShowListenRow` states, and §16's guard
-  // for it: read once at mount so the answer cannot change underneath a rider. Home stays MOUNTED
-  // under a push, so a live read would re-evaluate when they came back from /sample and pull the row
-  // out mid-glance. Evaluated once here, it is true by construction rather than by care.
-  const [showListenRow] = useState(shouldShowListenRow)
-
   // ⚠ ANY region at all, not "more than one" — and the change of heart is the point. Gating this on
   // a second region made the chip a dead label for the only configuration that ships, and the reason
   // I gave (a picker onto a list of one does nothing) was wrong about what the sheet is FOR: it
@@ -1161,14 +1176,6 @@ export default function HomeScreen() {
   const placeholder = coldOpen
     ? placeholderAt(placeholderExamples, tick, voice.plan.composerPlaceholder)
     : voice.plan.composerReplyPlaceholder
-
-  // Burn the one launch the rider is owed only when the row was ACTUALLY on screen. Keyed on the same
-  // two conditions that render it, so the offline home — which carries no listen row — can never spend
-  // it on a screen that offered nothing. Writing the flag does not re-render: `showListenRow` was
-  // already captured above, so the row stays put for the rest of this mount.
-  useEffect(() => {
-    if (coldOpen && showListenRow) markListenRowSeen()
-  }, [coldOpen, showListenRow])
 
   // The wrap-up bar's CTA (design §7 case 2): the most recent route the rider was shown, but ONLY if
   // it never got drawn. Every route is drawn on arrival, so this is normally empty — it exists for
@@ -1480,27 +1487,12 @@ export default function HomeScreen() {
           onRetry={regionsFailed ? () => void loadRegions() : retryTurn}
         />
       ) : null}
-      {/* ⚠ THE LISTEN ROW SITS ABOVE THE ASKS, INSIDE THE SAME LIST, and that placement is what makes
-          the two launches structurally identical bar one row — the alternative (a hero card above the
-          question) forced two authored layouts and two authored copy decks. It is still "hear him
-          first" in the ACTION order: the first thing offered, just not the first thing typeset.
-          ⚠ Its skin is deliberately unlike the three below it (round disc, pine keyline, its own
-          kicker) so it never reads as a fourth suggestion. That distinction lives in ListenRow.
-          ⚠ `coldOpen`, NOT `showExamples` — the sample is a static presigned clip that does not care
-          whether the planner is up, and gating it on the examples made it vanish during an OUTAGE,
-          i.e. at the exact moment it is the only audio in the app that still works. */}
-      {coldOpen && showListenRow ? (
-        <ListenRow
-          kicker={voice.sample.rowKicker}
-          title={voice.sample.rowTitle}
-          subtitle={voice.sample.rowHint}
-          // ⚠ Marks NOTHING here. "Seen" is recorded by the effect below, on the mount that actually
-          // rendered the row; "played" is recorded in app/sample.tsx, next to the latch that already
-          // fires once per load for both autoplay and a deliberate tap. Marking on tap would be a
-          // third writer of the same fact and the one most likely to drift.
-          onPress={() => navigateOnce(() => router.push('/sample'))}
-        />
-      ) : null}
+      {/* ⚠ THE LISTEN ROW WAS HERE AND IS GONE (founder, 2026-08-04) — "we no longer need the sample
+          chip on the home screen since it was moved to onboarding". It is a MOVE, not a cut: the taste
+          is now the FIRST screen of a fresh install (app/sample.tsx, reached by the redirect at the
+          top of this file), which is a strictly better slot for it than a row a returning rider had
+          already dismissed. Do not re-add it here without re-opening that call — the row carried two
+          persisted flags of its own, and both were deleted with it (src/lib/client-flags.ts). */}
       {showExamples
         ? exampleAsks.map((e, i) => (
             <SuggestionRow

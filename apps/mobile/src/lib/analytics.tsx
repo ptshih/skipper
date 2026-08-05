@@ -218,8 +218,14 @@ type AnalyticsEventProps = {
   /** The ONE presigned preview clip from the rider's OWN proposed route. Deliberately distinct from
    *  sample_played: this answers "did their drive land", the sample answers "did the voice land". */
   preview_clip_played: { completed: boolean }
-  /** `GET /sample` — the curated postcard, a SEPARATE surface from the route preview clip above. */
-  sample_played: { completed: boolean; autoplay: boolean }
+  /** `GET /sample` — the curated postcard, a SEPARATE surface from the route preview clip above.
+   *  ⚠ It carried an `autoplay` boolean until 2026-08-04, when the postcard became the first screen of
+   *  ONBOARDING and stopped auto-starting (it takes exclusive `doNotMix` focus, so autoplaying at it
+   *  would stop a stranger's podcast as the app's opening move). Every play is now a deliberate tap, so
+   *  the field could only ever report `false` — and a property with one possible value is noise that
+   *  reads like a signal. The rate this event exists to produce is now simply: of the installs that saw
+   *  onboarding, how many pressed play, and how many heard it out. */
+  sample_played: { completed: boolean }
   /** The free-account wall was shown. Numerator of the funnel's single most important rate. */
   wall_shown: { source: WallSource }
   /** A NEW account was created. ⚠ Sign-UP only — never fire this for an existing-account sign-in. The

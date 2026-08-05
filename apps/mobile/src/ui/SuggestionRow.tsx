@@ -20,9 +20,8 @@
 // Nothing here is selectable — a tap is spent the moment it lands.
 import type { ReactNode } from 'react'
 import { Pressable, StyleSheet, View } from 'react-native'
-import { border, hit, radius, space } from '../theme/tokens'
+import { hit, radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
-import { Divider } from './Divider'
 import { Icon, type IconName } from './Icon'
 import { Text } from './Text'
 
@@ -157,61 +156,6 @@ export function SuggestionRow({
   )
 }
 
-export interface ListenRowProps {
-  /** The section label above the title (`HAVE A LISTEN`). Decorative — see the a11y note below. */
-  kicker: string
-  title: string
-  subtitle: string
-  onPress: () => void
-  accessibilityHint?: string
-}
-
-/**
- * The sample clip, offered as the FIRST action rather than a hero card (§14): same row geometry as
- * the three suggestions, distinct skin, and a dashed atlas rule beneath separating it from them.
- *
- * ⚠ No `state`/`playing` prop, and that is a claim about today's behaviour, not an oversight: the
- * sample NAVIGATES (home pushes `/sample`, which owns the player and the process-wide audio focus),
- * and home stays MOUNTED under a push — so the caller's lazy-`useState` hide flag is not re-read on
- * the way back and the row correctly survives until the next launch. Add
- * `state?: 'idle' | 'loading' | 'playing'` (disc → `pause` / an `ActivityIndicator`, the
- * `PreviewCard` precedent) ONLY if inline playback ever ships here.
- */
-export function ListenRow({ kicker, title, subtitle, onPress, accessibilityHint }: ListenRowProps) {
-  const { colors } = useTheme()
-  return (
-    <View style={styles.listenGroup}>
-      <Row
-        mark={
-          // ⚠ PINE, not amber — and §14's premise that "the send disc is pine" is false: `Composer`
-          // fills the send disc with `primaryFill`, which IS the lantern amber at dusk. An amber
-          // listen disc would put TWO amber discs on the dusk cold open, a direct DESIGN §8 breach.
-          // `accent` + `onPrimary` is the contrast-safe pairing `Badge`'s pine tone and `FilterChip`
-          // already use (day: pine fill + cream; dusk: light-pine fill + ink), so it reads in both.
-          <View style={[styles.mark, styles.listenDisc, { backgroundColor: colors.accent }]}>
-            <Icon name="play" size={20} color="onPrimary" />
-          </View>
-        }
-        kicker={kicker}
-        title={title}
-        subtitle={subtitle}
-        // No trailing chevron: the disc IS the action, and a second affordance on the one row that
-        // already looks different from its neighbours only muddies why it looks different.
-        borderWidth={border.keyline}
-        borderColor={colors.accent}
-        onPress={onPress}
-        // ⚠ The kicker is OMITTED. It is a decorative section label sitting inside the same
-        // pressable, so including it would have VoiceOver announce it twice.
-        accessibilityLabel={`${title}, ${subtitle}`}
-        accessibilityHint={accessibilityHint}
-      />
-      {/* The atlas-trail rule that closes the listen row off from the three suggestions. It lives
-          INSIDE this component so it cannot be forgotten, or left behind, by the screen. */}
-      <Divider dashed />
-    </View>
-  )
-}
-
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
@@ -225,7 +169,5 @@ const styles = StyleSheet.create({
   body: { flex: 1, gap: 1 }, // StopRow's deliberate 1pt column gap (off-grid; a grid step is too loose)
   mark: { width: MARK_SIZE, height: MARK_SIZE, alignItems: 'center', justifyContent: 'center' },
   askMark: { borderRadius: radius.pill },
-  listenDisc: { borderRadius: radius.pill },
-  listenGroup: { gap: space.md },
   pressed: { opacity: 0.7 },
 })

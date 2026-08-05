@@ -21,6 +21,17 @@
 > **wrong and must not be re-implemented.** Those two rules combined with home's pre-existing
 > "auto-select only when the list has exactly one region" to make an unrecoverable dead screen. Read
 > **§18 before touching the chip, the picker or `loadRegions`.**
+>
+> ⚠ **SUPERSEDED 2026-08-04 — §14.2's LISTEN ROW IS GONE FROM THE COLD OPEN.** The founder moved the
+> sample out of home entirely ("we no longer need the sample chip on the home screen since it was moved
+> to onboarding"), so §14.2, the `ListenRow` primitive and the two client flags that hid it
+> (`listenRowSeen` / `samplePlayed`) were all deleted. **This is a MOVE, not a cut**, and §14.2's
+> argument is the reason it survives: letting a newcomer HEAR the thing outranks asking them to type at
+> it — which is exactly why the taste is now the FIRST screen of a fresh install rather than a row a
+> returning rider had already dismissed. The flow that replaced it is
+> [onboarding-taste-then-where](onboarding-taste-then-where.md). Everything §14.2 says about the row's
+> skin, its placement above the asks and its dismissal rule is **history, not instruction** — but §18's
+> kill-switch lesson very much still applies to the region picker the new second screen renders.
 
 ## §18 · The region affordance was a kill switch on shipped builds (2026-08-03)
 

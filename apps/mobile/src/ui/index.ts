@@ -26,12 +26,7 @@ export { useThemedActionSheet, type ShowActionSheet } from './actionSheet'
 export { RegionChip, type RegionChipProps } from './RegionChip'
 export { Ridgeline, type RidgelineProps } from './Ridgeline'
 export { useRegionPicker, type RegionPickerArgs, type PickableRegion } from './RegionPicker'
-export {
-  SuggestionRow,
-  ListenRow,
-  type SuggestionRowProps,
-  type ListenRowProps,
-} from './SuggestionRow'
+export { SuggestionRow, type SuggestionRowProps } from './SuggestionRow'
 export { Segmented, type SegmentedProps, type SegmentedOption } from './Segmented'
 export { Divider } from './Divider'
 export { AttributionButton, type AttributionButtonProps } from './AttributionButton'

@@ -12,6 +12,13 @@
 //
 // The rule is therefore: with a non-empty list, ALWAYS land on something. Picking imperfectly is
 // recoverable in one tap; picking nothing is not recoverable at all.
+//
+// ⚠ THERE IS NO "NEAREST REGION TO THE RIDER" RULE HERE, AND THAT IS A DECISION (founder,
+// 2026-08-04) — written down because it is the obvious thing to add to this file and it costs more
+// than it looks. Onboarding asks for NO location permission (the rider picks a region by hand), so
+// there is no coordinate to rank against; and ranking would need a region CENTRE on the wire, which
+// the `Region` DTO deliberately does not carry. Reopening "land them on their nearest roads" means
+// reopening the permission question FIRST — docs/designs/onboarding-taste-then-where.md.
 
 /** The rider's last region if it is still on offer, else the first the server listed, else null.
  *
@@ -35,3 +42,4 @@ export function pickRegionId<T extends { id: string }>(
   // STARTING point: the chip beside it opens the picker.
   return regions[0]?.id ?? null
 }
+

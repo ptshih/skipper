@@ -311,12 +311,13 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   ANTICIPATE a moment; pick the one anonymous preview clip by ear), 11 cuts to feed D36's step-10 sweep
   (⚠ `drives.route_sig` has no reader at all), and a list of things **explicitly not worth doing**, each
   with the condition that expires it. Idea shelf, nothing greenlit; 2026-07-31.
-- [onboarding-taste-then-where.md](designs/onboarding-taste-then-where.md) — 💡 IDEA 2026-08-04: two
-  screens before the cold open — hear the skipper (tap, never autoplay: the clip takes EXCLUSIVE audio
-  focus and would stop a stranger's podcast to introduce us), then pick the region. ⚠ The location
-  permission was asked for and **dropped**: iOS gives ONE prompt, so "ask again before the first
-  drive" does not exist, and the region screen offers "Use my location" as an ANSWER instead. ⚠
-  "Nearest region" needs a coarse region centre on the DTO — the client has no coordinates today.
+- [onboarding-taste-then-where.md](designs/onboarding-taste-then-where.md) — ✅ **BUILT 2026-08-04**:
+  two screens before the cold open — hear the skipper (tap, never autoplay: the clip takes EXCLUSIVE
+  audio focus and would stop a stranger's podcast to introduce us), then pick the region by hand. ⚠
+  **NO location permission anywhere in the flow** — iOS gives ONE prompt, and it is still spent only at
+  "Let's roll". ⚠ **Read §8 first, it deletes §4:** the region-centre wire field and the nearest-region
+  function were built and backed out the same day, because with no location ask neither could ever have
+  a reader. ⚠ Home's listen row is GONE with it — that supersedes `home-cold-open-declutter` §14.2.
 - [home-cold-open-declutter.md](designs/home-cold-open-declutter.md) — ✅ **BUILT 2026-08-03**: the
   1.1 home cold open, rebuilt. Three founder notes (cluttered · prompts too loud · sample CTA too
   prominent) traced to **one inversion** — the composer was the primary action styled as the quietest
