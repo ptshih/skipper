@@ -30,7 +30,7 @@
 import { Pressable, StyleSheet, View } from 'react-native'
 import { radius, space } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeProvider'
-import { Icon } from './Icon'
+import { Icon, type IconName } from './Icon'
 import { Text } from './Text'
 import { voice } from './voice'
 
@@ -72,9 +72,14 @@ export interface RegionChipProps {
    * problem than a quiet one. Bigger, not louder.
    */
   prominent?: boolean
+  /** A leading glyph — `map` reads as "a place selector" before the word is parsed, which is the
+   *  cheapest way to add noticeability without spending accent FILL. ⚠ It costs one more pine mark on
+   *  home, whose §14 budget is the reason this chip is quiet in the first place; weigh it against the
+   *  three suggestion discs and the send disc already there. */
+  leadingIcon?: IconName
 }
 
-export function RegionChip({ regionName, onPress, prominent }: RegionChipProps) {
+export function RegionChip({ regionName, onPress, prominent, leadingIcon }: RegionChipProps) {
   const { colors } = useTheme()
 
   // ⚠ THE PRESSABLE BRANCH IS TESTED FIRST, AND ON `onPress` RATHER THAN ON THE NAME, because a
@@ -115,7 +120,11 @@ export function RegionChip({ regionName, onPress, prominent }: RegionChipProps) 
             pressed && styles.pressed,
           ]}
         >
-          <RegionMark regionName={regionName ?? voice.region.unset} prominent={prominent} />
+          <RegionMark
+            regionName={regionName ?? voice.region.unset}
+            prominent={prominent}
+            leadingIcon={leadingIcon}
+          />
           {/* The chip spends its one pine here rather than on the glyph: the caret IS the
               affordance, and §14 flagged the screen's total pine load (listen keyline, three row
               badges, the send disc) as the thing the quiet chip exists to keep in budget. */}
@@ -150,7 +159,7 @@ export function RegionChip({ regionName, onPress, prominent }: RegionChipProps) 
         accessible
         accessibilityLabel={`Region: ${regionName}`}
       >
-        <RegionMark regionName={regionName} prominent={prominent} />
+        <RegionMark regionName={regionName} prominent={prominent} leadingIcon={leadingIcon} />
       </View>
     </View>
   )
@@ -158,9 +167,18 @@ export function RegionChip({ regionName, onPress, prominent }: RegionChipProps) 
 
 /** The enamel glyph + the name — identical in both states, so the pill is a skin over the badge
  *  rather than a second rendering of it. */
-function RegionMark({ regionName, prominent }: { regionName: string; prominent?: boolean }) {
+function RegionMark({
+  regionName,
+  prominent,
+  leadingIcon,
+}: {
+  regionName: string
+  prominent?: boolean
+  leadingIcon?: IconName
+}) {
   return (
     <>
+      {leadingIcon ? <Icon name={leadingIcon} size={prominent ? 18 : 14} color="accent" /> : null}
       {/* ⚠ NO `numberOfLines`, and no `style` prop on this component for a caller to smuggle one in
           through: home is a scrollable, non-driving surface and is therefore UNCAPPED through the AX
           Dynamic Type sizes (§8), while the region name is a server fact of arbitrary length.

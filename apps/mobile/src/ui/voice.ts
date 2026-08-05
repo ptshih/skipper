@@ -421,7 +421,9 @@ export const voice = {
     // exactly where 1.1 put it — at "Let's roll", and only if we don't already have it. A line like
     // "we'll find the closest roads for you" would be writing a cheque this flow deliberately cannot
     // cash. See docs/designs/onboarding-taste-then-where.md.
-    setupTitle: 'Where are we driving?',
+    // ⚠ `setupTitle` ('Where are we driving?') WAS DELETED (2026-08-04) with the region step itself —
+    // onboarding asks a stranger nothing now. `setupCta` survives because it is still the button that
+    // ends the flow. If the question ever returns, it belongs wherever the picker does.
     // ⚠ `setupBody` LIVED HERE AND IS GONE (2026-08-04). It was the coverage caption under the chip —
     // "I know every turn on these. More are coming." — and its argument was good: say the LIMIT out
     // loud, because a newcomer who learns it in that forgiving first moment is not ambushed by it

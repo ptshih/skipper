@@ -5,28 +5,23 @@ import { Stack, useRouter } from 'expo-router'
 import type { ImageSourcePropType } from 'react-native'
 import { applyExclusiveBackgroundAudio, releaseAudioSession } from '@/lib/audio-session'
 import { track } from '@/lib/analytics'
-import { getSample, listRegions } from '@/lib/api'
+import { getSample } from '@/lib/api'
 import { markOnboarded } from '@/lib/client-flags'
 import { cleanPlaceName } from '@/lib/labels'
 import { postcardImageFor } from '@/lib/postcards'
-import { readCachedRegion, writeCachedRegion } from '@/lib/region-cache'
-import { pickRegionId } from '@/lib/region-select'
-import type { Region, Sample } from '@skipper/shared'
+import type { Sample } from '@skipper/shared'
 import { space, radius } from '@/theme/tokens'
 import { useTheme, type Theme } from '@/theme'
 import {
   AttributionButton,
   Button,
   Card,
-  Divider,
-  RegionChip,
   Scrubber,
   Screen,
   StateView,
   Sunburst,
   Text,
   TransportBar,
-  useRegionPicker,
   voice,
 } from '@/ui'
 
@@ -141,7 +136,6 @@ export default function SampleScreen() {
   const { colors } = useTheme()
   const player = useAudioPlayer()
   const status = useAudioPlayerStatus(player)
-  const pickRegion = useRegionPicker()
   // ⚠ `useWindowDimensions`, not a one-shot `Dimensions.get()` — it re-renders on rotation and on
   // iPad split-screen resize, where a stale first read would leave the picture sized for a viewport
   // the rider is no longer in.
@@ -166,8 +160,6 @@ export default function SampleScreen() {
   // so a pause/resume is not a second play.
   const startedRef = useRef(false)
 
-  const [regions, setRegions] = useState<Region[] | null>(null)
-  const [regionId, setRegionId] = useState<string | null>(null)
 
   // setAudioModeAsync is process-wide (shared with the drive player). ⚠ D35 (1.1, founder): the postcard
   // is pre-drive SKIPPER audio, so it takes EXCLUSIVE focus like a drive rather than mixing under the
@@ -219,29 +211,6 @@ export default function SampleScreen() {
     void load()
   }, [load])
 
-  // ⚠ THE REGIONS LOAD IS ITS OWN EFFECT AND MUST NOT BE FOLDED INTO `load` ABOVE. A failed or slow
-  // `/regions` may not cost the rider the CLIP, and a failed clip may not cost them the region
-  // question — they are independent answers to independent questions, and this screen has to be able
-  // to show either one without the other.
-  // ⚠ `.then(…)` rather than `async/await`: `react-hooks/set-state-in-effect` follows the call, and an
-  // async version reads as setting state synchronously in an effect even with an await in front of it.
-  // Every setState here lives in a promise CALLBACK, which is the shape the rule names as correct.
-  const loadRegions = useCallback(() => {
-    listRegions().then(
-      (rs) => {
-        setRegions(rs)
-        // ⚠ SEEDED THROUGH `pickRegionId`, NOT `rs[0]`, so this screen and home can never disagree
-        // about what "the current region" means. It honours a cached choice too, which is not dead
-        // code: a rider reinstalling over a restored backup arrives with a region already remembered.
-        setRegionId(pickRegionId(rs, readCachedRegion()?.regionId))
-      },
-      () => setRegions([]),
-    )
-  }, [])
-
-  useEffect(() => {
-    loadRegions()
-  }, [loadRegions])
 
   const durSec =
     status.duration && status.duration > 0 ? status.duration : (sample?.durationMs ?? 0) / 1000
@@ -289,36 +258,18 @@ export default function SampleScreen() {
     } catch {}
   }
 
-  const region = regions?.find((r) => r.id === regionId) ?? null
-  const hasRegions = (regions?.length ?? 0) > 0
-
-  const openPicker = useCallback(() => {
-    pickRegion({ regions: regions ?? [], selectedId: regionId, onSelect: setRegionId })
-  }, [pickRegion, regions, regionId])
 
   const finish = useCallback(() => {
-    // Persist the CHOICE before the flag, and the flag before navigating. Home re-reads both at mount:
-    // it seeds its region from `readCachedRegion()` and decides whether to redirect from
-    // `shouldShowOnboarding()`, so writing either after `replace('/')` races the mount that reads it —
-    // and losing the flag race is an onboarding loop, not a cosmetic glitch.
-    if (region) {
-      // Names only, for the degraded/offline cards — `region-cache.ts`'s header owns what may live
-      // here. `rotation` is deliberately unset, so home's cold open starts at window 0.
-      writeCachedRegion({
-        regionId: region.id,
-        displayName: region.displayName,
-        exampleAnchors: region.exampleAnchors,
-      })
-    }
-    // ⚠ MARKED EVEN WITH NO REGION, and the CTA is never disabled for the lack of one. `/regions` can
-    // fail on a first launch, and trapping a new install behind a dead button would be a far worse
-    // outcome than the one it prevents: home survives having no region (it retries the same load and
-    // shows the in-persona outage card), so the honest move is to let them through. The network
-    // failed, not the flow.
+    // ⚠ THE FLAG BEFORE THE NAVIGATION, never after. Home decides whether to redirect here from a lazy
+    // initialiser at MOUNT, so a flag written after `router.replace('/')` races the mount that reads it
+    // — and losing that race is an onboarding LOOP, not a cosmetic glitch.
+    // ⚠ No region is written any more: home's own `loadRegions` picks and caches one through
+    // `pickRegionId`, and having onboarding write a second copy of that answer was exactly the kind of
+    // duplicated decision that drifts.
     markOnboarded()
     // `replace`, so the back gesture from home cannot walk a finished rider into onboarding again.
     router.replace('/')
-  }, [region, router])
+  }, [router])
 
   if (phase === 'loading')
     return (
@@ -445,51 +396,17 @@ export default function SampleScreen() {
         </View>
       </Card>
 
-      {/* ── The question. Everything above is the taste; everything below is the one answer the app
-          needs. The rule separates them without a second screen. ── */}
-      <Divider />
-
-      <View style={styles.field}>
-        {/* ⚠ THE QUESTION IS THE LABEL, and that is what survived the merge. A dry "REGION" caption
-            would have been the honest cost of collapsing the two screens; asking it keeps the framing
-            the standalone screen did for free — the rider is answering the skipper, not filling in a
-            form field. */}
-        <Text variant="heading" color="ink" align="center">
-          {voice.region.setupTitle}
-        </Text>
-        {/* ⚠ `onPress` is passed WHENEVER A LIST EXISTS, never gated on "is there more than one" —
-            RegionChip's own header is a monument to that bug. With a list of one the sheet is a
-            one-row answer to "which roads?", which is a real answer. */}
-        {/* ⚠ THE SAME ROW WRAPPER THE BADGE NEEDS, and for the identical reason — `RegionChip`'s own
-            row carries `alignSelf: 'flex-start'`, which beats any `alignItems` its parent sets, so a
-            column could never centre it (measured: chip centre 147 against 220 for everything else on
-            the screen). Only the MAIN axis can, hence a row with `justifyContent`. Third instance of
-            this trap on this screen; if a fourth appears, it wants a shared `<Center>` primitive. */}
-        <View style={styles.centerRow}>
-          <RegionChip
-            prominent
-            regionName={region?.displayName ?? null}
-            onPress={hasRegions ? openPicker : undefined}
-          />
-        </View>
-        {/* ⚠ NO COVERAGE CAPTION HERE, and it was built and cut (founder, 2026-08-04: "maybe we can
-            drop the 'I know…' tagline at the bottom"). It read "I know every turn on these. More are
-            coming." and its argument — say the LIMIT out loud, because a newcomer who learns it here is
-            forgiving where the same fact discovered mid-plan reads as a dead end — is still sound. It
-            was not refuted, it was RELOCATED: the picker one tap away is titled "Roads I know" and
-            lists exactly what exists, which answers the same question more honestly than a sentence
-            promising it. The ~40pt it cost now pays for the masthead above. */}
-      </View>
-
-      {/* ⚠ NO CLOSING LINE HERE, and it was built and cut (founder, 2026-08-04: "maybe get rid of the
-          'that's the taste'"). "That's the taste, friend." was the last surviving fragment of the
-          deleted end card, and on a merged screen it earned nothing: the CTA lighting up already says
-          he has finished, so the sentence restated it in words AND grew the layout by ~39pt at exactly
-          the moment the primary action appears — which pushed the button flush against the home
-          indicator. A line that says what the screen has already shown is not charm, it is a caption. */}
-      {/* ⚠ QUIET UNTIL HEARD — see the header. `secondary` on arrival so the play disc owns the
-          screen's one obvious action; primary + glow once the clip has landed, which is also the
-          screen's way of saying it is finished with the rider. Never disabled: this is the only exit. */}
+      {/* ⚠ THE REGION QUESTION WAS HERE AND IS GONE (founder, 2026-08-04: "remove the region select
+          from the onboarding screen and just default all new users to lake tahoe for now"). It was a
+          heading, a picker chip and a divider; onboarding now asks a stranger for NOTHING, which is
+          the lightest this flow can be — hear him, then go.
+          ⚠ NOTHING IS HARDCODED TO TAHOE, and that is the honest reading of "default to lake tahoe":
+          home already lands every rider on a region through `pickRegionId` (src/lib/region-select.ts),
+          and with one region live that IS Lake Tahoe. Baking the slug into the client would be a fact
+          in the app that the server owns, and it would go stale the day the region list changes.
+          ⚠ The rider is now NEVER asked, on any install — see TODO #73, which was already tracking the
+          narrower version of this for riders who onboarded before region 2. Home's chip is the only
+          place the question is asked at all, which is why it is being made more prominent there. */}
       <Button
         title={voice.region.setupCta}
         variant={finished ? 'primary' : 'secondary'}
@@ -551,11 +468,6 @@ const styles = StyleSheet.create({
   // Matches the ⓘ's own 48pt tap floor, and is mirrored empty on the right — see the call site.
   transportSlot: { width: 48 },
   transportFill: { flex: 1 },
-  // ⚠ A row is the only container that can centre a child whose own component pins
-  // `alignSelf: 'flex-start'` (RegionChip does), because `justifyContent` runs along the MAIN axis and
-  // `alignSelf` only ever overrides the cross one. The badge needed this too until it was cut.
-  centerRow: { flexDirection: 'row', justifyContent: 'center' },
-  field: { gap: space.sm, alignItems: 'center' },
   // The postcard matte: a raised card holding the image, with the caption printed on its lower margin.
   postcardImage: {
     width: '100%',

@@ -1264,6 +1264,8 @@ function HomeScreen() {
   // The region this conversation is pinned to.
   const masthead = (
     <RegionChip
+      prominent
+      leadingIcon="map"
       // The cached name covers the offline and outage reads. Null means either no /regions call has
       // ever succeeded here, or one did and returned SEVERAL — `loadRegions` auto-selects at length 1
       // only, so a longer list leaves nothing pinned until the rider picks.
