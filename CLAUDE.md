@@ -329,7 +329,7 @@ stays advisory (no auto-judge for world-truth). `docs/decisions/automated-ground
 - **This file = operating truth** — doctrine, hard invariants, stack, workflow; only what an agent must know
   to avoid breaking something or burning money. When something here is superseded, DELETE it and record the
   history in `docs/decisions/` — no strikethrough graveyards.
-- **`TODO.md` = engineering backlog** (actionable near-term items; delete when done — git history is the archive).
+- **`TODO.md` = engineering backlog** — worked by `/todo`; delete when done — git history is the archive.
 - **`docs/` = durable records**, foldered by KIND with a dated **Status** line: `decisions/` (why,
   append-only), `designs/` (future truth at any maturity — the Status line carries idea → build-ready →
   built, not the folder), `research/`, `guides/`. Index: `docs/README.md`. A post-MVP idea defaults to NOT

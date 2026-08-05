@@ -5,7 +5,7 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 | Layer | Where | What |
 | --- | --- | --- |
 | **Operating truth** (now) | `/CLAUDE.md` | doctrine, hard invariants, stack, workflow — only what an agent must know to avoid breaking something or burning money |
-| **Engineering backlog** (near-term) | `/TODO.md` | actionable items with enough context to act on; DELETE items when done (git history is the archive) |
+| **Engineering backlog** (near-term) | `/TODO.md` | actionable items with enough context to act on, one per line-anchored `#id` with area/priority/tags (legend at the top of the file; `/todo` operates it); DELETE items when done (git history is the archive) |
 | **Durable records** (history + future) | `docs/` | everything below |
 | **Code** (the rest of now) | the repo | if a doc and the code disagree, the code wins — fix the doc |
 
@@ -72,7 +72,15 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   its original tour-generation consumer is **CONSUMER SUPERSEDED by V2** (migration `0009`).
 - [geometry-first-regions.md](decisions/geometry-first-regions.md) — a region is a BBOX, never a
   stored FK: a POI's region = point-in-bbox; a drive stores its route bbox + derives region by
-  intersect — no `region_id` FK anywhere (2026-06-19).
+  intersect — no `region_id` FK anywhere (2026-06-19). ⚠ A 2026-08-05 founder pass considered stamping
+  `drives.region_id` after all and **reversed to derived**, which this record already prescribed — the
+  deliberation (and why the pin was tempting) is recorded in
+  [my-drives-legibility.md](designs/my-drives-legibility.md) §4, not here, because nothing changed.
+- [device-support-matrix.md](decisions/device-support-matrix.md) — which iPhones we DESIGN for:
+  reference 393x852, checks at 440x956 and 375x667, portrait only. ⚠ Opens with the finding that
+  reframed it — **the iPhone SE cannot be dropped**: both surviving SE generations run iOS 26 and iOS
+  has no screen-size exclusion, so 375x667 is in scope permanently and the only lever is what we
+  optimize for. The small end must not BREAK; it is allowed to scroll (2026-08-04).
 - [no-default-region.md](decisions/no-default-region.md) — every corpus run NAMES its region:
   `DEFAULT_REGION_SLUG` + the Tahoe fallback bbox are deleted, `--region` is required (explicit-id
   runs exempt), and the admin 400s instead of defaulting. A default region billed the wrong corpus
@@ -311,13 +319,28 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   ANTICIPATE a moment; pick the one anonymous preview clip by ear), 11 cuts to feed D36's step-10 sweep
   (⚠ `drives.route_sig` has no reader at all), and a list of things **explicitly not worth doing**, each
   with the condition that expires it. Idea shelf, nothing greenlit; 2026-07-31.
+- [my-drives-legibility.md](designs/my-drives-legibility.md) — **§3 + §4 BUILT 2026-08-05**, §5–§6 idea:
+  fifty saved drives (`FREE_DRIVE_CAP`) in a flat list where every title is machine-made `A → B` and
+  nothing is nameable, so four drives of one route are four identical cards. Shipped: the drive's DATE on
+  the card (`createdAt` was already on the wire and thrown away), and a region filter whose region is
+  **DERIVED per request** from the drive's frozen start point (`apps/api/src/region-geo.ts`) — no column,
+  so `geometry-first-regions` needed no amendment. ⚠ **A stored `drives.region_id` was adopted and
+  REVERSED the same day** on cost, not principle — read §4 before re-proposing one; the "which region
+  does Reno → Tahoe City belong to?" objection is a FALSE premise (the planner cannot draw a cross-region
+  drive at all). ⚠ §4.2 is the non-negotiable: the filter can never open empty while drives exist. Still
+  open: **rename is a PATCH, not a migration** (§5, `drives.label` is already nullable and preferred by
+  `storedDriveLabel`), and it is the only rung that helps at fifty drives in ONE region. ⚠ §7: collides
+  later with `passport-logbook`.
 - [onboarding-taste-then-where.md](designs/onboarding-taste-then-where.md) — ✅ **BUILT 2026-08-04**:
-  two screens before the cold open — hear the skipper (tap, never autoplay: the clip takes EXCLUSIVE
-  audio focus and would stop a stranger's podcast to introduce us), then pick the region by hand. ⚠
-  **NO location permission anywhere in the flow** — iOS gives ONE prompt, and it is still spent only at
-  "Let's roll". ⚠ **Read §8 first, it deletes §4:** the region-centre wire field and the nearest-region
-  function were built and backed out the same day, because with no location ask neither could ever have
-  a reader. ⚠ Home's listen row is GONE with it — that supersedes `home-cold-open-declutter` §14.2.
+  ONE screen before the cold open — hear the skipper (tap, never autoplay: the clip takes EXCLUSIVE
+  audio focus and would stop a stranger's podcast to introduce us) and pick the region, together. ⚠
+  **Read §8 before anything else — it reverses three things the body still says.** §8.4: it was two
+  screens plus an end card until a founder call merged them (three surfaces → one, deleting the end
+  card and the skip control; the CTA stays QUIET until the clip is heard, which is not optional). §8.1
+  deletes §4 entirely — the region-centre wire field and nearest-region function were built and backed
+  out the same day, because with **NO location permission anywhere in the flow** neither could ever
+  have a reader; the one prompt is still spent only at "Let's roll". ⚠ Home's listen row is GONE with
+  it — that supersedes `home-cold-open-declutter` §14.2.
 - [home-cold-open-declutter.md](designs/home-cold-open-declutter.md) — ✅ **BUILT 2026-08-03**: the
   1.1 home cold open, rebuilt. Three founder notes (cluttered · prompts too loud · sample CTA too
   prominent) traced to **one inversion** — the composer was the primary action styled as the quietest
@@ -432,6 +455,48 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   rule*, so **only a drive's own manifest is authoritative for that drive** — the per-drive top-up is
   nearly free because `createDrive`/`getDrive` already return a full `DriveManifest`. The body is the
   pre-cut reasoning, kept as the argument to re-read if per-drive downloads ever prove insufficient.
+- [download-before-start.md](designs/download-before-start.md) — 📋 **BUILD-READY, founder call
+  2026-08-05**: a live drive becomes GATED on a complete offline copy (what Shaka does). The argument
+  that carried it is not the precedent — it is that a streamed clip which won't load costs 12 s of dead
+  air and is then dropped with NO note, while `missingClipCount` (the one disclosure) reports **0 by
+  construction whenever streaming**, so the likelier failure is the undisclosed one. Sized against the
+  eight real saved drives: the largest is **20 clips / ~11 MB**, seconds on LTE — the gate is cheap
+  because the CORPUS is, so re-check that before defending it again. ⚠ §2's table is load-bearing —
+  *the gate never blocks a rider it cannot help* (offline + partial still plays); collapsing it into a
+  bare completeness check recreates the trailhead failure it exists to prevent. §3 is DECIDED: the
+  copy is fetched **automatically at create, on any connection** (Q1 answered — at 11 MB the cellular
+  objection doesn't survive the measurement), and Start enables itself when it lands. ⚠ §3's finding
+  is the live question: "background" means TWO things — surviving navigation is nearly free (the
+  in-flight promise is already module-level; only the screen's unmount-abort kills it), but surviving
+  APP SUSPENSION — *lock the phone, walk to the car* — needs `expo-file-system`'s `DownloadTask`
+  (`sessionType: 'background'`, iOS default) in place of `File.downloadFileAsync`, which means
+  REPLACING the hardened primitive in `download.ts` and redefining `CLIP_DOWNLOAD_TIMEOUT_MS`. §8
+  holds the open calls. **Q5 is CHECKED**: the `stop_skipped` reason union already separates
+  stream-failure from a partial-download gap, and EAS builds do report — but 1.1 is unreleased and
+  RISK-1 hasn't happened, so the population is empty by construction and Q5 collapses into Q3 (drive
+  first, or ship on the argument). **§10 (founder, 2026-08-05) folds in the full deletion** — *a
+  drive's audio is only ever played from disk* — retiring `POST /drives/:id/assets/sign`, the whole
+  re-sign path and the "playing from download" chip. ⚠ Its boundary is load-bearing: `GET /sample` and
+  the route-preview clip play BEFORE a drive exists and must keep streaming — "force offline for
+  everything" must never be read as "delete all streaming". **All product calls are ANSWERED
+  (2026-08-05)**: any connection, don't wait for the drive, an old unsaved drive auditions nothing,
+  and **sim behaves exactly as live** — that last one closes a hole rather than merely simplifying,
+  because `play.tsx` RE-DERIVES the mode after the CTA already decided (so a `live`-keyed gate
+  authorises on one value while the player acts on another), `__DEV__` makes every dev-build drive
+  sim (so a `live`-only gate is never exercised by our own QA), and `scheme: "skipper"` puts the
+  player one deep link from the CTA. Gate the DRIVE, in BOTH the CTA and the player. ⚠ Only Q4 is
+  open and it is a SPIKE not a decision — `DownloadTaskOptions` has no `idempotent` (our retry ladder
+  depends on that contract), suspension behaviour is untestable in the Simulator, and
+  `CLIP_DOWNLOAD_TIMEOUT_MS` changes MEANING. **§11** retires `?mode` (the GPS clock becomes a setting,
+  not a route — today the "Simulated drive" action pushes NO param and leans on `__DEV__`, so absence
+  is load-bearing and flips meaning with build type). **§12 is a COMPLETE player-logic dive**: five
+  actionable items (tappable list scoped to passed stops; the stall ladder's 24 s → ~2–3 s collapse;
+  two generalization traps; pause as a COPY fix after finding Shaka ships the identical GPS-releasing
+  "Tour Switch") and — ⚠ more valuable — four sections recording a REASON rather than a change, because
+  three separate bug hypotheses turned out to be already answered at the definition site. The
+  native-owns-session / app-owns-playback split, the three-clause end predicate's raw-position fallback,
+  and the `tSec` reporting-only invariant are each one well-meaning "simplification" away from a silent
+  failure.
 - [poi-legibility-layer.md](designs/poi-legibility-layer.md) — **the claimed moat**: everything between
   "a Wikidata entity exists" and "a driver hears one coherent thing at the right moment" — the
   SOLO/CLUSTER/DISTRICT treatment split, leader (non-chaining) grouping, an Opus treatment classifier,
@@ -486,6 +551,13 @@ The rest are post-MVP features, gated behind the proven phone player:
   wait for; DEFERRED 2026-06-10 (revisit with region-skippers, M4-ish).
 
 ### research/
+- [fitting-one-screen-across-iphone-sizes.md](research/fitting-one-screen-across-iphone-sizes.md) —
+  how to fit one dense screen from 375x667 to 440x956. ⚠ Leads with the finding that there is no
+  "correct Apple way" to look up: **every iPhone in portrait is the same size class**, so the
+  abstraction cannot see this problem and reading real dimensions is the only mechanism. Also: the
+  scarce axis is HEIGHT while nearly all responsive advice is about WIDTH; flex distributes SURPLUS and
+  so shrinks a hero to ZERO when there is none; `flexShrink` is inert without `minHeight: 0`; and
+  device-scaled FONTS multiply with Dynamic Type, so scale space and media, never type (2026-08-04).
 - [credit-monetization-research.md](research/credit-monetization-research.md) — how modern agentic AI
   apps charge via credits, and what it implies here. ⚠ The free grant's SIZE is the only irreversible
   decision (frozen per user at signup) and gets costlier with every signup; Apple's no-expiry rule
