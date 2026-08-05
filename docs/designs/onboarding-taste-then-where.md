@@ -1,8 +1,10 @@
 # Onboarding — a taste, then where
 
-> **Status:** ✅ **BUILT 2026-08-04.** Two screens in front of the cold open: hear the skipper
-> (`apps/mobile/app/sample.tsx`), then say which roads (`apps/mobile/app/region-setup.tsx`), gated by
-> `onboarded` in `src/lib/client-flags.ts` and entered from the redirect at the top of `app/index.tsx`.
+> **Status:** ✅ **BUILT 2026-08-04.** **ONE screen** in front of the cold open — hear the skipper and
+> say which roads, together (`apps/mobile/app/sample.tsx`) — gated by `onboarded` in
+> `src/lib/client-flags.ts` and entered from the redirect at the top of `app/index.tsx`.
+> ⚠ It was TWO screens plus an end card for a few hours; §8.4 records why they merged, and that
+> supersedes the two-screen framing still used in §1 and §6 below.
 > **The location permission is NOT part of it** — asked and settled the other way twice (§2), which
 > reverses one third of the original brief.
 >
@@ -124,15 +126,17 @@ purged on sign-out**.
 
 ## §6 · Alternatives
 
-**A. Two screens: taste → where.** (Chosen.) Fixes the two things the cold open genuinely does not
+**A. Two screens: taste → where.** (Built first, then SUPERSEDED by B — see §8.4.) Fixes the two things the cold open genuinely does not
 do: the sample is a ghost text link today, so the most persuasive asset in the product is the least
 visible thing on screen; and the region is auto-picked in silence, so no rider ever chooses it. Hands
 off to the cold open unchanged.
 
-**B. One screen — postcard and picker together.** Less ceremony, one fewer tap, and the region
-question rides along with the audio instead of following it. Rejected for now because it crowds the
-one moment that has to land: the rider should be listening, not deciding. Worth revisiting if the
-two-screen version tests as a slog.
+**B. One screen — postcard and picker together.** (CHOSEN, 2026-08-04 — this text is the original
+rejection, kept because the objection it raises is still the thing to protect.) Less ceremony, one
+fewer tap, and the region question rides along with the audio instead of following it. *Rejected for
+now because it crowds the one moment that has to land: the rider should be listening, not deciding.*
+⚠ That objection lost on the merits (§8.4) but is not WRONG — it names the real hazard, and the quiet
+`secondary` CTA that only promotes once the clip has been heard is the mitigation it earned.
 
 **C. Don't build it — fix both problems in place.** Promote the listen row on the cold open from a
 ghost link to a real card, and make the region chip an explicit first-run question there. No new
@@ -142,7 +146,8 @@ research, and putting a flow in front of it means the product has two front door
 which was designed to be the first. If onboarding ever starts feeling like ceremony, this is the
 version to fall back to.
 
-**Which I'd pick:** A, because the two gaps it closes are real and neither is closable by moving a
+**Which I'd pick:** A. (It shipped, and was merged into B within hours — §8.4. The gaps it names are
+still the right gaps; only the screen count changed.) Because the two gaps it closes are real and neither is closable by moving a
 component around. **What would change my mind:** if the taste screen measures as a step riders skip
 past — if `sample_played` on first run comes in low — then the audio was never the blocker and C is
 the cheaper truth.
@@ -186,7 +191,7 @@ to this flow" and the founder confirmed the second half of that: *"we no longer 
 the home screen since it was moved to onboarding."* So `ListenRow`, `voice.sample.row*` and the two
 client flags that governed the row (`listenRowSeen`, `samplePlayed`) were all deleted, and
 `home-cold-open-declutter.md` §14.2 is now history. `/sample` has exactly one entrance — the redirect —
-and exactly one exit, forward to `/region-setup`.
+and exactly one exit — which, since §8.4, is the CTA on that same screen.
 
 ⚠ **That is what makes the postcard's SKIP control load-bearing rather than polite.** With home no
 longer pushing it, `canGoBack` is false on the first screen a fresh install shows; without the skip a
@@ -217,6 +222,45 @@ string written under it broke it anyway, which is worth more than the fix.
 
 ⚠ The residual gap is now filed as TODO **#73**: riders who onboarded before region 2 are never re-asked
 and can only discover it via home's chip. **Do not solve that by re-running onboarding.**
+
+**4. The two screens (and the end card between them) MERGED INTO ONE (founder, 2026-08-04: "what if
+we combined the region selection with the sample on the same screen").** This reverses §6's rejection
+of alternative B, and the rejection deserves to be read alongside it — the objection was "the rider
+should be listening, not deciding," and it over-valued a conflict that is not really there. The picker
+is defaulted and passive; nothing on that screen demands attention while the clip runs. It is idle
+attention, not contested attention.
+
+What actually made the merge worth doing was a third surface nobody was counting. The **end card** —
+a full-screen "That's the taste, friend." with a forward CTA — existed only to give the clip somewhere
+to land and a door out. Put the region field and the CTA on the postcard itself and the clip simply
+finishes in place, with the rider already looking at what comes next. So one founder question deleted
+`/region-setup`, the end card, AND the separate skip control in one move: **three surfaces to one.**
+
+⚠ **THE MITIGATION IS NOT OPTIONAL.** A forward CTA and a play disc compete for "what do I do now?",
+and a rider who taps past without pressing play defeats the entire point of the screen. So the CTA
+ships QUIET (`secondary`) and promotes to the glowing primary only once the clip has been heard. Do
+not collapse that into one constant variant — it is what makes §6's objection survivable.
+
+⚠ **"Skip the sample" is gone and must not come back as a label.** A permanently visible forward CTA
+IS the skip; naming it one made the screen apologise for its own content. What remains load-bearing is
+that the CTA is never disabled and never gated on having a region — home REDIRECTS here, so there is
+no back chevron and that button is the only exit in the app's first screen.
+
+⚠ **Three layout traps, all invisible to typecheck and all caught on the simulator.** Worth listing
+because two of them are the same bug: (a) `Badge` and `RegionChip` each pin `alignSelf: 'flex-start'`
+internally, and a child's `alignSelf` always beats its parent's `alignItems` — so only a ROW with
+`justifyContent` can centre them, never a column; (b) `Screen`'s `center` sets `alignItems: 'center'`,
+which silently shrank a `Divider` (a `borderTopWidth` on a width-less View) to zero — it rendered,
+measured nothing, and read as a missing feature; (c) a blank header still OCCUPIES the bar, and on
+iOS 26 it floats, so `useScreenPadding` added its full height back and put 116pt of dead paper above
+the postcard ("also not really top aligned"). The fix is `headerShown: false` plus claiming the `top`
+safe-area edge, which is right here specifically because this screen has no title and no back button.
+
+⚠ **The closing line was built and then cut** (founder: "maybe get rid of the 'that's the taste'").
+`endTitle` was the last fragment of the end card. On a merged screen it earned nothing — the CTA
+lighting up already says he has finished, so the sentence restated in words what the rider had just
+watched happen, and it grew the layout by ~39pt at exactly the moment the primary button appears,
+pushing it flush against the home indicator.
 
 **Also worth recording: the sample no longer autoplays** (§1 called this, and it survived the build).
 The 450 ms anti-jump-scare beat was defensible behind a deliberate tap on home's listen row; as the

@@ -351,15 +351,14 @@ export const voice = {
     kicker: 'POSTCARD FROM LAKE TAHOE',
     badge: 'A TASTE', // teal — honest "this is a sample, not a live drive"
     loading: 'Cueing up something good from the lake…',
-    endTitle: 'That’s the taste, friend.',
-    endBody:
-      'One stop of a few hundred up around the lake. Point me at a road up there and I’ll do this the whole drive.',
-    endCta: 'Plan a drive',
-    // The escape hatch on the postcard itself, for a rider who does not want to stand still for a
-    // minute of audio. ⚠ NOT 'Maybe later' (which this replaces): that was honest when the sample was
-    // an optional row on home, and is a lie in onboarding — there is no later, because nothing links
-    // to this screen any more. It says what it does: move on to the next question.
-    skip: 'Skip the sample',
+    // ⚠ `skip` AND ALL FOUR `end*` STRINGS WERE DELETED HERE (2026-08-04) when the postcard, the end
+    // card and the region screen merged into ONE surface. `endBody`/`endCta`/`endSecondary` dressed a
+    // full-screen end card that no longer exists — the clip finishes in place now, under a CTA that was
+    // already on screen. `skip` ('Skip the sample') went with the separate skip control: a permanently
+    // visible forward CTA IS the skip, and it never has to apologise for being one. `endTitle` ("That's
+    // the taste, friend.") outlived them by an hour and then went too: with the CTA lighting up to mark
+    // the end, a sentence saying the same thing is a caption on something the rider just watched
+    // happen — and it grew the layout by ~39pt exactly when the primary button appears.
     // ⚠ VOICEOVER-ONLY, and the reason they exist is that `TransportBar`'s defaults are DRIVE copy:
     // this control announced itself as "Let's roll" and then "Hold here" on the first screen of a
     // fresh install, promising a drive that a one-minute postcard does not start. Caught reading the
@@ -414,10 +413,11 @@ export const voice = {
     // arrive by a `released_at` flip with no build, so singular copy would go stale on installed apps
     // that can do nothing about it — the same failure class as §18's chip. "these" reads correctly at
     // one region and at six.
-    setupBody: 'Pick the roads you want stories on. I know every turn on these — and more are coming.',
+    // ⚠ SHORTENED when the two screens merged: it is a CAPTION under the chip now, not a screen's body,
+    // and the heading directly above it already asks the question — so the old opening clause ("Pick the
+    // roads you want stories on") was restating the label six words later.
+    setupBody: 'I know every turn on these. More are coming.',
     setupCta: 'Start exploring',
-    // The chip is the control, so the label beside it names the field rather than repeating the ask.
-    setupLabel: 'REGION',
   },
   greeting: 'Hop in. I’ll do the talking.',
   // The cold-open descriptor: a newcomer should know WHAT this is before any audio
