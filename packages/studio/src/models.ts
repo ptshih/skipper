@@ -37,18 +37,29 @@ export function getAnthropic(label = 'a model call needs it'): Anthropic {
 // The spec wants the MOST CAPABLE model for narration quality. Claude Fable 5 was
 // the pick (a tier above Opus; switched 2026-06-09 at founder request), but on
 // 2026-06-14 it began returning 404 "Claude Fable 5 is not available. Please use
-// Opus 4.8." account-wide (req_011Cc2MhTY66A8XhQ1A29VBd) — so narration is back on
-// Opus 4.8, the most capable model available to this account. (Re-point here if
+// Opus 4.8." account-wide (req_011Cc2MhTY66A8XhQ1A29VBd) — so narration WENT back to
+// Opus 4.8, then to Opus 5 (below). (Re-point here if
 // Fable access returns; this constant is the single switch.)
 //
-// Opus 4.8 request surface: adaptive thinking only, NO `budget_tokens` /
-// `temperature` / `top_p` / `top_k` (all 400). narrate.ts passes
-// thinking:{type:"adaptive"} with no tools, so it rides Opus cleanly. (Unlike Fable,
-// Opus 4.8 ACCEPTS a forced tool_choice, so the Fable-era reason the judges needed a
-// separate model no longer bites — but JUDGMENT_MODEL stays Opus for calibration; see below.)
+// ⚠ NOW OPUS 5 (founder call, 2026-08-04 — `CLAUDE_MODELS.opus` was bumped 4.8 → 5 in place, against
+// the standing warning on that constant; the warning is kept there for the next bump). The Fable
+// history above is retained because it is WHY this constant exists as a single switch.
 //
-// COST (a founder-relevant axis, per CLAUDE.md): Opus 4.8 is $5/$25 per MTok — HALF
-// of Fable's $10/$50, so a regen now bills less than the Fable interim did.
+// Request surface, VERIFIED on claude-opus-5 before the bump (one probe each, ~3¢ total) rather than
+// assumed — the Fable-era failure was exactly a 5-series model refusing a request shape:
+//   · forced `tool_choice: {type:'tool', name}` — ✅ (every judge depends on this; Fable REJECTED it,
+//     which is the whole reason JUDGMENT_MODEL is a separate constant)
+//   · `tool_choice: {type:'any'}` — ✅ (pipeline/scout.ts's agentic fetch-or-finalize loop)
+//   · `thinking: {type:'adaptive'}` with no tools — ✅ (this call, narrate.ts)
+//   · forced tool + adaptive thinking together — ✅ (nothing uses it today; recorded as available)
+// ⚠ `budget_tokens` is rejected on this model (see the planner note in @skipper/shared's models.ts);
+// depth is `output_config.effort`. `temperature`/`top_p`/`top_k` were rejected on 4.8 and are NOT
+// re-verified on 5 — nothing here sends them, so treat that line as history, not as a current claim.
+//
+// COST: unchanged. Opus 5 is $5/$25 per MTok, identical to 4.8 (MODEL_PRICING in @skipper/shared), so
+// the bump is cost-neutral and a regen bills what it did before.
+// ⚠ STILL OWED: the judge rubrics were calibrated against 4.8. `eval/calibrate.ts` has NOT been re-run,
+// so any score compared across the bump is apples-to-oranges until it is.
 //
 // Source: Anthropic model catalog (claude-api skill — "Current Models" table); the id literal is
 // single-sourced in @skipper/shared (CLAUDE_MODELS).
@@ -56,16 +67,25 @@ export const NARRATION_MODEL = CLAUDE_MODELS.opus
 
 // JUDGMENT tier — the structured-report / spot-check judges (eval/charm.ts, eval/grounding.ts,
 // eval/veracity.ts): the NON-narration calls that need the calibration tier. (The enrichment
-// scout is a SEPARATE ENRICH tier, Sonnet by default — see ENRICH_MODELS below.) Opus 4.8. With narration ALSO on Opus 4.8 now
-// (Fable 5 unavailable, above), this tier currently COINCIDES with NARRATION_MODEL — but it
-// stays a SEPARATE constant on purpose, for two reasons that outlive the coincidence:
-//   (a) Most of them FORCE tool use (tool_choice {type:'tool'} or {type:'any'}); Opus 4.8
-//       accepts that, but it's a hard requirement the narration model must also meet if the
-//       two ever diverge again (Fable, e.g., rejected it).
+// scout is a SEPARATE ENRICH tier, Sonnet by default — see ENRICH_MODELS below.) Opus 5 since
+// 2026-08-04. It still COINCIDES with NARRATION_MODEL — but it stays a SEPARATE constant on purpose,
+// for two reasons that outlive the coincidence:
+//   (a) Most of them FORCE tool use (tool_choice {type:'tool'} or {type:'any'}); Opus 5 accepts both
+//       (verified 2026-08-04 — see the narration block above), but it's a hard requirement the
+//       narration model must also meet if the two ever diverge again (Fable, e.g., rejected it).
 //   (b) The judge rubrics/score thresholds were calibrated against Opus-tier judging — moving
 //       this would silently shift every score (re-run eval/calibrate.ts after any bump).
 // Upgraded Sonnet→Opus 2026-06-09 at founder request (the old NARRATION_MODEL_ALTERNATES
 // catalog is gone with them).
+//
+// ⚠ AND THE COINCIDENCE ITSELF IS A KNOWN RISK, not just an accident of availability: a judge running
+// the same model that wrote the text is the documented setting for SELF-PREFERENCE BIAS, whose
+// load-bearing detail is that it does NOT go away with a more capable judge — only with a DIFFERENT
+// one. Exposure is uneven: eval/charm.ts is a pure taste judgment and is the exposed one;
+// eval/grounding.ts checks claims against a sheet printed in the same context window, which is a
+// verifiable check rather than a preference, so it is far less exposed. Sources + the cheap probe that
+// would settle it: docs/research/llm-judge-bias-and-prompt-optimization.md. Pointing THIS constant at
+// another family is the one-line mitigation if that probe ever shows the bias is real here.
 export const JUDGMENT_MODEL = CLAUDE_MODELS.opus
 
 // ENRICH tier — the corpus `enrich` step's fact-sheet builder (pipeline/scout.ts buildCorpusFactSheet).
@@ -74,10 +94,10 @@ export const JUDGMENT_MODEL = CLAUDE_MODELS.opus
 // per MTok — half Opus's input, ~⅗ its output) to keep the one-time bill modest. Opus stays available
 // (`enrich-pois --model opus`) for an A/B against the calibration tier on a sample. Both ACCEPT a
 // forced tool_choice {type:'any'} (the fact-sheet builder forces it every turn) — only Fable rejected that,
-// so either is safe. Sources: claude-api skill "Current Models" table (verified 2026-06-15).
+// so either is safe (re-verified on opus-5 2026-08-04: `{type:'any'}` accepted). Sources: claude-api skill.
 export const ENRICH_MODELS = {
   sonnet: CLAUDE_MODELS.sonnet,
-  opus: JUDGMENT_MODEL, // CLAUDE_MODELS.opus ('claude-opus-4-8')
+  opus: JUDGMENT_MODEL, // CLAUDE_MODELS.opus ('claude-opus-5' since 2026-08-04)
 } as const
 export type EnrichModelChoice = keyof typeof ENRICH_MODELS
 
