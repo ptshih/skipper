@@ -535,7 +535,7 @@ function PostcardFrame({
         style={[styles.stamp, { backgroundColor: colors.surfaceRaised, borderColor: colors.rule }]}
         pointerEvents="none"
       >
-        <Sunburst size={30} opacity={0.5} />
+        <Sunburst size={20} opacity={0.5} />
       </View>
     </View>
   )
@@ -591,10 +591,17 @@ const styles = StyleSheet.create({
   postcardCaption: { marginTop: space.sm, marginBottom: space.xs },
   stamp: {
     position: 'absolute',
-    top: space.md,
-    right: space.md,
-    width: 46,
-    height: 46,
+    // ⚠ ON THE MATTE, NOT ON THE PHOTO — and that is a THEME correctness fix, not a taste one
+    // (design pass, 2026-08-04). It sat at `top: space.md` over the image, which is fine in day
+    // (cream stamp, cream sky) and wrong at dusk: `surfaceRaised` flips DARK while the photo stays
+    // bright, so it read as a hole punched in the picture. The root cause generalises — this palette
+    // has no always-light role by design (contrast is enforced by the token set, DESIGN §4), so
+    // ANYTHING overlapping a photograph is unthemeable. Anchored to the caption strip it sits on
+    // theme-coloured paper in both moods and cannot fight an image it knows nothing about.
+    bottom: space.xs,
+    right: space.sm,
+    width: 30,
+    height: 30,
     borderRadius: radius.sm,
     borderWidth: 1,
     borderStyle: 'dashed',
