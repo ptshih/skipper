@@ -1,0 +1,150 @@
+# Onboarding — a taste, then where
+
+> **Status:** 💡 **IDEA — 2026-08-04** (founder brainstorm, decisions made live in the session below).
+> Two screens in front of the cold open: hear the skipper, then say which roads. **The location
+> permission is NOT part of it** — that question was asked and settled the other way (§2), which
+> reverses one third of the original brief. Nothing here is built.
+
+## What it is
+
+A first-run flow, shown once per install, between launch and home:
+
+1. **The taste.** The sample postcard — Emerald Bay, one line of invitation, a play disc. **Nothing
+   plays until the rider touches it.**
+2. **The where.** "Which roads?" — a region picker, defaulted to the nearest region when the rider
+   offers their location and to Lake Tahoe when they don't.
+
+Then it hands off to the cold open, unchanged.
+
+## §1 · The moment
+
+A stranger opens Skipper on a couch, not in a car. There is a postcard of Emerald Bay and a play
+disc. They tap it, and a voice starts telling them about a lake they have not been to yet — the
+whole product, in sixty-four seconds, before they have typed anything or made an account.
+
+⚠ **It does not autoplay, and that was a decision** (founder, 2026-08-04). Autoplay is the bolder
+read of "the persona is the product", and it is wrong here for a mechanical reason: the sample takes
+**exclusive `doNotMix` audio focus** (`src/lib/audio-session.ts`), so it does not merely make noise —
+it *stops whatever the rider was already listening to*, unasked, as its first act. On a bus or at a
+desk that is a wince. One tap is the price of not hijacking a stranger's podcast to introduce
+ourselves.
+
+## §2 · The location permission is NOT in onboarding
+
+The brief asked for a permission explainer here. It was interrogated and dropped, and the reason is
+not taste:
+
+- **iOS gives exactly ONE prompt, ever.** A denial is sticky and recovers only through Settings
+  (`docs/decisions/location-permission-priming.md`). The founder's proposed safety net — *"if a user
+  doesn't grant at onboarding we will ask again before starting their first drive"* — **does not
+  exist**: the second request returns the denial immediately and shows nothing. Riders who tap
+  through and deny would be locked out of GPS drives permanently, and that is precisely the group the
+  fallback assumed it could recover.
+- **1.1 made it an acceptance criterion** that no location permission is asked until "Let's roll".
+  Onboarding is the far end of the app from there.
+- **A pre-permission screen may not offer an escape** under a strict reading of 5.1.1(iv), so
+  onboarding would have to march every first-timer into a system prompt they have no reason to accept
+  yet — spending the one shot at its least motivated moment.
+
+⚠ **On the "no Not Now" rule, our own decision doc is stricter than the evidence.** Apple's written
+5.1.1(iv) forbids *manipulating, tricking or forcing* consent — which cuts against forcing everyone
+into the prompt, not for it. The "must not carry a Not Now" line traces to a single forum rejection,
+and the pattern Apple documents objecting to is a priming **button labelled like the system action**
+("Configure Location Access"; they want a neutral "Continue"). Most shipped priming screens do offer
+a bypass. Recorded because a future reader will otherwise inherit a hard rule built on one data point.
+
+**What replaced it.** The region screen asks *"which roads?"* and offers **"Use my location"** as one
+of the answers. That is the same permission request wearing an honest motive: it is in service of a
+question the rider can see on screen, and choosing a region by hand is an *answer*, not a dismissal —
+so there is no bare "Not Now" for a reviewer to object to, and the one shot is only ever spent by a
+rider who chose to spend it. The prompt at "Let's roll" stays exactly where 1.1 put it, for everyone
+who didn't.
+
+## §3 · The region picker, not a label
+
+The screen's region control is a **real picker from day one** (`useRegionPicker`, which already
+exists), even though exactly one region is live.
+
+⚠ **An affordance that only becomes interactive when region 2 ships is a known kill switch here.**
+`home-cold-open-declutter.md` §18 records the chip shipping as a plain label until "region 2", which
+combined with "auto-select only when there is exactly one region" to produce an unrecoverable dead
+screen on installed builds. Same shape, same trap. A one-row sheet is not embarrassing: it tells a
+newcomer the truth about coverage, which is the very thing the postcard exists to soften.
+
+## §4 · Nearest region needs a wire change — the client has no coordinates
+
+**This is the finding that costs the most and is easiest to miss.** The `Region` DTO the client
+receives is `id`, `slug`, `displayName`, `ready`, `exampleAnchors` — and that last field is
+documented as *"names only, no ids, no coordinates"* (`packages/shared/src/schemas.ts`). **There is
+no geometry on the client**, so "pick the region closest to the rider" cannot be computed on-device
+as things stand.
+
+⚠ **AND THE OMISSION IS DEFENDED, not incidental** — this doc said "has no geometry" first and that
+undersells it. `GET /regions` already SELECTS `regions.bbox` (it needs it to bucket example anchors by
+point-in-bbox) and then builds the response field-by-field under an explicit guard: *"never
+`{ ...r, exampleAnchors }` — a spread suppresses TypeScript's excess-property check, so `regions.bbox`
+would ride out onto an anonymous wire with tsc perfectly green. The DTO says a region has no bbox;
+keep it true."* So adding geometry is amending a boundary somebody drew on purpose, and the
+distinction that makes it defensible is CENTRE vs BBOX: a centre says "Lake Tahoe is roughly here",
+which the planner already says aloud to anonymous riders; a bbox says "our corpus sweep covers exactly
+this rectangle", which is operator information about where we have built.
+
+Two ways, and they are not equivalent:
+
+- **Add a coarse region CENTRE to the DTO** (recommended). ⚠ Ship it `.catch`-guarded and optional,
+  for the deploy-order reason `ready` documents: a client that knows the field talking to a server
+  that does not yet send it must degrade to the Tahoe default, never throw — any throw here is
+  mobile's blocking "please update the app" wall on the critical path. The pick happens on the phone, which means
+  **the rider's coordinates never leave the device** — a strictly better privacy story than the
+  alternative, and cheap server-side since a region already *is* a bbox
+  (`geometry-first-regions.md`). A region centre is a public fact about a public place; INV-1 governs
+  endpoint anchor ids and coordinates, which this is not.
+- **Send the rider's position to the server** and let it answer. This puts rider coordinates on the
+  wire and into a request body — new personal data in flight, on a path where CLAUDE.md already
+  forbids logging bodies. Avoid.
+
+Founder decision (2026-08-04): build the pick as a **pure, unit-tested function now** and wire it,
+accepting that it is a **no-op that cannot be observed on device until region 2 exists** — with one
+region, nearest always returns Tahoe, which is also the default. The tests are the only thing holding
+it upright until then; that is the known cost.
+
+## §5 · Where the "seen it" flag lives
+
+`src/lib/client-flags.ts`, as an added FIELD — that file is explicitly written so a second flag is a
+field rather than a new file, and it already carries the three traps this flag would otherwise
+rediscover: the **document dir, never the cache dir** (an eviction would resurrect onboarding for
+someone who finished it), **never keyed on the user id** (the anonymous user row is hard-deleted at
+signup, so a user-keyed flag would re-show onboarding the moment a rider makes an account), and **not
+purged on sign-out**.
+
+## §6 · Alternatives
+
+**A. Two screens: taste → where.** (Chosen.) Fixes the two things the cold open genuinely does not
+do: the sample is a ghost text link today, so the most persuasive asset in the product is the least
+visible thing on screen; and the region is auto-picked in silence, so no rider ever chooses it. Hands
+off to the cold open unchanged.
+
+**B. One screen — postcard and picker together.** Less ceremony, one fewer tap, and the region
+question rides along with the audio instead of following it. Rejected for now because it crowds the
+one moment that has to land: the rider should be listening, not deciding. Worth revisiting if the
+two-screen version tests as a slog.
+
+**C. Don't build it — fix both problems in place.** Promote the listen row on the cold open from a
+ghost link to a real card, and make the region chip an explicit first-run question there. No new
+flow, no persistence flag, no new screens, no wire change. **The honest case for this is strong**:
+the cold open was redesigned on 2026-08-03 for exactly this job, after founder notes and outside
+research, and putting a flow in front of it means the product has two front doors — the second of
+which was designed to be the first. If onboarding ever starts feeling like ceremony, this is the
+version to fall back to.
+
+**Which I'd pick:** A, because the two gaps it closes are real and neither is closable by moving a
+component around. **What would change my mind:** if the taste screen measures as a step riders skip
+past — if `sample_played` on first run comes in low — then the audio was never the blocker and C is
+the cheaper truth.
+
+## §7 · Spend
+
+**No new paid call.** `GET /sample` already exists and is anonymous and free (a presigned clip, no
+model call); `GET /regions` is free. Onboarding adds no rider-triggered spend, so the caps in
+`apps/api/src/limits.ts` are untouched and this needs no founder go on that axis. The only contract
+change is the region centre in §4.
