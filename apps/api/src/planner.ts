@@ -38,9 +38,31 @@ import { PLAN_ROUTE_TOOL, PLANNER_SYSTEM_PROMPT } from './planner-prompt'
 /** Thinking DEPTH. Deliberately paired with `PLANNER_MAX_TOKENS`, which bounds thinking PLUS visible
  *  output in ONE budget on this model (there is no separate thinking budget — `budget_tokens` is a 400).
  *  ⚠ Raising this without raising that cap is the failure limits.ts warns about: higher effort against a
- *  small ceiling returns HTTP 200 with stop_reason 'max_tokens' and no usable tool call. The planner's
- *  job is small — pick two endpoints off a printed list — so depth buys latency, not quality. */
-const PLANNER_EFFORT = 'low' as const
+ *  small ceiling returns HTTP 200 with stop_reason 'max_tokens' and no usable tool call. That cap was
+ *  raised to 4_096 in the SAME change for exactly this reason; the two move together or not at all.
+ *
+ *  ⚠ 'low' → 'medium' BY AN EXPLICIT FOUNDER CALL, 2026-08-04, shipped WITHOUT the eval arm that was
+ *  offered. Recorded rather than deleted because the argument this replaces was not wrong, only partial:
+ *  the ROUTING job really is small (pick two endpoints off a printed list) and depth buys it nothing.
+ *  What that reading missed is that routing is not the whole turn — the same call has to carry the
+ *  persona, and 'low' is documented as the setting that strips preamble and terses output. The measured
+ *  `route_wordless` shape (draw turns emitting 160 tokens of tool JSON and NO text block at all, against
+ *  34-42 on turns that spoke) is that description at its limit, and the open stamping/repetition defect
+ *  is the same family one turn on. Whether depth actually fixes it is UNMEASURED — see the note below.
+ *
+ *  ⚠ WHAT TO WATCH, since nothing was measured first. Three numbers, all already logged by
+ *  `logPlanSpend`, no new instrumentation: `stop_reason` (any 'max_tokens' means the raised cap is still
+ *  too tight — that is the regression this pairing exists to prevent), `thinking` (it was a true zero at
+ *  'low'; a large jump is the latency cost landing), and `out`/`usd`. ⚠ The latency cost is NOT hidden by
+ *  streaming: `display: 'omitted'` means the wire is silent for the whole thinking phase, so depth here
+ *  is dead air in a chat bubble before the first token, which is the one thing this surface cannot spend
+ *  freely. If it reads slow on device, that is the trade, and 'low' is one word away.
+ *
+ *  ⚠ WHOLE-RUN ONLY, NEVER PER-TURN. The resolved effort value is rendered into the prompt, so changing
+ *  it between requests invalidates the cached prefix and re-bills the whole ~6.9k roster block at full
+ *  rate on an anonymous path (TODO #9). That is why this is a module constant and why `effort?:` on
+ *  PlannerModelArgs is an eval seam that passes ONE value for a whole run. */
+const PLANNER_EFFORT = 'medium' as const
 
 /** ⚠ NOT studio's `maxRetries: 5` — that number is tuned for a batch run that has already spent money
  *  and can afford to wait. This is a rider staring at a chat box, and every attempt bills again. The SDK

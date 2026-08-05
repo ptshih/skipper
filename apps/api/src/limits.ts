@@ -154,8 +154,22 @@ export const MAX_PLAN_MESSAGE_CHARS = 2_000
  *  silently produced nothing, indistinguishable from "the planner chose not to route this turn". The
  *  step-6 handler must branch on stop_reason explicitly.
  *  Raising it costs nothing unless the model actually generates the tokens: max_tokens is a ceiling, not
- *  a reservation. Tighten only after logging real p99 output. */
-export const PLANNER_MAX_TOKENS = 2_048
+ *  a reservation. Tighten only after logging real p99 output.
+ *
+ *  ⚠ RAISED 2_048 → 4_096 BY AN EXPLICIT FOUNDER CALL, 2026-08-04, and it is the REQUIRED other half of
+ *  moving `PLANNER_EFFORT` to 'medium' in the same change — not an independent tuning. At 'low' the model
+ *  chose ZERO thinking tokens on all 54 eval turns, so the ~10x headroom this cap appeared to have was
+ *  measured in a regime where thinking never engaged. 'medium' engages it, and thinking is billed inside
+ *  THIS budget. Shipping the effort change alone would have spent the headroom on reasoning and surfaced
+ *  as `stop_reason: 'max_tokens'` → the handler's `truncated` → the rider hearing the retry line.
+ *  ⚠ WHY 4_096 AND NOT MORE: visible output is the deterministic half and peaks at ~209 tokens observed,
+ *  so the doubling is entirely thinking headroom. It also keeps the worst-case bound legible — 4_096
+ *  output tokens is ~$0.10 a turn at this model's rate, against ~$0.05 before. That bound is what INV-11
+ *  names as a guard, so the number is a founder's to move and this one was.
+ *  ⚠ UNMEASURED ON PURPOSE — the founder chose to ship rather than run the eval arm first. What makes
+ *  that safe to watch rather than guess at: `plan_spend` already logs `stop_reason` and `thinking` per
+ *  call, so a truncation regression is one Cloud Logging filter away and needs no new instrumentation. */
+export const PLANNER_MAX_TOKENS = 4_096
 
 /** How long `POST /drives/plan` may reuse a region's cached name + anchor roster (./roster-cache).
  *
