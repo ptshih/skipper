@@ -58,8 +58,13 @@ export function getAnthropic(label = 'a model call needs it'): Anthropic {
 //
 // COST: unchanged. Opus 5 is $5/$25 per MTok, identical to 4.8 (MODEL_PRICING in @skipper/shared), so
 // the bump is cost-neutral and a regen bills what it did before.
-// ⚠ STILL OWED: the judge rubrics were calibrated against 4.8. `eval/calibrate.ts` has NOT been re-run,
-// so any score compared across the bump is apples-to-oranges until it is.
+// ✅ CALIBRATED on the bump, 2026-08-04 (`eval/calibrate.ts`, 54 Opus calls): verdict agreement 16/18,
+// violation recall 8/8, false positives 4 claims across 2/10 clean cases. Recall is the FAIL-CLOSED axis
+// and it is perfect — the bump did not make the gate leakier. The drift is in the COST axis only, exactly
+// where calibrate.ts says to expect it. ⚠ Two clean cases now over-flag, and `grounding-inverse-relation`
+// is a RETURNED regression: grounding.ts spells that carve-out out with that very example ("hired by his
+// aunt X" grounds "he was X's nephew") and the golden case exists because it was a live false positive in
+// June. Left as measured rather than patched — a grounding-prompt edit owes another calibration run.
 //
 // Source: Anthropic model catalog (claude-api skill — "Current Models" table); the id literal is
 // single-sourced in @skipper/shared (CLAUDE_MODELS).

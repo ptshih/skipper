@@ -23,9 +23,17 @@ export const CLAUDE_MODELS = {
    *   · pricing — IDENTICAL to 4.8 ($5/$25 per MTok, see MODEL_PRICING), so the bump is cost-neutral.
    *     ⚠ `claude-opus-4-8` STAYS in MODEL_PRICING: historical `eval_runs` rows name it, and an
    *     unpriced model silently under-reports spend.
-   *  ⚠ STILL OWED: the judge rubrics were calibrated against the OLD model, so every score may shift —
-   *  `eval/calibrate.ts` has not been re-run. Until it is, treat cross-run score comparisons with
-   *  anything before 2026-08-04 as apples-to-oranges. */
+   *  ✅ CALIBRATED, same day (`eval/calibrate.ts`, 54 Opus calls): **verdict agreement 16/18, violation
+   *  recall 8/8, false positives 4 claims across 2 of 10 clean cases.** Recall — the FAIL-CLOSED
+   *  direction, where a miss ships a hallucination — is perfect, which is the result that mattered. The
+   *  drift is entirely in the COST direction and in the direction calibrate.ts predicted ("precision is
+   *  the axis expected to drift… the judge is biased toward flagging BY CONSTRUCTION"). Both
+   *  disagreements are false positives on clean cases: `grounding-merged-feature` and
+   *  `grounding-inverse-relation`.
+   *  ⚠ The second is a RETURNED regression worth knowing about: the grounding prompt spells that exact
+   *  carve-out out with that exact example ("hired by his aunt X" grounds "he was X's nephew"), and the
+   *  golden case exists because it was a live false positive on 2026-06-09. Opus 5 flags it anyway. Cost
+   *  of leaving it: each false positive buys an excision round and trims writing the sheet supported. */
   opus: 'claude-opus-5',
   haiku: 'claude-haiku-4-5-20251001',
   /** The LIVE PLANNER's model — the only one of these that runs inside a rider request.

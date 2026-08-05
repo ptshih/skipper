@@ -25,6 +25,7 @@
 //   dotenvx run -f .env.development -- bun packages/studio/src/eval/calibrate.ts
 
 import { GROUNDING_VOTE_SAMPLES } from '../config'
+import { llmSpendLines, llmSpentUsd } from '@skipper/shared'
 import { GROUNDING_CASES, type GroundingCase } from './golden'
 import { evaluateGrounding } from './grounding'
 import type { ClaimVerdict, StopEval } from './types'
@@ -136,6 +137,16 @@ async function main() {
   // worth watching at all: `GROUNDING_VOTE_SAMPLES` biases the judge toward flagging by construction,
   // so drift here is expected to be one-directional and slow — the shape that hides in a passing gate.
   if (verdictAgree < results.length) process.exitCode = 1
+
+  // ⚠ REPORT WHAT IT BILLED. This is a PAID run — GROUNDING_VOTE_SAMPLES Opus calls per case, 54 on the
+  // 2026-08-04 run — and until then it printed no spend at all, so the operator learned the agreement
+  // numbers and nothing about the cost. Doctrine is explicit: "a paid one reports what it BILLED, not
+  // what it planned." Same defect fixed in classify-treatments.ts the same day; the tally already
+  // existed in-process (grounding.ts records every attempt, retries included) and simply was not read.
+  // ⚠ Printed AFTER the exit code is set so a disagreeing run still reports its bill — a calibration
+  // that fails is exactly the one whose cost you want to know before re-running it.
+  for (const line of llmSpendLines()) console.log(line)
+  console.log(`\nBILLED THIS RUN: ~$${llmSpentUsd().toFixed(4)}  (${GROUNDING_VOTE_SAMPLES()} vote sample(s) × ${results.length} cases)`)
 }
 
 main().catch((e) => {
