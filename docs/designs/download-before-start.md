@@ -981,6 +981,63 @@ the CTA correctly flipped to SAVED OFFLINE → "Start the drive".
 quirk, so it very likely does — but the shipped 1.1 build should be assumed to have it until someone
 saves a drive on a real phone. That check now outranks §12.5's threshold check.
 
+## §16 — Second audit: the bug class had a SECOND instance, and it was worse
+
+An audit pass aimed specifically at §15's bug CLASS (21 claims, 11 confirmed after adversarial
+verification). Four independent lenses found the same critical defect.
+
+### §16.1 — ⚠ CRITICAL: `placeOne` deleted every clip the v4→v5 migration moved
+
+`clip-store.ts`'s `placeOne` did exactly what `transferSharedClip` did — moved a byte into the store,
+then deleted the moved handle — with the identical false comment, *"After a clean move the source is
+already gone and this is a no-op."*
+
+**It was worse than §15 in two ways.** It runs at LAUNCH, from `loadManifest`, on any device holding a
+pre-v5 download — so it deleted a rider's whole saved drive without them touching anything. And it
+LIES AFTERWARDS: `landed` is read BEFORE the delete, so the caller records every clip as placed and
+commits a v5 manifest claiming the drive is saved, over the v4 manifest that held the only record of
+the drive-local filenames. `repairDownload` cannot recover it — there are no bytes left to adopt.
+
+⚠ Reachability was the link most likely to break the finding, and it holds: v4-era downloads genuinely
+succeeded, because that downloader wrote STRAIGHT to its destination with no temp and no move (verified
+at `36ec553^`). The bug needs a working download to destroy. Pre-existing since 36ec553 (2026-08-01);
+blast radius is bounded only because 1.1 was never released — the founder's device, the simulator, and
+any TestFlight tester holding a v4 download.
+
+**Fix:** re-derive the source from its name, exactly as §15. ⚠ Note the collision path was always
+correct (dest present ⇒ move skipped ⇒ handle unmutated ⇒ the source really is a droppable duplicate),
+**which is precisely why it hid: the dangerous path is the one that works.**
+
+### §16.2 — ⚠ The bug class is now CLOSED, and that is a checkable claim
+
+There are exactly **two** `moveSync` call sites in `apps/mobile`, and no `rename`/`copy` at all. Both
+are fixed. The remaining `deleteQuietly(tmp)` in `transferSharedClip` runs BEFORE the move, where the
+handle is unmutated — correct as written. ⚠ Any future `move`/`rename` is a new member of this class:
+the handle is dead the instant it succeeds.
+
+### §16.3 — HIGH: account deletion could not stop an in-flight download (5.1.1(v))
+
+`deleteAllDriveDownloads` deliberately EXCLUDED an in-flight download's dir, to avoid pulling files
+from under the downloader. That was a fair trade when only a rider tapping Save could start one — and
+stopped being one the moment §3 made downloads start automatically and survive navigation. The
+excluded run would finish, commit its manifest, and leave the ERASED account's audio on the phone.
+Exclusion guaranteed the residue rather than risking it.
+
+**Fix:** the registry makes the honest version possible — abort every transfer, then purge with no
+exclusions. `deleteDriveDownload` gets the same treatment (it also unblocked the fail-closed sweep,
+which refuses to reclaim anything while a download is in flight). ⚠ A TOP-UP still has no cancel
+handle (its signal belongs to the screen); bounded and documented at the call site.
+
+### §16.4 — The test gap is real and was NOT closed
+
+⚠ Re-simplifying either `finally` restores a 0% download rate **with a green suite**. The reason is
+structural: everything touching the native `File` API is unimportable by `bun test`, so the offline
+tests cover only the pure half. Closing it means mocking `expo-file-system` process-wide — itself a
+documented hazard here (a past incident read 96 pass / 9 fail because a mock leaked across files).
+**Deliberately deferred, not overlooked**, and it is why both fixes carry the loudest comments in the
+module. Also uncovered: the download registry/tombstone (where §14.3/§14.4 live) and the three audio
+hooks.
+
 ## Not worth doing
 
 - **A region-level pre-fetch.** Cut, and for a reason that still holds: no bbox-level rule can

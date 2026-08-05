@@ -212,9 +212,28 @@ function placeOne(dir: Directory, fromName: string, toName: string): boolean {
     }
   }
   const landed = hasStoredClip(toName)
-  // Only once the store is PROVEN to hold the bytes is the drive-local copy droppable. After a clean
-  // move the source is already gone and this is a no-op; after a collision it reclaims a duplicate.
-  if (landed) deleteQuietly(src)
+  // Only once the store is PROVEN to hold the bytes is the drive-local copy droppable.
+  //
+  // ⚠ RE-DERIVE THE SOURCE FROM ITS NAME. This was `deleteQuietly(src)`, commented "after a clean move
+  // the source is already gone and this is a no-op" — the SAME false native-contract assertion that
+  // made `transferSharedClip` delete every clip it saved (docs/designs/download-before-start.md §15).
+  // `moveSync` MUTATES the receiver (`ios/FileSystemPath.swift` ends `moveItem(...)` with
+  // `url = destinationUrl`; Android's `FileSystemPath.kt` matches with `uri = finalUri`), so on the
+  // SUCCESSFUL path — the normal one — `src` no longer points at the drive-local copy. It points at the
+  // clip that was just placed in the store, and deleting it destroyed the only remaining copy: the
+  // source was RENAMED, not copied.
+  //
+  // ⚠ WORSE THAN THE §15 BUG, because this one lies afterwards. `landed` is read BEFORE the delete, so
+  // the caller records the clip as placed and commits a v5 manifest claiming a drive is saved — over
+  // the v4 manifest that held the only record of the drive-local filenames. A rider updating the app
+  // lost a whole saved download at launch, silently, and `repairDownload` cannot get it back because
+  // there are no bytes left to adopt. This is the exact failure this module's header says it must
+  // never have.
+  //
+  // The COLLISION path was always correct (dest already present ⇒ the move is skipped ⇒ `src` is
+  // unmutated ⇒ it really is a droppable duplicate) — which is precisely why the bug hid: the
+  // dangerous path is the one that works.
+  if (landed) deleteQuietly(new File(dir, fromName))
   return landed
 }
 

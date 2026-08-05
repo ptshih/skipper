@@ -1303,14 +1303,27 @@ export function sweepOrphanClips(): number {
  *
  */
 export function deleteAllDriveDownloads(): number {
-  // Keep NOTHING. Still excludes an in-flight download's DIR, which would otherwise have its files
-  // pulled out from under the downloader mid-verify.
-  // ⚠ topUps as well as inFlight. A top-up is a real transfer into the shared store, so excluding it
-  // here while `sweepOrphanClips` already checks both would let an erasure race land more of the
-  // deleted rider's audio after the purge ran — a 5.1.1(v) residue.
-  const doomed = driveIdsToSweep(downloadedDriveIds(), [], [...inFlight.keys(), ...topUps.keys()])
+  // ⚠ CANCEL FIRST, THEN KEEP NOTHING. This used to EXCLUDE an in-flight download's dir, to avoid
+  // pulling files out from under the downloader mid-verify — which was a reasonable trade when a
+  // download could only be started by a rider tapping Save on the screen they were looking at. It is
+  // not one now: the download starts AUTOMATICALLY at create and survives navigation, so a transfer
+  // can easily be running while the rider deletes their account, and excluding it GUARANTEED the
+  // residue rather than risking it. The run would finish, commit its manifest, and leave the erased
+  // account's audio on the phone — an App Store 5.1.1(v) failure, and the one erasure path that has
+  // to be total.
+  //
+  // The registry is what makes the honest version possible: abort every transfer, then purge
+  // everything with no exclusions. An aborted `runDownload` also drops its own uncommitted dir, so it
+  // cleans up behind itself rather than racing us for it.
+  for (const driveId of [...registry.keys()]) cancelDownload(driveId)
+  const doomed = driveIdsToSweep(downloadedDriveIds(), [], [])
   for (const driveId of doomed) removeDriveDir(driveId)
   deleteAllStoredClips()
+  // ⚠ A TOP-UP is the one transfer with no cancel handle (its signal belongs to the screen that
+  // started it), so one already past `runTopUp`'s manifest check could still write a byte after this
+  // returns. Bounded, not ignored: it can only write into the store we just cleared, its own commit
+  // needs a manifest whose dir is gone, and the launch sweep reclaims anything it does land. Give it
+  // a cancel handle if top-ups ever start outliving their screen the way downloads now do.
   return doomed.length
 }
 
@@ -1335,6 +1348,13 @@ function removeDriveDir(driveId: string): void {
  * space returned than they expect; the honest alternative is explaining refcounts to someone in a car.
  */
 export function deleteDriveDownload(driveId: string): void {
+  // ⚠ CANCEL THIS DRIVE'S TRANSFER FIRST. Since the download starts automatically at create and
+  // survives navigation, "Remove download" (and the drive delete behind it) can land while bytes are
+  // still coming down — and without this the app went on pulling audio for a drive the rider had just
+  // deleted, then committed a manifest for it. Worse, the sweep below is fail-closed on
+  // `downloadsInFlight`, so that same run also stopped it reclaiming anything at all. Idempotent: a
+  // no-op when nothing is running.
+  cancelDownload(driveId)
   removeDriveDir(driveId)
   sweepOrphanClips()
 }
