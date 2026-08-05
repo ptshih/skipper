@@ -348,7 +348,10 @@ export const voice = {
   // front-door taste for everyone outside the corpus AND the App Review path. Fact-free (the poi
   // name is a FACT, served by the API, never baked here). Warm, corny, glanceable.
   sample: {
-    kicker: 'POSTCARD FROM LAKE TAHOE',
+    // ⚠ `kicker` ('POSTCARD FROM LAKE TAHOE') WAS DELETED (2026-08-04) when the artwork folded into
+    // the player card. It captioned the postcard's lower matte, and it was naming a region the chip
+    // twelve points below already named. The postcard metaphor now rides on the MATTE — an image inset
+    // in paper reads as a print without a label saying so.
     // ⚠ `badge` ('A TASTE') WAS DELETED HERE (2026-08-04). Its job — be honest that "this is a sample,
     // not a live drive" — was true copy on the old `/sample`, which a rider reached from home already
     // knowing what a drive was. As the first screen of a fresh install it disambiguated against a

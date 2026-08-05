@@ -17,6 +17,7 @@ import { useTheme, type Theme } from '@/theme'
 import {
   AttributionButton,
   Button,
+  Card,
   Divider,
   RegionChip,
   Scrubber,
@@ -381,14 +382,8 @@ export default function SampleScreen() {
         </Text>
       </View>
 
-      <PostcardFrame
-        image={postcardImageFor(sample?.qid)}
-        caption={voice.sample.kicker}
-        colors={colors}
-        imageHeight={postcardH}
-      />
-
-      <View style={[styles.card, compact && styles.cardCompact]}>
+      <Card style={[styles.card, compact && styles.cardCompact]}>
+        <PostcardImage image={postcardImageFor(sample?.qid)} colors={colors} imageHeight={postcardH} />
         {/* ⚠ NO "A TASTE" BADGE HERE ANY MORE (founder, 2026-08-04). Its stated job was to be honest
             that "this is a sample, not a live drive" — which was true copy on the OLD `/sample`,
             reached from a row on home by a rider who already knew what a drive was. On the first
@@ -398,7 +393,18 @@ export default function SampleScreen() {
             exploring"). A fourth signal cost ~28pt on the screen where vertical space is the whole
             fight. It also took the app's only teal Badge with it — a real palette loss, and the
             cheapest thing here to put back if the screen reads flat without it. */}
-        <Text variant="display" color="ink" align="center" numberOfLines={2}>
+        {/* ⚠ THE POSTCARD CAPTION'S TREATMENT, not a title's (founder, 2026-08-04) — `label` +
+            `accentWarm`, i.e. small tracked caps in burnt amber, exactly what "POSTCARD FROM LAKE
+            TAHOE" wore on the old matte. It keeps the print's warmth on a line that is now a FACT from
+            the API rather than a hardcoded place, and it drops the display-weight title that was
+            competing with the artwork directly above it.
+            ⚠ IT NAMES THE PLACE AND NOT THE REGION, and that is a constraint rather than a choice.
+            `Sample` carries no region (packages/shared: qid, name, url, contentType, durationMs,
+            attribution), so "…, Lake Tahoe" could only come from hardcoding it — a baked fact about a
+            clip the SERVER chooses and can swap — or from the picked region, which would be a lie the
+            day region 2 ships: this postcard is always the Tahoe clip while the chip below is the
+            rider's own, independent choice. Naming both honestly needs a region on the DTO. */}
+        <Text variant="label" color="accentWarm" align="center" numberOfLines={2}>
           {sample ? cleanPlaceName(sample.name) : ''}
         </Text>
 
@@ -437,7 +443,7 @@ export default function SampleScreen() {
           />
           <View style={styles.transportSlot} />
         </View>
-      </View>
+      </Card>
 
       {/* ── The question. Everything above is the taste; everything below is the one answer the app
           needs. The rule separates them without a second screen. ── */}
@@ -490,53 +496,35 @@ export default function SampleScreen() {
   )
 }
 
-// The framed "postcard": a landscape image (the WPA poster of the place) matted like a real postcard,
-// with a little stamp in the corner, and the region caption printed on the bottom matte. Until the
-// curated art for this clip's QID exists (see @/lib/postcards), it renders a calm sunburst placeholder
-// so it reads as an intentional postcard, never a broken image.
-function PostcardFrame({
+// The inset artwork — the WPA poster of the place, matted inside the player card like a print rather
+// than bled to its edges. Until the curated art for this clip's QID exists (see @/lib/postcards) it
+// renders a calm sunburst placeholder, so it is an intentional blank, never a broken image.
+//
+// ⚠ IT WAS A STANDALONE "POSTCARD FRAME" — its own raised matte, an amber caption reading "POSTCARD
+// FROM LAKE TAHOE", and a dashed franking stamp — and the founder folded it into the player card
+// (2026-08-04). What that bought: one object instead of two stacked placards, one set of padding
+// instead of two, and a Tahoe mention removed that the region chip twelve points below was already
+// making. The metaphor survives in the MATTE — an image inset in paper with a caption under it is a
+// print; bleeding it to the card's edges is what would have made this a generic media header.
+function PostcardImage({
   image,
-  caption,
   colors,
   imageHeight,
 }: {
   image: ImageSourcePropType | undefined
-  caption: string
   colors: Theme['colors']
-  /** Device-derived — see POSTCARD_SCREEN_FRACTION. Passed in rather than read here so the ONE
-   *  arithmetic lives beside the layout it is protecting. */
+  /** Device-derived — see POSTCARD_SCREEN_FRACTION. */
   imageHeight: number
 }) {
   return (
-    <View
-      style={[
-        styles.postcard,
-        {
-          backgroundColor: colors.surfaceRaised,
-          borderColor: colors.rule,
-          boxShadow: [{ offsetX: 0, offsetY: 8, blurRadius: 22, color: colors.shadowCast }],
-        },
-      ]}
-    >
-      <View style={[styles.postcardImage, { height: imageHeight, backgroundColor: colors.surfaceSunken }]}>
-        {image ? (
-          <Image source={image} style={styles.postcardFill} resizeMode="cover" accessibilityIgnoresInvertColors />
-        ) : (
-          <View style={styles.postcardPlaceholder} pointerEvents="none">
-            <Sunburst size={132} opacity={0.16} />
-          </View>
-        )}
-      </View>
-      <Text variant="label" color="accentWarm" align="center" style={styles.postcardCaption}>
-        {caption}
-      </Text>
-      {/* The stamp — the small thing that makes it read as a postcard rather than a photo card. */}
-      <View
-        style={[styles.stamp, { backgroundColor: colors.surfaceRaised, borderColor: colors.rule }]}
-        pointerEvents="none"
-      >
-        <Sunburst size={20} opacity={0.5} />
-      </View>
+    <View style={[styles.postcardImage, { height: imageHeight, backgroundColor: colors.surfaceSunken }]}>
+      {image ? (
+        <Image source={image} style={styles.postcardFill} resizeMode="cover" accessibilityIgnoresInvertColors />
+      ) : (
+        <View style={styles.postcardPlaceholder} pointerEvents="none">
+          <Sunburst size={132} opacity={0.16} />
+        </View>
+      )}
     </View>
   )
 }
@@ -551,7 +539,10 @@ const styles = StyleSheet.create({
   // read as ONE control surface, so the roomier `lg` step was spacing them like separate sections and
   // spending ~16pt to do it. `lg` still separates the postcard, the question and the CTA in `body`.
   card: { gap: space.md, width: '100%' },
-  cardCompact: { gap: space.sm },
+  // ⚠ PADDING TOO, not just the gap — `Card` sets `space.lg` on all four sides, and the placard's
+  // elevation would otherwise cost a short phone 32pt of pure inset on top of the gaps it just saved.
+  // `style` is applied after the primitive's own base, so this override lands.
+  cardCompact: { gap: space.sm, padding: space.md },
   transportRow: { flexDirection: 'row', alignItems: 'center' },
   // Matches the ⓘ's own 48pt tap floor, and is mirrored empty on the right — see the call site.
   transportSlot: { width: 48 },
@@ -562,18 +553,6 @@ const styles = StyleSheet.create({
   centerRow: { flexDirection: 'row', justifyContent: 'center' },
   field: { gap: space.sm, alignItems: 'center' },
   // The postcard matte: a raised card holding the image, with the caption printed on its lower margin.
-  postcard: {
-    width: '100%',
-    // ⚠ `overflow: hidden` as a backstop. A FLEX version of this frame was tried first and the image
-    // spilled out of its matte, drawing over the title beneath it — "parent measured small, child drew
-    // large" is a bug you SEE rather than one a test catches. The height is explicit now so it cannot
-    // recur, but clipping to the matte makes the whole class impossible.
-    overflow: 'hidden',
-    padding: space.sm,
-    paddingBottom: space.xs,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
   postcardImage: {
     width: '100%',
     // ⚠ NO `aspectRatio` AND NO `flex` — the height arrives as a prop, computed from the screen (see
@@ -588,26 +567,4 @@ const styles = StyleSheet.create({
   },
   postcardFill: { width: '100%', height: '100%' },
   postcardPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  postcardCaption: { marginTop: space.sm, marginBottom: space.xs },
-  stamp: {
-    position: 'absolute',
-    // ⚠ ON THE MATTE, NOT ON THE PHOTO — and that is a THEME correctness fix, not a taste one
-    // (design pass, 2026-08-04). It sat at `top: space.md` over the image, which is fine in day
-    // (cream stamp, cream sky) and wrong at dusk: `surfaceRaised` flips DARK while the photo stays
-    // bright, so it read as a hole punched in the picture. The root cause generalises — this palette
-    // has no always-light role by design (contrast is enforced by the token set, DESIGN §4), so
-    // ANYTHING overlapping a photograph is unthemeable. Anchored to the caption strip it sits on
-    // theme-coloured paper in both moods and cannot fight an image it knows nothing about.
-    bottom: space.xs,
-    right: space.sm,
-    width: 30,
-    height: 30,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    transform: [{ rotate: '5deg' }],
-  },
 })
