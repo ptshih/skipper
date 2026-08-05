@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Image, StyleSheet, useWindowDimensions, View } from 'react-native'
+import { Animated, Image, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { Stack, useRouter } from 'expo-router'
 import type { ImageSourcePropType } from 'react-native'
@@ -16,6 +16,8 @@ import {
   AttributionButton,
   Button,
   Card,
+  Ridgeline,
+  RouteTrack,
   Screen,
   StateView,
   Sunburst,
@@ -156,7 +158,7 @@ export default function SampleScreen() {
   // ⚠ `useWindowDimensions`, not a one-shot `Dimensions.get()` — it re-renders on rotation and on
   // iPad split-screen resize, where a stale first read would leave the picture sized for a viewport
   // the rider is no longer in.
-  const { height: windowH } = useWindowDimensions()
+  const { height: windowH, width: windowW } = useWindowDimensions()
   const postcardH = Math.min(
     POSTCARD_MAX_H,
     Math.max(POSTCARD_MIN_H, Math.round(windowH * POSTCARD_SCREEN_FRACTION)),
@@ -179,6 +181,22 @@ export default function SampleScreen() {
   // Set the instant the rider STOPS, cleared when they start again. It exists only to defend the
   // end-of-clip fallback below against the stop's own pause→seek gap — see `togglePlay`.
   const manualStopRef = useRef(false)
+
+  /** The rig's position along the trail below the card, 0..1.
+   *
+   *  ⚠ DECORATION THAT HAPPENS TO BE HONEST, not a control. `RouteTrack` is
+   *  `accessibilityElementsHidden` and has no touch handlers, which is exactly right for art and was
+   *  exactly WRONG when an earlier pass tried to make it the transport (it silently deleted the
+   *  screen's only adjustable element). Nothing here is tappable; it only shows time passing.
+   *  ⚠ It also closes the gap §7.2 of the legibility doc left open — with the player gone the label
+   *  was the only sign the clip was running. This answers "is it playing?" without handing back a
+   *  control to grab, which was the stated constraint. */
+  //  ⚠ A LAZY `useState`, NOT `useRef(...).current` — that form reads `.current` during RENDER, which
+  //  is `react-hooks/refs` ("Cannot access refs during render") and a NEW lint error rather than one
+  //  of the baselined ones. The lazy initialiser gives the same guarantee the ref was there for: the
+  //  Animated.Value is constructed once and its identity never changes, so the tween below is never
+  //  re-targeted at a fresh object mid-clip.
+  const [trailProgress] = useState(() => new Animated.Value(0))
 
 
   // setAudioModeAsync is process-wide (shared with the drive player). ⚠ D35 (1.1, founder): the postcard
@@ -213,6 +231,9 @@ export default function SampleScreen() {
     endedRef.current = false
     startedRef.current = false // the retry path re-loads the clip — that is a new play
     manualStopRef.current = false // a fresh clip has not been stopped
+    // A reload is a fresh clip, so the rig starts at the trailhead. Without this a retry after a
+    // completed play would draw the car parked at the END of a clip that has not run yet.
+    trailProgress.stopAnimation(() => trailProgress.setValue(0))
     setFinished(false)
     try {
       const s = await getSample()
@@ -226,7 +247,10 @@ export default function SampleScreen() {
       // persona dead-end. Show the retry surface.
       setPhase('error')
     }
-  }, [player])
+    // `trailProgress` is a lazily-initialised `useState` value, so its identity never changes and
+    // this stays a once-per-mount load — the dependency is honesty for the hooks lint, not a re-run.
+    // (Same reasoning `loadRegions` states for `nextRotation` on home.)
+  }, [player, trailProgress])
 
   useEffect(() => {
     void load()
@@ -235,6 +259,29 @@ export default function SampleScreen() {
 
   const durSec =
     status.duration && status.duration > 0 ? status.duration : (sample?.durationMs ?? 0) / 1000
+
+  // Drive the rig from the clip's real position.
+  // ⚠ A 500ms TIMING, NOT `setValue`. `expo-audio` publishes status about twice a second, so writing
+  // the value outright would STEP the token twice a second and lose the glide that is the whole point
+  // of the motif; easing to the next sample lands just as the following one arrives.
+  // ⚠ `useNativeDriver: false` is forced, not lazy — RouteTrack positions its token with percentage
+  // layout, which the native driver cannot animate (its own header says so).
+  useEffect(() => {
+    // ⚠ THE STOPPED RIG STAYS PARKED. A stop freezes `currentTime` rather than rewinding it, so any
+    // later tick would re-assert the old position and undo the snap-to-zero `togglePlay` just did.
+    // Reading the REF (not state) is what makes this correct: it is written synchronously inside the
+    // tap, so it is already true by the time this effect next runs. Cleared on the next play, before
+    // `play()`, so real progress resumes animating immediately.
+    if (manualStopRef.current) return
+    const frac = durSec > 0 ? Math.max(0, Math.min(1, (status.currentTime ?? 0) / durSec)) : 0
+    const anim = Animated.timing(trailProgress, {
+      toValue: frac,
+      duration: 500,
+      useNativeDriver: false,
+    })
+    anim.start()
+    return () => anim.stop()
+  }, [status.currentTime, durSec, trailProgress])
 
   // Clip finished. didJustFinish is the primary signal, guarded against its double-fire. FALLBACK:
   // expo-audio can DROP didJustFinish across an OS audio interruption (useDrive defends the same way),
@@ -291,6 +338,15 @@ export default function SampleScreen() {
       // we STOPPED the rider's music, and pausing our player does not give it back.
       manualStopRef.current = true
       releaseAudioSession()
+      // ⚠ PARK THE RIG AT THE START IMMEDIATELY (founder, 2026-08-05). The trail is driven off
+      // `status.currentTime`, which a stop FREEZES rather than rewinds — so without this the car sat
+      // mid-trail advertising a position the next tap will not resume from, which is the same
+      // label-vs-behaviour lie the "Stop" wording already had to have fixed once.
+      // ⚠ SNAP, NOT A GLIDE, and that is a picture rather than a performance concern: easing the
+      // token back would literally show the car DRIVING BACKWARDS down the road.
+      // ⚠ `stopAnimation` FIRST — a 500ms tracking tween may be mid-flight, and it would otherwise
+      // finish after this and drag the rig straight back out again.
+      trailProgress.stopAnimation(() => trailProgress.setValue(0))
       return
     }
     manualStopRef.current = false
@@ -461,6 +517,38 @@ export default function SampleScreen() {
           ⚠ The rider is now NEVER asked, on any install — see TODO #73, which was already tracking the
           narrower version of this for riders who onboarded before region 2. Home's chip is the only
           place the question is asked at all, which is why it is being made more prominent there. */}
+      {/* THE TRAIL — the app's own dashed atlas trail with the skipper's rig on it, filling the space
+          the bottom-pinned CTAs opened up (founder, 2026-08-05: "showcasing the drive routing,
+          breadcrumbs, trail with an illustration… also maybe it makes sense to align the 2 CTAs to
+          the bottom"). The two ideas solve each other: pinning the buttons CREATES this gap, and the
+          trail is what stops it reading as dead paper.
+          ⚠ ILLUSTRATION, NOT CARTOGRAPHY. `GET /sample` carries NO geography on purpose ("no
+          geography, because there is no map here, just the clip" — packages/shared) and the `Region`
+          DTO deliberately withholds coordinates, so nothing here may ever sprout real place names or
+          claim to be a real route. It is a motif that says "a drive", and that is all it may say.
+          ⚠ FLEXES, so it is the give on a short phone: the gap shrinks to `minHeight` on an SE while
+          the poster and both buttons keep their size — spacing is the one thing worth compressing
+          (docs/research/fitting-one-screen-across-iphone-sizes.md). */}
+      <View style={styles.trailSlot} pointerEvents="none">
+        {/* ⚠ THE RIDGE IS NOT OPTIONAL DRESSING — it is what makes this a SCENE. The trail alone was
+            built first and looked worse than the empty space it filled: a hairline marooned in a tall
+            void, reading as a stray progress bar at 0% rather than as illustration. A horizon behind
+            it turns the same line into a road running along the foot of the hills, which is the WPA
+            poster idiom the whole app is drawn in — and it is the motif home already uses at its top,
+            so the two screens now rhyme. */}
+        <View style={styles.trailGroup}>
+          {/* ⚠ BLEEDS PAST THE GUTTER, and only the ridge does. `Ridgeline`'s own header is explicit
+              that a horizon "runs off both sides instead of being cut off by them" — inset to the
+              screen's padding it reads as a chart line with two ends rather than as scenery. The ROAD
+              deliberately does not bleed: its rig starts at the line's left edge, and pushed to the
+              screen edge the token would sit half off-screen looking clipped rather than parked. */}
+          <View style={styles.ridgeBleed}>
+            <Ridgeline width={windowW} height={56} opacity={0.5} />
+          </View>
+          <RouteTrack progress={trailProgress} glow={status.playing} />
+        </View>
+      </View>
+
       <View style={styles.ctaStack}>
         {/* ⚠ A TOGGLE, NEVER A STANDING OFFER — the stop half is a requirement. This surface takes
             exclusive `doNotMix` focus, so a rider who cannot stop the clip has had their podcast
@@ -567,7 +655,11 @@ function PostcardImage({
 }
 
 const styles = StyleSheet.create({
-  body: { gap: space.lg },
+  // ⚠ `flexGrow: 1` IS WHAT PINS THE CTAS TO THE BOTTOM, and it only works because this is a
+  // ScrollView's CONTENT container: it lets the content stretch to fill a tall screen (so
+  // `trailSlot`'s flex has something to claim) while still scrolling when the content is taller than
+  // the viewport — which is the property the whole screen was built around and must not lose.
+  body: { gap: space.lg, flexGrow: 1 },
   // ⚠ ONE STEP DOWN THE EXISTING SCALE, never a hand-picked number — `lg`→`md` and `md`→`sm` keep the
   // screen inside the design system's rhythm on a short phone instead of inventing a second one.
   bodyCompact: { gap: space.md },
@@ -589,6 +681,20 @@ const styles = StyleSheet.create({
   // ⚠ `sm`, not the body's `lg`: the two buttons are ONE decision surface (hear it, or go), so they
   // group rather than reading as two separate sections of the screen.
   ctaStack: { gap: space.sm, width: '100%' },
+  // The trail's slot. ⚠ `flex: 1` claims whatever is left between the poster and the buttons, which
+  // is what pushes the CTAs down; `minHeight` is the floor so the motif never renders as a sliver on
+  // a short phone. `justifyContent: 'center'` keeps the trail off both neighbours as the gap grows.
+  // ⚠ `flex-end`, NOT `center`. Centred, the scene floated with a void both above and below it and
+  // read as marooned; anchored to the bottom of the gap it becomes the GROUND the two buttons stand
+  // on, and the leftover space collects into one block under the poster instead of two.
+  trailSlot: { flex: 1, minHeight: 44, justifyContent: 'flex-end', width: '100%' },
+  // Ridge and road read as ONE object, so they sit flush — a gap between them would separate the
+  // horizon from the road running along it and put us back to two stray elements.
+  trailGroup: { width: '100%' },
+  // ⚠ NEGATIVE GUTTER, mirrored, so the horizon reaches both screen edges — `Screen padded` insets
+  // this column by exactly `space.gutter`, and this gives it back. Derived from that token, never a
+  // hand-picked number: change the gutter and this follows.
+  ridgeBleed: { marginHorizontal: -space.gutter },
   // ⚠ `transportRow` / `transportSlot` / `transportFill` WERE DELETED HERE (2026-08-05) with the
   // transport itself. They centred the play disc between an ⓘ slot and a matching empty one; there
   // is no disc to centre now. See the header for why the whole player left.

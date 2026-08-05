@@ -9,7 +9,9 @@
 > two actions are stacked labelled buttons.
 > ⚠ **§7's recommended option A was NOT what shipped**, and §7.1 below records why — the category
 > descriptor it proposed was built, rendered, and rejected against a rewritten tagline.
-> ⚠ **One finding is deliberately left open: nothing signals playback but the button's label** (§7.2).
+> Then a fourth pass closed the last gap: the CTAs pin to the BOTTOM and a trail illustration
+> (`Ridgeline` + `RouteTrack`) fills the space that opens up, with the rig advancing as the clip plays
+> — so playback finally has a signal without a control coming back (§7.2).
 > ⚠ **This retires `onboarding-taste-then-where.md` §8.4's quiet-CTA rule** — see that doc's status.
 > Prompted by the founder: *"i feel like the onboarding page is pretty but still a bit confusing as
 > the first screen a brand new user sees."* Read on a booted simulator (iPhone 17 Pro Max, iOS 26.5)
@@ -190,19 +192,42 @@ dropped the screen's only `accessibilityRole="adjustable"` (`RouteTrack` is `acc
 It was abandoned for the strip-out, not for that defect — but the defect is why it should not be
 casually revived.
 
-## §7.2 · The one finding left OPEN — playback has no signal but a word
+## §7.2 · Playback had no signal but a word — CLOSED 2026-08-05 by the trail
 
-With the transport gone, **nothing on the screen moves while the clip plays.** The secondary button's
-label flips `Hear a sample` → `Stop the sample`, and that is the entire feedback surface.
+For a few hours this was the one finding left open: with the transport gone, **nothing on the screen
+moved while the clip played**. The button's label flipped `Hear a sample` → `Stop the sample` and that
+was the entire feedback surface — a real gap on the screen whose whole purpose is being heard, since a
+rider on silent or with headphones unplugged taps and sees only a word change.
 
-⚠ **This is known and deliberate, not an oversight** — but it is a real gap on the one screen whose
-whole purpose is being heard: a rider on silent, or with headphones not connected, taps and sees a
-word change. Three candidates were sketched and none built: a hairline progress fill along the
-poster's base; the rig creeping along that same base (drive metaphor, but reintroduces the motif just
-removed); or nothing at all, trusting audio to be its own feedback.
+**What closed it** (founder, 2026-08-05: *"earlier we kinda riffed on an idea of 'showcasing the drive
+routing, breadcrumbs, trail' with an illustration, i wonder if that would warm up this screen"* — plus
+*"maybe it makes sense to align the 2 CTAs to the bottom"*). Those two ideas solve each other: pinning
+the CTAs to the bottom CREATES a gap, and a trail illustration is what stops that gap reading as dead
+paper. The rig advances along it as the clip runs, so the screen shows playback **without handing back
+a control**, which was the stated constraint.
 
-⚠ **Do not "fix" this by putting the player back.** The register to stay inside is *ambient*, not
-*transport* — something that shows time passing without offering a control to grab.
+⚠ **THE OBJECTION THAT SANK `RouteTrack` AS A TRANSPORT IS WHAT MAKES IT RIGHT AS ART.** It is
+`accessibilityElementsHidden` with no touch handlers. As a scrubber replacement that silently deleted
+the screen's only `accessibilityRole="adjustable"`; as decoration it is exactly correct, because art
+*should* be hidden from assistive tech. Same component, opposite verdict, and the difference is
+whether it pretends to be a control.
+
+⚠ **THE TRAIL ALONE WAS BUILT FIRST AND WAS WORSE THAN THE EMPTY SPACE.** A dashed hairline in a tall
+void reads as a stray progress bar stuck at 0% and draws the eye to the emptiness. What fixed it was
+adding `Ridgeline` behind it — the horizon motif home already uses — which turns the same line into a
+road running along the foot of the hills, and reframes the space above as SKY rather than a hole. ⚠ The
+ridge BLEEDS past the gutter (its own header: a horizon "runs off both sides instead of being cut off
+by them"); the road deliberately does not, or the rig sits half off-screen looking clipped.
+
+⚠ **The rig snaps to the trailhead on stop** (founder: *"can we reset the little car to the beginning
+right after a user clicks stop sample"*) — a SNAP, not a glide, because easing it back would literally
+show the car driving backwards. A stop freezes `currentTime` rather than rewinding it, so the tracking
+effect also has to stand down while stopped or the next tick drags the rig straight back out.
+
+⚠ **Still true: do not "fix" anything here by putting the player back.** The register is *ambient*, not
+*transport* — something that shows time passing without offering a control to grab. And it must stay
+ILLUSTRATION, never cartography: `GET /sample` carries no geography, so this motif may never sprout
+real place names or claim to be a real route.
 
 ## §7.3 · Two audio defects the on-device testing found — both fixed 2026-08-05
 
