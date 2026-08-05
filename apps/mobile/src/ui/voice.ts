@@ -402,29 +402,47 @@ export const voice = {
     // "we'll find the closest roads for you" would be writing a cheque this flow deliberately cannot
     // cash. See docs/designs/onboarding-taste-then-where.md.
     setupTitle: 'Where are we driving?',
-    // ⚠ Says the LIMIT out loud rather than hiding it. A newcomer who picks from a list of one has
-    // learned something true about the app in the one moment they are most forgiving of it; the same
-    // fact discovered later, mid-plan, reads as a dead end. The postcard right before this is what
-    // buys the goodwill to be straight here.
-    // ⚠ COUNT-AGNOSTIC, and this shipped WRONG for a day — it read "this is where I know every turn",
-    // which quietly assumes exactly one region (founder, 2026-08-04: "i will be adding more regions
-    // without releasing new versions of the app, so the app has to anticipate multiple regions"). That
-    // is the block header's rule two lines up, broken by the first string written under it. Regions
-    // arrive by a `released_at` flip with no build, so singular copy would go stale on installed apps
-    // that can do nothing about it — the same failure class as §18's chip. "these" reads correctly at
-    // one region and at six.
-    // ⚠ SHORTENED when the two screens merged: it is a CAPTION under the chip now, not a screen's body,
-    // and the heading directly above it already asks the question — so the old opening clause ("Pick the
-    // roads you want stories on") was restating the label six words later.
-    setupBody: 'I know every turn on these. More are coming.',
+    // ⚠ `setupBody` LIVED HERE AND IS GONE (2026-08-04). It was the coverage caption under the chip —
+    // "I know every turn on these. More are coming." — and its argument was good: say the LIMIT out
+    // loud, because a newcomer who learns it in that forgiving first moment is not ambushed by it
+    // mid-plan. It was not refuted, it was RELOCATED. `heading` above titles the picker one tap away
+    // ("Roads I know") over a list of exactly what exists, which answers the same question by showing
+    // rather than promising — and the line's ~40pt bought the wordmark masthead on that screen.
+    // ⚠ It also went through TWO rewrites in an hour first, both worth not repeating: it shipped
+    // saying "*this* is where I know every turn" (singular — stale the day a second region releases,
+    // on installed apps that could do nothing about it), then got shortened when the two onboarding
+    // screens merged and it became a caption rather than a body.
     setupCta: 'Start exploring',
   },
   greeting: 'Hop in. I’ll do the talking.',
-  // The cold-open descriptor: a newcomer should know WHAT this is before any audio
-  // plays. Clear first, persona second — the deadpan stays, just aimed.
+  // The line under the wordmark on the onboarding screen — the one sentence a stranger reads before
+  // any audio plays.
+  //
+  // ⚠ IT NO LONGER NAMES THE CATEGORY, and that reverses this comment's original rule of "clear first,
+  // persona second" (founder, 2026-08-04). It opened "Narrated road trips. You pick the road…" and the
+  // descriptor was cut. Recorded because it is a real trade, not a tidy-up: the line stopped LABELLING
+  // the product and now only demonstrates it. What makes that survivable is everything around it — a
+  // postcard, an "A TASTE" badge, a transport bar and a 64-second clip are all on the same screen, so
+  // "audio about places" is shown three ways before the sentence has to say it. It also earned its
+  // keep on layout: at 375pt wide the longer version wrapped to two lines on the smallest phone.
+  //
+  // ⚠ IT HAD NO READER AT ALL FOR A DAY, which is worth recording because nothing failed. Home's
+  // masthead (kicker → headline → rig → tagline) was deleted on 2026-08-03 as "a LANDING PAGE, and
+  // Skipper already has one at skipper.fm" — correct for home, where the rider has already installed
+  // and is standing there wanting to plan a drive. This string went dead with it and simply sat here.
+  // Onboarding is the one screen where the argument does NOT apply: the rider has not decided
+  // anything yet, and the postcard alone never says what the app DOES.
+  //
+  // ⚠ THE THIRD CLAUSE WAS CUT (founder, 2026-08-04): it read "…I'll do the talking. One corny guide
+  // the whole way." Two reasons, and the second is the one that would have bitten. It wrapped to two
+  // lines in this slot, and the extra line pushed the primary CTA flush against the home indicator —
+  // a layout cost paid by copy nobody was reading closely. And the corniness is something the sixty
+  // seconds of audio directly below it DEMONSTRATES; announcing it first is the one place this line
+  // could sound like marketing rather than like him.
+  //
   // ⚠ Named BOTH modes until roam was removed (it had been co-equal on home, founder 2026-06-11).
-  // Now there is one artifact, so the line says one thing. (Wording is a quick founder tweak.)
-  tagline: 'Narrated road trips. You pick the road, I’ll do the talking. One corny guide the whole way.',
+  // Now there is one artifact, so the line says one thing.
+  tagline: 'You pick the road, I’ll do the talking.',
   // The home hero's enamel flourish: a departures-board kicker ABOVE the headline
   // (deliberately NOT repeating the tagline). Warm, corny, glanceable, no facts.
   home: {

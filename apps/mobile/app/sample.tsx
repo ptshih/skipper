@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Image, StyleSheet, View } from 'react-native'
+import { Image, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio'
 import { Stack, useRouter } from 'expo-router'
 import type { ImageSourcePropType } from 'react-native'
@@ -98,12 +98,39 @@ const BLANK_HEADER = { headerShown: false } as const
  *  clock and the notch. A module constant for the same reason `BLANK_HEADER` is one. */
 const SCREEN_EDGES = ['top', 'left', 'right', 'bottom'] as const
 
+/**
+ * How tall the postcard picture is, as a fraction of the SCREEN — the one number that decides whether
+ * this screen fits without scrolling.
+ *
+ * ⚠ IT REPLACED A FIXED `aspectRatio: 3/2`, which is the whole point. A ratio is a function of WIDTH,
+ * so it demanded ~260pt of height on a 375pt-wide phone exactly as readily as on a 440pt one — and the
+ * short phone is precisely where those points do not exist. Height is what is scarce here, so height
+ * is what this is measured against.
+ */
+const POSTCARD_SCREEN_FRACTION = 0.28
+/** Never larger than the natural 3:2 height at the widest iPhone — a bigger picture on a tall phone
+ *  would just push the CTA back off the bottom, which is the thing this whole exercise fixed. */
+const POSTCARD_MAX_H = 260
+/** Below this it stops reading as a postcard and becomes a stripe. On a 375x667 SE the fraction lands
+ *  above this, so the floor is a guard rather than the operative rule — but it is what stops a future
+ *  smaller viewport (a split-screen iPad, a fold) from rendering a caption over a play button, which
+ *  is what a pure flex-to-fit layout actually did when it was tried. */
+const POSTCARD_MIN_H = 140
+
 export default function SampleScreen() {
   const router = useRouter()
   const { colors } = useTheme()
   const player = useAudioPlayer()
   const status = useAudioPlayerStatus(player)
   const pickRegion = useRegionPicker()
+  // ⚠ `useWindowDimensions`, not a one-shot `Dimensions.get()` — it re-renders on rotation and on
+  // iPad split-screen resize, where a stale first read would leave the picture sized for a viewport
+  // the rider is no longer in.
+  const { height: windowH } = useWindowDimensions()
+  const postcardH = Math.min(
+    POSTCARD_MAX_H,
+    Math.max(POSTCARD_MIN_H, Math.round(windowH * POSTCARD_SCREEN_FRACTION)),
+  )
 
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading')
   const [sample, setSample] = useState<Sample | null>(null)
@@ -293,21 +320,49 @@ export default function SampleScreen() {
     )
 
   return (
-    // ⚠ `scroll padded`, and NOT `center` — deliberately, on two counts (founder, 2026-08-04: "can you
-    // top align the postcard too").
-    //   • TOP-ALIGNED: the postcard is the hero and it should meet the eye where the eye lands, not
-    //     float in a vertically-centred block whose position moves with the clip's own controls.
-    //   • `center` also sets `alignItems: 'center'`, which SILENTLY COLLAPSED the divider below: a
-    //     `Divider` draws a hairline via `borderTopWidth` on a View with no intrinsic width, so a
-    //     centring cross-axis shrank it to nothing. It rendered, measured zero, and looked like a
-    //     missing feature. Same family as the `alignSelf` traps on the badge and the region chip.
-    // `scroll` stays: postcard + transport + question + CTA is taller than a small phone at large
-    // Dynamic Type, and this is the one screen a rider cannot navigate away from to escape a clipped
-    // control.
+    // ⚠ NOT `scroll`, AND NOT `center` — both deliberate, and the first one reverses an earlier choice.
+    //   • TOP-ALIGNED (founder: "can you top align the postcard too"): the postcard is the hero and
+    //     should meet the eye where the eye lands, not float in a vertically-centred block whose
+    //     position drifts with the clip's own controls. `center` also sets `alignItems: 'center'`,
+    //     which SILENTLY COLLAPSED the divider below — a `Divider` draws a hairline via
+    //     `borderTopWidth` on a View with no intrinsic width, so a centring cross-axis shrank it to
+    //     nothing. It rendered, measured zero, and read as a missing feature.
+    //   • THE POSTCARD SIZES ITSELF TO THE DEVICE (founder: "can we make the screen resize to fit to
+    //     avoid scrolling") so that on every iPhone still sold the whole flow — including the ONLY
+    //     exit — is on screen at once. It was a fixed `aspectRatio: 3/2` before, which demanded ~260pt
+    //     of height whether the phone had it or not: on an SE that put 846pt of content in a 667pt
+    //     viewport, with the region question and the CTA below the fold.
+    //   • ⚠ `scroll` STAYS, and it is NOT a leftover. A pure flex-to-fit layout was tried and rejected
+    //     ON DEVICE: with everything else at its natural size there is nothing left for a picture on a
+    //     375x667 SE, so the postcard shrank to ZERO and the screen became a caption over a play
+    //     button. Scrolling ~100pt on the oldest small phone is a far better failure than deleting the
+    //     hero on it, and scroll is also what keeps this honest at large Dynamic Type everywhere else.
     <Screen scroll padded edges={SCREEN_EDGES} contentContainerStyle={styles.body}>
       <Stack.Screen options={BLANK_HEADER} />
 
-      <PostcardFrame image={postcardImageFor(sample?.qid)} caption={voice.sample.kicker} colors={colors} />
+      {/* THE MASTHEAD — the wordmark and the one line that says what this is (founder, 2026-08-04).
+          ⚠ IT IS NOT THE LANDING PAGE HOME DELETED, and the distinction is the whole justification.
+          Home's hero stack (kicker → headline → rig → tagline) was cut on 2026-08-03 because it
+          "re-sold someone who had already installed and was standing there wanting to plan a drive" —
+          right there, wrong here: on the FIRST screen the rider has decided nothing, and a postcard of
+          a lake never says the app narrates road trips. Two lines of type, no mark, no hero.
+          ⚠ Skipper has NO drawn logo — the identity is the type (`variant="wordmark"`, the display
+          face) plus the app icon. Anything asking for a "logo" here means commissioning one first. */}
+      <View style={styles.masthead}>
+        <Text variant="wordmark" color="ink" align="center">
+          SKIPPER
+        </Text>
+        <Text variant="dim" color="inkFaint" align="center">
+          {voice.tagline}
+        </Text>
+      </View>
+
+      <PostcardFrame
+        image={postcardImageFor(sample?.qid)}
+        caption={voice.sample.kicker}
+        colors={colors}
+        imageHeight={postcardH}
+      />
 
       <View style={styles.card}>
         <View style={styles.titleRow}>
@@ -330,20 +385,35 @@ export default function SampleScreen() {
           onSeek={seekToMs}
           disabled={!canSeek}
         />
-        <TransportBar
-          playing={status.playing}
-          onPlayPause={togglePlay}
-          // ⚠ BOTH, never one — see `pauseLabel` on TransportBar. The defaults are drive copy, and on
-          // this screen the disc starts a one-minute postcard, not a drive.
-          playLabel={voice.sample.playA11y}
-          pauseLabel={voice.sample.pauseA11y}
-          canSeek={canSeek}
-          onSeekBack={() => seekBy(-15)}
-          onSeekForward={() => seekBy(15)}
-        />
-
-        {/* The ⓘ source affordance — same reveal as the drive player (unified). */}
-        <AttributionButton items={sample?.attribution} />
+        {/* ⚠ THE ⓘ RIDES THE TRANSPORT ROW rather than owning a row of its own (founder, 2026-08-04:
+            "that info icon also wastes a lot of vertical space"). It was a full-width Pressable on its
+            own line — ~43pt of height, gap included, for an 18pt glyph — on the one screen where
+            vertical space decides whether the CTA is visible without scrolling. The transport is three
+            discs centred in a wide row, so the space beside them was already empty.
+            ⚠ THE EMPTY SLOT ON THE RIGHT IS LOAD-BEARING, not filler: `TransportBar` centres its discs
+            within whatever width it is given, so without a matching slot the row would be 48pt wider
+            on the left and the play disc would sit visibly off-centre from everything above it.
+            ⚠ The ⓘ keeps its own 48pt tap floor (its `hitSlop` — see AttributionButton, where the
+            reasoning is a licence obligation rather than a preference); the slot only reserves the
+            space, it does not shrink the target. */}
+        <View style={styles.transportRow}>
+          <View style={styles.transportSlot}>
+            <AttributionButton items={sample?.attribution} />
+          </View>
+          <TransportBar
+            style={styles.transportFill}
+            playing={status.playing}
+            onPlayPause={togglePlay}
+            // ⚠ BOTH, never one — see `pauseLabel` on TransportBar. The defaults are drive copy, and
+            // on this screen the disc starts a one-minute postcard, not a drive.
+            playLabel={voice.sample.playA11y}
+            pauseLabel={voice.sample.pauseA11y}
+            canSeek={canSeek}
+            onSeekBack={() => seekBy(-15)}
+            onSeekForward={() => seekBy(15)}
+          />
+          <View style={styles.transportSlot} />
+        </View>
       </View>
 
       {/* ── The question. Everything above is the taste; everything below is the one answer the app
@@ -369,15 +439,13 @@ export default function SampleScreen() {
         <View style={styles.centerRow}>
           <RegionChip regionName={region?.displayName ?? null} onPress={hasRegions ? openPicker : undefined} />
         </View>
-        {/* Says the LIMIT out loud rather than hiding it: a newcomer who picks from a short list has
-            learned something true in the one moment they are most forgiving of it, where the same fact
-            discovered later, mid-plan, reads as a dead end. Hidden when the list failed to load — the
-            sentence would be describing something not on screen. */}
-        {hasRegions ? (
-          <Text variant="dim" color="inkFaint" align="center">
-            {voice.region.setupBody}
-          </Text>
-        ) : null}
+        {/* ⚠ NO COVERAGE CAPTION HERE, and it was built and cut (founder, 2026-08-04: "maybe we can
+            drop the 'I know…' tagline at the bottom"). It read "I know every turn on these. More are
+            coming." and its argument — say the LIMIT out loud, because a newcomer who learns it here is
+            forgiving where the same fact discovered mid-plan reads as a dead end — is still sound. It
+            was not refuted, it was RELOCATED: the picker one tap away is titled "Roads I know" and
+            lists exactly what exists, which answers the same question more honestly than a sentence
+            promising it. The ~40pt it cost now pays for the masthead above. */}
       </View>
 
       {/* ⚠ NO CLOSING LINE HERE, and it was built and cut (founder, 2026-08-04: "maybe get rid of the
@@ -407,10 +475,14 @@ function PostcardFrame({
   image,
   caption,
   colors,
+  imageHeight,
 }: {
   image: ImageSourcePropType | undefined
   caption: string
   colors: Theme['colors']
+  /** Device-derived — see POSTCARD_SCREEN_FRACTION. Passed in rather than read here so the ONE
+   *  arithmetic lives beside the layout it is protecting. */
+  imageHeight: number
 }) {
   return (
     <View
@@ -423,7 +495,7 @@ function PostcardFrame({
         },
       ]}
     >
-      <View style={[styles.postcardImage, { backgroundColor: colors.surfaceSunken }]}>
+      <View style={[styles.postcardImage, { height: imageHeight, backgroundColor: colors.surfaceSunken }]}>
         {image ? (
           <Image source={image} style={styles.postcardFill} resizeMode="cover" accessibilityIgnoresInvertColors />
         ) : (
@@ -448,7 +520,15 @@ function PostcardFrame({
 
 const styles = StyleSheet.create({
   body: { gap: space.lg },
-  card: { gap: space.lg, width: '100%' },
+  masthead: { gap: space.xs, width: '100%' },
+  // ⚠ `md`, not `lg`. This column holds the title, the scrubber and the transport — three things that
+  // read as ONE control surface, so the roomier `lg` step was spacing them like separate sections and
+  // spending ~16pt to do it. `lg` still separates the postcard, the question and the CTA in `body`.
+  card: { gap: space.md, width: '100%' },
+  transportRow: { flexDirection: 'row', alignItems: 'center' },
+  // Matches the ⓘ's own 48pt tap floor, and is mirrored empty on the right — see the call site.
+  transportSlot: { width: 48 },
+  transportFill: { flex: 1 },
   titleRow: { gap: space.sm, alignItems: 'center' },
   // ⚠ ONE STYLE, THREE CALL SITES — the badge, the region chip, and anything else whose own component
   // pins `alignSelf: 'flex-start'`. A row is the only container that can centre such a child, because
@@ -459,6 +539,11 @@ const styles = StyleSheet.create({
   // The postcard matte: a raised card holding the image, with the caption printed on its lower margin.
   postcard: {
     width: '100%',
+    // ⚠ `overflow: hidden` as a backstop. A FLEX version of this frame was tried first and the image
+    // spilled out of its matte, drawing over the title beneath it — "parent measured small, child drew
+    // large" is a bug you SEE rather than one a test catches. The height is explicit now so it cannot
+    // recur, but clipping to the matte makes the whole class impossible.
+    overflow: 'hidden',
     padding: space.sm,
     paddingBottom: space.xs,
     borderRadius: radius.md,
@@ -466,7 +551,11 @@ const styles = StyleSheet.create({
   },
   postcardImage: {
     width: '100%',
-    aspectRatio: 3 / 2, // a postcard is landscape
+    // ⚠ NO `aspectRatio` AND NO `flex` — the height arrives as a prop, computed from the screen (see
+    // POSTCARD_SCREEN_FRACTION). Both alternatives were built and rejected ON DEVICE: the fixed 3:2
+    // ratio overflowed short phones, and flexing it to the leftover space shrank it to ZERO on an SE,
+    // because once the masthead, title, transport, question and CTA are all at natural size there is
+    // genuinely nothing left. `resizeMode="cover"` crops rather than distorting as it gets shorter.
     borderRadius: radius.sm,
     overflow: 'hidden',
     alignItems: 'center',
