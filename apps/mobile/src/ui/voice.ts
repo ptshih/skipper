@@ -361,10 +361,20 @@ export const voice = {
   // front-door taste for everyone outside the corpus AND the App Review path. Fact-free (the poi
   // name is a FACT, served by the API, never baked here). Warm, corny, glanceable.
   sample: {
-    // ⚠ `kicker` ('POSTCARD FROM LAKE TAHOE') WAS DELETED (2026-08-04) when the artwork folded into
-    // the player card. It captioned the postcard's lower matte, and it was naming a region the chip
-    // twelve points below already named. The postcard metaphor now rides on the MATTE — an image inset
-    // in paper reads as a print without a label saying so.
+    // The card's header — what this thing IS and what pressing it does (founder, 2026-08-04: "a label
+    // somewhere on the onboarding screen that tells the user this is a sample").
+    //
+    // ⚠ IT IS NOT THE 'A TASTE' BADGE COMING BACK, and the difference is why one was cut and this one
+    // earns its place. That badge's stated job was "this is a sample, not a live DRIVE" — it
+    // disambiguated against a concept a first-run rider has never met, on the first screen of a fresh
+    // install. This answers the question a newcomer actually has in front of an image and a play disc:
+    // what happens if I press it. Nothing else on the screen says so — the artwork, the place name and
+    // the transport all assume you already know.
+    //
+    // ⚠ Its predecessor here was 'POSTCARD FROM LAKE TAHOE', which named a region the chip twelve
+    // points below already named and hardcoded a place into `voice` besides. This names no place, so
+    // it survives the server swapping the sample clip.
+    kicker: 'HEAR A SAMPLE',
     // ⚠ `badge` ('A TASTE') WAS DELETED HERE (2026-08-04). Its job — be honest that "this is a sample,
     // not a live drive" — was true copy on the old `/sample`, which a rider reached from home already
     // knowing what a drive was. As the first screen of a fresh install it disambiguated against a

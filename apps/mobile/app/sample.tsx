@@ -334,6 +334,15 @@ export default function SampleScreen() {
       </View>
 
       <Card style={[styles.card, compact && styles.cardCompact]}>
+        {/* ⚠ ABOVE the artwork, not beside the controls. It is a header for the whole card — "this card
+            is a sample you can hear" — and putting it down by the transport would have made it a second
+            caption stacked under the place name, which is the arrangement the "A TASTE" badge lost on.
+            ⚠ `inkDim`, deliberately NOT `accentWarm`: the screen's one amber is already spent on the
+            place name below the image, and two amber lines inside one card is a card with no
+            hierarchy. */}
+        <Text variant="label" color="inkDim" align="center">
+          {voice.sample.kicker}
+        </Text>
         <PostcardImage image={postcardImageFor(sample?.qid)} colors={colors} imageHeight={postcardH} />
         {/* ⚠ NO "A TASTE" BADGE HERE ANY MORE (founder, 2026-08-04). Its stated job was to be honest
             that "this is a sample, not a live drive" — which was true copy on the OLD `/sample`,
