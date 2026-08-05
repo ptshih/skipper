@@ -933,6 +933,54 @@ re-downloads what a rider cancelled; that collapsing the stall ladder removed a 
 rather than a re-sign; that a simulated drive lost its SIM indicator; and that `DEFAULT_SIM_MODE` was
 not actually single-sourced.
 
+## §15 — ⚠ THE BUG THIS FEATURE UNCOVERED: no drive could EVER be saved
+
+Found on the simulator 2026-08-05, while trying to test something else. **Pre-existing — the transfer
+code is byte-identical to before this work** — and it meant the offline download had a 0% success
+rate. It was invisible because nothing forced anyone to notice: an unsaved drive simply streamed.
+⚠ **The gate is what turns this from a quiet bug into a total outage**, because a rider who cannot
+download now cannot drive at all.
+
+### The cause: `moveSync` MUTATES the File, and the cleanup deleted the clip
+
+```ts
+const tmp = new File(store, `${p.name}.part`)
+await downloadFileWithRetry(p.url, tmp, ...)   // bytes land in the temp ✓
+tmp.moveSync(new File(store, p.name))          // move succeeds ✓ — and RE-POINTS `tmp`
+if (!hasStoredClip(p.name)) throw …            // passes: the clip IS there ✓
+} finally {
+  deleteQuietly(tmp)   // ⚠ "a no-op after a clean move" — it deletes the CLIP
+}
+```
+
+`expo-file-system`'s move ends with `url = destinationUrl` (`ios/FileSystemPath.swift`). So the moment
+the move succeeds, the `tmp` handle stops referring to the temp and starts referring to the finished
+clip — and the `finally` deletes exactly the byte it just saved. **Fix: re-derive the temp from its
+NAME in the `finally`, never reuse the moved handle.**
+
+### ⚠ Why it took a filesystem poll to find, and what that says about the code
+
+Every layer behaved *correctly* on an empty store, and each one subtracted information:
+1. the move error was discarded by an **empty catch**;
+2. no clip threw at all — the post-move check passed, because at that instant the file existed;
+3. `fetchMissing` absorbs per-clip failures **by design** (partial-tolerance, right for the rider);
+4. `runDownload` ended at `"no clips could be saved"` — a symptom three layers from its cause.
+
+The observable that cracked it was polling `Documents/clips/` during a run: `.part` files appearing
+with real bytes, then vanishing, with the final name never present.
+
+**Two diagnosability fixes landed with it, and they are the durable half:** the move error is now
+carried into the thrown message, and `fetchMissing` returns the FIRST clip failure so `runDownload`
+can name a cause instead of a symptom. ⚠ Rider-facing copy is unchanged — the screen still speaks the
+persona line; only the Error carries the reason.
+
+**Verified after the fix:** 20 clips / 12 MB on disk, zero leftover `.part`, manifest committed, and
+the CTA correctly flipped to SAVED OFFLINE → "Start the drive".
+
+⚠ **Unknown: whether this reproduces on a DEVICE.** It is a JS/native-contract bug, not a simulator
+quirk, so it very likely does — but the shipped 1.1 build should be assumed to have it until someone
+saves a drive on a real phone. That check now outranks §12.5's threshold check.
+
 ## Not worth doing
 
 - **A region-level pre-fetch.** Cut, and for a reason that still holds: no bbox-level rule can

@@ -554,17 +554,39 @@ async function transferSharedClip(p: PlannedClip, signal?: AbortSignal): Promise
   try {
     deleteQuietly(tmp) // our own abandoned temp from a hard kill — never a live store byte
     await downloadFileWithRetry(p.url, tmp, p.name, signal)
+    let moveErr: unknown
     if (!hasStoredClip(p.name)) {
       try {
         tmp.moveSync(new File(store, p.name))
-      } catch {
+      } catch (e) {
         // A concurrent pass landed it first, or the disk is full. The destination check below is the
         // only thing allowed to declare success; nothing is deleted here.
+        // ⚠ BUT KEEP THE REASON. This catch used to be empty, and that made a REAL failure
+        // undiagnosable: the bytes reached the temp, the move failed, the `finally` deleted the temp,
+        // and every layer above reported something generic — `fetchMissing` absorbs per-clip failures
+        // by design, and `runDownload` ends at "no clips could be saved". Three deliberate silences in
+        // the one module whose whole argument is that silent failure is the enemy. The move error is
+        // the ONLY witness to why a download produced nothing; carry it up.
+        moveErr = e
       }
     }
-    if (!hasStoredClip(p.name)) throw new Error('Clip did not land in the offline store.')
+    if (!hasStoredClip(p.name)) {
+      const why = moveErr instanceof Error ? moveErr.message : moveErr ? String(moveErr) : 'no error thrown'
+      throw new Error(`Clip did not land in the offline store (move: ${why}).`)
+    }
   } finally {
-    deleteQuietly(tmp) // a no-op after a clean move; after a collision it reclaims a verified duplicate
+    // ⚠ RE-DERIVE THE TEMP FROM ITS NAME. Never reuse the `tmp` handle here, and never "simplify" this
+    // back to `deleteQuietly(tmp)` — that line read "a no-op after a clean move" and was the single
+    // reason NO drive could ever be saved.
+    //
+    // `expo-file-system`'s move MUTATES the File in place (ios/FileSystemPath.swift: `try
+    // FileManager.default.moveItem(...)` then `url = destinationUrl`). So the instant the move
+    // SUCCEEDS, `tmp` stops pointing at the temp and starts pointing at the finished clip — and this
+    // cleanup deleted the very byte it had just saved. Everything downstream then behaved perfectly
+    // correctly on an empty store: no clip threw (the post-move `hasStoredClip` check passed, because
+    // at THAT moment the file existed), `buildClipRefs` found nothing, and the run ended at "no clips
+    // could be saved" — a symptom three layers away from its cause.
+    deleteQuietly(new File(store, `${p.name}.part`))
     writingStoreNames.delete(p.name)
   }
 }
@@ -576,7 +598,12 @@ async function fetchMissing(
   needed: PlannedClip[],
   signal: AbortSignal | undefined,
   onSettled: (p: PlannedClip) => void,
-): Promise<void> {
+): Promise<string | null> {
+  // ⚠ THE FIRST CLIP FAILURE, CARRIED OUT. Partial-tolerance is right for the RIDER and useless for
+  // the BUILDER: when EVERY clip fails, `runDownload` ends at "no clips could be saved", which names a
+  // symptom and no cause — and the one place that knew the cause was the catch below. First, not all:
+  // twenty clips failing on one connection is twenty copies of one sentence.
+  let firstFailure: string | null = null
   let next = 0
   const worker = async (): Promise<void> => {
     while (next < needed.length) {
@@ -584,13 +611,19 @@ async function fetchMissing(
       const p = needed[next++]!
       try {
         await fetchClip(driveId, p, signal)
-      } catch {
+      } catch (e) {
         // The OUTER signal is the ONLY terminal failure. Anything else means the retries were
         // exhausted (a persistent timeout/5xx), which is PARTIAL-TOLERANT (H2): drop this clip and
         // keep going so one bad clip in a dead zone doesn't cost the rider the whole drive. The gap is
         // NOT silent — the manifest's `audioSeqs` still expects it, so `offlineStatus` re-derives it
         // after a restart (audit #1).
         if (signal?.aborted) throw abortError()
+        // ⚠ TOLERATED IS NOT THE SAME AS UNEXPLAINED. Partial-tolerance is right for the RIDER and
+        // wrong for the BUILDER: every clip can fail for a real, fixable reason and this catch was the
+        // last place that knew it. A whole-drive failure then arrives as "no clips could be saved",
+        // which names a symptom and no cause. Dev-only, matching `useDrive`'s multi-fire warn — it must
+        // never become a rider-facing channel (INV-13: no rider content in messages).
+        if (firstFailure == null) firstFailure = e instanceof Error ? e.message : String(e)
       }
       onSettled(p)
     }
@@ -598,6 +631,7 @@ async function fetchMissing(
   await Promise.all(
     Array.from({ length: Math.min(DOWNLOAD_CONCURRENCY, needed.length) }, () => worker()),
   )
+  return firstFailure
 }
 
 /** Drop a drive dir we created but never committed a manifest to. ⚠ Guarded on the manifest's ABSENCE:
@@ -651,8 +685,9 @@ async function runDownload(
   let done = total - needed.reduce((n, p) => n + (seqsPerName.get(p.name) ?? 1), 0)
   onProgress?.({ done, total })
 
+  let firstFailure: string | null = null
   try {
-    await fetchMissing(driveId, needed, signal, (p) => {
+    firstFailure = await fetchMissing(driveId, needed, signal, (p) => {
       done += seqsPerName.get(p.name) ?? 1
       onProgress?.({ done, total })
     })
@@ -672,7 +707,16 @@ async function runDownload(
     // A true network-down — nothing on disk to save. Throw so the caller shows the generic download
     // error rather than a hollow "downloaded 0 of N".
     dropUncommittedDriveDir(driveId)
-    throw new Error('Download failed — no clips could be saved.')
+    // ⚠ NAME THE CAUSE, not just the symptom. "no clips could be saved" was true and useless: it is
+    // what a dead zone looks like AND what a genuine store bug looks like, and the difference decides
+    // whether a rider should retry or a builder should fix something. `firstFailure` is the first
+    // clip's real reason, carried up from `fetchMissing`. Rider-safe by construction — these are our
+    // own messages and OS errors, never rider content (INV-13).
+    throw new Error(
+      firstFailure
+        ? `Download failed — no clips could be saved (${firstFailure}).`
+        : 'Download failed — no clips could be saved.',
+    )
   }
 
   // ⚠ THE MANIFEST WRITE IS THE COMMIT POINT, and it comes LAST. The reverse order would leave a
