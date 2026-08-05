@@ -128,8 +128,21 @@ export const voice = {
       // know the roads support.
       'somewhere pretty, back by 5',
       'kill an hour before dinner',
-      '2 hours, no highways',
-      'just take the long way',
+      // ⚠ '2 hours, no highways' and 'just take the long way' WERE HERE AND ARE GONE (founder,
+      // 2026-08-04: "some of them don't make any sense"). They are not merely odd — they coached the
+      // rider into the one ask the skipper is INSTRUCTED TO REFUSE. apps/api/src/planner-prompt.ts,
+      // "When they ask about the road": *"Folks will ask for the pretty way, no highways, back by
+      // five, the long way round. You pick the two ends; the map picks the road between them, and you
+      // do not get a vote."* So the highest-visibility teaching copy in the app was demonstrating a
+      // sentence whose scripted reply is a deflection.
+      // ⚠ AND THE RULE WAS ALREADY WRITTEN, four lines up: "an idiom sitting where the ASK goes ('the
+      // long way round' requests nothing)" — rejected in the first cut and back in a reworded form.
+      // What a name-free placeholder may ask for is bounded by what the planner actually resolves
+      // (CLAUDE.md: endpoints as anchor ids, `via`, round-trip, duration target). With no NAME in the
+      // line that leaves duration, round-trip and "you pick" — which is why the replacements below
+      // lean on time and shape rather than on the road.
+      'out and back, about 2 hours',
+      'anywhere good, i have the afternoon',
     ],
     composerA11yLabel: 'Tell the skipper where to',
     sendA11yLabel: 'Send',
