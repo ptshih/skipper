@@ -247,8 +247,9 @@ export function useRoutePreview(): RoutePreview {
   // ── preview_clip_played: COMPLETION — the other half of the pair emitted in play().
   // ⚠ DELIBERATELY NOT RIDING `didJustFinish` ALONE, and the asymmetry is the reason this is its own
   // effect rather than a line inside the hand-back above. expo-audio can DROP didJustFinish across an
-  // OS audio interruption — a phone call over the last seconds of a clip — and both sibling surfaces
-  // (app/sample.tsx, useDrive) already defend with an `atEnd` position check for exactly that. Here it
+  // OS audio interruption — a phone call over the last seconds of a clip — and `useDrive` already
+  // defends with an `atEnd` position check for exactly that. (`app/sample.tsx` was the third such
+  // surface and did the same; it was deleted 2026-08-05 with the onboarding gate.) Here it
   // matters more than anywhere: this event is emitted TWICE precisely so completion RATE is readable,
   // so a dropped signal does not lose a nicety, it silently moves a listener into the abandoned bucket
   // and biases the one number the pair exists to produce.

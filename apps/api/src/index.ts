@@ -9,21 +9,21 @@
 //   GET  /drives                     -> the caller's saved drives (one card each)
 //   GET  /drives/:id                 -> replay a saved drive (frozen structure + live narration content)
 //   POST /drives/plan                -> one turn of planning a drive by talking (ANONYMOUS; spends)
-//   GET  /sample                     -> one curated "taste" clip (anonymous; no location)
 //
 // The app runs on ONE rider artifact: the user-owned DRIVE, assembled from the region's shared
 // narration corpus. Hand-authored tours are deferred and free-roam was removed in 1.1. OWNING a
 // drive needs a free account — the wall is per-route on the four owner routes (D15/INV-15), never on
-// the `/drives*` mount. The open anonymous front door is the planner, `/drives/propose` (route,
-// stop count, and one release-filtered clip from the rider's own route — INV-5), and `/sample`.
+// the `/drives*` mount. The open anonymous front door is the planner and `/drives/propose` (route,
+// stop count, and one release-filtered clip from the rider's own route — INV-5). ⚠ `GET /sample`, a
+// second anonymous taste, was deleted 2026-08-05 — see the tombstone further down.
 // Audio is private in R2 — presigned on demand after the tier check.
 
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { and, asc, eq, isNotNull, sql } from 'drizzle-orm'
+import { asc, isNotNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { narrations, places, pois, regions } from '@skipper/db/schema'
-import { isAdmin, type AttributionList, type Region } from '@skipper/shared'
+import { places, regions } from '@skipper/db/schema'
+import { isAdmin, type Region } from '@skipper/shared'
 import { assertAuthEnv, auth, SITE_ORIGIN } from './auth'
 import { driveRoutes } from './drives'
 import { EXAMPLE_ANCHOR_SCAN_LIMIT, pickExampleAnchors } from './example-anchors'
@@ -33,7 +33,6 @@ import {
   PROPOSE_RATE,
   REGIONS_MEMO_TTL_MS,
   REGIONS_RATE,
-  SAMPLE_RATE,
   SERVER_IDLE_TIMEOUT_SEC,
   SERVER_MAX_BODY_BYTES,
 } from './limits'
@@ -42,7 +41,8 @@ import { withSession, type ApiEnv } from './entitlements'
 import { composeRegionCopy, PLANNER_COPY } from './planner-copy'
 import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
-import { audioUnavailable, presignedClipFields } from './storage'
+/* ⚠ `audioUnavailable` + `presignedClipFields` were imported here for `GET /sample` and went with
+ * it (2026-08-05). Both are still live in ./drives, which is where every remaining presign happens. */
 import { VERSION_POLICIES } from './version-policy'
 
 // ⚠ BOOT-TIME FAIL-FAST, AND IT IS THE ONLY ONE LEFT. ./auth's instance is now a lazy memoized proxy
@@ -75,10 +75,10 @@ app.onError((err, c) => {
   return c.json({ error: 'internal' }, 500)
 })
 
-// ⚠ TWO MOUNT RULES THIS FILE HAS BEEN BITTEN BY, kept here now that the mount they annotated is
-// gone: `app.use('/x', …)` matches that EXACT path only, NOT its subpaths (which is why /sample
-// carries its own limiter below rather than inheriting one), and Hono runs handlers in REGISTRATION
-// order, so a late mount silently skips everything registered above it.
+// ⚠ TWO MOUNT RULES THIS FILE HAS BEEN BITTEN BY, kept here now that BOTH mounts they annotated are
+// gone: `app.use('/x', …)` matches that EXACT path only, NOT its subpaths (which is why the deleted
+// /sample route had to carry its own limiter rather than inheriting one), and Hono runs handlers in
+// REGISTRATION order, so a late mount silently skips everything registered above it.
 
 // Health check — used by infra / local smoke tests.
 app.get('/health', (c) => c.json({ ok: true }))
@@ -323,7 +323,9 @@ app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw))
 export const proposeLimiter = rateLimit(PROPOSE_RATE)
 export const planMinuteLimiter = rateLimit(PLAN_RATE_MINUTE)
 export const planHourLimiter = rateLimit(PLAN_RATE_HOUR)
-export const sampleLimiter = rateLimit(SAMPLE_RATE)
+/* ⚠ `sampleLimiter` WAS DELETED HERE (2026-08-05) with `GET /sample`. Its cap constant went with it
+ * (SAMPLE_RATE, ./limits) — read that file's tombstone before reusing the name, because two other
+ * buckets were sized RELATIVE to it. */
 
 // Rate-limit the propose path BEFORE mounting the sub-app: POST /drives/propose fires ONE Google
 // Routes call (+ a corpus read) per request and otherwise has no cap, so this is the spend/DB-load
@@ -352,68 +354,21 @@ app.route('/drives/plan', planRoutes)
 // would re-wall the whole funnel, and test/drive-access.test.ts is what catches it.
 app.route('/drives', driveRoutes)
 
-/** The soft 404 both of `GET /sample`'s miss paths answer with. ⚠ ONE COPY BECAUSE IT IS ONE ANSWER:
- *  "the QID is unset" and "the QID resolves to nothing released" are two different OPERATOR facts and
- *  the same RIDER fact, and the rider must not be able to tell them apart — a message that
- *  distinguished them would report whether a given QID exists in the corpus. Deliberately vague and
- *  retryable for that reason, not out of politeness. */
-const NO_SAMPLE = {
-  error: 'no_sample',
-  message: 'No sample is cued up just yet. Check back soon.',
-} as const
-
-// GET /sample — the anonymous "taste" for a rider OUTSIDE any coverage. The corpus is Tahoe-only, so
-// a first-timer (or an Apple reviewer in Cupertino) can talk to the Skipper and still never reach a
-// road he has stories for; this serves ONE curated, always-iconic clip so they hear him regardless of
-// where they are. Anonymous — no account, no location. Resolves SAMPLE_NARRATION_QID to its
-// released narration and presigns the private clip. Fails SOFT (404 with a friendly code) when the
-// QID is unset / not found / unreleased, so the client shows a reachable retry, never a white screen.
-// Additive wire contract (post-v1 safe).
-//
-// Its own rate limiter — one indexed limit-1 query plus a presign, so it can be looser than the paid
-// buckets. ⚠ It carried one when it lived at /roam/sample because `app.use('/roam', …)` did NOT cover
-// the subpath; keep it now for the plainer reason that every anonymous, uncapped DB-touching route is
-// a standing invitation. The NUMBER lives in ./limits with every other rider-facing cap (INV-12) —
-// this mount was the last one still spelling its cap as an inline literal, the shape that drifts.
-app.use('/sample', sampleLimiter)
-app.get('/sample', async (c) => {
-  const qid = process.env.SAMPLE_NARRATION_QID
-  // Unset config is an OPERATOR miss, not a rider error — but the rider still gets a clean, retryable
-  // surface rather than a 500. Setting the QID is an explicit go-live gate (see the submission guide).
-  if (!qid) return c.json(NO_SAMPLE, 404)
-  const rows = await withRetry(
-    () =>
-      db
-        .select({
-          qid: pois.qid,
-          name: pois.name,
-          key: narrations.audioUrl,
-          durationMs: narrations.audioDurationMs,
-          attribution: narrations.attribution,
-        })
-        .from(narrations)
-        .innerJoin(pois, eq(pois.id, narrations.poiId))
-        // RELEASED only — the taste is public, so it must clear the same gate as any anonymous clip.
-        .where(and(eq(pois.qid, qid), isNotNull(narrations.releasedAt)))
-        .limit(1),
-    { label: 'sample' },
-  )
-  const row = rows[0]
-  if (!row) return c.json(NO_SAMPLE, 404)
-  try {
-    return c.json({
-      qid: row.qid,
-      name: row.name,
-      durationMs: row.durationMs,
-      // URL + content type + the CC BY-SA credit from ONE expression (./storage) — the same one the
-      // drive manifest and the route preview use, so the obligation cannot be met on two surfaces and
-      // forgotten on the third.
-      ...presignedClipFields(row.key, row.attribution as AttributionList | null),
-    })
-  } catch (e) {
-    return audioUnavailable(c, 'sample', e)
-  }
-})
+/* ⚠ `GET /sample` AND ITS `NO_SAMPLE` SOFT-404 WERE DELETED HERE (founder, 2026-08-05), together with
+ * the mobile screen that was their only caller and the `SAMPLE_NARRATION_QID` config that fed them.
+ *
+ * It served ONE curated, always-iconic clip so a first-timer — or an Apple reviewer in Cupertino —
+ * could hear the Skipper even though the corpus is Tahoe-only and they would never reach a road he has
+ * stories for. That was the whole justification, and it was SUPERSEDED: `POST /drives/propose` is the
+ * open anonymous front door and already answers with ONE presigned clip drawn from the route the rider
+ * planned in conversation (`previewClipFor`, ./drives) — no account, no credit, no location. It is a
+ * better taste, because it plays a real stop from a drive they chose rather than a postcard they did
+ * not. docs/designs/onboarding-gate-reconsidered.md.
+ *
+ * ⚠ WHAT MUST NOT BE LOST WITH IT: the release gate. That handler filtered on
+ * `isNotNull(narrations.releasedAt)` because the taste is public. `previewClipFor` inherits the same
+ * property by construction — it reads the route's own release-filtered selection — so the guarantee
+ * survives, but any future anonymous clip path has to assert it for itself. */
 
 const port = Number(process.env.PORT ?? 8787)
 

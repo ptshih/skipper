@@ -24,7 +24,6 @@ import {
   PROPOSE_RATE,
   readBoundedText,
   REGIONS_RATE,
-  SAMPLE_RATE,
   SERVER_IDLE_TIMEOUT_SEC,
   SERVER_MAX_BODY_BYTES,
 } from '../src/limits'
@@ -224,7 +223,6 @@ describe('rate-limiter buckets (drift guard)', () => {
     DRIVE_CREATE_RATE,
     PLAN_RATE_MINUTE,
     PLAN_RATE_HOUR,
-    SAMPLE_RATE,
     REGIONS_RATE,
   ]
 
@@ -239,21 +237,21 @@ describe('rate-limiter buckets (drift guard)', () => {
   test('the per-minute buckets really do share one window, so their limits are comparable', () => {
     // The precondition for the next test: comparing `limit` across buckets is meaningless unless the
     // windows match. PLAN_RATE_HOUR is excluded on purpose — it is a second window on the same route.
-    for (const r of [PROPOSE_RATE, DRIVE_CREATE_RATE, PLAN_RATE_MINUTE, SAMPLE_RATE, REGIONS_RATE]) {
+    for (const r of [PROPOSE_RATE, DRIVE_CREATE_RATE, PLAN_RATE_MINUTE, REGIONS_RATE]) {
       expect(r.windowSec).toBe(60)
     }
   })
 
   test('the unpaid bucket is never tighter than a bucket that bills a vendor', () => {
-    // GET /sample moves no per-request vendor money (one indexed query + a locally computed presign),
-    // while propose fires Google Routes and plan fires a frontier model on EVERY request (INV-11). So
-    // the free path may sit above them and must never fall below: if SAMPLE_RATE ever becomes the
-    // tightest per-minute bucket, either a real cost appeared behind /sample — which is a founder
-    // decision, not a tuning commit — or somebody edited the wrong constant.
-    // ⚠ Asserted for BOTH unpaid buckets, not just /sample: /regions bills no vendor either, and the
-    // property is about the class of route rather than about one constant.
+    // GET /regions moves no per-request vendor money, while propose fires Google Routes and plan fires
+    // a frontier model on EVERY request (INV-11). So the free path may sit above them and must never
+    // fall below: if REGIONS_RATE ever becomes the tightest per-minute bucket, either a real cost
+    // appeared behind /regions — which is a founder decision, not a tuning commit — or somebody edited
+    // the wrong constant.
+    // ⚠ THIS COVERED TWO UNPAID BUCKETS UNTIL 2026-08-05; SAMPLE_RATE was the other, and it was deleted
+    // with `GET /sample`. The property is about the CLASS of route, not about either constant — so if a
+    // second free, DB-touching route is ever added, it belongs in this loop on day one.
     for (const paid of [PROPOSE_RATE, DRIVE_CREATE_RATE, PLAN_RATE_MINUTE]) {
-      expect(SAMPLE_RATE.limit).toBeGreaterThanOrEqual(paid.limit)
       expect(REGIONS_RATE.limit).toBeGreaterThanOrEqual(paid.limit)
     }
   })
@@ -274,7 +272,6 @@ describe('429 copy — the persona speaks, never a validator', () => {
     DRIVE_CREATE_RATE,
     PLAN_RATE_MINUTE,
     PLAN_RATE_HOUR,
-    SAMPLE_RATE,
     REGIONS_RATE,
   ]
 

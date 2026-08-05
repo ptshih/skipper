@@ -317,16 +317,22 @@ export default function DriveScreen() {
 
   if (d.phase === 'gate')
     // A drive is owned (account-gated), so loading it at all needs a free account — the gate catches
-    // the 401 here. "Just take the sample ride" used to route to ?mode=preview of THIS drive, which
-    // re-hit the same account-gated fetch and 401'd straight back to this gate — an anonymous rider
-    // looped forever. It now routes to /sample (the curated postcard), which is the real, working
-    // anonymous taste — unifying the two half-built "sample" ideas into one and killing the loop.
+    // the 401 here. The secondary action's whole job is to leave an anonymous rider somewhere that
+    // WORKS without an account, and the history is a warning: it first routed to `?mode=preview` of
+    // THIS drive, which re-hit the same account-gated fetch and 401'd straight back here — an
+    // anonymous rider looped forever. It then routed to `/sample`.
+    // ⚠ IT NOW ROUTES HOME (2026-08-05), because `/sample` was deleted and home is where the working
+    // anonymous taste actually lives: plan a route in conversation and `POST /drives/propose` returns
+    // a real clip from it, no account and no credit. That is a better landing than a canned postcard
+    // — it is the product — and it is the same reason the gate screen was deleted
+    // (docs/designs/onboarding-gate-reconsidered.md).
+    // ⚠ Whatever this points at must be reachable ANONYMOUSLY. That is the invariant the loop broke.
     return (
       <AccountGate
         note={voice.gate.driveNote}
         secondaryAction={{
           label: voice.gate.secondary,
-          onPress: () => router.replace('/sample'),
+          onPress: () => router.replace('/'),
         }}
       />
     )

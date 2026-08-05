@@ -1,16 +1,26 @@
 # Does the onboarding gate still earn its place?
 
-> **Status:** 🤔 **OPEN QUESTION, 2026-08-05. Nothing built, nothing deleted, no decision made.**
-> Raised by the founder after a day of iterating on `/sample`: *"i feel like we have been churning a
-> bit… can we take a new perspective, an outside lens, on whether this onboarding screen even deserves
-> to exist"* — and then the sharper follow-up that actually moved it: *"do we even really need a sample
-> for the reviewer anymore?"*
-> ⚠ **§2 is the finding.** The argument that justified this screen — *the corpus is Tahoe-only, so an
-> Apple reviewer in Cupertino can never reach a road he has stories for* — was TRUE when written and is
-> now SUPERSEDED by the anonymous route-preview clip. It has been repeated since without re-checking.
-> ⚠ This does NOT supersede [onboarding-first-screen-legibility.md](onboarding-first-screen-legibility.md)
-> (BUILT, and the screen is genuinely good now). It asks whether the surface those fixes live on should
-> exist at all. Nothing here argues the work was wasted — §5 lists what survives either way.
+> **Status:** ✅ **ANSWERED AND EXECUTED 2026-08-05 — NO. The gate, the screen and the sample are all
+> DELETED.** Asked as an open question hours earlier; the founder's follow-up (*"do we even really need
+> a sample for the reviewer anymore?"*) resolved it, and then: *"lets completely delete the sample and
+> the onboarding screen, don't leave any orphans."*
+>
+> **What was removed:** the `/sample` screen and its first-run redirect; `src/lib/client-flags.ts` (the
+> `onboarded` flag) and the Settings → Developer reset it fed; `GET /sample`, `sampleLimiter`,
+> `SAMPLE_RATE` and `SAMPLE_NARRATION_QID`; the `sample` DTO and `Sample` type; `getSample`,
+> `listRegions` (orphaned by the screen — it had no other caller), `postcards.ts`, `Sunburst`, the
+> `sample_played` analytics event, and every string that dressed them.
+>
+> **What deliberately survived:** the Emerald Bay artwork
+> (`apps/mobile/assets/brand/postcard-emerald-bay.jpg`), kept with no reader for **TODO #74** — reusing
+> region postcards on home. And the drive player's account gate, whose "take the sample ride" escape now
+> routes HOME; ⚠ whatever that button points at must stay reachable ANONYMOUSLY, which is the invariant
+> an earlier version broke by looping riders back into the same 401.
+>
+> ⚠ **The deciding metric was never read.** §4 pre-committed to first-run `sample_played`, and the call
+> was made on the superseded-argument finding (§2) instead. That is a legitimate basis — the argument
+> was structurally void, not merely weak — but it is not the evidence the doc asked for, and the event
+> is now deleted, so it can never be read. Recorded so nobody later assumes it was.
 
 ## §1 · Why this is being asked now, and why that is not a mood
 

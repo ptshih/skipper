@@ -301,7 +301,13 @@ export const voice = {
     title: 'Grab your ticket',
     body: 'The full drive needs a (free) ticket. Ten seconds, and the skipper never stops talking.',
     action: 'Get my free ticket',
-    secondary: 'Just take the sample ride', // the play-screen gate → routes to /sample (the postcard)
+    // The play-screen gate's escape hatch → routes HOME. ⚠ It said 'Just take the sample ride' and
+    // pointed at `/sample`, which was deleted on 2026-08-05; home is where the working anonymous
+    // taste lives now (plan a route, `POST /drives/propose` answers with a real clip from it — no
+    // account, no credit). The label has to promise something reachable WITHOUT a ticket, because
+    // this button's entire job is un-sticking an anonymous rider — an earlier version pointed back at
+    // the same account-gated fetch and looped them forever (see app/drives/[id]/play.tsx).
+    secondary: 'Plan one of my own',
     keepBrowsing: 'Keep browsing', // the detail download-gate → dismiss back to the drive
     // Context line for the live-drive gate — carries ONLY what the body lacks (the body
     // already makes the ticket ask), so the two don't stutter "needs a (free) ticket" twice.
@@ -388,69 +394,14 @@ export const voice = {
     // now only ever plays from disk, so a chip saying so asserts nothing — it was informative only
     // while streaming was the other possibility. (docs/designs/download-before-start.md §10.)
   },
-  // The "postcard" — one curated Tahoe clip a stranger anywhere can hear (the /sample screen). The
-  // front-door taste for everyone outside the corpus AND the App Review path. Fact-free (the poi
-  // name is a FACT, served by the API, never baked here). Warm, corny, glanceable.
-  sample: {
-    // ── The two labels of the ONE control this screen still has. They are a PAIR: the same button
-    // toggles between them, so they must always be read together.
-    //
-    // ⚠ THE STOP HALF IS A REQUIREMENT, NOT A COURTESY. `/sample` takes exclusive `doNotMix` audio
-    // focus, so starting the clip INTERRUPTS whatever a stranger was already listening to. A rider
-    // who cannot stop it has had their podcast taken hostage by the app's opening move. Never reduce
-    // this to a one-way offer.
-    // ⚠ PLAIN, NOT IN PERSONA. These are the visible label AND (having no separate a11y string) the
-    // screen-reader label, and with the transport gone the WORD is the only feedback that the clip is
-    // running at all — so it says what the control does, in the fewest words that stay unambiguous.
-    // ⚠ "Stop the sample", not "Pause", and the BEHAVIOUR matches the word (founder, 2026-08-05: "the
-    // sample should reset from the beginning (not resume)"). There is no scrubber, no clock and no
-    // resume affordance, so "pause" would promise a position nothing on this screen can show or reach
-    // — and the next tap says "Hear a sample", which must not drop a stranger mid-sentence. Stopping
-    // rewinds to 0; a taste is heard from the top or not at all. See `togglePlay` in app/sample.tsx.
-    hearCta: 'Hear a sample',
-    stopCta: 'Stop the sample',
-    // ⚠ `kicker` ('HEAR A SAMPLE') WAS DELETED HERE (2026-08-05). It was a small-caps line printed on
-    // the artwork above the place name, and its job was the good one this file recorded at the time:
-    // "what happens if I press it", which the postcard and a play disc both assumed you already knew.
-    // What retired it was the founder's strip-out — with the player gone, the offer is made by a
-    // BUTTON that says the same four words, so the kicker became the label twice on the one screen
-    // where every point of height was fought for. ⚠ Its own predecessor was 'POSTCARD FROM LAKE
-    // TAHOE', which hardcoded a place into `voice`; if a kicker ever returns, it must still name none.
-    // ⚠ `badge` ('A TASTE') WAS DELETED HERE (2026-08-04). Its job — be honest that "this is a sample,
-    // not a live drive" — was true copy on the old `/sample`, which a rider reached from home already
-    // knowing what a drive was. As the first screen of a fresh install it disambiguated against a
-    // concept the rider has never met, while the tagline, the section heading and the CTA all already
-    // say the clip is not the product. See app/sample.tsx for the ~28pt it cost.
-    loading: 'Cueing up something good from the lake…',
-    // ⚠ `skip` AND ALL FOUR `end*` STRINGS WERE DELETED HERE (2026-08-04) when the postcard, the end
-    // card and the region screen merged into ONE surface. `endBody`/`endCta`/`endSecondary` dressed a
-    // full-screen end card that no longer exists — the clip finishes in place now, under a CTA that was
-    // already on screen. `skip` ('Skip the sample') went with the separate skip control: a permanently
-    // visible forward CTA IS the skip, and it never has to apologise for being one. `endTitle` ("That's
-    // the taste, friend.") outlived them by an hour and then went too: with the CTA lighting up to mark
-    // the end, a sentence saying the same thing is a caption on something the rider just watched
-    // happen — and it grew the layout by ~39pt exactly when the primary button appears.
-    // ⚠ `playA11y` / `pauseA11y` WERE DELETED HERE (2026-08-05) with the `TransportBar` they labelled.
-    // They were VoiceOver-only, and they existed because that component's DEFAULTS are drive copy:
-    // the disc announced itself as "Let's roll" and then "Hold here" on the first screen of a fresh
-    // install, promising a drive a one-minute postcard does not start. Caught by reading the
-    // accessibility tree on the simulator — invisible to every test and to a sighted glance.
-    // ⚠ THE LESSON OUTLIVED THE STRINGS, and it is why `hearCta`/`stopCta` above are plain rather than
-    // in persona: a control's spoken name must say what the control DOES. Those two are now visible
-    // text, so there is nothing separate to keep in sync — but any future control borrowed from the
-    // drive player arrives wearing drive copy, and this screen is not a drive.
-    // ⚠ THE THREE `row*` STRINGS THAT SAT HERE ARE GONE (2026-08-04) — `rowKicker` / `rowTitle` /
-    // `rowHint` dressed home's listen row, and the row was deleted when the taste became the first
-    // screen of onboarding (founder). The reasoning they carried is worth keeping even though the
-    // strings are not: the taste is the "worked example" the empty-state research puts first, because
-    // for an audio product letting a newcomer HEAR the thing outranks asking them to type at it. That
-    // argument is exactly why it moved to the front of the app rather than being dropped.
-    // ⚠ NAMES NO PLACE. The sample clip is server-chosen and swappable, and voice is delivery, never
-    // facts — so this copy sells the VOICE, not the location, and survives the clip changing. That is
-    // also what lets one canonical sample stay canonical once there is more than one region.
-    // ⚠ see `region` below for the picker's copy — kept out of `sample` so the region sheet does not
-    // inherit postcard framing.
-  },
+  // ⚠ THE WHOLE `sample` BLOCK WAS DELETED HERE (founder, 2026-08-05) — the canned "postcard"
+  // taste and the `/sample` screen it dressed are both gone, along with the first-run gate that
+  // showed them. Its founding job was to reach a rider OUTSIDE the Tahoe corpus (and an App Review
+  // pass in Cupertino) who could otherwise hear nothing. That job now belongs to the anonymous
+  // route PREVIEW CLIP on `POST /drives/propose`, which plays a real stop from the drive the rider
+  // just planned — a better taste, and one that arrives inside the funnel instead of in front of it.
+  // ⚠ Do not re-add copy here without re-opening that comparison first:
+  // docs/designs/onboarding-gate-reconsidered.md.
   // The region sheet behind the home chip. ⚠ Names NO region — the list is server data; this is only
   // the framing around it, and it has to stay true the day there are six.
   region: {
@@ -468,84 +419,26 @@ export const voice = {
     // sounds like — an ADMIN is served staged regions too (apps/api GET /regions, `canPreview`), so
     // this ships the moment a second region is seeded, released or not.
     unset: 'Pick a region',
-    // ── Onboarding step 2. The screen asks WHERE, once, before the rider ever reaches the composer.
-    // ⚠ NO LOCATION ANYTHING HERE, and that is the decision the copy has to hold up (founder,
-    // 2026-08-04): the rider picks by hand, and iOS's one-shot permission prompt is still spent
-    // exactly where 1.1 put it — at "Let's roll", and only if we don't already have it. A line like
-    // "we'll find the closest roads for you" would be writing a cheque this flow deliberately cannot
-    // cash. See docs/designs/onboarding-taste-then-where.md.
-    // ⚠ `setupTitle` ('Where are we driving?') WAS DELETED (2026-08-04) with the region step itself —
-    // onboarding asks a stranger nothing now. `setupCta` survives because it is still the button that
-    // ends the flow. If the question ever returns, it belongs wherever the picker does.
-    // ⚠ `setupBody` LIVED HERE AND IS GONE (2026-08-04). It was the coverage caption under the chip —
-    // "I know every turn on these. More are coming." — and its argument was good: say the LIMIT out
-    // loud, because a newcomer who learns it in that forgiving first moment is not ambushed by it
-    // mid-plan. It was not refuted, it was RELOCATED. `heading` above titles the picker one tap away
-    // ("Roads I know") over a list of exactly what exists, which answers the same question by showing
-    // rather than promising — and the line's ~40pt bought the wordmark masthead on that screen.
-    // ⚠ It also went through TWO rewrites in an hour first, both worth not repeating: it shipped
-    // saying "*this* is where I know every turn" (singular — stale the day a second region releases,
-    // on installed apps that could do nothing about it), then got shortened when the two onboarding
-    // screens merged and it became a caption rather than a body.
-    // ⚠ WAS 'Start exploring' UNTIL 2026-08-05 (founder: the onboarding screen "is pretty but still a
-    // bit confusing as the first screen a brand new user sees"). "Explore" sets a BROWSE expectation —
-    // a map, a catalogue, a list to poke at — and the screen behind this button is a CONVERSATION that
-    // immediately asks "Where are we headed?". So the app's first label described something the app
-    // does not do, at the rider's very first act.
-    // ⚠ PLAIN, NOT IN PERSONA, for exactly the reason `unset` above is: this is the ONLY exit from
-    // onboarding (home REDIRECTS to /sample, so `canGoBack` is false and there is no back chevron), so
-    // every rider reads it and every rider presses it. It has to read as an instruction, not flavour.
-    // ⚠ NOT "Let's plan a drive", though it was on the table: "Let's roll" is TransportBar's drive-START
-    // label, and echoing it here would promise a drive that a one-minute postcard does not begin — the
-    // same defect `sample.playA11y` above exists to fix.
-    // docs/designs/onboarding-first-screen-legibility.md §3.
-    setupCta: 'Plan a drive',
+    // ⚠ THE ONBOARDING STRINGS THAT LIVED HERE ARE ALL GONE (founder, 2026-08-05) — `setupTitle`
+    // and `setupBody` went on 2026-08-04 with the region step, and `setupCta` ('Plan a drive', and
+    // 'Start exploring' before it) went with the gate screen itself. Nothing asks a stranger
+    // anything before home any more; the region is picked by `pickRegionId` and changed by the chip
+    // above. See docs/designs/onboarding-gate-reconsidered.md.
+    // ⚠ The rule those strings were written under still governs this block: it must stay
+    // count-agnostic. `setupBody` shipped saying "*this* is where I know every turn" (singular —
+    // stale the day a second region releases, on installed apps that could do nothing about it).
   },
   greeting: 'Hop in. I’ll do the talking.',
-  // The line under the wordmark on the onboarding screen — the one sentence a stranger reads before
-  // any audio plays.
-  //
-  // ⚠ IT NO LONGER NAMES THE CATEGORY, and that reverses this comment's original rule of "clear first,
-  // persona second" (founder, 2026-08-04). It opened "Narrated road trips. You pick the road…" and the
-  // descriptor was cut. Recorded because it is a real trade, not a tidy-up: the line stopped LABELLING
-  // the product and now only demonstrates it. What makes that survivable is everything around it — a
-  // postcard, an "A TASTE" badge, a transport bar and a 64-second clip are all on the same screen, so
-  // "audio about places" is shown three ways before the sentence has to say it. It also earned its
-  // keep on layout: at 375pt wide the longer version wrapped to two lines on the smallest phone.
-  //
-  // ⚠ IT HAD NO READER AT ALL FOR A DAY, which is worth recording because nothing failed. Home's
-  // masthead (kicker → headline → rig → tagline) was deleted on 2026-08-03 as "a LANDING PAGE, and
-  // Skipper already has one at skipper.fm" — correct for home, where the rider has already installed
-  // and is standing there wanting to plan a drive. This string went dead with it and simply sat here.
-  // Onboarding is the one screen where the argument does NOT apply: the rider has not decided
-  // anything yet, and the postcard alone never says what the app DOES.
-  //
-  // ⚠ THE THIRD CLAUSE WAS CUT (founder, 2026-08-04): it read "…I'll do the talking. One corny guide
-  // the whole way." Two reasons, and the second is the one that would have bitten. It wrapped to two
-  // lines in this slot, and the extra line pushed the primary CTA flush against the home indicator —
-  // a layout cost paid by copy nobody was reading closely. And the corniness is something the sixty
-  // seconds of audio directly below it DEMONSTRATES; announcing it first is the one place this line
-  // could sound like marketing rather than like him.
-  //
-  // ⚠ Named BOTH modes until roam was removed (it had been co-equal on home, founder 2026-06-11).
-  // Now there is one artifact, so the line says one thing.
-  // ⚠ REWRITTEN 2026-08-05, and the change is what it NAMES, not its tone. It read "You pick the road,
-  // I'll do the talking." — one word away from working, and the missing word was the product. "Pick
-  // the road" implies a LIST to pick from (the same browse-expectation defect that made "Start
-  // exploring" the wrong CTA), and "do the talking" never says what he talks ABOUT. Neither clause
-  // said the rider was DRIVING. The replacement keeps the same you-X-I'll-Y rhythm and the same
-  // length — it still sets one line at 375pt, verified on an SE — while finally saying there is a car,
-  // it is moving, and he narrates what goes past it.
-  // ⚠ THIS IS THE SCREEN'S ONLY DESCRIPTOR, so it carries the whole category on its own. A small-caps
-  // "NARRATED ROAD TRIPS" kicker was built and rendered on both viewports and NOT taken: against this
-  // line it was a second explanatory line saying less, and store-listing nouns under a wordmark are
-  // the "landing page" register that got home's hero deleted on 2026-08-03.
-  // ⚠ It carried a descriptor once before — it opened "Narrated road trips. You pick the road…" until
-  // 2026-08-04, cut on the argument that a postcard, a transport bar and an "A TASTE" badge showed the
-  // category three ways. The badge was deleted the same day and the transport on 2026-08-05, so that
-  // argument had lost two of its three legs; this line is now the only thing that says what Skipper
-  // is. docs/designs/onboarding-first-screen-legibility.md §2.
-  tagline: 'You drive, I’ll tell you what you’re passing.',
+  // ⚠ `tagline` WAS DELETED HERE (founder, 2026-08-05) with the screen that was its only reader.
+  // It read "You drive, I'll tell you what you're passing." — rewritten hours earlier to finally
+  // name the category, because nothing on the first screen said the product was narrated DRIVING.
+  // ⚠ IT HAD BEEN ORPHANED ONCE BEFORE, on 2026-08-03, when home's masthead was deleted as "a
+  // LANDING PAGE, and Skipper already has one at skipper.fm" — it then sat reader-less for a day
+  // before `/sample` picked it up. That is twice this line has outlived its home, which is the
+  // argument for NOT reviving it a third time on reflex: home's cold open teaches the product by
+  // ASKING ("Where are we headed?" over real example asks), which is why the gate lost.
+  // ⚠ If a one-line product descriptor is ever wanted again, it belongs on home and the case has to
+  // be made there — docs/designs/onboarding-gate-reconsidered.md §5.
   // The home hero's enamel flourish: a departures-board kicker ABOVE the headline
   // (deliberately NOT repeating the tagline). Warm, corny, glanceable, no facts.
   home: {
@@ -607,9 +500,10 @@ export const voice = {
       'Couldn’t match what’s on the phone to this drive. Download it again, or remove the leftovers.',
     save: 'Save for offline', // the main-path button under the Start CTA (was ⋯-menu-only)
     // ⚠ REGION-FREE ON PURPOSE (founder, 2026-08-03), and this one had no alternative: it sits on the
-    // drive-detail Save button, and a `DriveManifest` carries no region — so unlike the /sample copy
-    // (which keeps its "Lake Tahoe" deliberately) there was nothing here to template FROM. Naming a
-    // region would simply have been wrong for every drive outside it. §7 holds either way: this says
+    // drive-detail Save button, and a `DriveManifest` carries no region — so there was nothing here to
+    // template FROM. (The counter-example used to be `/sample`'s copy, which kept its "Lake Tahoe"
+    // deliberately; that screen was deleted 2026-08-05, so this is now simply the rule.) Naming a
+    // region would have been wrong for every drive outside it. §7 holds either way: this says
     // something true about the ROAD, which is route information, not a fact about a place on it.
     // ⚠ ONE LINE, deliberately (founder, 2026-08-03) — it is a caption tucked under a button, and the
     // two-line version it replaced wrapped mid-thought and cost the itinerary a row of screen. The
@@ -718,13 +612,6 @@ export const voice = {
     // desk pass more than it deserves is worse than no copy. docs/designs/desk-drive-harness.md.
     developerHint:
       'Simulated GPS walks this drive’s route at a steady speed and fires the stops, no car required. It tests the triggering and the audio, not the GPS itself. Takes effect next time you start a drive.',
-    // ── First-run reset. ⚠ Plain and literal, not in persona: an admin tool's copy has one job, which
-    // is to say exactly what the button does to this phone before it is pressed.
-    onboardingLabel: 'FIRST-TIME EXPERIENCE',
-    onboardingHint:
-      'Onboarding — the postcard, then the region question — runs once per install. Reset it to see those two screens again on the next launch. Your drives, downloads and account are untouched; the region you already picked stays selected in the picker.',
-    onboardingReset: 'Reset first-time experience',
-    onboardingResetDone: 'Reset. Relaunch the app to see onboarding again.',
     tracesLabel: 'DRIVE TRACES',
     // Says what it is FOR, because the value is not obvious from the file list: a trace is the only
     // way a drive that already happened can be driven again.

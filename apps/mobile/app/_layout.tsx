@@ -128,8 +128,8 @@ export default function RootLayout() {
           {/* D16's anonymous mint. Its OWN leaf beside VersionGate — the app-root side-effect slot —
               so a $sessionSignal tick re-renders this and not the navigator. It sits inside the
               `if (!ready)` gate above and that is correct, not a compromise: nothing a rider can do
-              in the first frames needs a session (POST /drives/plan sends no cookie at all, /sample
-              is anonymous), and the splash is already held for the fonts. */}
+              in the first frames needs a session (POST /drives/plan sends no cookie at all, and
+              /drives/propose is anonymous), and the splash is already held for the fonts. */}
           <AnonymousMint />
         </ThemeProvider>
       </SafeAreaProvider>

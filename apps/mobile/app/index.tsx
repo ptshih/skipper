@@ -19,7 +19,7 @@
 // of it is persisted — not to disk, not to the region cache (which holds public place NAMES only).
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { StyleSheet, View, type TextInput } from 'react-native'
-import { Redirect, Stack, useFocusEffect, useIsFocused, useRouter } from 'expo-router'
+import { Stack, useFocusEffect, useIsFocused, useRouter } from 'expo-router'
 import { MAX_PLAN_DRAWN, type PlannedRoute, type PlannerExample } from '@skipper/shared'
 // ⚠ The TYPED contract, and the only analytics surface there is (src/lib/analytics.tsx owns the raw
 // client, unexported). Every property below is a number, a boolean or a closed union — INV-13 applies
@@ -41,7 +41,6 @@ import { isSignedIn, useSession } from '@/lib/auth'
 import { useIsOffline } from '@/lib/connectivity'
 import { downloadDrive, listDownloadedDrives } from '@/lib/offline'
 import { isPlanAborted, planTurn } from '@/lib/planner'
-import { shouldShowOnboarding } from '@/lib/client-flags'
 import { driveMinutes } from '@/lib/labels'
 import { useLatestRun } from '@/lib/useLatestRun'
 import { useNavigateOnce } from '@/lib/useNavigateOnce'
@@ -123,29 +122,18 @@ const WATERMARK_TOP = 4
 // ⚠ `PreviewItem` MOVED to `src/ui/TranscriptCard.tsx` and is imported from `@/ui` — the card owns
 // its own contract, and `src/ui` may not import from `app/`.
 
-/**
- * The onboarding gate, and the ONLY reason it is a separate component wrapping the screen below.
- *
- * ⚠ IT CANNOT LIVE INSIDE `HomeScreen` — that is a rule of React, not a preference. Home runs dozens
- * of hooks and none of them may be skipped, so a `<Redirect>` decided in its body would still fire a
- * `/regions` load, a `/planner/copy` load and the whole conversation machine for a rider we are about
- * to send somewhere else. Deciding one level up means a first launch does none of that work twice.
- *
- * ⚠ LAZY INITIALISER, NEVER A LIVE READ — the contract `shouldShowOnboarding` states. Home stays
- * MOUNTED under a push, so re-evaluating this mid-session could yank a rider out of a conversation and
- * back into onboarding. Read once, at mount, and the answer cannot change underneath them.
- *
- * The flow `replace`s its way back to `/` when it finishes, which remounts this — and by then the flag
- * and the rider's region choice are both on disk, so the fresh mount reads a settled world.
- */
-export default function HomeRoute() {
-  const [onboarding] = useState(shouldShowOnboarding)
-  // The postcard first, the region question second; `app/sample.tsx` owns the hand-off between them.
-  if (onboarding) return <Redirect href="/sample" />
-  return <HomeScreen />
-}
-
-function HomeScreen() {
+// ⚠ THE ONBOARDING GATE WAS DELETED HERE (founder, 2026-08-05) — home is the app's ONE front door
+// again. A `HomeRoute` wrapper used to read a `shouldShowOnboarding` flag and `<Redirect>` a fresh
+// install to `/sample` before this screen ever mounted. Both the flag and that screen are gone; see
+// `docs/designs/onboarding-gate-reconsidered.md` for why (its founding argument — that a reviewer
+// outside the Tahoe corpus could otherwise hear nothing — was superseded by the anonymous route
+// preview clip on `POST /drives/propose`, which demos the product better and from inside the funnel).
+//
+// ⚠ THE REASON IT WAS A SEPARATE COMPONENT IS WORTH KEEPING, in case a gate is ever wanted again: it
+// could NOT live inside this function. Home runs dozens of hooks and none may be skipped, so a
+// `<Redirect>` decided in its body would still fire the bootstrap load and the whole conversation
+// machine for a rider being sent elsewhere. A gate belongs one level up, or not at all.
+export default function HomeScreen() {
   const router = useRouter()
   const { data: session } = useSession()
   // ⚠ INV-9 — the ONE client-side "is this rider signed in?" (src/lib/auth.ts). A truthy `session` is
@@ -1490,11 +1478,14 @@ function HomeScreen() {
         />
       ) : null}
       {/* ⚠ THE LISTEN ROW WAS HERE AND IS GONE (founder, 2026-08-04) — "we no longer need the sample
-          chip on the home screen since it was moved to onboarding". It is a MOVE, not a cut: the taste
-          is now the FIRST screen of a fresh install (app/sample.tsx, reached by the redirect at the
-          top of this file), which is a strictly better slot for it than a row a returning rider had
-          already dismissed. Do not re-add it here without re-opening that call — the row carried two
-          persisted flags of its own, and both were deleted with it (src/lib/client-flags.ts). */}
+          chip on the home screen since it was moved to onboarding". ⚠ AND THEN THE THING IT MOVED TO
+          WAS DELETED TOO (founder, 2026-08-05): `/sample` and its gate are gone, so the canned taste
+          no longer exists on any surface. That is deliberate, not an oversight — the anonymous route
+          PREVIEW CLIP on `POST /drives/propose` is now the taste, and it is a better one: it plays a
+          real stop from the drive the rider just planned, inside the funnel rather than in front of
+          it. See docs/designs/onboarding-gate-reconsidered.md.
+          ⚠ So do NOT re-add a listen row here reflexively. If a canned clip is ever wanted again, the
+          question to re-open is whether it beats the route preview — not where to put a chip. */}
       {showExamples
         ? exampleAsks.map((e, i) => (
             <SuggestionRow

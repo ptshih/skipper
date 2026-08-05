@@ -41,7 +41,7 @@ console.warn = origWarn
 
 // ⚠ The HONO instance, not `mod.default` — the default export is Bun's serve config
 // (`{ port, fetch, … }`), which carries no `.routes` and makes the middleware chain invisible.
-const { app, proposeLimiter, planMinuteLimiter, planHourLimiter, sampleLimiter, regionsLimiter } = mod
+const { app, proposeLimiter, planMinuteLimiter, planHourLimiter, regionsLimiter } = mod
 
 // ⚠ The REAL `withSession`, imported rather than reconstructed: the /regions order assertion below is
 // only meaningful if it compares against the same reference ../src/index mounted.
@@ -71,14 +71,13 @@ describe('the paid anonymous paths carry their rate limiter', () => {
     expect(chain.indexOf(planMinuteLimiter)).toBeLessThan(chain.indexOf(planHourLimiter))
   })
 
-  test('GET /sample is capped too', () => {
-    // Not a spend guard — it bills no vendor — but it is an anonymous, uncapped, DB-touching route,
-    // which is a standing invitation. Pinned for the same structural reason, not the same cost reason.
-    expect(handlersOn('/sample')).toContain(sampleLimiter)
-  })
+  // ⚠ A 'GET /sample is capped too' case LIVED HERE and was deleted with the route (2026-08-05). Its
+  // reason still governs the case below: not a spend guard — it bills no vendor — but an anonymous,
+  // uncapped, DB-touching route is a standing invitation, so it is pinned for a STRUCTURAL reason
+  // rather than a cost one. Any new anonymous DB-touching route needs a case here.
 
   test('GET /regions is capped too', () => {
-    // Same family as /sample: no vendor charge, a LOAD cap. What it bounds is not the two corpus
+    // Same family as the deleted /sample: no vendor charge, a LOAD cap. What it bounds is not the two corpus
     // queries — REGIONS_MEMO_TTL_MS already caps those — but the `withSession` resolve that runs
     // ahead of the memo. ⚠ Not "an auth-DB round-trip on every request": with cookieCache on, the
     // common rider path is answered from the cookie. The uncapped path is the attacker-controlled
@@ -118,9 +117,9 @@ describe('⚠ mount ORDER — a limiter registered too late is dead', () => {
 describe('⚠ the limiters are DISTINCT instances', () => {
   test('no two mounts share a bucket map', () => {
     // Each rateLimit() call closes over its OWN Map, so reusing one middleware on two paths would
-    // silently merge their counts — a rider's /sample reads would then eat their /drives/plan budget.
+    // silently merge their counts — a rider's /regions reads would then eat their /drives/plan budget.
     // Cheap to assert, and the failure mode is invisible at every other layer.
-    const all = [proposeLimiter, planMinuteLimiter, planHourLimiter, sampleLimiter, regionsLimiter]
+    const all = [proposeLimiter, planMinuteLimiter, planHourLimiter, regionsLimiter]
     expect(new Set(all).size).toBe(all.length)
   })
 })

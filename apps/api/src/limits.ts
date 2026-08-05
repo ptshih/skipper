@@ -265,21 +265,19 @@ export const PLAN_RATE_HOUR = {
   message: "That's a fair bit of planning for one sitting. Rest the voice a spell and come back to me.",
 } as const
 
-/** GET /sample — the anonymous "taste" clip. The LOOSEST bucket here, and the only one whose number is
- *  not argued from a vendor bill: the handler runs one indexed limit-1 query and then SIGNS the R2 URL
- *  in-process (presign is a local computation, not a request — packages/storage), so unlike propose and
- *  plan there is no per-request Google Routes or model charge behind it. What it caps is DB load and the
- *  standing invitation any anonymous, uncapped, DB-touching route represents — not spend. That is the
- *  whole reason it may sit above the paid buckets rather than beside them.
- *  ⚠ VALUE UNCHANGED from the inline literal it replaces at the ./index.ts mount. A RE-HOMING, never a
- *  re-pricing: a rider-facing cap moves only on an explicit founder call (CLAUDE.md STOP), so the commit
- *  that gives a cap a home must never also be the commit that changes its number. */
-export const SAMPLE_RATE = {
-  limit: 30,
-  windowSec: 60,
-  label: 'sample',
-  message: 'Let me catch my breath, friend. Try that again in a moment.',
-} as const
+/* ⚠ `SAMPLE_RATE` WAS DELETED HERE (founder, 2026-08-05) with `GET /sample` itself — the route, the
+ * screen that called it and the `SAMPLE_NARRATION_QID` config all went together
+ * (docs/designs/onboarding-gate-reconsidered.md).
+ *
+ * ⚠ IT IS NAMED IN THE COMMENT BELOW ON PURPOSE, because `REGIONS_RATE` was SIZED AGAINST IT (30/min →
+ * 120/min, "4x SAMPLE_RATE"). That number is not re-derived here: it was a founder call on 2026-08-03
+ * and it stands on its own reasoning about CGNAT and the launch path. Recording the anchor rather than
+ * silently dropping it, so nobody later reads 120 as arbitrary.
+ *
+ * ⚠ AND THE DISTINCTION IT DREW IS STILL LIVE: this file holds both SPEND caps (propose, plan — the
+ * INV-12 ones behind a vendor bill) and LOAD caps (an anonymous, DB-touching route's standing
+ * invitation). SAMPLE_RATE was the original example of the second kind. Do not collapse the two
+ * categories now that the clearest load-only case is gone. */
 
 /** GET /regions — the last anonymous, uncapped, DB-touching route.
  *
@@ -304,16 +302,18 @@ export const SAMPLE_RATE = {
  *  BELOW `app.use('/regions', withSession)` this limiter would cap nothing that matters, because the
  *  resolve it exists to bound would already have run.
  *
- *  ⚠ THE LOOSEST BUCKET IN THIS FILE, DELIBERATELY — 4x SAMPLE_RATE, and the reason is the failure
+ *  ⚠ THE LOOSEST BUCKET IN THIS FILE, DELIBERATELY — it was set at 4x the now-deleted SAMPLE_RATE
+ *  (30/min), and the reason is the failure
  *  mode, not the cost. Limits key on CLIENT IP, and CGNAT / corporate NAT put many unrelated riders
  *  behind one address; `/regions` is on the LAUNCH path, so a 429 here is not a graceful degrade but
  *  an empty region picker — an app that reads as broken, for people doing nothing wrong. At 120/min a
  *  single abusive host still resolves to ~2 auth-DB round-trips a second, which is the actual thing
  *  worth bounding. There is no vendor charge behind this route at all (INV-12 spend caps are propose
- *  and plan); this is a LOAD cap, in the same family as SAMPLE_RATE.
+ *  and plan); this is a LOAD cap, the category SAMPLE_RATE used to exemplify.
  *
  *  Number set by founder call 2026-08-03 — a new rider-facing cap, not a re-homing of an existing
- *  literal, which is the one thing the ⚠ on SAMPLE_RATE says a commit may not do quietly. */
+ *  literal — the one thing a commit may never do quietly (CLAUDE.md STOP: a rider-facing cap moves
+ *  only on an explicit founder call). */
 export const REGIONS_RATE = {
   limit: 120,
   windowSec: 60,

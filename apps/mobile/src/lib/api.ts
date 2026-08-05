@@ -5,14 +5,12 @@
 // API client: drives are user-OWNED. GET /drives lists the
 // caller's saved drives (one card each) and GET /drives/:id replays one (route + ordered
 // place-narration clips); POST /drives/propose (cheap, no credit) then POST /drives
-// create one. Plus the anonymous reads: GET /regions, GET /sample.
+// create one. Plus the anonymous read: GET /bootstrap (the cold open's regions + copy).
 import {
   driveList,
   driveManifest,
   driveProposal,
   bootstrap,
-  regionList,
-  sample,
   versionResponse,
 } from '@skipper/shared'
 import type {
@@ -24,7 +22,6 @@ import type {
   Bootstrap,
   DriveSummary,
   Region,
-  Sample,
   VersionPolicy,
 } from '@skipper/shared'
 import { API_URL, authClient } from './auth'
@@ -96,7 +93,7 @@ export const errorMessage = (e: unknown, fallback: string): string =>
 const REQUEST_TIMEOUT_MS = 15_000
 
 // `anonymous: true` deliberately OMITS the session Cookie so an intentionally-anonymous call — the
-// ?preview=1 funnel, GET /sample, and (in 1.1) the planner — never links a signed-in identity to
+// ?preview=1 funnel and (in 1.1) the planner — never links a signed-in identity to
 // preview activity. Authenticated calls (the rider's own drives) leave it false so the cookie still
 // rides.
 //
@@ -199,11 +196,9 @@ export function parseDto<T>(schema: { parse: (data: unknown) => T }, data: unkno
   }
 }
 
-/** GET /sample — the one curated "taste" clip for a rider outside any coverage. Anonymous (no
- *  account, no location). Throws on a non-2xx (incl. the soft 404 when no sample is configured) — the
- *  /sample screen catches it and shows a reachable retry. */
-export const getSample = async (): Promise<Sample> =>
-  parseDto(sample, await fetchJson('/sample', undefined, { anonymous: true }))
+/* ⚠ `getSample` (GET /sample) WAS DELETED HERE (2026-08-05) with the screen that was its only
+ * caller. The anonymous taste is now the preview clip that rides `POST /drives/propose` — a real stop
+ * from the rider's own planned route. docs/designs/onboarding-gate-reconsidered.md. */
 
 /* -------------------------------------------------------------------------- */
 /*  Create-a-Drive — user-owned on-demand A→B drives. ⚠ NOT uniformly gated any   */
@@ -212,11 +207,14 @@ export const getSample = async (): Promise<Sample> =>
 /*  mount — so do not "simplify" this file back to one blanket account rule.      */
 /* -------------------------------------------------------------------------- */
 
-/** The pickable regions, plain. ⚠ STILL USED — /sample needs region NAMES and nothing else, so it has
- *  no business asking for composed cold-open copy or sending a launch rotation. `/regions` stays the
- *  shared, memoized list it always was; `getBootstrap` below is the per-device one. */
-export const listRegions = async (): Promise<Region[]> =>
-  parseDto(regionList, await fetchJson('/regions')).regions
+/* ⚠ `listRegions` (GET /regions, plain) WAS DELETED HERE (2026-08-05). Its doc said "STILL USED —
+ * /sample needs region NAMES and nothing else", and that was its ONLY caller: when the screen went, the
+ * function had none. Home has always used `getBootstrap` below, which is the per-device call.
+ * ⚠ The distinction it protected is still real and still enforced by that split: `/regions` is memoized
+ * and identical for every rider, while the bootstrap answer varies with a per-device launch rotation —
+ * folding a per-device answer into a shared cache is how a cache starts serving one rider another
+ * rider's screen. If a plain region list is ever needed again, add it back rather than widening
+ * `getBootstrap`. */
 
 /**
  * Everything the cold open needs, in one call: the pickable regions, each region's suggestions already

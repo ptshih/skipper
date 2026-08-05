@@ -1,26 +1,29 @@
 # Onboarding — the first screen is pretty but does not say what this is
 
-> **Status:** ✅ **BUILT 2026-08-05 — §2, §3, §4 and §5 are all closed, and NOT by the option this
-> doc recommended.** Landed in three passes: (1) CTA → **"Plan a drive"** and the tagline promoted
-> `inkFaint` → `inkDim`; (2) the tagline REWRITTEN to name the activity and the payload — *"You drive,
-> I'll tell you what you're passing."*; (3) **every player control deleted** (founder, 2026-08-05:
-> *"i wonder if we should just get rid of all the player controls, and just have one 'secondary' cta
-> above the primary 'plan a drive' cta that says 'Hear a Sample'"*), so the card is a poster and the
-> two actions are stacked labelled buttons.
-> ⚠ **§7's recommended option A was NOT what shipped**, and §7.1 below records why — the category
-> descriptor it proposed was built, rendered, and rejected against a rewritten tagline.
-> Then a fourth pass closed the last gap: the CTAs pin to the BOTTOM and a trail illustration
-> (`Ridgeline` + `RouteTrack`) fills the space that opens up, with the rig advancing as the clip plays
-> — so playback finally has a signal without a control coming back (§7.2).
-> ⚠ **This retires `onboarding-taste-then-where.md` §8.4's quiet-CTA rule** — see that doc's status.
-> Prompted by the founder: *"i feel like the onboarding page is pretty but still a bit confusing as
-> the first screen a brand new user sees."* Read on a booted simulator (iPhone 17 Pro Max, iOS 26.5)
-> against `apps/mobile/app/sample.tsx` as it stood at `d5fd80f`.
-> ⚠ This does **not** supersede [onboarding-taste-then-where.md](onboarding-taste-then-where.md) — that
-> doc is BUILT and its structural calls (one screen, no autoplay, no region question, no location ask)
-> are **not** re-litigated here and should not be reopened by anything below. What this adds is a
-> narrower claim: the screen those calls produced never states the CATEGORY, and one specific deletion
-> is why. §7 lists options; the founder has picked none of them.
+> **Status:** ⚰️ **THE SCREEN IT FIXED WAS DELETED 2026-08-05. This document is HISTORY.** Every fix
+> below shipped and worked — the CTA rename, the `inkFaint` promotion, the rewritten tagline, the
+> stripped-out player, the trail illustration, the two audio bugs — and then the founder deleted the
+> surface they lived on: *"lets completely delete the sample and the onboarding screen, don't leave any
+> orphans."* See [onboarding-gate-reconsidered.md](onboarding-gate-reconsidered.md) for why.
+>
+> ⚠ **WHAT SURVIVED THE DELETION, and is the reason to keep reading:**
+> • **§7.3's two audio defects.** The replay-after-completion bug (activate on mount, release on
+>   completion, `setIsAudioActiveAsync(false)` "prevents new audio from playing") is a defect CLASS this
+>   repo has now shipped twice — see `src/lib/audio-session.ts`. Any surface that releases the session
+>   must re-activate before playing again.
+> • **The method.** A label and a behaviour disagreed ("Stop" that resumed) and nothing in the type
+>   system, the tests or a screenshot could tell them apart — only playing the clip and timing it could.
+> • **§7.2's `RouteTrack` reversal.** The same component was WRONG as a transport (it is
+>   `accessibilityElementsHidden`, so it silently deleted the screen's only adjustable element) and
+>   RIGHT as decoration. Same component, opposite verdict, decided by whether it pretends to be a control.
+> • **The `StyleSheet.absoluteFillObject` trap** (§7.2): that property does not exist on this RN typing,
+>   `{...undefined}` is legal JS, so the spread compiled to a style with no positioning and failed
+>   silently — looking for all the world like a stale bundle. `tsc` caught it; the simulator never could.
+>
+> ⚠ **The DIAGNOSIS below is also still worth reading**, because it is about home now: §1's "what a
+> stranger actually learns" and the observation that **home teaches the product better than the gate
+> did** are what eventually killed the gate. Everything describing `app/sample.tsx` as live code is
+> obsolete.
 
 ## §1 · What a stranger actually learns, in order
 
@@ -228,6 +231,28 @@ effect also has to stand down while stopped or the next tick drags the rig strai
 *transport* — something that shows time passing without offering a control to grab. And it must stay
 ILLUSTRATION, never cartography: `GET /sample` carries no geography, so this motif may never sprout
 real place names or claim to be a real route.
+
+**The sun completes the scene** (founder, 2026-08-05: *"can we also fill in the whitespace with maybe
+soft illustrations or a subtle background"*). `Sunburst` — already in the app, previously only the
+postcard placeholder — sits in the sky behind the ridge, so the three elements read as one poster: sun,
+horizon, road.
+
+⚠ **DECORATION HERE MUST CONSUME NO LAYOUT HEIGHT, and this is a hard constraint rather than a
+preference.** In normal flow a 240pt sun pushed **both CTAs below the fold on a 375×667 SE** — measured,
+not predicted — which breaks the rule the whole screen is built around: the only exit is reachable
+without scrolling. The sun is therefore an absolutely-positioned layer that fills the gap and **clips to
+it**, so it is sized by the space available rather than by a number: most of it on a tall phone, a
+sliver cresting the ridge on a short one. ⚠ The clip belongs on that layer, NOT on `trailSlot`, which
+also holds the ridge's deliberate bleed past the gutter.
+
+⚠ **THE TRAP THAT COST AN HOUR — `StyleSheet.absoluteFillObject` DOES NOT EXIST on this RN's typing.**
+The first fix spread it into the style. `{...undefined}` is legal JavaScript, so the layer compiled to a
+style with **no positioning at all**, silently fell back into normal flow, and reproduced the exact
+overflow it was written to prevent. On device it looked identical to a stale bundle, and two rounds were
+spent blaming Fast Refresh and a simulator another agent happened to be driving. **`tsc` caught it in one
+line; the simulator never could.** Write the four edges out. The general lesson: a spread of a
+non-existent constant is invisible at runtime and invisible on screen — typecheck before re-testing when
+a "fix" changes nothing.
 
 ## §7.3 · Two audio defects the on-device testing found — both fixed 2026-08-05
 

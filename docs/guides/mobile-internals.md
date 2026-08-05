@@ -20,7 +20,6 @@ Expo Router, file-based, new arch.
 |---|---|
 | `app/_layout.tsx` | The shell — providers, splash, fonts, startup janitors, `VersionGate` |
 | `app/index.tsx` | **Home is the conversation.** The planner; MY DRIVES is the archive below it |
-| `app/sample.tsx` | The one ungated sample clip, with its postcard |
 | `app/sign-in.tsx` | The account wall's destination |
 | `app/settings.tsx` | Theme, account, deletion, and the admin-only way into Developer |
 | `app/legal.tsx` | Sources & licenses (bundled, must render in a dead zone) |
@@ -169,7 +168,7 @@ hear silence and never learn a stop was there. It does reach us: `stop_skipped{r
 exactly that hole, and it is the one the gate exists to make rare.
 
 ⚠ `PRE_START_STALL_MS` (12 s) is **not** dead — it survives for the surfaces that still stream, i.e.
-`useRoutePreview` and `GET /sample`, which play before a drive exists. **"Offline for everything" is a
+`useRoutePreview`, which plays before a drive exists. (⚠ `GET /sample` was the other such surface and was deleted 2026-08-05 with the onboarding gate.) **"Offline for everything" is a
 rule about DRIVE audio; it was never "delete all streaming".**
 
 A separate **post-start** watchdog (`POST_START_STALL_MS`) covers the other half: a clip that started
@@ -363,7 +362,7 @@ rejections) and **native** crashes, with dSYM / source-map upload at build time 
 
 The event map is a **closed typed contract** — every property is a number, a boolean or a closed
 union. As of this writing: `planner_ready`, `plan_turn_sent`, `proposal_shown`, `preview_clip_played`,
-`sample_played`, `wall_shown`, `signup_completed`, `drive_created`, `drive_started`, `stop_fired`,
+`wall_shown`, `signup_completed`, `drive_created`, `drive_started`, `stop_fired`,
 `stop_skipped`, `drive_completed`, `font_load_failed`.
 
 ⚠ **INV-13 applies to analytics exactly as it applies to logs**: no rider prose, no place name, no
@@ -404,7 +403,7 @@ unanswered, knowingly (`download-before-start.md` Q3).
   fallback (a legal page must render in a dead zone), so the release was never actually avoided and
   two copies that can disagree is strictly worse than one that cannot. ⚠ Per-clip attribution is
   frozen on the narration row at generation time — this is the catalog, not the credit.
-- **`postcards.ts`** — WPA-style poster art for the sample screen, keyed by the clip's QID so it can
+- ⚠ **`postcards.ts` was DELETED 2026-08-05** with the sample screen. It held WPA-style poster art keyed by the clip's QID so it could
   never show the wrong place; an unmapped QID falls back to a generic frame rather than mislabeling.
   Deliberately illustration, not an AI photo: a faked photo of a real landmark fights the
   never-invents doctrine; a stylized poster does not claim to be real.

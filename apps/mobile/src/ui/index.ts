@@ -30,7 +30,9 @@ export { SuggestionRow, type SuggestionRowProps } from './SuggestionRow'
 export { Segmented, type SegmentedProps, type SegmentedOption } from './Segmented'
 export { Divider } from './Divider'
 export { AttributionButton, type AttributionButtonProps } from './AttributionButton'
-export { Sunburst, type SunburstProps } from './Sunburst'
+// ⚠ `Sunburst` WAS DELETED (2026-08-05) — the WPA sunburst watermark. Its last two readers were
+// home's masthead (cut 2026-08-03) and the `/sample` postcard placeholder (deleted with the
+// screen). Recreate from git if a poster watermark is ever wanted again.
 export { RouteTrack } from './RouteTrack'
 export { Scrubber, type ScrubberProps } from './Scrubber'
 export { StopRow, STOP_ROW_HEIGHT, type StopState } from './StopRow'

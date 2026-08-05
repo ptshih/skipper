@@ -991,3 +991,25 @@ below carries its own full context.
       ⚠ Re-read `docs/designs/offline-region-packs.md` first: only a drive's OWN manifest is authoritative
       for that drive, which is why there is no region pack. Whatever lands here must not quietly reintroduce
       one. The store itself is `apps/mobile/src/lib/clip-store.ts` (keyed by narration SUBJECT id).
+
+- [ ] #74 (mobile, low, founder) **Give each REGION a postcard, and put it on home.** (Founder idea,
+      2026-08-05, filed while deleting `/sample`: *"can we potentially reuse the emerald bay
+      postcard/image on the home screen? maybe each region can have a postcard image"*.)
+      The WPA travel-poster artwork survives the deletion on purpose —
+      `apps/mobile/assets/brand/postcard-emerald-bay.jpg` is deliberately KEPT with no reader, for this
+      item. What did NOT survive is `src/lib/postcards.ts`, and that is the interesting part: it keyed
+      art by the sample clip's **poi QID**, which is the wrong key for this idea. A region postcard is
+      keyed by **region**, so this is a new (smaller) module, not a resurrection — recover the file from
+      git for the bundling rationale, not the mapping.
+      ⚠ **The rationale IS worth recovering**: art is BUNDLED rather than served from R2, and it is
+      illustration rather than an AI photo, because "a faked photo of a real landmark fights the honest,
+      grounded, never-invents doctrine; a stylized poster doesn't claim to be real." Keep both properties.
+      ⚠ **Where it goes on home is the real design question, and it is not obvious.** Home's cold open was
+      deliberately stripped of its hero on 2026-08-03 ("a LANDING PAGE, and Skipper already has one at
+      skipper.fm") and the region is currently a compact CHIP. A full-bleed poster risks re-adding exactly
+      the hero that was cut — so the strong version is probably small (art ON the region chip, or behind
+      the ridgeline watermark), not a headline image.
+      ⚠ **It only scales if art exists per region**, and today exactly one region ships. An unmapped
+      region must fall back to something calm and intentional, never a broken frame — that fallback was
+      `Sunburst`, which was ALSO deleted (recoverable from git, `src/ui/Sunburst.tsx`).
+      Context: `docs/designs/onboarding-gate-reconsidered.md`.

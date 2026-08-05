@@ -4,11 +4,6 @@
       "count": 2
     }
   },
-  "app/sample.tsx": {
-    "react-hooks/set-state-in-effect": {
-      "count": 1
-    }
-  },
   "app/settings.tsx": {
     "react-hooks/set-state-in-effect": {
       "count": 1

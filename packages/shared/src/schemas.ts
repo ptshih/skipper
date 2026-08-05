@@ -129,7 +129,7 @@ export type Attribution = z.infer<typeof attribution>
  * single-object shape to tolerate (zero-reuse, no users → clean array contract).
  *
  * ⚠ `.catch([])` for the SAME reason `region.exampleAnchors` carries one, and the stakes are higher
- * here: this rides the anonymous `/drives/propose` response (and `/sample`), the mobile client turns
+ * here: this rides the anonymous `/drives/propose` response, the mobile client turns
  * ANY DTO parse failure into a blocking "please update the app" wall (apps/mobile/src/lib/api.ts
  * `parseDto`), and the value is a FROZEN blob the studio pipeline wrote — nothing re-validates it on
  * the way out. So a fifth `attributionSource` value, a stamp that isn't strict ISO, or one malformed
@@ -182,24 +182,15 @@ export const versionResponse = z.object({ policies: z.array(versionPolicy) })
 /*  API response DTOs (apps/api ⇄ clients). Lightweight, no internal columns.   */
 /* -------------------------------------------------------------------------- */
 
-/** GET /sample — ONE curated "taste" clip, anonymous, for a rider OUTSIDE any coverage (the
- *  Cupertino reviewer, and every first-timer who opens the app 200 miles from Tahoe). A single
- *  hand-picked narration (server-side `SAMPLE_NARRATION_QID`) resolved to a presigned clip: no
- *  geography, because there is no map here, just the clip. `attribution` rides along because a taste
- *  presents the adapted work like any other surface (CC BY-SA).
- *  ⚠ Served at /roam/sample until 1.1; the path moved with roam's removal and there is NO alias —
- *  the wire may break freely (docs/decisions/api-versioning-posture.md). */
-export const sample = z.object({
-  // The clip's poi QID — lets the client pick the matching curated "postcard" artwork (qid→image),
-  // and fall back to a generic frame if it doesn't recognize the place. Optional for wire-compat.
-  qid: z.string().optional(),
-  name: z.string(),
-  url: z.url(),
-  contentType: z.string(),
-  durationMs: z.number().int(),
-  attribution: attributionList.optional(),
-})
-export type Sample = z.infer<typeof sample>
+/* ⚠ THE `sample` DTO AND ITS `Sample` TYPE WERE DELETED HERE (founder, 2026-08-05) with `GET /sample`,
+ * the mobile screen that called it and the onboarding gate that showed it. The anonymous taste is now
+ * the preview clip on `POST /drives/propose` (`drivePreviewClip`, above), which carries a real stop
+ * from the rider's own planned route. docs/designs/onboarding-gate-reconsidered.md.
+ *
+ * ⚠ ITS ONE DESIGN NOTE IS WORTH KEEPING: that DTO deliberately carried NO GEOGRAPHY — "no map here,
+ * just the clip" — which is the same restraint the `Region` DTO shows in withholding `bbox`. Any future
+ * anonymous clip payload should stay that spare unless a reader genuinely needs more.
+ */
 
 /* -------------------------------------------------------------------------- */
 /*  Create-a-Drive (V2) — a user-owned, on-demand A→B drive over reused narrations */
@@ -314,8 +305,9 @@ export type DriveProposeRequest = z.infer<typeof driveProposeRequest>
  *  character away. A preview needs a name, a URL and a credit. Nothing else.
  *
  *  `attribution` is NOT decoration: Wikipedia is CC BY-SA, so any surface that presents the adapted
- *  work owes credit, and this is the most-seen anonymous surface there is. `sample` above carries it
- *  for exactly the same reason. */
+ *  work owes credit, and since 2026-08-05 this is the ONLY anonymous clip surface there is — the
+ *  deleted `sample` DTO carried `attribution` for exactly the same reason, so the obligation did not
+ *  shrink with it, it concentrated here. */
 export const drivePreviewClip = z.object({
   /** The place this clip is about — the card's label. Safe on an anonymous wire: the clip says the
    *  name out loud, so withholding the string protects nothing. */

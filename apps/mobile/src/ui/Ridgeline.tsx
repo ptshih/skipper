@@ -7,7 +7,8 @@
 // base could not be faded out; drawing only the RIDGE removes the problem instead of hiding it, and
 // a contour line is closer to the atlas idiom than a solid mass anyway.
 //
-// Built from rotated Views, the same no-dependency technique as `Sunburst`. Decorative only: low
+// Built from rotated Views — the same no-dependency technique the deleted `Sunburst` used (2026-08-05;
+// recover it from git if a radiating watermark is ever wanted again). Decorative only: low
 // opacity, pointer-events off, no a11y surface, colour from a theme ROLE so it swaps day/dusk.
 //
 // ⚠ Why a horizon rather than the sunburst it replaced: a burst is a radial object with a centre, so

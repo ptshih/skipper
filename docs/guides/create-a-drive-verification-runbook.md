@@ -215,9 +215,10 @@ each is a real edge. Severity is "how likely to bite a real rider."
   and the `POST /drives/:id/assets/sign` route are all deleted — a drive's audio never resolves to
   `https` again, which is what the gate above is protecting. It still serves a PARTIAL local map rather
   than error-walling a rider holding 39 of 40 stops. ⚠ **This is not "the app never streams":**
-  `GET /sample` and the anonymous route-preview clip play BEFORE a drive exists, with nothing on disk
-  to play from, and they deliberately still stream on the generous 12 s `PRE_START_STALL_MS`. Never
-  "simplify" the boundary away.
+  the anonymous route-preview clip plays BEFORE a drive exists, with nothing on disk to play from, and
+  it deliberately still streams on the generous 12 s `PRE_START_STALL_MS`. Never "simplify" the
+  boundary away. (⚠ `GET /sample` was the second such surface and was deleted 2026-08-05 with the
+  onboarding gate — the boundary itself is unchanged, it just has one surface on it now.)
 
 ## Accept bar
 

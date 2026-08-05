@@ -1,30 +1,24 @@
 # Onboarding — a taste, then where
 
-> **Status:** ✅ **BUILT 2026-08-04**, and **PARTLY SUPERSEDED 2026-08-05 by
-> [onboarding-first-screen-legibility.md](onboarding-first-screen-legibility.md)** — read that one
-> alongside this. **ONE screen** in front of the cold open — hear the skipper and say which roads,
-> together (`apps/mobile/app/sample.tsx`) — gated by `onboarded` in `src/lib/client-flags.ts` and
-> entered from the redirect at the top of `app/index.tsx`.
+> **Status:** ⚰️ **DELETED 2026-08-05. This document is HISTORY — the flow it specifies no longer
+> exists.** The founder removed the first-run gate, the `/sample` screen, `GET /sample`,
+> `SAMPLE_NARRATION_QID` and the `onboarded` client flag outright: *"lets completely delete the sample
+> and the onboarding screen, don't leave any orphans."* Home is the app's ONE front door again.
 >
-> ⚠ **§8.4's QUIET-CTA RULE IS RETIRED — do not enforce it against the current screen.** It said the
-> forward CTA must ship `secondary` and promote to primary only once the clip had been heard, and
-> "do not collapse that into one constant variant". Its premise was that *"a forward CTA and a play
-> disc compete for 'what do I do now?'"* — and on 2026-08-05 the founder **deleted every player
-> control** (scrubber, ±15, play disc). With no disc left to compete with, the rule lost the conflict
-> it was mitigating: the two actions are now stacked, labelled buttons ("Hear a sample" above "Plan a
-> drive"), so hierarchy is stated in words rather than fought over by weight, and **"Plan a drive" is
-> primary from the first frame**. The `glow` still waits for the clip. ⚠ The half that is NOT retired:
-> the forward CTA is still never disabled and never gated, because it remains the only exit.
-> ⚠ Also changed there: the postcard kicker was deleted, the tagline rewritten, and **stop now rewinds
-> to the beginning** rather than pausing.
-> ⚠ It was TWO screens plus an end card for a few hours; §8.4 records why they merged, and that
-> supersedes the two-screen framing still used in §1 and §6 below.
-> **The location permission is NOT part of it** — asked and settled the other way twice (§2), which
-> reverses one third of the original brief.
+> ⚠ **WHY, IN ONE LINE:** this doc's founding premise — the corpus is Tahoe-only, so a first-timer or an
+> Apple reviewer outside coverage could talk to the skipper and never reach a road he has stories for —
+> was **superseded** by the anonymous route-preview clip on `POST /drives/propose`, which plays a real
+> stop from the route the rider just planned. Better taste, no account, no gate.
+> The argument is in [onboarding-gate-reconsidered.md](onboarding-gate-reconsidered.md).
 >
-> ⚠ **TWO THINGS IN THE TEXT BELOW WERE REVERSED BY THE FOUNDER DURING THE BUILD, and §8 is the list.**
-> Read §8 before §4 — it deletes §4 outright, including the region-`center` wire field that section
-> recommends. The rest of this document shipped as written.
+> ⚠ **§6 CALLED THIS.** Alternative C said *"if onboarding ever starts feeling like ceremony, this is
+> the version to fall back to"*, and §6's "what would change my mind" named the metric. Read as a
+> worked example of a doc pre-registering its own kill criteria — that is the part worth keeping.
+>
+> ⚠ **Everything below is preserved as written and is NO LONGER TRUE of the app.** Do not mine it for
+> implementation guidance. The parts that outlived the flow are the location-permission reasoning (§2 —
+> iOS gives exactly one prompt, ever) and §5's client-flag traps (document dir not cache dir; never
+> keyed on the user id), both of which still govern anything once-per-install.
 
 ## What it is
 

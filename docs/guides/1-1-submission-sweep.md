@@ -21,9 +21,18 @@
 > unsaved-drive alert (*Save it first / Start anyway / Cancel*) is GONE, replaced by a gated CTA that
 > turns itself on — §4 is rewritten around it; **(3)** `?mode` is retired and the `__DEV__` "Simulated
 > drive" ⋯ item with it — Pass A's entry point moved to an **admin-gated setting**, which changes which
-> BUILD it needs. ⚠ **None of that touches the App Review path in §5**: the planner, the route-preview
-> clip and `GET /sample` all play before a drive exists and deliberately still STREAM. "Offline for
+> BUILD it needs. ⚠ **None of that touches the App Review path in §5**: the planner and the
+> route-preview clip play before a drive exists and deliberately still STREAM. "Offline for
 > everything" must never be read as "delete all streaming" — it would take the front door with it.
+>
+> ⚠ **UPDATE 2026-08-05 — `GET /sample`, the `/sample` screen and the first-run onboarding gate are all
+> DELETED.** The reviewer path is now: open the app → talk to the skipper → get a route → play the
+> preview clip that `POST /drives/propose` returns. Anonymous, no account, no location permission, and
+> a better demo because it plays a real stop from a route the reviewer chose.
+> ⚠ **Two steps below are therefore VOID and struck through in place** — the "Hear a quick sample" tap
+> and the `/sample` 200 in the pre-flight. Do not re-add them, and do not treat a `/sample` 404 on prod
+> as a regression: it is the intended state once the API is redeployed.
+> See [docs/designs/onboarding-gate-reconsidered.md](../designs/onboarding-gate-reconsidered.md).
 
 ---
 
@@ -238,8 +247,9 @@ cleaning up. Do this on the **production/TestFlight** build, signed out, on cell
       must hear it with one tap and no wait bar. If it ever goes quiet, suspect that someone read
       "force offline for everything" as "delete all streaming" and took the front door with it.
 - [ ] Tap **"Make this drive"** while signed out. Expect *"You'll need a free account to keep this drive."*
-- [ ] Back on the opening screen, tap **"Not near Tahoe? Hear a quick sample."** Expect audio to start
-      on its own, no account, no permission.
+- [ ] ~~Back on the opening screen, tap **"Not near Tahoe? Hear a quick sample."**~~ **VOID 2026-08-05
+      — the sample and its screen are deleted.** The taste is now the route-preview clip in the step
+      above, which this sweep already covers. Nothing replaces this line.
 - [ ] Ask for a route the corpus does not run (e.g. Cupertino → Santa Cruz). Expect the in-persona
       refusal, and judge it as a reviewer would: **does it read as honest, or as broken?** This is the
       one live failure mode §10 exists to route around.
@@ -276,8 +286,10 @@ Everything here is owned by [app-store-submission.md](app-store-submission.md) �
       `POST /drives/plan`, which reaches our server and Anthropic; nothing persists it. Transmitted vs
       *collected* is a judgement on Apple's definition and it is **founder's, not a docs edit** —
       deciding it wrong is rejection-class.
-- [ ] **Re-run §12's pre-flight.** Server side was green on 2026-08-03: `/health`, `/sample`,
-      `/regions`, site `/privacy` `/terms` `/support` all 200; `/roam/sample` 404 (correct);
+- [ ] **Re-run §12's pre-flight.** Server side was green on 2026-08-03: `/health`, `/regions`, site
+      `/privacy` `/terms` `/support` all 200; `/roam/sample` 404 (correct). ⚠ That run also probed
+      `/sample` for a 200 — **void as of 2026-08-05**, the route is deleted; expect 404 after the next
+      API deploy and do NOT read it as a regression;
       `delete-user` **400**, not 404. Still owed: one anonymous `POST /drives/plan` against prod — it
       spends model tokens, so it is a deliberate act, and it is the only proof `ANTHROPIC_API_KEY` is
       set on the deployed service.

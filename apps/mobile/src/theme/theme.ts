@@ -94,7 +94,7 @@ export interface ThemeColors {
 // — `onPrimary`/`onAmber`/`onDanger`, which Button/FilterChip/Badge already render as text on a
 // fill. The two lists differ on purpose and neither is stale: that test asks "safe on the app
 // surface", this asks "is a text colour at all". Everything omitted is a surface, fill, rule, or
-// rgba effect, and stays reachable from `style` / `Icon` / `Glyph` / `Sunburst`.
+// rgba effect, and stays reachable from `style` / `Icon` / `Glyph` / `Ridgeline`.
 export type TextColorRole = keyof Pick<
   ThemeColors,
   | 'ink'
