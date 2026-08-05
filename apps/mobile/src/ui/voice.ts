@@ -163,32 +163,30 @@ export const voice = {
     exampleAToBTitle: 'Drive somewhere',
     exampleOpenTitle: 'Let the skipper pick',
     exampleAToB: '{a} to {b}, the scenic way.',
-    // ⚠ EVERY `wire: true` SKIPPER LINE BELOW IS PROMPT SURFACE. These are seeded into the transcript
-    // and re-sent to the model as its OWN prior sentences, so a line the prompt forbids becomes
-    // in-context precedent that contradicts the instructions before the rider has typed anything —
-    // and these chips are the app's highest-traffic entry points. They change under
-    // apps/api/src/planner-prompt.ts's review, not the design system's. The set is:
-    // `exampleAToBReply`, `exampleOpenReply`, `adjustSay`, `noStopsSay`.
-    // ⚠ Fixed 2026-08-03: this one silently DROPPED the rider's road ask ("the scenic way") while the
-    // pipeline sends `travelMode: 'DRIVE'` with no route modifiers at all — so it modelled agreeing to
-    // something that never happens. It now says which half is the skipper's, matching the prompt's
-    // `== When they ask about the road ==`.
-    // ⚠ FIXED 2026-08-04, AND IT ENDS ON A STATEMENT ON PURPOSE — do not "restore" a question here.
-    // This line asked "About how long do you want to be out?" for a day after the prompt was changed to
-    // forbid exactly that ask (planner-prompt.ts, `You never ask how long`). Because it is SEEDED, the
-    // skipper appeared to ask it while no model turn existed to fix — deploying the prompt changed
-    // nothing, the eval passed, and the founder saw it on TestFlight regardless. Worse, per the wire
-    // note above it was re-sent as his OWN prior sentence, so the app was teaching the model to ask the
-    // thing the prompt had just banned, on the highest-traffic entry point in the app.
-    // ⚠ WHY NO ASK AT ALL (founder, 2026-08-04, over three drafts that each ended in a yes-ask): by
-    // this turn he has a start AND a far end, and the prompt is explicit that this is ENOUGH — "do not
-    // go hunting for one more thing to ask: not a stop to add, not a shape to choose between, not a
-    // number". There is genuinely nothing left to ask for, so any question here is the APP deciding how
-    // the turn goes. It also sidesteps the stamp: the prompt refuses to demonstrate a yes-ask anywhere
-    // because every demonstration became the stamp, and seeding one into the turn every new rider taps
-    // first would be the strongest possible version of that. The composer ("Go on, I'm listening")
-    // already invites the next line; the model picks the conversation up from here.
-    exampleAToBReply: '{a} out to {b} — I pick the ends, the road picks itself.',
+    // ⚠ THREE SHAPES ADDED 2026-08-04 (founder), and they are SHAPES, not destinations — a chip set of
+    // places would rebuild the picker D7 deleted. Each shows the rider something the screen otherwise
+    // never reveals is possible: that a drive can pass through somewhere, and that they may open with
+    // only ONE end and let him ask for the other.
+    // ⚠ These carry no seeded skipper reply and must never grow one — see the note above the wire
+    // lines. They are rider sentences the tap SENDS; the planner answers them for real.
+    // ⚠ NO LOOP SHAPE among them, deliberately: a loop is an explicit-ask exception
+    // (docs/decisions/no-same-road-loops.md §8), so a chip offering one is the app making an offer in
+    // his voice that he is forbidden to make himself.
+    exampleViaTitle: 'Pass through somewhere',
+    exampleVia: '{a} to {b}, by way of {c}.',
+    exampleFromStartTitle: "Say where I'm starting",
+    exampleFromStart: 'Starting from {a}.',
+    exampleToEndTitle: "Say where I'm going",
+    exampleToEnd: 'Take me to {b}.',
+    // ⚠ THE TWO CHIP REPLIES ARE GONE (2026-08-04) — do not reintroduce one. Tapping a suggestion used
+    // to seed a hand-authored SKIPPER answer alongside the rider's line, free of a model call. That
+    // prose then drifted from the planner prompt and kept asking "About how long do you want to be out?"
+    // for a day after the prompt banned it — invisibly, because there was no model turn to fix and the
+    // eval had nothing to score. A chip now sends only the RIDER's line; the planner answers for real.
+    // ⚠ `adjustSay` and `noStopsSay` below are still SEEDED and still ride the WIRE, so they remain
+    // prompt surface: they are re-sent to the model as its own prior sentences, and a line the prompt
+    // forbids becomes in-context precedent contradicting it. They change under
+    // apps/api/src/planner-prompt.ts's review, not the design system's.
     // ⚠ NOT "Somewhere pretty. You pick." — that read fine as a standalone chip and stopped making
     // sense the moment it sat under the title "Let the skipper pick": the row said the same thing
     // twice, and the second time in the rider's mouth ("you pick") pointing at the skipper while the
@@ -201,10 +199,6 @@ export const voice = {
     // known, `open` when one is not.
     exampleOpenRegion: 'Surprise me: somewhere pretty around {r}.',
     exampleOpen: 'Surprise me: somewhere pretty.',
-    // ⚠ "Happy to pick" committed the character to choosing "somewhere pretty" off a list of BARE
-    // NAMES — the exact name-inference trap the prompt spends a paragraph forbidding ("A Lakeview
-    // Point earns you no lake"). He can point somewhere; he cannot know it is pretty.
-    exampleOpenReply: 'I can point us somewhere. Where are you starting from?',
     // The turn cap (D12). ⚠ The composer is REPLACED by these, never greyed out — a disabled field
     // reads as broken, and the skipper bowing out in character is the whole point of the cap being
     // expressed in persona rather than as an error.

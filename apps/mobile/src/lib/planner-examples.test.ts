@@ -12,51 +12,66 @@ import {
 const T: ExampleAskTemplates = {
   aToBTitle: 'Drive somewhere',
   aToB: '{a} to {b}, the scenic way.',
-  // ⚠ DELIBERATELY NOT PROSE ANYONE COULD SHIP. This fixture used to read "{a} out to {b}. How long do
-  // you want to be out?" — a line the planner prompt forbids, sitting in a file whose whole job is to
-  // be copied from. The real reply is seeded into the transcript and re-read by the model as its own
-  // words, so a plausible-but-banned string here is one careless paste away from production. These
-  // only need placeholders; the prose lives in voice.ts and changes under the prompt's review.
-  aToBReply: '{a} REPLY {b}.',
+  viaTitle: 'Pass through somewhere',
+  via: '{a} to {b}, by way of {c}.',
+  fromStartTitle: "Say where I'm starting",
+  fromStart: 'Starting from {a}.',
+  toEndTitle: "Say where I'm going",
+  toEnd: 'Take me to {b}.',
   openTitle: 'Let the skipper pick',
   open: 'Surprise me — somewhere pretty.',
   openRegion: 'Surprise me — somewhere pretty around {r}.',
-  // Same reasoning: "Happy to pick" is a REJECTED line in voice.ts (it commits him to judging a place
-  // pretty off a bare name), so it does not belong in a fixture either.
-  openReply: 'OPEN REPLY.',
 }
 
+/** Eight names, as EXAMPLE_ANCHORS_PER_REGION sends. */
+const EIGHT = ['Tahoe City', 'Emerald Bay', 'Incline Village', 'Kings Beach', 'Truckee', 'Stateline', 'Carson City', 'Genoa']
+
 describe('shape degradation', () => {
-  test('two or more names → both shapes', () => {
-    const asks = buildExampleAsks(['Tahoe City', 'Emerald Bay', 'Incline Village'], T)
-    expect(asks).toHaveLength(2)
+  test('a full region fills every shape, and NO NAME IS SAID TWICE', () => {
+    const asks = buildExampleAsks(EIGHT, T)
+    expect(asks.map((e) => e.shape)).toEqual(['aToB', 'via', 'fromStart', 'toEnd', 'open'])
     expect(asks[0]?.ask).toBe('Tahoe City to Emerald Bay, the scenic way.')
-    expect(asks[1]?.ask).toBe('Surprise me — somewhere pretty.')
-    // ⚠ A THIRD NAME BUYS NO THIRD CHIP. It used to: the loop row ran out of `clean[2]`, and that row
-    // was removed when a loop became an explicit-ask exception (no-same-road-loops.md §8). A surplus
-    // name is now simply unspent by this call — `rotateNames` upstream is what puts it on screen on a
-    // later launch. Pinned so nobody "fixes" the unused name by inventing a row for it.
-    // ⚠ Titles ride through UNFILLED and stay paired with their own shape. The pairing is worth
-    // pinning: the list is built by separate pushes under different conditions, so a mis-paired title
-    // is a one-character edit away.
-    expect(asks.map((e) => e.title)).toEqual(['Drive somewhere', 'Let the skipper pick'])
+    expect(asks[1]?.ask).toBe('Incline Village to Kings Beach, by way of Truckee.')
+    expect(asks[2]?.ask).toBe('Starting from Stateline.')
+    expect(asks[3]?.ask).toBe('Take me to Carson City.')
+    // ⚠ THE ASSERTION THIS FILE EXISTS FOR, now that five rows share one pool. The complaint that
+    // started this area was ONE town saying itself in every slot; indexing each shape from clean[0]
+    // would rebuild it exactly. The cursor is what prevents it, so the property is pinned directly
+    // rather than inferred from the strings above.
+    const said = asks.flatMap((e) => EIGHT.filter((n) => e.ask.includes(n)))
+    expect(said).toEqual([...new Set(said)])
+    // ⚠ Titles stay paired with their own shape. The list is built by separate pushes under different
+    // conditions, so a mis-paired title is a one-character edit away.
+    expect(asks.map((e) => e.title)).toEqual([
+      'Drive somewhere',
+      'Pass through somewhere',
+      "Say where I'm starting",
+      "Say where I'm going",
+      'Let the skipper pick',
+    ])
   })
 
   // ⚠ THE POINT OF `shape`, pinned: the list degrades, so POSITION does not identify a shape. A screen
   // pairing icons by array index looks right on a two-name region and mis-pairs on a one-name one —
   // i.e. it breaks only where nobody is looking. These two assertions are what make that unnecessary.
   test('shape survives degradation, so position never has to be trusted', () => {
-    expect(buildExampleAsks(['Tahoe City', 'Emerald Bay'], T).map((e) => e.shape)).toEqual([
+    // ⚠ SKIPPED, NOT TERMINAL — a shape it cannot afford is passed over and the CHEAPER ones still
+    // render. Three names cannot buy the three-name pass-through after A→B has taken two, but there is
+    // still one left for a single-ended row. Getting this wrong the other way (stop at the first
+    // unaffordable shape) would silently strip thin regions back to the open ask alone.
+    expect(buildExampleAsks(['Tahoe City', 'Emerald Bay', 'Incline Village'], T).map((e) => e.shape)).toEqual([
       'aToB',
+      'fromStart',
       'open',
     ])
-    expect(buildExampleAsks(['Tahoe City'], T).map((e) => e.shape)).toEqual(['open'])
+    expect(buildExampleAsks(['Tahoe City', 'Emerald Bay'], T).map((e) => e.shape)).toEqual(['aToB', 'open'])
+    expect(buildExampleAsks(['Tahoe City'], T).map((e) => e.shape)).toEqual(['fromStart', 'open'])
     expect(buildExampleAsks([], T).map((e) => e.shape)).toEqual(['open'])
   })
 
-  test('one name → only the open ask, because A→B needs two', () => {
+  test('one name still buys a chip — the single-ended shapes cost one each', () => {
     const asks = buildExampleAsks(['Tahoe City'], T)
-    expect(asks.map((a) => a.ask)).toEqual(['Surprise me — somewhere pretty.'])
+    expect(asks.map((a) => a.ask)).toEqual(['Starting from Tahoe City.', 'Surprise me — somewhere pretty.'])
   })
 
   test('a region name makes the open-ended ask region-specific too', () => {
@@ -82,20 +97,27 @@ describe('the names themselves', () => {
   test('cleanPlaceName runs before interpolation', () => {
     const asks = buildExampleAsks(['Tahoe Keys, California', 'Rubicon, California'], T)
     expect(asks[0]?.ask).toBe('Tahoe Keys to Rubicon, the scenic way.')
-    expect(asks[0]?.reply).toContain('Tahoe Keys REPLY Rubicon.')
   })
 
   test('blank and duplicate names are dropped, so no chip reads back an empty gap', () => {
     // Two names that clean to the SAME place would produce "X to X" — one chip's worth of nonsense.
-    // Three raw entries collapse to ONE real name here, which is below A→B's floor, so the open ask is
-    // all that survives. That is the point: the dedupe happens before the count is taken, never after.
+    // Three raw entries collapse to ONE real name here, which is below A→B's floor, so what survives is
+    // the single-ended row and the open ask. That is the point: the dedupe happens before the count is
+    // taken, never after — counted first, this would read as three names and render "Tahoe City to
+    // Tahoe City".
     const asks = buildExampleAsks(['  ', 'Tahoe City', 'Tahoe City, California'], T)
-    expect(asks.map((a) => a.ask)).toEqual(['Surprise me — somewhere pretty.'])
+    expect(asks.map((a) => a.ask)).toEqual(['Starting from Tahoe City.', 'Surprise me — somewhere pretty.'])
   })
 
-  test('the reply is interpolated too — it ships into the transcript, not just onto a chip', () => {
+  // ⚠ THE OPPOSITE ASSERTION TO THE ONE THAT USED TO BE HERE. This test read "the reply is
+  // interpolated too — it ships into the transcript, not just onto a chip". There is no reply now: a
+  // chip carries the RIDER's line only, because authored skipper prose here drifted from the planner
+  // prompt and kept asking a banned question with no model turn for any check to catch (2026-08-04).
+  // A `reply` reappearing on this type is the regression, so the type itself is what is pinned.
+  test('a chip carries no skipper prose — only the rider line', () => {
     const asks = buildExampleAsks(['Tahoe City', 'Emerald Bay'], T)
-    expect(asks[0]?.reply).toBe('Tahoe City REPLY Emerald Bay.')
+    expect(asks[0]?.ask).toBe('Tahoe City to Emerald Bay, the scenic way.')
+    for (const e of asks) expect(Object.keys(e)).not.toContain('reply')
   })
 })
 
@@ -104,7 +126,6 @@ describe('no placeholder ever reaches a rider', () => {
     for (const names of [[], ['Tahoe City'], ['Tahoe City', 'Emerald Bay']]) {
       for (const e of buildExampleAsks(names, T)) {
         expect(e.ask).not.toMatch(/\{[ab]\}/)
-        expect(e.reply).not.toMatch(/\{[ab]\}/)
       }
     }
   })

@@ -69,7 +69,6 @@ import {
   lastRouteOf,
   resetTranscript,
   seedAdjust,
-  seedExample,
   toWire,
   type Turn,
 } from '@/lib/planner-transcript'
@@ -112,6 +111,9 @@ import {
 // degrades in regions with fewer than two curated names and position stops identifying a shape there.
 const EXAMPLE_ICONS: Record<ExampleAsk['shape'], IconName> = {
   aToB: 'trailSign', // a routed signpost: somewhere to somewhere
+  via: 'map', // a route with a bend in it — somewhere ON the way
+  fromStart: 'locate', // a pin on where they are setting off from
+  toEnd: 'car', // pointed at a destination, no start named yet
   open: 'scenic', // the skipper's own eye picks it
 }
 
@@ -266,14 +268,14 @@ export default function HomeScreen() {
 
   /** How many turns the rider has SENT in the current conversation — `plan_turn_sent`'s `turn_index`,
    *  and nothing else reads it.
-   *  ⚠ A COUNTER, NOT A DERIVATION FROM THE TRANSCRIPT, and that is the whole point. Both obvious
-   *  derivations are wrong in ways that only show up in the funnel, never in a test: counting rider
-   *  turns in `next` OR in `toWire(next)` both include the pair `seedExample` stamps `wire: true`, so
-   *  a rider who taps an example chip — the app's highest-traffic entry — reports their FIRST billed
-   *  turn as 2 while a rider who types cold reports 1. Bucket 1 then silently means "cold typists
-   *  only" and the drop-off curve is unreadable. `toWire` additionally MERGES consecutive same-role
-   *  turns, so a rider line following a failed turn collapses into the previous one and the count
-   *  goes backwards.
+   *  ⚠ A COUNTER, NOT A DERIVATION FROM THE TRANSCRIPT. One of its two reasons retired on 2026-08-04
+   *  and the other did not, which is why this stays a counter. RETIRED: a tapped example chip used to
+   *  seed a rider line AND a skipper reply, so deriving the count made a chip-tapper report their first
+   *  billed turn as 2 while a cold typist reported 1 — bucket 1 silently meant "cold typists only".
+   *  Chips now send exactly one rider turn, like typing, so that skew is gone. STILL TRUE: `toWire`
+   *  MERGES consecutive same-role turns, so a rider line following a failed turn collapses into the
+   *  previous one and the count goes BACKWARDS. A derivation would still be wrong, just less often —
+   *  which is the worse kind of wrong to ship into a funnel nobody re-checks.
    *  ⚠ Incremented at the EMIT, not in `send`, because every guard in `runTurn` returns having posted
    *  nothing. And NOT incremented on a retry: a retry is the same turn of the conversation sent twice
    *  (it re-sends the identical transcript), so it repeats its index and is told apart by `retry`.
@@ -958,11 +960,15 @@ export default function HomeScreen() {
       buildExampleAsks(rotatedNames, {
         aToBTitle: voice.plan.exampleAToBTitle,
         aToB: voice.plan.exampleAToB,
-        aToBReply: voice.plan.exampleAToBReply,
+        viaTitle: voice.plan.exampleViaTitle,
+        via: voice.plan.exampleVia,
+        fromStartTitle: voice.plan.exampleFromStartTitle,
+        fromStart: voice.plan.exampleFromStart,
+        toEndTitle: voice.plan.exampleToEndTitle,
+        toEnd: voice.plan.exampleToEnd,
         openTitle: voice.plan.exampleOpenTitle,
         open: voice.plan.exampleOpen,
         openRegion: voice.plan.exampleOpenRegion,
-        openReply: voice.plan.exampleOpenReply,
       },
       // ⚠ The REGION name, not an anchor — it makes the open-ended row region-specific like the other
       // two while staying the one ask that still has a form when a region has no curated anchors.
@@ -977,19 +983,21 @@ export default function HomeScreen() {
     (i: number) => {
       const ex = exampleAsks[i]
       if (!ex) return
-      setTurns((ts) => seedExample(ts, ex.ask, ex.reply))
-      // ⚠ FOCUS, not just the scroll pin (`focusComposer` does both), and it matters MORE since
-      // 2026-08-04, not less. The A-to-B reply used to end on a direct question, which is what this
-      // comment used to cite: the rider was asked something, so the cursor had to be waiting. That
-      // question is gone — it asked how long they wanted to be out, which the planner prompt forbids —
-      // and the reply now ends on a plain read-back. Nothing prompts the rider to speak, so the blinking
-      // cursor IS the prompt. Removing this focus would leave a seeded exchange sitting there looking
-      // finished. "Change it up" already earns this; so does this.
-      // The keyboard covering the hero is fine: the first rider turn has already collapsed it (see
-      // `collapsed`), which is the same render that puts this pair on screen.
-      focusComposer()
+      // ⚠ IT SENDS, it no longer SEEDS — and the difference is a bug that shipped (founder, 2026-08-04).
+      // This used to append the rider's line AND a hand-authored skipper answer, free of a model call.
+      // That answer drifted from the planner prompt and went on asking how long the rider wanted to be
+      // out for a day after the prompt banned it; nothing caught it because there was no model turn to
+      // catch, and it rode the wire as the model's own prior words. A tap is now exactly a typed
+      // message: `send` guards the empty/in-flight/no-region cases and runs a real turn.
+      send(ex.ask)
+      // ⚠ NO focusComposer HERE ANY MORE, and its absence is deliberate. It earned its place when this
+      // seeded a finished exchange that ended on a question: nothing was happening, so the cursor had
+      // to say "your turn". Now a tap starts a real turn — the thinking indicator appears and the
+      // skipper streams a reply — so raising the keyboard would cover the answer the rider just asked
+      // for, to type into a conversation that is mid-sentence. `send` already scrolls. Do not add it
+      // back without checking what is on screen at the moment it fires.
     },
-    [exampleAsks, focusComposer],
+    [exampleAsks, send],
   )
 
   const riderTurnCount = turns.reduce((n, t) => (t.role === 'rider' ? n + 1 : n), 0)

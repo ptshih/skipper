@@ -92,16 +92,13 @@ export const appendSkipper = (
   opts: { wire: boolean; route?: PlannedRoute | null },
 ): Turn[] => [...turns, { role: 'skipper', text, wire: opts.wire, route: opts.route ?? null }]
 
-/**
- * Seed a tapped example ask + its hand-authored reply (D17): one rider turn and one skipper turn, no
- * network, no model call — the app's highest-traffic turn costs zero dollars.
- *
- * BOTH ride the wire: the model must see the answer it "already gave", or its next turn re-asks a
- * question the rider can plainly read that it already asked. The pair ends on a SKIPPER turn, so it is
- * never sendable alone — it only ever ships as a prefix with the rider's next line appended.
- */
-export const seedExample = (turns: readonly Turn[], ask: string, reply: string): Turn[] =>
-  appendSkipper(appendRider(turns, ask), reply, { wire: true })
+// ⚠ `seedExample` WAS HERE AND IS NOT COMING BACK (2026-08-04). It seeded a tapped chip's ask AND a
+// hand-authored skipper reply, both on the wire, so the app's highest-traffic turn cost zero dollars.
+// The saving was real; the cost was that authored skipper prose sat outside every check that governs
+// what he says. It drifted from the planner prompt — still asking how long the rider wanted to be out
+// a day after that was banned — and no test, eval or deploy could catch it, because there was no model
+// turn involved. A chip now calls `send` like any typed line. If a future chip wants a free reply,
+// read that story first: the dollars were never the expensive part.
 
 /**
  * "Change it up" — the skipper inviting a revision, seeded with no model call and no dollars, the

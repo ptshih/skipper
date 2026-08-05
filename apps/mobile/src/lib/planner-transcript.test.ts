@@ -10,7 +10,6 @@ import {
   lastRouteOf,
   resetTranscript,
   seedAdjust,
-  seedExample,
   toWire,
   type Turn,
 } from './planner-transcript'
@@ -75,8 +74,13 @@ describe('toWire', () => {
     expect(toWire([{ role: 'rider', text: '  ', wire: true }])).toBeNull()
   })
 
-  test('a seeded pair is never sent alone, but ships as a prefix once the rider types', () => {
-    const seeded = seedExample(resetTranscript(OPENING), 'A loop out of Tahoe City.', 'Where to?')
+  // ⚠ BUILT FROM THE PRIMITIVES since `seedExample` was deleted (2026-08-04), and the COVERAGE still
+  // matters: `seedAdjust` and the 0-stop beat both still end a transcript on a client-authored skipper
+  // turn, so "never sent alone, ships as a prefix" is live behaviour with or without example chips.
+  test('a transcript ending on the skipper is never sent alone, but ships as a prefix once the rider types', () => {
+    const seeded = appendSkipper(appendRider(resetTranscript(OPENING), 'A loop out of Tahoe City.'), 'Where to?', {
+      wire: true,
+    })
     expect(toWire(seeded)).toBeNull() // ends on the skipper
     const typed = appendRider(seeded, 'Two hours or so.')
     expect(toWire(typed)).toEqual([
@@ -109,7 +113,9 @@ describe('toWire', () => {
   // vendor's own docs disagree on whether `messages` must alternate. Merging is correct under BOTH
   // readings; leaving it out and being wrong is a silent permanent fake outage (see toWire's comment).
   test('consecutive SKIPPER turns are merged — the seeded reply plus a late 0-stop beat', () => {
-    let turns = seedExample([], 'A loop out of Tahoe City', 'Where do you want to turn around?')
+    let turns = appendSkipper(appendRider([], 'A loop out of Tahoe City'), 'Where do you want to turn around?', {
+      wire: true,
+    })
     turns = appendSkipper(turns, 'That road is a quiet one.', { wire: true })
     turns = appendRider(turns, 'Try Emerald Bay then')
     expect(toWire(turns)).toEqual([
@@ -146,12 +152,6 @@ describe('append helpers', () => {
     expect(appendSkipper([], 'no signal', { wire: false })[0]?.wire).toBe(false)
   })
 
-  test('seedExample seeds BOTH sides onto the wire', () => {
-    const [ask, reply] = seedExample([], 'Somewhere pretty.', 'Happy to pick.')
-    expect(ask).toEqual({ role: 'rider', text: 'Somewhere pretty.', wire: true })
-    expect(reply?.role).toBe('skipper')
-    expect(reply?.wire).toBe(true)
-  })
 })
 
 describe('seedAdjust', () => {

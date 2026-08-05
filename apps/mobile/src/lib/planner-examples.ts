@@ -1,5 +1,15 @@
-// The tappable example asks (D17) — two authored ask/reply PAIRS the rider can seed the
-// conversation with for zero dollars and zero server work.
+// The tappable example asks (D17) — authored RIDER LINES the tap sends on the rider's behalf.
+//
+// ⚠ THERE IS NO AUTHORED SKIPPER REPLY ANY MORE, and adding one back re-opens a bug that reached
+// TestFlight (founder, 2026-08-04). Each chip used to seed BOTH sides — the rider's line and a
+// hand-written skipper answer — for zero dollars. The skipper half then drifted from the planner
+// prompt: it went on asking "About how long do you want to be out?" for a day after the prompt was
+// changed to forbid that ask. Nothing caught it, because there was no model turn to catch — deploying
+// the prompt fixed nothing and the eval passed. Worse, a seeded reply rides the WIRE, so the app was
+// feeding the model a banned sentence as its OWN prior words on the highest-traffic path in the app.
+// A tap now sends the rider's line and the planner answers for real, like any typed message. The chip
+// can no longer put words in the skipper's mouth, which is the only durable fix: prose here cannot
+// drift from a prompt it no longer duplicates.
 //
 // ⚠ THERE WAS A THIRD, AND IT WAS A LOOP. Removed 2026-08-03 when a loop became an EXPLICIT-ASK
 // exception (docs/decisions/no-same-road-loops.md §8) — the skipper may not offer a shape he cannot
@@ -70,10 +80,9 @@ export interface ExampleAsk {
    *  degraded regions nobody is looking at. A discriminator costs one field and cannot drift.
    *  ⚠ Still a UNION with one member removed rather than a boolean: the set has changed size once
    *  already, and a boolean would have to be reworked the next time rather than extended. */
-  shape: 'aToB' | 'open'
+  shape: 'aToB' | 'via' | 'fromStart' | 'toEnd' | 'open'
   title: string
   ask: string
-  reply: string
 }
 
 /** The `{a}`/`{b}` templates, straight from `voice.plan`. */
@@ -82,7 +91,14 @@ export interface ExampleAskTemplates {
   // delivery, not facts. The leftover-brace wall below therefore never has to consider them.
   aToBTitle: string
   aToB: string
-  aToBReply: string
+  /** Pass-through: `{a}` to `{b}` by way of `{c}`. Costs THREE names, the most of any shape. */
+  viaTitle: string
+  via: string
+  /** One end only. Both cost a single name, which is why they survive regions the A→B row cannot. */
+  fromStartTitle: string
+  fromStart: string
+  toEndTitle: string
+  toEnd: string
   openTitle: string
   open: string
   /** The same open-ended ask, but naming the REGION (`{r}`). Used when a region name is known.
@@ -91,16 +107,16 @@ export interface ExampleAskTemplates {
    *  from. Keeping them separate is what lets this row be region-specific like the other two while
    *  still having a form that survives a region with zero curated anchors. */
   openRegion: string
-  openReply: string
 }
 
 // A placeholder with no name behind it is LEFT IN PLACE rather than filled with '' — an empty
 // substitution would read as "Tahoe City to ." and slip past the leftover-brace guard below, which is
 // the whole reason that guard exists.
-const fill = (template: string, a: string | undefined, b: string | undefined): string => {
+const fill = (template: string, a?: string, b?: string, c?: string): string => {
   let s = template
   if (a !== undefined) s = s.replaceAll('{a}', a)
   if (b !== undefined) s = s.replaceAll('{b}', b)
+  if (c !== undefined) s = s.replaceAll('{c}', c)
   return s
 }
 
@@ -110,9 +126,11 @@ const fill = (template: string, a: string | undefined, b: string | undefined): s
  * Shapes, not destinations — destinations would rebuild the picker D7 deleted. Each chip demonstrates a
  * different way to ASK: a one-way A→B, and a fully open-ended line that names no place at all.
  *
- * Degrades by how many names the region has: ≥2 → both; fewer (or a region that never loaded) → only
- * the open one, which needs no facts. It never returns a chip whose text would show a rider an empty
- * gap where a place name belongs.
+ * Degrades by how many names the region has, and by SHAPE rather than by count: each row is skipped
+ * when too few names are left to fill it, so a thin region loses the three-name pass-through and keeps
+ * the one-name rows. The open-ended row needs no names at all and therefore always survives — including
+ * a region that never loaded. It never returns a chip whose text would show a rider an empty gap where
+ * a place name belongs.
  */
 export function buildExampleAsks(
   names: readonly string[],
@@ -128,35 +146,42 @@ export function buildExampleAsks(
     if (n.length > 0 && !clean.includes(n)) clean.push(n)
   }
 
-  const a = clean[0]
-  const b = clean[1]
-  // ⚠ THE ROTATION STILL EARNS ITS KEEP WITH TWO ROWS. The complaint this whole area came from was one
-  // town shouting — `Carson City` at slot 0 said itself in the A→B ask, its seeded reply, the loop ask,
-  // ITS reply and the composer placeholder. Losing the loop row removed two of those five; the other
-  // three still come off `a`, so `rotateNames` upstream is what keeps a launch from being one name over
-  // and over. Do not read the smaller chip set as having solved it.
+  // ⚠ NAMES ARE SPENT FROM A CURSOR, NEVER INDEXED PER SHAPE, and that is what stops two rows saying
+  // the same town. Five shapes want seven names between them; the server sends
+  // EXAMPLE_ANCHORS_PER_REGION (8), so a full region fills every row with a DIFFERENT name. Indexing
+  // each shape independently would have put `clean[0]` in three rows at once, which is the "one town
+  // shouting" complaint this whole area exists to fix, rebuilt with more chips.
+  let cursor = 0
+  const take = (n: number): string[] | null => {
+    if (clean.length - cursor < n) return null
+    const out = clean.slice(cursor, cursor + n)
+    cursor += n
+    return out
+  }
+
   const out: ExampleAsk[] = []
-  if (clean.length >= 2)
-    out.push({
-      shape: 'aToB',
-      title: t.aToBTitle,
-      ask: fill(t.aToB, a, b),
-      reply: fill(t.aToBReply, a, b),
-    })
-  // Region-named when we have a region, bare when we do not. ⚠ The bare form is not a fallback for
-  // tidiness — it is the one ask that survives a region that has not LOADED (a cold start before
-  // `/regions` lands), so it can never be allowed to depend on a name of any kind.
-  // ⚠ NOT the same case as a region we know is UNCURATED. This function still returns the open ask
-  // for zero names, because from here "no names" and "no region yet" are indistinguishable — the
-  // SCREEN knows the difference and suppresses the whole row (`uncuratedRegion` in app/index.tsx).
-  // That split was a real bug: this row read "somewhere pretty around Yosemite National Park"
-  // directly beneath the skipper saying he runs no roads there (founder, 2026-08-03).
+  // ⚠ ORDER IS DISPLAY ORDER **AND** PRIORITY, because the cursor is greedy: whatever comes first gets
+  // the names. A→B leads because it is the shape the product is actually for. ⚠ A shape that cannot be
+  // afforded is SKIPPED, not terminal — the one-name rows still render in a region too thin for the
+  // three-name one, which is the degradation that matters (a 4-name region gets A→B plus both ends
+  // rather than A→B alone).
+  const ab = take(2)
+  if (ab) out.push({ shape: 'aToB', title: t.aToBTitle, ask: fill(t.aToB, ab[0], ab[1]) })
+
+  const abc = take(3)
+  if (abc) out.push({ shape: 'via', title: t.viaTitle, ask: fill(t.via, abc[0], abc[1], abc[2]) })
+
+  const from = take(1)
+  if (from) out.push({ shape: 'fromStart', title: t.fromStartTitle, ask: fill(t.fromStart, from[0]) })
+
+  const to = take(1)
+  if (to) out.push({ shape: 'toEnd', title: t.toEndTitle, ask: fill(t.toEnd, undefined, to[0]) })
+
   const regionLabel = regionName?.trim()
   out.push({
     shape: 'open',
     title: t.openTitle,
     ask: regionLabel ? t.openRegion.replaceAll('{r}', regionLabel) : t.open,
-    reply: fill(t.openReply, a, b),
   })
 
   // A structural wall, not a belt: voice.ts changes under a different review than this file, so a
@@ -166,5 +191,5 @@ export function buildExampleAsks(
   // announce itself either. A guard that only knows the tokens it was written against is a guard that
   // silently stops covering the newest one.
   const UNFILLED = /\{[^}]*\}/
-  return out.filter((e) => !UNFILLED.test(e.ask) && !UNFILLED.test(e.reply))
+  return out.filter((e) => !UNFILLED.test(e.ask))
 }
