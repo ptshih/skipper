@@ -407,7 +407,14 @@ export const voice = {
     // learned something true about the app in the one moment they are most forgiving of it; the same
     // fact discovered later, mid-plan, reads as a dead end. The postcard right before this is what
     // buys the goodwill to be straight here.
-    setupBody: 'Pick the roads you want stories on. More are coming — this is where I know every turn.',
+    // ⚠ COUNT-AGNOSTIC, and this shipped WRONG for a day — it read "this is where I know every turn",
+    // which quietly assumes exactly one region (founder, 2026-08-04: "i will be adding more regions
+    // without releasing new versions of the app, so the app has to anticipate multiple regions"). That
+    // is the block header's rule two lines up, broken by the first string written under it. Regions
+    // arrive by a `released_at` flip with no build, so singular copy would go stale on installed apps
+    // that can do nothing about it — the same failure class as §18's chip. "these" reads correctly at
+    // one region and at six.
+    setupBody: 'Pick the roads you want stories on. I know every turn on these — and more are coming.',
     setupCta: 'Start exploring',
     // The chip is the control, so the label beside it names the field rather than repeating the ask.
     setupLabel: 'REGION',

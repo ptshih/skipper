@@ -194,6 +194,30 @@ rider unwilling to stand still for a minute of audio would have no way out of on
 same reason neither exit may be a `router.back()` — back lands on a home that immediately redirects
 here, which is a loop.
 
+**3. "Show the region screen only once there are two regions" was proposed and REFUSED (founder,
+2026-08-04).** Post-build, I argued the region step was ceremonial while one region ships — it asks a
+question with one possible answer, `pickRegionId` was already landing everyone there silently, and home's
+chip shows and changes it anyway — and proposed rendering it only when `/regions` returns more than one,
+on the grounds that it would self-activate on a `released_at` flip with no submission.
+
+The founder refused: *"i will be adding more regions without releasing new versions of the app, so the
+app has to anticipate multiple regions."* Right, and the proposal was worse than that objection states.
+`onboarded` is per-INSTALL and set once, so a rider who installs under one region has their flag written
+without ever seeing the question — and the conditional screen would then never appear for them, not when
+region 2 ships, not ever. It would activate only for installs created AFTER the second region, leaving
+the entire existing base pinned to whichever region sorted first, with no build able to reach them. That
+is §18's kill switch again in a different costume: behaviour that varies by region count, landing on
+installed apps.
+
+**So the region step is unconditional, permanently.** ⚠ And the copy has to be count-agnostic with it —
+`voice.region.setupBody` shipped reading "*this* is where I know every turn", which assumes exactly one
+region and would have gone stale on installed apps the day Yosemite released. Fixed to "these". The
+block's own header already carried that rule ("it has to stay true the day there are six") and the first
+string written under it broke it anyway, which is worth more than the fix.
+
+⚠ The residual gap is now filed as TODO **#73**: riders who onboarded before region 2 are never re-asked
+and can only discover it via home's chip. **Do not solve that by re-running onboarding.**
+
 **Also worth recording: the sample no longer autoplays** (§1 called this, and it survived the build).
 The 450 ms anti-jump-scare beat was defensible behind a deliberate tap on home's listen row; as the
 first screen of a fresh install it is not, because this surface takes exclusive `doNotMix` focus and
