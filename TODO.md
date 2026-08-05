@@ -875,3 +875,19 @@ Owed, in dependency order — **nothing below is started**:
       [corpus-as-the-planners-world](docs/designs/corpus-as-the-planners-world.md) and
       [what-is-a-drive-endpoint](docs/designs/what-is-a-drive-endpoint.md). Wikidata knows what is NOTABLE,
       Google knows where people GO, and neither set contains the other. Resolve the class, not these two.
+
+- [ ] **Should a drive be fully downloaded BEFORE it can start, the way Shaka Guide does?** (founder,
+      2026-08-04.) Shaka gates the whole tour behind a download; we stream and fill the offline store from
+      the `DriveManifest` opportunistically. Their rule trades a wait at the trailhead for never dropping a
+      word in a canyon — and canyons are exactly where our stops are, so the failure it prevents is the one
+      we would actually hit. **Answer the question, don't just copy the rule**: what does a Tahoe drive's
+      audio weigh, how long does that take on a phone at the last bar of LTE before US-50, and does the
+      current opportunistic fill already win that race in practice? Nobody has measured it.
+      ⚠ Cheap to get wrong in BOTH directions. A blocking download in front of "Let's roll" is a wall in
+      front of the one moment the whole app exists for; but a stop that arrives silent because the bytes
+      were still in flight is the failure a rider remembers. A middle reading — block only until the FIRST
+      few stops are resident, keep filling behind them — probably beats either extreme and is closer to
+      what the store already does.
+      ⚠ Re-read `docs/designs/offline-region-packs.md` first: only a drive's OWN manifest is authoritative
+      for that drive, which is why there is no region pack. Whatever lands here must not quietly reintroduce
+      one. The store itself is `apps/mobile/src/lib/clip-store.ts` (keyed by narration SUBJECT id).
