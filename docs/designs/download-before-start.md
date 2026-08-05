@@ -402,7 +402,14 @@ streams" — see the boundary below, which is what keeps this from breaking the 
 
 ### ⚠ The boundary: the anonymous front door structurally CANNOT be offline
 
-`GET /sample` and the one route-preview clip play **before a drive exists** — before the wall, before
+> ⚠ **ERRATUM 2026-08-05, later the same day:** this section names TWO members of that front door.
+> `GET /sample` has since been **deleted** (founder call, with the onboarding gate — route, limiter,
+> client function and screen all gone). The argument is unchanged and the boundary still holds, but it
+> now has exactly ONE member: the anonymous route-preview clip. ⚠ A single-member exemption reads much
+> more like an oversight than a category did — which is precisely when someone "tidies" it away. It is
+> not an oversight; `useRoutePreview` keeping the 12 s `PRE_START_STALL_MS` depends on it.
+
+the one route-preview clip play **before a drive exists** — before the wall, before
 a credit, with nothing on disk to play from. They are the taste that sells the thing. They keep
 streaming, and that is not a compromise in the rule; it is the rule's edge. ⚠ Deleting the re-sign
 route (below) does not touch them: they are served with the same presign and the same TTL as an owner

@@ -1002,9 +1002,13 @@ function manifestClips(selection: DriveSelection, corpusById: Map<string, Narrat
  *  download-before-start.md §10), so this URL is the only one this rider will get.
  *
  *  ⚠ AND THIS CLIP STREAMS, DELIBERATELY. "A drive's audio is only ever played from disk" (§10) stops
- *  at the front door: this preview clip and `GET /sample` play BEFORE a drive exists — before the wall,
- *  before a credit, with nothing on disk to play from. They are the taste that sells the thing, and
- *  they keep streaming. A sweep reading "force offline for everything" must not take them with it.
+ *  at the front door: this preview clip plays BEFORE a drive exists — before the wall, before a credit,
+ *  with nothing on disk to play from. It is the taste that sells the thing, and it keeps streaming. A
+ *  sweep reading "force offline for everything" must not take it with it.
+ *
+ *  ⚠ AND IT IS NOW THE ONLY ONE. `GET /sample` was the other member of that boundary until it was
+ *  deleted with the onboarding gate (founder, 2026-08-05). So the exemption no longer reads as a
+ *  category — it is this one clip, which makes it easier to mistake for an oversight. It is not.
  *
  *  ⚠ NULL, NEVER A THROW. An empty selection (a real 200 with estStopCount 0) and a presign failure both
  *  degrade to "no taste" — the route, distance and stop count are all still true and the wall is
