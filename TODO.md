@@ -780,13 +780,23 @@ carries usable leftover, ~90 s added to 39 minutes, coverage 23% → 26%. It is 
 
 Owed, in dependency order — **nothing below is started**:
 
-- [ ] **The prompt tweak, and it blocks any corpus run.** The Riverside cut opened *"Since you're curious
-      about the man who drew all this"* — an acknowledgment open the B-SIDE block explicitly asks it to
-      avoid. Harmless once, grating at 200 clips: this is the repo's structural-monotony trap, and the same
-      failure as the `"here's the …"` family — a construction the prompt half-banned and the model then
-      found another door into. **Either tighten "do not open by acknowledging the request" or delete it and
-      let §2's "since you asked" charm freebie be deliberate — but pick one.** Cheap, and it must land
-      BEFORE spend, not after 200 clips carry it.
+- [ ] **⚠ RE-AIMED 2026-08-04 (prompt sweep): THIS DOES NOT BLOCK A CORPUS RUN, AND THE PROMPT NEEDS NO
+      TWEAK — the item was built on a misquote of its own prompt.** It claimed the B-SIDE block "explicitly
+      asks it to avoid" an acknowledgment open, and asked whether to tighten *"do not open by acknowledging
+      the request"* or delete it. The block does not say that. It says: *"Do not open by acknowledging the
+      request **with a stock line**… **One warm beat that lands as "since you asked" is plenty**, and it
+      should sound like YOU, not like a menu."* So the observed Riverside line — *"Since you're curious
+      about the man who drew all this"* — is precisely what the prompt PERMITS, and the §2 charm freebie is
+      already deliberate. There is no contradiction to resolve and nothing to pick between.
+      **The real concern survives and is STRUCTURAL: at 200 clips a permitted beat becomes the stamp**, each
+      instance individually fine. ⛔ Do NOT fix that by editing this clause — the repo already measured the
+      answer on the same failure in a lower-input form: *"Assigned, not BANNED… structure beats prohibition"*
+      ([scenic-stops-spec §11.8](docs/designs/scenic-stops-spec.md)). Scenic fixed opener/closer monotony by
+      ASSIGNING shapes round-robin on the queue index with a co-prime offset, and the machinery is exported
+      and reusable as-is: `openingAngleFor` / `closingAngleFor` in `pipeline/narrate.ts`, applied the way
+      `generate-scenic-narrations.ts` applies them. So this becomes a b-side GENERATOR task (assign the
+      opening shape at build time), it is free, the feature is unbuilt so nothing needs regenerating, and it
+      no longer gates the prompt.
 - [ ] **Widen the source to sheet AND extract (§2 correction).** §2 says curated sheet *or* the extract
       fallback; it should be both — **~277 median chars in `facts.extract` beyond the sheet on 373 of 421
       pois** — and a b-side has no two-minute budget forcing it to choose. Free, and it raises the eligible

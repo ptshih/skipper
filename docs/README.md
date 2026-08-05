@@ -138,6 +138,18 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   clears every hard requirement and is still declined for `planner.ts` — no capability gain, a multi-step
   agent loop beside an INV-11 one-call-per-request path, and `display:'omitted'` unverified. ⚠ If either
   is ever revisited, `packages/studio` is the first target and the planner is the last.
+- [prompt-sweep-2026-08-04.md](decisions/prompt-sweep-2026-08-04.md) — **all 14 prompts in the repo
+  assessed one at a time**, against current Anthropic guidance and against the live corpus: 5 changed, 9
+  left alone, ~$1.20. Read it before "improving" any prompt — the LEFT-ALONE entries are the point as much
+  as the changes, and five plausible-sounding problems are recorded as dissolved (a misread remediation, a
+  bias defused by tool PROPERTY ORDER, long-context guidance that does not apply below ~20k tokens, a
+  consistency problem already solved by union-voting, and a backlog item built on a misquote). ⚠ The
+  cautionary entry is the planner: 3–5 diverse examples is documented best practice, and adding three broke
+  a gate and doubled the persona flags, because **a worked exchange teaches every beat it contains, not the
+  one you added it for.** ⚠ Durable patterns: a REQUIRED output field manufactures content on a clean run;
+  structure beats prohibition in low-input forms; probe before you edit (two 1¢ probes settled what would
+  otherwise have been argued). ⚠ Its open follow-up is an EAR CHECK on the landscape TTS read, whose blast
+  radius went from ~61 clips to ~370 the same day.
 - [planner-stops-asking-how-long.md](decisions/planner-stops-asking-how-long.md) — the duration ask is
   GONE (founder, 2026-08-04), prompt-only. It was never actionable: D9 gives the model no coordinates and
   the prompt forbids it any distance "not even as a guess", so a duration cannot tell it which place is
