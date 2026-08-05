@@ -16,7 +16,6 @@ import { space, radius } from '@/theme/tokens'
 import { useTheme, type Theme } from '@/theme'
 import {
   AttributionButton,
-  Badge,
   Button,
   Divider,
   RegionChip,
@@ -390,19 +389,18 @@ export default function SampleScreen() {
       />
 
       <View style={[styles.card, compact && styles.cardCompact]}>
-        <View style={styles.titleRow}>
-          <Text variant="display" color="ink" align="center" numberOfLines={2}>
-            {sample ? cleanPlaceName(sample.name) : ''}
-          </Text>
-          {/* ⚠ A ROW WITH `justifyContent`, not the parent's `alignItems: 'center'`. `Badge` sets
-              `alignSelf: 'flex-start'` on its own pill — correct there, since it stops the pill
-              stretching full-width in the COLUMN containers it usually lands in — and a child's
-              `alignSelf` always beats its parent's `alignItems`, so only the main axis can centre it.
-              Do not "fix" this by editing Badge: every other caller depends on that flex-start. */}
-          <View style={styles.badgeRow}>
-            <Badge tone="teal" label={voice.sample.badge} />
-          </View>
-        </View>
+        {/* ⚠ NO "A TASTE" BADGE HERE ANY MORE (founder, 2026-08-04). Its stated job was to be honest
+            that "this is a sample, not a live drive" — which was true copy on the OLD `/sample`,
+            reached from a row on home by a rider who already knew what a drive was. On the first
+            screen of a fresh install it disambiguates against a concept the rider has never met, and
+            three other things on the same screen already say the clip is not the product: the tagline
+            ("you pick the road"), the section heading ("where are we driving?") and the CTA ("start
+            exploring"). A fourth signal cost ~28pt on the screen where vertical space is the whole
+            fight. It also took the app's only teal Badge with it — a real palette loss, and the
+            cheapest thing here to put back if the screen reads flat without it. */}
+        <Text variant="display" color="ink" align="center" numberOfLines={2}>
+          {sample ? cleanPlaceName(sample.name) : ''}
+        </Text>
 
         <Scrubber
           positionMs={(status.currentTime ?? 0) * 1000}
@@ -558,11 +556,9 @@ const styles = StyleSheet.create({
   // Matches the ⓘ's own 48pt tap floor, and is mirrored empty on the right — see the call site.
   transportSlot: { width: 48 },
   transportFill: { flex: 1 },
-  titleRow: { gap: space.sm, alignItems: 'center' },
-  // ⚠ ONE STYLE, THREE CALL SITES — the badge, the region chip, and anything else whose own component
-  // pins `alignSelf: 'flex-start'`. A row is the only container that can centre such a child, because
-  // `justifyContent` runs along the MAIN axis and `alignSelf` only ever overrides the cross one.
-  badgeRow: { flexDirection: 'row', justifyContent: 'center' },
+  // ⚠ A row is the only container that can centre a child whose own component pins
+  // `alignSelf: 'flex-start'` (RegionChip does), because `justifyContent` runs along the MAIN axis and
+  // `alignSelf` only ever overrides the cross one. The badge needed this too until it was cut.
   centerRow: { flexDirection: 'row', justifyContent: 'center' },
   field: { gap: space.sm, alignItems: 'center' },
   // The postcard matte: a raised card holding the image, with the caption printed on its lower margin.

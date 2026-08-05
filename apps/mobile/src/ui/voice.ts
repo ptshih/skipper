@@ -349,7 +349,11 @@ export const voice = {
   // name is a FACT, served by the API, never baked here). Warm, corny, glanceable.
   sample: {
     kicker: 'POSTCARD FROM LAKE TAHOE',
-    badge: 'A TASTE', // teal — honest "this is a sample, not a live drive"
+    // ⚠ `badge` ('A TASTE') WAS DELETED HERE (2026-08-04). Its job — be honest that "this is a sample,
+    // not a live drive" — was true copy on the old `/sample`, which a rider reached from home already
+    // knowing what a drive was. As the first screen of a fresh install it disambiguated against a
+    // concept the rider has never met, while the tagline, the section heading and the CTA all already
+    // say the clip is not the product. See app/sample.tsx for the ~28pt it cost.
     loading: 'Cueing up something good from the lake…',
     // ⚠ `skip` AND ALL FOUR `end*` STRINGS WERE DELETED HERE (2026-08-04) when the postcard, the end
     // card and the region screen merged into ONE surface. `endBody`/`endCta`/`endSecondary` dressed a
