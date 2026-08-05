@@ -328,7 +328,22 @@ export default function SampleScreen() {
         <Text variant="wordmark" color="ink" align="center">
           SKIPPER
         </Text>
-        <Text variant="dim" color="inkFaint" align="center">
+        {/* ⚠ `inkDim`, NOT `inkFaint` (founder, 2026-08-05). This is the ONLY sentence on the app's
+            first screen that attempts to say what Skipper is, and it was set in the role
+            `src/theme/theme.ts` documents as "tertiary hints" — the faintest the system has, and the
+            one settings footnotes use. The most explanatory line on the screen was styled as the least
+            important text on it.
+            ⚠ `inkDim` is NOT a hand-picked step up: it is what home's own one-line subhead under its
+            headline already uses (`voice.plan.openingHint`, app/index.tsx). Two lines doing the same
+            job on consecutive screens now read at the same weight.
+            ⚠ THE SIZE STAYS `dim` (13.5pt) ON PURPOSE. The tagline that named the category wrapped to
+            two lines at 375pt, which is part of why the descriptor was cut — and restoring it is still
+            open (docs/designs/onboarding-first-screen-legibility.md §2). Growing the type now would
+            spend the line budget that change needs.
+            ⚠ AND THE DESCRIPTOR IS STILL MISSING. This makes the line legible; it does not make it say
+            "narrated road trips". §2 of that doc is the open half of this fix — do not read a promoted
+            colour role as having closed it. */}
+        <Text variant="dim" color="inkDim" align="center">
           {voice.tagline}
         </Text>
       </View>

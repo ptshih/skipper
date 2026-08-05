@@ -454,7 +454,19 @@ export const voice = {
     // saying "*this* is where I know every turn" (singular — stale the day a second region releases,
     // on installed apps that could do nothing about it), then got shortened when the two onboarding
     // screens merged and it became a caption rather than a body.
-    setupCta: 'Start exploring',
+    // ⚠ WAS 'Start exploring' UNTIL 2026-08-05 (founder: the onboarding screen "is pretty but still a
+    // bit confusing as the first screen a brand new user sees"). "Explore" sets a BROWSE expectation —
+    // a map, a catalogue, a list to poke at — and the screen behind this button is a CONVERSATION that
+    // immediately asks "Where are we headed?". So the app's first label described something the app
+    // does not do, at the rider's very first act.
+    // ⚠ PLAIN, NOT IN PERSONA, for exactly the reason `unset` above is: this is the ONLY exit from
+    // onboarding (home REDIRECTS to /sample, so `canGoBack` is false and there is no back chevron), so
+    // every rider reads it and every rider presses it. It has to read as an instruction, not flavour.
+    // ⚠ NOT "Let's plan a drive", though it was on the table: "Let's roll" is TransportBar's drive-START
+    // label, and echoing it here would promise a drive that a one-minute postcard does not begin — the
+    // same defect `sample.playA11y` above exists to fix.
+    // docs/designs/onboarding-first-screen-legibility.md §3.
+    setupCta: 'Plan a drive',
   },
   greeting: 'Hop in. I’ll do the talking.',
   // The line under the wordmark on the onboarding screen — the one sentence a stranger reads before
