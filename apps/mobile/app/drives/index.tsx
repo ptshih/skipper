@@ -26,6 +26,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Stack, useFocusEffect, useRouter } from 'expo-router'
 import { errorMessage, listDrives, type DriveSummary } from '@/lib/api'
+import {
+  filterDrivesByRegion,
+  initialRegionFilter,
+  regionFacets,
+  shouldOfferRegionFilter,
+} from '@/lib/drive-filter'
+import { readCachedRegion } from '@/lib/region-cache'
 import { useLatestRun } from '@/lib/useLatestRun'
 import { useNavigateOnce } from '@/lib/useNavigateOnce'
 import { isSignedIn, useSession } from '@/lib/auth'
@@ -36,6 +43,7 @@ import {
   CreditHint,
   DriveCard,
   DriveCardSkeleton,
+  FilterChip,
   hasCreditHint,
   Screen,
   ScreenList,
@@ -79,6 +87,13 @@ export default function MyDrivesScreen() {
   const [credits, setCredits] = useState<{ remaining: number; cap: number } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Which region the list is scoped to; null = ALL. Server-derived per drive and never stored
+  // (`DriveSummary.region`), so this is pure presentation — no request carries it.
+  const [regionFilter, setRegionFilter] = useState<string | null>(null)
+  // ⚠ Has the RIDER chosen, as opposed to the screen defaulting for them? Without this, the focus
+  // refetch below would silently undo their choice every time they came back from a drive — this
+  // screen reloads on FOCUS, not mount, so that is the common path, not an edge case.
+  const filterTouched = useRef(false)
   // True when the /drives fetch failed but saved downloads carried us (dead-zone fallback).
   const [offline, setOffline] = useState(false)
 
@@ -108,6 +123,23 @@ export default function MyDrivesScreen() {
     [onPressDrive],
   )
 
+  // Keep the filter honest against whatever rows just arrived. Both branches exist for ONE reason —
+  // this screen must never show an empty list to a rider who owns drives:
+  //   · untouched → default from their cached region chip, but ONLY if they have drives there
+  //     (`initialRegionFilter`); a chip pointing somewhere they have never driven falls back to All.
+  //   · touched → keep their choice, unless that region stopped appearing (they just deleted the last
+  //     drive in it on the detail screen and came back), in which case fall back to All.
+  // Together these make "filtered to empty" unreachable: every non-null value is a facet id, and a
+  // facet exists only because at least one drive produced it.
+  const reconcileRegionFilter = useCallback((rows: readonly DriveSummary[]) => {
+    const facets = regionFacets(rows)
+    if (!filterTouched.current) {
+      setRegionFilter(initialRegionFilter(facets, readCachedRegion()?.regionId ?? null))
+      return
+    }
+    setRegionFilter((cur) => (cur && facets.some((f) => f.id === cur) ? cur : null))
+  }, [])
+
   const reload = useCallback(async () => {
     const isCurrent = beginReload()
     setError(null)
@@ -130,6 +162,7 @@ export default function MyDrivesScreen() {
       const r = await listDrives()
       if (!isCurrent()) return
       setDrives(r.drives)
+      reconcileRegionFilter(r.drives)
       setCredits(r.credits ?? null) // null only against a server predating the field → hint hidden
       setOffline(false)
     } catch (e) {
@@ -140,6 +173,10 @@ export default function MyDrivesScreen() {
       const saved = listDownloadedDrives()
       if (saved.length > 0) {
         setDrives(saved)
+        // ⚠ The dead-zone list gets the same reconciliation, and it matters MORE here: a summary
+        // saved before `region` existed carries none, so these often produce no facets at all —
+        // which must land on ALL (everything visible), never on a stale region that hides the lot.
+        reconcileRegionFilter(saved)
         setOffline(true)
       } else {
         // `errorMessage` maps an OfflineError to "No signal out here", so a dead-zone failure with
@@ -149,7 +186,7 @@ export default function MyDrivesScreen() {
     } finally {
       if (isCurrent()) setLoading(false)
     }
-  }, [beginReload, signedIn])
+  }, [beginReload, signedIn, reconcileRegionFilter])
 
   // FOCUS, not mount, and both halves matter: a drive deleted on the detail screen must fall out of
   // this list on the way back, and a return from sign-up must repopulate it.
@@ -257,11 +294,46 @@ export default function MyDrivesScreen() {
   // header off the first card, so a zero-height header would still hang an unexplained band of air at
   // the top of the list. ⚠ `hasCreditHint` rather than a re-derived `remaining <= 5`: it is the same
   // expression `<CreditHint>` acts on, so this test cannot fall out of step with what renders.
+  // The region scope control. ⚠ IT APPEARS ONLY WHEN IT CAN DO SOMETHING — two or more regions among
+  // these drives (`shouldOfferRegionFilter`). That is what keeps it invisible at a single region
+  // rather than parking a permanently useless control at the top of the list, and it means this rung
+  // needed no "wait for the second region" flag: the condition IS the gate.
+  //
+  // ⚠ EVERY region present gets a chip, plus ALL. So nothing is ever hidden without a visible way
+  // back to it — the §4.2 requirement that a 1:1 filter must never be the only view. A drive with no
+  // region (outside every released bbox, or an offline summary predating the field) has no chip of
+  // its own by design and lives under ALL.
+  const facets = regionFacets(drives)
+  const visible = filterDrivesByRegion(drives, regionFilter)
+  const chooseRegion = (id: string | null) => {
+    filterTouched.current = true
+    setRegionFilter(id)
+  }
+  const filterRow = shouldOfferRegionFilter(facets) ? (
+    <View style={styles.filterRow}>
+      <FilterChip
+        label={voice.filter.allRegions}
+        accessibilityLabel={voice.filter.allRegionsA11y}
+        active={regionFilter === null}
+        onPress={() => chooseRegion(null)}
+      />
+      {facets.map((f) => (
+        <FilterChip
+          key={f.id}
+          label={f.displayName}
+          active={regionFilter === f.id}
+          onPress={() => chooseRegion(f.id)}
+        />
+      ))}
+    </View>
+  ) : null
+
   const header =
-    hasCreditHint(credits) || offlineNote ? (
+    hasCreditHint(credits) || offlineNote || filterRow ? (
       <View style={styles.header}>
         <CreditHint credits={credits} />
         {offlineNote}
+        {filterRow}
       </View>
     ) : null
 
@@ -269,7 +341,7 @@ export default function MyDrivesScreen() {
     <>
       <Stack.Screen options={SCREEN_OPTIONS} />
       <ScreenList
-        data={drives}
+        data={visible}
         keyExtractor={keyOfDrive}
         renderItem={renderDriveCard}
         ListHeaderComponent={header}
@@ -299,6 +371,10 @@ function DrivesSkeleton() {
 
 const styles = StyleSheet.create({
   body: { gap: space.md },
+  // ⚠ WRAPS, and it is not decorative: one chip per region present, and each carries a real region's
+  // display name at the AX Dynamic Type sizes this uncapped screen supports. A single row would push
+  // the later regions off the edge exactly for the riders reading largest.
+  filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   header: { gap: space.md },
   list: { gap: space.md },
 })

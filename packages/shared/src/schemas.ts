@@ -526,6 +526,23 @@ export const driveManifest = z.object({
 export type DriveManifest = z.infer<typeof driveManifest>
 
 /** GET /drives — one card per saved drive (the caller's own; no geometry). */
+/** The region a saved drive belongs to, for grouping/filtering MY DRIVES.
+ *
+ *  ⚠ DERIVED SERVER-SIDE PER REQUEST, never a stored column — `drives` has no `region_id` and must not
+ *  grow one (`docs/decisions/geometry-first-regions.md`). The server resolves it by testing the drive's
+ *  frozen START point against each released region's bbox; see `apps/api/src/region-geo.ts`.
+ *
+ *  ⚠ Carries `displayName` rather than leaving the client to look one up from its cached region list.
+ *  That list is a CACHE and can be stale or absent (a cold install, a dead zone), and a drive rendering
+ *  as "Lake Tahoe" on one launch and as a bare id on the next is worse than either. One answer, from
+ *  the side that already knows it. */
+export const driveRegion = z.object({
+  id: z.uuid(),
+  slug: z.string(),
+  displayName: z.string(),
+})
+export type DriveRegion = z.infer<typeof driveRegion>
+
 export const driveSummary = z.object({
   driveId: z.uuid(),
   label: z.string(),
@@ -535,6 +552,10 @@ export const driveSummary = z.object({
   durationSeconds: z.number().int().nullish(),
   clipCount: z.number().int(),
   createdAt: z.iso.datetime(),
+  /** ⚠ NULL IS A REAL ANSWER, not just an older server: a drive whose start sits outside every
+   *  RELEASED region's bbox genuinely has no region. Both cases must render the drive — never hide a
+   *  row because it failed to label, or a bbox edit silently eats part of a rider's library. */
+  region: driveRegion.nullish(),
 })
 export type DriveSummary = z.infer<typeof driveSummary>
 /** Free-tier credit balance from the user-owned ledger — for a proactive "N free drives left" hint. */

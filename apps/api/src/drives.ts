@@ -63,6 +63,7 @@ import { creditSummaryEnsuringGrant, driveConsumeEntry } from './credits'
 import { SUPPORT_EMAIL } from './email'
 import { DRIVE_CREATE_RATE, MAX_DRIVE_BODY_BYTES, MAX_PLAN_ANCHORS, readBoundedText } from './limits'
 import { rateLimit } from './rate-limit'
+import { loadRegionBoxes, regionForPoint } from './region-geo'
 import { withRetry } from './retry'
 import { audioUnavailable, presignedClipFields } from './storage'
 
@@ -1373,7 +1374,11 @@ driveRoutes.get('/', requireAccount, withFreshSession, async (c) => {
   // unconditionally. A brand-new user still reads their full balance before their first drive — that
   // is exactly the branch that still writes. Any write it does make is an idempotent upsert, so it
   // remains harmless if the list half rejects first.
-  const [rows, { remaining, granted }] = await Promise.all([
+  // ⚠ THE REGION BOXES JOIN THIS `Promise.all`, they do not follow it. This route is hit on every app
+  // focus and the two reads above are already parallel to save a whole round-trip of rider-visible
+  // latency; awaiting the region list afterwards would hand that saving straight back. It is also
+  // memoized (./region-geo), so on the common path it costs no query at all.
+  const [rows, { remaining, granted }, regionBoxes] = await Promise.all([
     withRetry(
       () =>
         db
@@ -1382,6 +1387,11 @@ driveRoutes.get('/', requireAccount, withFreshSession, async (c) => {
             label: drives.label,
             startName: drives.startName,
             endName: drives.endName,
+            // The drive's START, for the derived region label below. NOT NULL in the schema, so no
+            // null-handling downstream — and the START specifically, never the route bbox: see the
+            // ⚠ at the top of ./region-geo for why a rectangle would manufacture a wrong second region.
+            startLat: drives.startLat,
+            startLng: drives.startLng,
             distanceMeters: drives.distanceMeters,
             durationSeconds: drives.durationSeconds,
             // Count clips in SQL rather than hauling the full selection jsonb back just to .length it
@@ -1395,6 +1405,7 @@ driveRoutes.get('/', requireAccount, withFreshSession, async (c) => {
       { label: 'drive.list' },
     ),
     creditSummaryEnsuringGrant(userId),
+    loadRegionBoxes(),
   ])
   // Proactive "N drives left" hint, from the user-owned credit LEDGER (every account has a balance).
   // `remaining` is the spendable balance and `cap` the lifetime granted (for "N of M" framing).
@@ -1410,6 +1421,10 @@ driveRoutes.get('/', requireAccount, withFreshSession, async (c) => {
       durationSeconds: r.durationSeconds,
       clipCount: r.clipCount,
       createdAt: r.createdAt.toISOString(),
+      // ⚠ DERIVED PER REQUEST, never stored — the geometry-first read (./region-geo). Null is a real
+      // answer, not a failure: a drive whose start sits outside every RELEASED region's box has no
+      // label, and the client must show it rather than hide it.
+      region: regionForPoint(regionBoxes, r.startLat, r.startLng),
     })),
     credits,
   } satisfies DriveList)

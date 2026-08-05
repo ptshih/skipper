@@ -37,6 +37,16 @@ export const voice = {
     drivesSignedOut:
       'Your drives ride with your ticket, friend. Grab one and they’ll be waiting right here.',
   },
+  filter: {
+    /** MY DRIVES' region filter. ⚠ THE ESCAPE HATCH, and the reason it is not optional: with drives
+     *  scoped to one region, this is the only thing standing between a rider and a library that looks
+     *  emptied because a chip moved. The region chips beside it are DATA (each region's own display
+     *  name, server-derived per drive), so this is the one word here that is copy.
+     *  ⚠ Short on purpose — it renders through the `label` type scale, which is UPPERCASE small-caps;
+     *  the spoken form below is what a screen reader gets instead. */
+    allRegions: 'All',
+    allRegionsA11y: 'All regions',
+  },
   credits: {
     /** The gentle remaining-balance line. ⚠ THE SENTENCE ONLY — *whether* it appears at all is
      *  `<CreditHint>`'s threshold, and it lives there so the rule cannot be written twice (it already

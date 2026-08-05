@@ -336,6 +336,23 @@ export const REGIONS_RATE = {
  *  is currently short of. */
 export const REGIONS_MEMO_TTL_MS = 60_000
 
+/** How long `GET /drives` reuses the region BOXES it labels each drive with (./region-geo).
+ *
+ *  ⚠ A SEPARATE CONSTANT from `REGIONS_MEMO_TTL_MS`, same value today by agreement rather than by
+ *  reference — the sibling note above `PLAN_ROSTER_MEMO_TTL_MS` states the reason and it holds here:
+ *  these cache different SHAPES for different callers, and collapsing them to one number would couple
+ *  a release-visibility delay to a list-labelling delay that has nothing to do with it.
+ *
+ *  A load cap, not a spend cap. `GET /drives` is hit on EVERY app focus and its two existing queries
+ *  are deliberately run in parallel to save a whole round-trip of rider-visible latency; labelling
+ *  drives by region must not quietly hand that back as a third sequential query. What this memo holds
+ *  is the region list's GEOMETRY, which changes only when an operator edits a bbox or releases a
+ *  region — measured in days, not requests.
+ *
+ *  ⚠ Cost is operator-visible, never rider-visible: after a bbox edit an operator waits up to this
+ *  long, per live instance, for drives to re-label. Nobody sees a wrong region; somebody waits. */
+export const REGION_GEO_MEMO_TTL_MS = 60_000
+
 /* -------------------------------------------------------------------------- */
 /* The bounded read.                                                            */
 /* -------------------------------------------------------------------------- */
