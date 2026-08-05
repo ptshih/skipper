@@ -117,6 +117,25 @@ const POSTCARD_MAX_H = 260
  *  is what a pure flex-to-fit layout actually did when it was tried. */
 const POSTCARD_MIN_H = 140
 
+/**
+ * Below this window height the screen switches to the tighter spacing step.
+ *
+ * ⚠ SPACING IS THE ONE THING WORTH COMPRESSING ON A SHORT PHONE, and that is a finding rather than a
+ * preference (docs/research/fitting-one-screen-across-iphone-sizes.md §5–§6). Type and controls are at
+ * their designed size and shrinking THEM makes every phone worse to spare one; device-scaled FONTS are
+ * worse still, because they multiply with the rider's Dynamic Type setting instead of replacing it.
+ * Gaps carry no accessibility contract and are the largest single consumer on a dense screen, so they
+ * are where the give is.
+ *
+ * ⚠ A THRESHOLD, NOT A DEVICE CHECK. It asks "is this window short", which is also true of an iPad
+ * slide-over and a future foldable — never "is this an iPhone SE". iOS size classes cannot answer the
+ * device question anyway: every iPhone in portrait is compact-width x regular-height, so there is no
+ * abstraction to lean on here (§1 of that note). 750 sits above the 667 of the smallest supported
+ * phone and below the 844 of the smallest CURRENT one, so it separates the two generations rather than
+ * landing mid-range.
+ */
+const COMPACT_SCREEN_H = 750
+
 export default function SampleScreen() {
   const router = useRouter()
   const { colors } = useTheme()
@@ -131,6 +150,7 @@ export default function SampleScreen() {
     POSTCARD_MAX_H,
     Math.max(POSTCARD_MIN_H, Math.round(windowH * POSTCARD_SCREEN_FRACTION)),
   )
+  const compact = windowH < COMPACT_SCREEN_H
 
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading')
   const [sample, setSample] = useState<Sample | null>(null)
@@ -337,7 +357,12 @@ export default function SampleScreen() {
     //     375x667 SE, so the postcard shrank to ZERO and the screen became a caption over a play
     //     button. Scrolling ~100pt on the oldest small phone is a far better failure than deleting the
     //     hero on it, and scroll is also what keeps this honest at large Dynamic Type everywhere else.
-    <Screen scroll padded edges={SCREEN_EDGES} contentContainerStyle={styles.body}>
+    <Screen
+      scroll
+      padded
+      edges={SCREEN_EDGES}
+      contentContainerStyle={[styles.body, compact && styles.bodyCompact]}
+    >
       <Stack.Screen options={BLANK_HEADER} />
 
       {/* THE MASTHEAD — the wordmark and the one line that says what this is (founder, 2026-08-04).
@@ -364,7 +389,7 @@ export default function SampleScreen() {
         imageHeight={postcardH}
       />
 
-      <View style={styles.card}>
+      <View style={[styles.card, compact && styles.cardCompact]}>
         <View style={styles.titleRow}>
           <Text variant="display" color="ink" align="center" numberOfLines={2}>
             {sample ? cleanPlaceName(sample.name) : ''}
@@ -520,11 +545,15 @@ function PostcardFrame({
 
 const styles = StyleSheet.create({
   body: { gap: space.lg },
+  // ⚠ ONE STEP DOWN THE EXISTING SCALE, never a hand-picked number — `lg`→`md` and `md`→`sm` keep the
+  // screen inside the design system's rhythm on a short phone instead of inventing a second one.
+  bodyCompact: { gap: space.md },
   masthead: { gap: space.xs, width: '100%' },
   // ⚠ `md`, not `lg`. This column holds the title, the scrubber and the transport — three things that
   // read as ONE control surface, so the roomier `lg` step was spacing them like separate sections and
   // spending ~16pt to do it. `lg` still separates the postcard, the question and the CTA in `body`.
   card: { gap: space.md, width: '100%' },
+  cardCompact: { gap: space.sm },
   transportRow: { flexDirection: 'row', alignItems: 'center' },
   // Matches the ⓘ's own 48pt tap floor, and is mirrored empty on the right — see the call site.
   transportSlot: { width: 48 },

@@ -81,10 +81,21 @@ does.
 | **Flexible** | Media / decorative hero | Scales off the SCARCE axis, with a cap (never bigger than designed) and a floor (never a stripe). |
 | **Release valve** | The shell | A scroll view. Absorbs whatever the floor could not, and covers large Dynamic Type on every device, not just short ones. |
 
-**Adaptive SPACING is the unused lever.** Gaps are the largest single consumer on a dense screen — a
-column with eight children at a 24pt gap spends ~190pt on nothing — and unlike type, spacing carries no
-accessibility contract. A short-screen gap step is the obvious next move if a screen still overflows
-after the media has hit its floor. **Not currently implemented.**
+**Adaptive SPACING is the fourth lever, and it is now BUILT** (`app/sample.tsx`, `COMPACT_SCREEN_H`).
+Gaps are the largest single consumer on a dense screen — a column with eight children at a 24pt gap
+spends ~190pt on nothing — and unlike type, spacing carries no accessibility contract, so it is where
+the give is. Below a window-height threshold the screen steps one notch down the EXISTING scale
+(`lg`→`md`, `md`→`sm`) rather than inventing numbers.
+
+Measured on the onboarding screen at 375×667: overflow **130pt → ~60pt**. Worth stating plainly that
+this did NOT close the gap — the CTA's top edge now sits at the fold instead of well below it, which is
+the difference between "there is obviously more" and "the only exit is invisible". Nothing above the
+threshold changed at all (a 440×956 Pro Max renders byte-identically), which is the property that makes
+the lever safe: it spends nothing on the phones that were already fine.
+
+⚠ **The threshold asks about the WINDOW, not the device** — `windowH < 750` is also true of an iPad
+slide-over and a future foldable, and it has to be, because §1 means there is no device question to
+ask. Pinning it to a model would be a rule that silently stops applying.
 
 ## §7 · Deployment target (asked alongside, parked here so it is not lost)
 
