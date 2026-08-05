@@ -466,7 +466,11 @@ export default function SampleScreen() {
             the screen). Only the MAIN axis can, hence a row with `justifyContent`. Third instance of
             this trap on this screen; if a fourth appears, it wants a shared `<Center>` primitive. */}
         <View style={styles.centerRow}>
-          <RegionChip regionName={region?.displayName ?? null} onPress={hasRegions ? openPicker : undefined} />
+          <RegionChip
+            prominent
+            regionName={region?.displayName ?? null}
+            onPress={hasRegions ? openPicker : undefined}
+          />
         </View>
         {/* ⚠ NO COVERAGE CAPTION HERE, and it was built and cut (founder, 2026-08-04: "maybe we can
             drop the 'I know…' tagline at the bottom"). It read "I know every turn on these. More are

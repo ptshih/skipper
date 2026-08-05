@@ -51,9 +51,30 @@ export interface RegionChipProps {
    *  the ONLY control that can reach the sheet, and without it the screen has no region, no example
    *  asks and a disabled composer. Gate it on "are there regions", never on "is one selected". */
   onPress?: () => void
+  /**
+   * Render the picker-TRIGGER weight instead of the quiet status pill.
+   *
+   * ⚠ OPT-IN, AND IT MUST STAY THAT WAY. §14.1's "quiet" is a real budget decision for HOME, where
+   * this chip is ambient status sitting above three pine suggestion discs and a pine send disc — it
+   * is deliberately the thing that does NOT spend accent weight there. On onboarding the same control
+   * has the opposite job: it is the ANSWER to the only question the screen asks, twelve points under
+   * the words "Where are we driving?", so a chip that whispers is a form field nobody fills in
+   * (founder, 2026-08-04: "the region selection cta needs to be bigger and more noticeable").
+   *
+   * ⚠ THIS IS THE VACANCY THE HEADER ABOVE NAMES. 1.1 deleted the START/END `PickerField`s and with
+   * them the system's picker-trigger slot; that is why the job had nowhere to live and this control
+   * was being asked to do it at status weight. Prominent fills the slot rather than inventing a
+   * second component.
+   *
+   * ⚠ It keeps the pill SKIN — `surfaceRaised` fill plus a hairline rule — and grows only its
+   * measurements and its type. Reaching for an accent outline would make it a twin of the outlined
+   * `Button` directly beneath it, and two identical-looking controls stacked is a worse legibility
+   * problem than a quiet one. Bigger, not louder.
+   */
+  prominent?: boolean
 }
 
-export function RegionChip({ regionName, onPress }: RegionChipProps) {
+export function RegionChip({ regionName, onPress, prominent }: RegionChipProps) {
   const { colors } = useTheme()
 
   // ⚠ THE PRESSABLE BRANCH IS TESTED FIRST, AND ON `onPress` RATHER THAN ON THE NAME, because a
@@ -74,7 +95,9 @@ export function RegionChip({ regionName, onPress }: RegionChipProps) {
           // precedent and clears the floor with room. ⚠ Unlike `ExampleAsks`, no gap arithmetic is
           // owed against it: §10 cut the paired kicker, so this chip has no tappable neighbour
           // whose touch region it could overlap and hand to z-order.
-          hitSlop={12}
+          // ⚠ The prominent size clears the 48pt floor on its own measurements (16pt line + 12pt
+          // padding each side), so the slop is the QUIET pill's crutch and only it needs one.
+          hitSlop={prominent ? 0 : 12}
           accessibilityRole="button"
           accessibilityLabel={a11yLabel}
           // "a different" would be a lie with nothing selected, and this is the one state where the
@@ -87,15 +110,16 @@ export function RegionChip({ regionName, onPress }: RegionChipProps) {
           style={({ pressed }) => [
             styles.mark,
             styles.pill,
+            prominent && styles.pillProminent,
             { backgroundColor: colors.surfaceRaised, borderColor: colors.rule },
             pressed && styles.pressed,
           ]}
         >
-          <RegionMark regionName={regionName ?? voice.region.unset} />
+          <RegionMark regionName={regionName ?? voice.region.unset} prominent={prominent} />
           {/* The chip spends its one pine here rather than on the glyph: the caret IS the
               affordance, and §14 flagged the screen's total pine load (listen keyline, three row
               badges, the send disc) as the thing the quiet chip exists to keep in budget. */}
-          <Icon name="expand" size={14} color="accent" />
+          <Icon name="expand" size={prominent ? 18 : 14} color="accent" />
         </Pressable>
       </View>
     )
@@ -120,12 +144,13 @@ export function RegionChip({ regionName, onPress }: RegionChipProps) {
         style={[
           styles.mark,
           styles.pill,
+          prominent && styles.pillProminent,
           { backgroundColor: colors.surfaceRaised, borderColor: colors.rule },
         ]}
         accessible
         accessibilityLabel={`Region: ${regionName}`}
       >
-        <RegionMark regionName={regionName} />
+        <RegionMark regionName={regionName} prominent={prominent} />
       </View>
     </View>
   )
@@ -133,7 +158,7 @@ export function RegionChip({ regionName, onPress }: RegionChipProps) {
 
 /** The enamel glyph + the name — identical in both states, so the pill is a skin over the badge
  *  rather than a second rendering of it. */
-function RegionMark({ regionName }: { regionName: string }) {
+function RegionMark({ regionName, prominent }: { regionName: string; prominent?: boolean }) {
   return (
     <>
       {/* ⚠ NO `numberOfLines`, and no `style` prop on this component for a caller to smuggle one in
@@ -143,7 +168,7 @@ function RegionMark({ regionName }: { regionName: string }) {
           Device-pass fallback if `label`'s tracked uppercase reads too timid, or reads badly on a
           real multi-word region name: `bodyStrong` + `ink`. Not `body`/`heading` — that lands the
           chip at CTA weight and re-breaks §14's "quiet". */}
-      <Text variant="label" color="ink" style={styles.name}>
+      <Text variant={prominent ? 'bodyStrong' : 'label'} color="ink" style={styles.name}>
         {regionName}
       </Text>
     </>
@@ -168,5 +193,8 @@ const styles = StyleSheet.create({
     // the same physical hairline `Divider` draws, so the chip sits in the same system.
     borderWidth: StyleSheet.hairlineWidth,
   },
+  // The picker-trigger weight — see `prominent`. Only the measurements change; the skin does not.
+  // 16pt line + 12pt padding each side clears DESIGN §8's 48pt floor without borrowing hit slop.
+  pillProminent: { paddingHorizontal: space.lg, paddingVertical: space.md },
   pressed: { opacity: 0.7 },
 })
