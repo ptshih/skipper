@@ -20,7 +20,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { StyleSheet, View, type TextInput } from 'react-native'
 import { Stack, useFocusEffect, useIsFocused, useRouter } from 'expo-router'
-import { MAX_PLAN_DRAWN, type PlannedRoute } from '@skipper/shared'
+import { MAX_PLAN_DRAWN, type PlannedRoute, type PlannerCopy } from '@skipper/shared'
 // ⚠ The TYPED contract, and the only analytics surface there is (src/lib/analytics.tsx owns the raw
 // client, unexported). Every property below is a number, a boolean or a closed union — INV-13 applies
 // to analytics exactly as it applies to logs: no rider prose, no place name, no coordinate, no url, no
@@ -31,6 +31,7 @@ import {
   createDrive,
   errorMessage,
   listDrives,
+  getPlannerCopy,
   listRegions,
   proposeDrive,
   type DriveProposal,
@@ -365,8 +366,27 @@ export default function HomeScreen() {
   // selected — no chip, no example asks, a composer disabled by `sending || !regionId` — and no build
   // in riders' hands able to recover. That file's header has the full account; the rule is tested
   // there because this hook is not reachable by `bun test`.
+  /** The words the app says on the skipper's behalf — GET /planner/copy.
+   *
+   *  ⚠ NULL IS A REAL STATE AND MEANS SILENCE, not "fall back to the built-in one". There is no
+   *  built-in one: a baked default in the app is exactly what serving this copy deleted, because it is
+   *  the string nobody remembers to update and it fails by looking fine. A failed fetch therefore shows
+   *  NO suggestion rows and omits the seeded beats — visibly absent rather than quietly stale, and both
+   *  safe (the composer works without chips, and the no-stops card states its own case).
+   *  ⚠ Deliberately NOT cached to disk beside the region: the chips are an online-only surface and the
+   *  seeded lines only fire after a successful server turn, so a cache would buy nothing the network
+   *  has not already provided by then. */
+  const [plannerCopy, setPlannerCopy] = useState<PlannerCopy | null>(null)
+
   const loadRegions = useCallback(async () => {
     setRegionsFailed(false)
+    // ⚠ RIDES THE REGIONS LOAD rather than owning its own effect, for two reasons. It inherits the
+    // offline→online self-heal for free — one reconnect path, not two that can disagree about whether
+    // the screen has recovered. And a second effect would have been a third `set-state-in-effect`
+    // against this file's budget of two (eslint-suppressions.json), a backlog to shrink, not grow.
+    // ⚠ NOT awaited alongside the regions: a copy failure must not fail the region load, and a slow one
+    // must not hold the composer up. It settles to `null`, which means silence.
+    void getPlannerCopy().then(setPlannerCopy, () => setPlannerCopy(null))
     try {
       const rs = await listRegions()
       setRegions(rs)
@@ -397,6 +417,17 @@ export default function HomeScreen() {
   useEffect(() => {
     void loadRegions()
   }, [loadRegions])
+
+  /** The words the app says on the skipper's behalf — GET /planner/copy.
+   *
+   *  ⚠ NULL IS A REAL STATE AND MEANS SILENCE, not "use the built-in one". There is no built-in one:
+   *  a baked fallback is exactly what moving this to the server deleted, because it is the copy nobody
+   *  remembers to update and it fails by looking fine. So a failed fetch shows NO suggestion rows and
+   *  omits the seeded beats — both visibly absent rather than quietly stale, and both safe (the
+   *  composer works without chips, and the no-stops card states its own case).
+   *  ⚠ Deliberately NOT cached to disk beside the region. The chips are an online-only surface and the
+   *  seeded lines only fire after a successful server turn, so the cache would buy nothing the network
+   *  has not already provided by then. */
 
   // ── planner_ready — the funnel's DENOMINATOR ────────────────────────────────────────────────
   // ⚠ Neither a bare mount effect nor the focus effect below, and both wrong answers are tempting.
@@ -593,7 +624,12 @@ export default function HomeScreen() {
             // tell the model so it doesn't cheerfully offer the same road again — hence `wire: true`.
             // Safe under D9: "that road is quiet" is ROUTE information, not a fact about any place
             // on it.
-            setTurns((ts) => appendSkipper(ts, voice.proposal.noStopsSay, { wire: true }))
+            // ⚠ OMITTED when the copy fetch failed, rather than substituted. The card beside this
+            // already carries the `noStops` state and says so itself, which is what makes silence a
+            // safe degrade — see the note on `plannerCopy`.
+            if (plannerCopy?.noStopsSay) {
+              setTurns((ts) => appendSkipper(ts, plannerCopy.noStopsSay, { wire: true }))
+            }
           }
         }
       } catch (e) {
@@ -616,7 +652,10 @@ export default function HomeScreen() {
         }
       }
     },
-    [patchCard],
+    // ⚠ `plannerCopy` is a dep because the 0-stop beat reads its words. A stale closure here would
+    // silently skip the beat for the first drive after the copy lands, which is the one case a rider
+    // is most likely to hit.
+    [patchCard, plannerCopy],
   )
 
   /** A route arrived (or the wrap-up bar asked for the last one) → a new card, drawn immediately.
@@ -860,9 +899,11 @@ export default function HomeScreen() {
    *  like the example replies), and tells the rider WHICH things are changeable. The repeat-tap guard
    *  lives in `seedAdjust`, not here — the button is on every card and stays live after a tap. */
   const adjustDrive = useCallback(() => {
-    setTurns((ts) => seedAdjust(ts, voice.proposal.adjustSay))
+    // ⚠ Nothing to say without the served copy, so the tap is a no-op rather than a wrong sentence.
+    if (!plannerCopy?.adjustSay) return
+    setTurns((ts) => seedAdjust(ts, plannerCopy.adjustSay))
     focusComposer()
-  }, [focusComposer])
+  }, [focusComposer, plannerCopy])
 
   /** The outage retry: re-send the SAME transcript, unchanged. Its last entry is still the rider's
    *  line, so nothing needs re-typing and the wire shape is still legal. */
@@ -957,23 +998,19 @@ export default function HomeScreen() {
 
   const exampleAsks: ExampleAsk[] = useMemo(
     () =>
-      buildExampleAsks(rotatedNames, {
-        aToBTitle: voice.plan.exampleAToBTitle,
-        aToB: voice.plan.exampleAToB,
-        viaTitle: voice.plan.exampleViaTitle,
-        via: voice.plan.exampleVia,
-        fromStartTitle: voice.plan.exampleFromStartTitle,
-        fromStart: voice.plan.exampleFromStart,
-        toEndTitle: voice.plan.exampleToEndTitle,
-        toEnd: voice.plan.exampleToEnd,
-        openTitle: voice.plan.exampleOpenTitle,
-        open: voice.plan.exampleOpen,
-        openRegion: voice.plan.exampleOpenRegion,
-      },
-      // ⚠ The REGION name, not an anchor — it makes the open-ended row region-specific like the other
-      // two while staying the one ask that still has a form when a region has no curated anchors.
-      regionLabel ?? undefined),
-    [rotatedNames, regionLabel],
+      // ⚠ The SERVER decides which rows exist, in what order and in what words; this file decides only
+      // how many names each shape spends and which glyph it wears. No copy left to pass in.
+      plannerCopy
+        ? buildExampleAsks(
+            rotatedNames,
+            plannerCopy.examples,
+            // ⚠ The REGION name, not an anchor — it makes the open-ended row region-specific like the
+            // others while staying the one ask that still has a form when a region has no curated
+            // anchors at all.
+            regionLabel ?? undefined,
+          )
+        : [],
+    [rotatedNames, regionLabel, plannerCopy],
   )
 
   /** A tapped example chip seeds BOTH halves of an authored exchange and makes NO model call — the

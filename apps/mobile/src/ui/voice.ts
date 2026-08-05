@@ -157,48 +157,16 @@ export const voice = {
     // filling. That is the whole seam: the TITLE says what SHAPE of drive this is (short, verb-first,
     // legible at a glance), the SUBTITLE underneath is the literal sentence the tap will say, filled
     // from the region's own names. A sentence crammed into a chip was the original complaint.
-    // ⚠ Every title is in the RIDER's voice, addressed to the skipper — "Let the skipper pick", never
-    // "Let me pick": the rows sit next to two imperatives the rider issues, so a title that switches
-    // speaker reads as the opposite of what it does.
-    exampleAToBTitle: 'Drive somewhere',
-    exampleOpenTitle: 'Let the skipper pick',
-    exampleAToB: '{a} to {b}, the scenic way.',
-    // ⚠ THREE SHAPES ADDED 2026-08-04 (founder), and they are SHAPES, not destinations — a chip set of
-    // places would rebuild the picker D7 deleted. Each shows the rider something the screen otherwise
-    // never reveals is possible: that a drive can pass through somewhere, and that they may open with
-    // only ONE end and let him ask for the other.
-    // ⚠ These carry no seeded skipper reply and must never grow one — see the note above the wire
-    // lines. They are rider sentences the tap SENDS; the planner answers them for real.
-    // ⚠ NO LOOP SHAPE among them, deliberately: a loop is an explicit-ask exception
-    // (docs/decisions/no-same-road-loops.md §8), so a chip offering one is the app making an offer in
-    // his voice that he is forbidden to make himself.
-    exampleViaTitle: 'Pass through somewhere',
-    exampleVia: '{a} to {b}, by way of {c}.',
-    exampleFromStartTitle: "Say where I'm starting",
-    exampleFromStart: 'Starting from {a}.',
-    exampleToEndTitle: "Say where I'm going",
-    exampleToEnd: 'Take me to {b}.',
-    // ⚠ THE TWO CHIP REPLIES ARE GONE (2026-08-04) — do not reintroduce one. Tapping a suggestion used
-    // to seed a hand-authored SKIPPER answer alongside the rider's line, free of a model call. That
-    // prose then drifted from the planner prompt and kept asking "About how long do you want to be out?"
-    // for a day after the prompt banned it — invisibly, because there was no model turn to fix and the
-    // eval had nothing to score. A chip now sends only the RIDER's line; the planner answers for real.
-    // ⚠ `adjustSay` and `noStopsSay` below are still SEEDED and still ride the WIRE, so they remain
-    // prompt surface: they are re-sent to the model as its own prior sentences, and a line the prompt
-    // forbids becomes in-context precedent contradicting it. They change under
-    // apps/api/src/planner-prompt.ts's review, not the design system's.
-    // ⚠ NOT "Somewhere pretty. You pick." — that read fine as a standalone chip and stopped making
-    // sense the moment it sat under the title "Let the skipper pick": the row said the same thing
-    // twice, and the second time in the rider's mouth ("you pick") pointing at the skipper while the
-    // title pointed at him too. The ask still has to be the RIDER's line, so it asks for the same
-    // thing a different way.
-    // ⚠ TWO VARIANTS, and `{r}` is the REGION NAME — a different source from `{a}`/`{b}`, which are
-    // curated ANCHOR names. That distinction is what lets this row be region-specific like the other
-    // two without losing the property it exists for: it is the shape that survives a region with ZERO
-    // curated anchors, so it must still have a form that names nothing. `openRegion` when a region is
-    // known, `open` when one is not.
-    exampleOpenRegion: 'Surprise me: somewhere pretty around {r}.',
-    exampleOpen: 'Surprise me: somewhere pretty.',
+    // ⚠ THE COLD-OPEN SUGGESTIONS NO LONGER LIVE HERE (2026-08-04). Their titles and rider lines are
+    // served by GET /planner/copy and filled with the region's own names on arrival — see
+    // apps/api/src/planner-copy.ts, which carries the reasoning. Two things drove them out. First, the
+    // chips used to seed a hand-authored SKIPPER reply alongside the rider's line; that prose drifted
+    // from the planner prompt and kept asking "About how long do you want to be out?" for a day after
+    // the prompt banned it, invisible to every test and unfixable by deploying. Second, once the words
+    // and the prompt have to agree, they must also SHIP together — and copy in the binary cannot.
+    // ⚠ Do not re-add a suggestion string here "just as a fallback". A default in the app is precisely
+    // what was deleted: it is the copy nobody remembers to update, and it fails silently by looking
+    // fine. No copy means no rows, which is visible.
     // The turn cap (D12). ⚠ The composer is REPLACED by these, never greyed out — a disabled field
     // reads as broken, and the skipper bowing out in character is the whole point of the cap being
     // expressed in persona rather than as an error.
@@ -238,29 +206,19 @@ export const voice = {
     // nothing but focus the composer — correct, and effectively invisible: on the simulator (where
     // every desk pass happens) a connected hardware keyboard suppresses the software one, so the
     // whole response was a caret appearing in a field that already looked identical, and it was
-    // filed as a dead button. Seeded like the example replies — no model call, no dollars — and it
-    // rides the WIRE, because the rider's next line ("shorter") is an answer to this question and
-    // reads as a non-sequitur without it. Ends on a question, per the prompt's ask-ONE-thing rule.
-    // ⚠ THE COMMENT HERE USED TO CLAIM THESE ARE "the three axes the planner can actually act on".
-    // Two of them are not: `toProposeRequest` DROPS `targetMinutes`, so longer/shorter cannot change
-    // the drive at all — only moving an end can. The LINE stays (founder-picked, and "shorter" is what
-    // riders genuinely want to say); what changed is that the prompt now answers it honestly instead
-    // of re-emitting an identical route — `== Once it is drawn ==` teaches that shorter means a nearer
-    // far end and asks which end moves. Do not "fix" this copy to hide the ask; the conversation IS
-    // the product.
-    adjustSay: 'What would you change — longer, shorter, somewhere else?',
-    // A route the corpus has nothing to say about. The server returns 200 with zero stops here, so
-    // this is the only thing standing between a rider and a credit spent on a silent drive.
+    // ⚠ `adjustSay` MOVED TO THE SERVER (2026-08-04) — GET /planner/copy. It is SEEDED into the
+    // transcript as the skipper's own sentence and rides the wire, so the model re-reads it as
+    // something he already said: prompt surface, which has to deploy with the prompt rather than with
+    // an App Store release. Its reasoning (why "longer, shorter" is deliberate and must not be
+    // "fixed") travels with it, in apps/api/src/planner-copy.ts.
+    // ⚠ `noStopsSay` MOVED TO THE SERVER (2026-08-04) — GET /planner/copy, for the same reason as
+    // `adjustSay`: it is seeded as the skipper's own turn and ships on the wire. `noStops` here is the
+    // CARD's label and STAYS — it is interface text the model never sees, so it cannot contradict the
+    // prompt. It is also what makes omitting the seeded beat safe when the copy fetch fails: this line
+    // still states the case on the card.
+    // A route the corpus has nothing to say about. The server returns 200 with zero stops, so this is
+    // the only thing standing between a rider and a credit spent on a silent drive.
     noStops: 'Nothing along that road I can talk about yet.',
-    // ⚠ The same beat as a TRANSCRIPT turn, so the rider is handed back to the conversation instead of
-    // a dead card. It ships on the wire (the model must know that route did not work, or it will
-    // cheerfully offer it again). Safe under D9: "that road is quiet" is ROUTE information, not a fact
-    // about any place on it.
-    // ⚠ Reworded 2026-08-03: "That road's a quiet one" is a judgement ABOUT the road, and the prompt
-    // gives the character no basis for one ("not whether it is any good"). Stating that it came back
-    // quiet ON HIM keeps the same beat while making it a fact about his own lookup, not the place.
-    noStopsSay:
-      'That road came back quiet on me — nothing to tell out that way. Give me another pair and I’ll see what I’ve got.',
     // Fallback ONLY. The server's own 403 names the limit and the way past it; show that when it comes.
     capReached: 'That’s the last of your free drives, friend.',
     openMade: 'Open the drive',

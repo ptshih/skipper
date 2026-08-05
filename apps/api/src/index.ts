@@ -40,6 +40,7 @@ import {
 } from './limits'
 import { planRoutes } from './plan-route'
 import { withSession, type ApiEnv } from './entitlements'
+import { PLANNER_COPY } from './planner-copy'
 import { rateLimit } from './rate-limit'
 import { withRetry } from './retry'
 import { audioUnavailable, presignedClipFields } from './storage'
@@ -89,6 +90,21 @@ app.get('/health', (c) => c.json({ ok: true }))
 // never an App Store release. The client compares its own version (@skipper/shared
 // `gateFor`) and shows a dismissible nudge or a blocking "update required" wall.
 app.get('/version', (c) => c.json({ policies: VERSION_POLICIES }))
+
+// The words the APP says on the skipper's behalf — the cold-open suggestions and the two lines it
+// seeds into the transcript without a model call. Anonymous + env-free, exactly like /version above,
+// and for the same reason: served from code so a wording fix lands on a BACKEND deploy rather than
+// waiting on an App Store release.
+//
+// ⚠ THAT WAIT IS THE BUG THIS EXISTS FOR, not a convenience. A seeded line is re-sent to the model as
+// its OWN prior sentence, so app-held copy could contradict the planner prompt as in-context
+// precedent — and on 2026-08-04 it did, for a day, with no test able to see it and no deploy able to
+// fix it. See ./planner-copy.
+//
+// ⚠ NO LIMITER, matching /version and /health: a constant with no DB read, no session resolve and no
+// model call has nothing to bound. If this ever grows a query or a per-region parameter, that decision
+// changes with it — see the REGIONS_RATE block in ./limits for what a limiter is actually protecting.
+app.get('/planner/copy', (c) => c.json(PLANNER_COPY))
 
 // The pickable regions for the Create-a-Drive region selector. Anonymous + tiny (just
 // id/slug/name) — the create FLOW is gated, but listing region names to pick from is open.

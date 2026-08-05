@@ -5,25 +5,27 @@ import {
   buildExampleAsks,
   EXAMPLE_ROTATION_STRIDE,
   rotateNames,
-  type ExampleAskTemplates,
 } from './planner-examples'
+import type { PlannerExample } from '@skipper/shared'
 
-// Shaped like voice.plan's real templates (the prose lives there; these only need the placeholders).
-const T: ExampleAskTemplates = {
-  aToBTitle: 'Drive somewhere',
-  aToB: '{a} to {b}, the scenic way.',
-  viaTitle: 'Pass through somewhere',
-  via: '{a} to {b}, by way of {c}.',
-  fromStartTitle: "Say where I'm starting",
-  fromStart: 'Starting from {a}.',
-  toEndTitle: "Say where I'm going",
-  toEnd: 'Take me to {b}.',
-  openTitle: 'Let the skipper pick',
-  open: 'Surprise me — somewhere pretty.',
-  openRegion: 'Surprise me — somewhere pretty around {r}.',
-}
+// ⚠ A STAND-IN FOR THE SERVED PAYLOAD, not a copy of it. The real words come from GET /planner/copy
+// (apps/api/src/planner-copy.ts) and change on a backend deploy without this file being touched — which
+// is exactly why the prose here is deliberately plain: pinning the real sentences would make this test
+// fail every time someone rewords a chip, and passing it does not mean the shipped copy is any good.
+// What this file guards is the FILLING and the DEGRADATION, which are structure and do not drift.
+const T: PlannerExample[] = [
+  { shape: 'aToB', title: 'Drive somewhere', ask: '{a} to {b}, the scenic way.' },
+  { shape: 'via', title: 'Pass through somewhere', ask: '{a} to {b}, by way of {c}.' },
+  { shape: 'fromStart', title: "Say where I'm starting", ask: 'Starting from {a}.' },
+  { shape: 'toEnd', title: "Say where I'm going", ask: 'Take me to {a}.' },
+  {
+    shape: 'open',
+    title: 'Let the skipper pick',
+    ask: 'Surprise me — somewhere pretty.',
+    askRegion: 'Surprise me — somewhere pretty around {r}.',
+  },
+]
 
-/** Eight names, as EXAMPLE_ANCHORS_PER_REGION sends. */
 const EIGHT = ['Tahoe City', 'Emerald Bay', 'Incline Village', 'Kings Beach', 'Truckee', 'Stateline', 'Carson City', 'Genoa']
 
 describe('shape degradation', () => {
@@ -87,9 +89,11 @@ describe('shape degradation', () => {
   test('no names → only the ask that needs no facts', () => {
     // Whole-object, not just `.ask`: this is the one case where every field has to be right at once,
     // because a region that never loaded is the state a rider is most likely to meet first.
-    expect(buildExampleAsks([], T)).toEqual([
-      { shape: 'open', title: T.openTitle, ask: T.open, reply: T.openReply },
-    ])
+    // ⚠ NO `reply` FIELD, and its absence is the assertion. Each chip used to ship a hand-authored
+    // SKIPPER answer beside the rider's line; that answer drifted from the planner prompt with no model
+    // turn for any check to catch. Whole-object equality is what makes a reply reappearing fail here.
+    const open = T.find((e) => e.shape === 'open')!
+    expect(buildExampleAsks([], T)).toEqual([{ shape: 'open', title: open.title, ask: open.ask }])
   })
 })
 
@@ -131,10 +135,13 @@ describe('no placeholder ever reaches a rider', () => {
   })
 
   test('a template that grows a token degrades to one fewer chip, never to braces on screen', () => {
-    // voice.ts changes under a different review than this file — this is that seam's guard. ⚠ The
-    // grown token is `{c}`, one this file has NEVER filled, because that is the real case: the guard
-    // has to catch a token nobody here has heard of, not just a known one in a new slot.
-    const grown = { ...T, aToB: '{a} to {b} by way of {c}.' }
+    // ⚠ THE SEAM GOT WIDER, not narrower, when the copy moved to the server (2026-08-04): these
+    // templates now change on a BACKEND deploy, with no app build and nobody reading this file at all.
+    // A two-name shape whose sentence grows a third token is the real case — the row must vanish, not
+    // render "Tahoe City to Emerald Bay by way of {c}." at a rider.
+    const grown: PlannerExample[] = T.map((e) =>
+      e.shape === 'aToB' ? { ...e, ask: '{a} to {b} by way of {c}.' } : e,
+    )
     const asks = buildExampleAsks(['Tahoe City', 'Emerald Bay'], grown)
     expect(asks.map((a) => a.ask)).toEqual(['Surprise me — somewhere pretty.'])
   })

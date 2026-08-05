@@ -10,6 +10,7 @@ import {
   driveList,
   driveManifest,
   driveProposal,
+  plannerCopy,
   regionList,
   sample,
   signedDriveAudio,
@@ -22,6 +23,7 @@ import type {
   DriveProposal,
   DriveProposeRequest,
   DriveSummary,
+  PlannerCopy,
   Region,
   Sample,
   SignedDriveAudio,
@@ -209,6 +211,24 @@ export const getSample = async (): Promise<Sample> =>
 /** The pickable regions for the Create-a-Drive region selector (anonymous; just id/slug/name). */
 export const listRegions = async (): Promise<Region[]> =>
   parseDto(regionList, await fetchJson('/regions')).regions
+
+/**
+ * The words the app says on the skipper's behalf: the cold-open suggestions, plus the two lines it
+ * seeds into the transcript with no model call. Anonymous and static.
+ *
+ * ⚠ SERVED RATHER THAN COMPILED IN, and it is a bug fix rather than a refactor. A seeded line is
+ * re-sent to the model as its OWN prior sentence, so copy held in the app could contradict the planner
+ * prompt as in-context precedent — and on 2026-08-04 it did, for a day, invisible to every test
+ * (there was no model turn to score) and unfixable by deploying (the words were in the binary). Served,
+ * the prompt and the words it governs move together.
+ *
+ * ⚠ THERE IS NO BAKED FALLBACK, deliberately. A default string in the app is exactly what this deletes,
+ * so a failed fetch means the app says NOTHING rather than something possibly stale: no suggestion
+ * rows, or a beat omitted. Both are safe — the composer works without chips and the no-stops card
+ * states its own case — and both are visibly missing rather than quietly wrong.
+ */
+export const getPlannerCopy = async (): Promise<PlannerCopy> =>
+  parseDto(plannerCopy, await fetchJson('/planner/copy', undefined, { anonymous: true }))
 
 // ⚠ THERE IS NO `listAnchors` ANY MORE, and re-adding one would be a real exposure, not a
 // convenience. GET /drives/anchors dumped a region's entire curated allowlist WITH exact lat/lng —

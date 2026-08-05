@@ -26,6 +26,7 @@
 // here reconstructs an endpoint from one (INV-1). A seeded ask is CONVERSATION: the planner resolves
 // whatever the rider says back to an anchor id server-side, exactly as it does for a typed line.
 
+import { PLANNER_EXAMPLE_NAME_COST, type PlannerExample } from '@skipper/shared'
 import { cleanPlaceName } from './labels'
 
 /** How far the name window ADVANCES per launch — deliberately NOT the window's width.
@@ -85,38 +86,23 @@ export interface ExampleAsk {
   ask: string
 }
 
-/** The `{a}`/`{b}` templates, straight from `voice.plan`. */
-export interface ExampleAskTemplates {
-  // ⚠ The `*Title`s carry no `{a}`/`{b}` and are passed straight through unfilled — they are
-  // delivery, not facts. The leftover-brace wall below therefore never has to consider them.
-  aToBTitle: string
-  aToB: string
-  /** Pass-through: `{a}` to `{b}` by way of `{c}`. Costs THREE names, the most of any shape. */
-  viaTitle: string
-  via: string
-  /** One end only. Both cost a single name, which is why they survive regions the A→B row cannot. */
-  fromStartTitle: string
-  fromStart: string
-  toEndTitle: string
-  toEnd: string
-  openTitle: string
-  open: string
-  /** The same open-ended ask, but naming the REGION (`{r}`). Used when a region name is known.
-   *
-   *  ⚠ `{r}` is the region's display name — NOT one of the curated anchor names `{a}`/`{b}` come
-   *  from. Keeping them separate is what lets this row be region-specific like the other two while
-   *  still having a form that survives a region with zero curated anchors. */
-  openRegion: string
-}
+// ⚠ The name costs live in `@skipper/shared` (PLANNER_EXAMPLE_NAME_COST), NOT here, because the SERVER
+// writes the `{a}`/`{b}`/`{c}` tokens and this file decides how many names to pour in. Held separately
+// the two drifted silently — a mismatch makes the leftover-brace guard drop the row, so a chip just
+// stops appearing and nothing fails. That header carries the account.
 
-// A placeholder with no name behind it is LEFT IN PLACE rather than filled with '' — an empty
-// substitution would read as "Tahoe City to ." and slip past the leftover-brace guard below, which is
-// the whole reason that guard exists.
-const fill = (template: string, a?: string, b?: string, c?: string): string => {
+// ⚠ POSITIONAL: `{a}`/`{b}`/`{c}` are simply the 1st/2nd/3rd name this row was given, NOT roles. One
+// rule for every shape means the server can write a single-name row as `{a}` and nothing here has to
+// know which shape it was. A token with no name behind it is LEFT IN PLACE rather than filled with ''
+// — an empty substitution reads as "Tahoe City to ." and slips past the leftover-brace guard below,
+// which is the whole reason that guard exists.
+const fill = (template: string, taken: readonly string[]): string => {
   let s = template
-  if (a !== undefined) s = s.replaceAll('{a}', a)
-  if (b !== undefined) s = s.replaceAll('{b}', b)
-  if (c !== undefined) s = s.replaceAll('{c}', c)
+  const tokens = ['{a}', '{b}', '{c}'] as const
+  taken.forEach((name, i) => {
+    const token = tokens[i]
+    if (token) s = s.replaceAll(token, name)
+  })
   return s
 }
 
@@ -134,7 +120,7 @@ const fill = (template: string, a?: string, b?: string, c?: string): string => {
  */
 export function buildExampleAsks(
   names: readonly string[],
-  t: ExampleAskTemplates,
+  examples: readonly PlannerExample[],
   regionName?: string,
 ): ExampleAsk[] {
   // `places.name` carries Wikipedia/Google ", California" suffixes; a chip is spoken-voice copy, so it
@@ -146,11 +132,10 @@ export function buildExampleAsks(
     if (n.length > 0 && !clean.includes(n)) clean.push(n)
   }
 
-  // ⚠ NAMES ARE SPENT FROM A CURSOR, NEVER INDEXED PER SHAPE, and that is what stops two rows saying
-  // the same town. Five shapes want seven names between them; the server sends
-  // EXAMPLE_ANCHORS_PER_REGION (8), so a full region fills every row with a DIFFERENT name. Indexing
-  // each shape independently would have put `clean[0]` in three rows at once, which is the "one town
-  // shouting" complaint this whole area exists to fix, rebuilt with more chips.
+  // ⚠ NAMES ARE SPENT FROM ONE CURSOR, NEVER INDEXED PER SHAPE, and that is what stops two rows saying
+  // the same town. Five shapes want seven names between them and the server sends eight
+  // (EXAMPLE_ANCHORS_PER_REGION), so a full region fills every row with a DIFFERENT name. Indexing each
+  // shape from clean[0] would rebuild the "one town shouting" complaint this whole area exists to fix.
   let cursor = 0
   const take = (n: number): string[] | null => {
     if (clean.length - cursor < n) return null
@@ -159,37 +144,34 @@ export function buildExampleAsks(
     return out
   }
 
-  const out: ExampleAsk[] = []
-  // ⚠ ORDER IS DISPLAY ORDER **AND** PRIORITY, because the cursor is greedy: whatever comes first gets
-  // the names. A→B leads because it is the shape the product is actually for. ⚠ A shape that cannot be
-  // afforded is SKIPPED, not terminal — the one-name rows still render in a region too thin for the
-  // three-name one, which is the degradation that matters (a 4-name region gets A→B plus both ends
-  // rather than A→B alone).
-  const ab = take(2)
-  if (ab) out.push({ shape: 'aToB', title: t.aToBTitle, ask: fill(t.aToB, ab[0], ab[1]) })
-
-  const abc = take(3)
-  if (abc) out.push({ shape: 'via', title: t.viaTitle, ask: fill(t.via, abc[0], abc[1], abc[2]) })
-
-  const from = take(1)
-  if (from) out.push({ shape: 'fromStart', title: t.fromStartTitle, ask: fill(t.fromStart, from[0]) })
-
-  const to = take(1)
-  if (to) out.push({ shape: 'toEnd', title: t.toEndTitle, ask: fill(t.toEnd, undefined, to[0]) })
-
   const regionLabel = regionName?.trim()
-  out.push({
-    shape: 'open',
-    title: t.openTitle,
-    ask: regionLabel ? t.openRegion.replaceAll('{r}', regionLabel) : t.open,
-  })
+  const out: ExampleAsk[] = []
+  // ⚠ SERVER ORDER IS DISPLAY ORDER **AND** PRIORITY, because the cursor is greedy: whatever comes
+  // first gets the names. Reordering the payload therefore reorders the screen AND changes what a thin
+  // region can afford — one decision, made server-side, in one place.
+  for (const e of examples) {
+    // ⚠ An UNKNOWN shape is dropped, not guessed at. The server may ship a shape this build has never
+    // heard of (that is the point of serving the copy), and it would have no name cost and no icon
+    // here — rendered anyway it would be filled wrong and crash the icon lookup.
+    const cost = PLANNER_EXAMPLE_NAME_COST[e.shape]
+    if (cost === undefined) continue
+    // ⚠ SKIPPED, not terminal: a row it cannot afford is passed over and the CHEAPER rows below still
+    // render. Stopping at the first unaffordable shape would strip a thin region back to the open ask.
+    const taken = take(cost)
+    if (!taken) continue
+    // The region-named variant when we have a region, the bare one when we do not. ⚠ The bare form is
+    // not tidiness — it is the one ask that survives a region that has not LOADED, so it can never be
+    // allowed to depend on a name of any kind.
+    const template = regionLabel && e.askRegion ? e.askRegion.replaceAll('{r}', regionLabel) : e.ask
+    out.push({ shape: e.shape, title: e.title, ask: fill(template, taken) })
+  }
 
-  // A structural wall, not a belt: voice.ts changes under a different review than this file, so a
-  // `{b}` added to a one-name template one day must degrade to "one fewer chip", never render braces at
-  // a rider. Cheaper than a lint rule and it fails at the only place that can see both halves.
+  // A structural wall, not a belt: the copy now changes on a SERVER deploy, with no app build and no
+  // review of this file at all, so a `{b}` added to a one-name template must degrade to "one fewer
+  // chip", never render braces at a rider. That seam got wider when the words moved server-side.
   // ⚠ ANY `{…}` token, not just `{a}`/`{b}`: `{r}` joined the vocabulary and the next one will not
-  // announce itself either. A guard that only knows the tokens it was written against is a guard that
-  // silently stops covering the newest one.
+  // announce itself either.
   const UNFILLED = /\{[^}]*\}/
   return out.filter((e) => !UNFILLED.test(e.ask))
 }
+
