@@ -33,7 +33,9 @@ export const CLAUDE_MODELS = {
    *  ⚠ The second is a RETURNED regression worth knowing about: the grounding prompt spells that exact
    *  carve-out out with that exact example ("hired by his aunt X" grounds "he was X's nephew"), and the
    *  golden case exists because it was a live false positive on 2026-06-09. Opus 5 flags it anyway. Cost
-   *  of leaving it: each false positive buys an excision round and trims writing the sheet supported. */
+   *  of leaving it: each false positive buys an excision round and trims writing the sheet supported.
+   *  ✅ ACCEPTED AS-IS (founder, 2026-08-04): it costs prose, never a shipped hallucination, and is not
+   *  worth editing the fail-closed gate on the day the model moved. Re-raise if the number GROWS. */
   opus: 'claude-opus-5',
   haiku: 'claude-haiku-4-5-20251001',
   /** The LIVE PLANNER's model — the only one of these that runs inside a rider request.

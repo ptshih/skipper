@@ -64,7 +64,10 @@ export function getAnthropic(label = 'a model call needs it'): Anthropic {
 // where calibrate.ts says to expect it. ⚠ Two clean cases now over-flag, and `grounding-inverse-relation`
 // is a RETURNED regression: grounding.ts spells that carve-out out with that very example ("hired by his
 // aunt X" grounds "he was X's nephew") and the golden case exists because it was a live false positive in
-// June. Left as measured rather than patched — a grounding-prompt edit owes another calibration run.
+// June. ✅ ACCEPTED AS-IS by the founder 2026-08-04 — 4 false positives across 10 clean cases costs some
+// excision rounds and trims a little supported writing, and it never ships a hallucination, so it is not
+// worth touching the fail-closed gate's prompt on the day the model changed. Re-raise only if a later
+// calibration shows the precision number MOVING, which is the drift this runner exists to watch.
 //
 // Source: Anthropic model catalog (claude-api skill — "Current Models" table); the id literal is
 // single-sourced in @skipper/shared (CLAUDE_MODELS).

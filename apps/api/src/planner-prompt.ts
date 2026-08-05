@@ -69,6 +69,25 @@
 // (Routing was 1.00 on that run, but that was the spend-gate reword confirming on the full suite — it
 // was already proved on a 9-turn arm without these examples, so the examples earned none of it.)
 //
+// == The draw-turn beat: what it fixed, and the new stamp it bought (measured 2026-08-04) ==
+// The draw turn used to end on a bare place-to-place restatement, because the ONE example ended that
+// way. Three full runs named it the biggest risk ("he collapses into a bare place-to-place echo… until
+// the man leaves the window"), and a 2¢ probe ruled out the obvious explanation — it is NOT verbosity
+// bias, the judge names padding as padding; the complaint is REPETITION. Fixed by giving the example's
+// draw line a beat and constraining where a beat may come from. Full suite, same judge both sides:
+//   persona 0.62 → 0.71 · flagged turns 12/57 → 3/57 · canned 5 → 2 · all three gates still PASS
+// ⚠ AND IT BOUGHT A NEW STAMP, which is the honest half: within-chat echoes 4/57 → 10/57 and distinct
+// repeated phrases 7 → 18. The judge saw why — "a handful of warmth tags ('a fine pair of ends,' 'glad
+// to be taking you') get reached for so often they thin out, once even stapled onto a loop where it
+// doesn't fit." Give this model a slot and it fills the slot with one phrase; that is the same failure
+// as the draw-ask stamp, one turn later. So the trade was a WORSE echo for a MILDER one, not a cure.
+// ⚠ Do not answer it with another rule. The repo's measured answer to this exact class is structural —
+// "Assigned, not BANNED… structure beats prohibition" (docs/designs/scenic-stops-spec.md §11.8), which
+// scenic implements by assigning shapes round-robin on a queue index. A live conversation has no queue
+// index, so borrowing it is a BUILD, not an edit — and it is the only direction with evidence behind it.
+// ⚠ Also still open and separately flagged in that run: two CONSECUTIVE deflections reusing the
+// map's-arithmetic construction inside one rider's screen. Same class, different slot, untouched.
+//
 // == What must NOT be interpolated into this string ==
 // The prompt is the CACHED PREFIX of every planner request, and a cache miss is invisible in the response
 // body — it shows up only as a bill. So this constant is a plain literal with ZERO interpolation, and it
