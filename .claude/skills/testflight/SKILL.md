@@ -67,8 +67,12 @@ closest local proxy for the cloud build succeeding, and it catches module
 resolution breakage that `tsc` cannot see:
 
 ```bash
-bunx expo export -p ios --output-dir "$TMPDIR/skipper-export"
+cd apps/mobile && bunx expo export -p ios --output-dir "$TMPDIR/skipper-export"
 ```
+
+⚠ **Both commands run from `apps/mobile`, never the monorepo root.** From the
+root, export dies on `No platforms are configured to use the Metro bundler in
+the project Expo config` — the Expo project is the workspace, not the repo.
 
 ⚠ **Export outside the repo.** The default `dist/` lands untracked in the working
 tree and dirties it — which then blocks the very build you are preparing.
@@ -134,17 +138,29 @@ declaring success; **absence of a failure is not success.**
 
 ## Shipping from a dirty tree (another agent's uncommitted work)
 
-The mobile artifact does not depend on `apps/api`, `apps/admin` or
-`packages/studio`, but eas-cli's clean-tree check is blanket. When the tree is
-dirty with work that is not yours and you cannot wait, build from a **detached
-worktree of HEAD** — it is pristine, so eas-cli is satisfied, and the other
-agent's files are never read, moved, or uploaded.
+eas-cli's clean-tree check is blanket, but the dirt is not all the same kind, and
+the difference decides how much you should care:
+
+- Dirt in `apps/api`, `apps/admin` or `packages/studio` is **purely mechanical** —
+  none of it compiles into the app. The build is blocked for a reason that has no
+  bearing on the artifact.
+- Dirt in `packages/engine` or `packages/shared` is **a content difference**.
+  `apps/mobile` depends on both, so someone's half-finished edit there would
+  otherwise ride into the binary. Shipping HEAD deliberately leaves it out — that
+  is the right outcome, not a compromise.
+
+Either way, build from a **detached worktree of HEAD**: it is pristine, so eas-cli
+is satisfied, and the other agent's files are never read, moved, or uploaded.
 
 ```bash
 HEAD_SHA=$(git rev-parse HEAD)
 git worktree add --detach "$TMPDIR/ship" "$HEAD_SHA"
 cd "$TMPDIR/ship" && bun install --frozen-lockfile
 ```
+
+⚠ **Run Phase 1 inside the worktree too**, not in the main tree. Pre-flighting the
+main tree checks the other agent's in-flight code — precisely what you are
+excluding. Check what ships.
 
 Then run Phase 2 from `"$TMPDIR/ship/apps/mobile"`, and afterwards:
 
