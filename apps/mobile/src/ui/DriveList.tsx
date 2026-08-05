@@ -15,7 +15,13 @@
 import { memo } from 'react'
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import type { DriveSummary } from '@/lib/api'
-import { cleanPlaceName, driveLength, spokenDriveLength } from '@/lib/labels'
+import {
+  cleanPlaceName,
+  driveDate,
+  driveLength,
+  spokenDriveDate,
+  spokenDriveLength,
+} from '@/lib/labels'
 import { space } from '../theme/tokens'
 import { Badge } from './Badge'
 import { Card } from './Card'
@@ -45,11 +51,24 @@ export const DriveCard = memo(function DriveCard({ drive, onPress }: DriveCardPr
   // ⚠ CLEANED ON BOTH SIDES — the drift this file exists to end. `cleanPlaceName` strips Wikipedia's
   // disambiguator and is display-only, which is exactly what a SPOKEN label is too.
   const label = cleanPlaceName(drive.label)
+  // ⚠ WHEN, and it is the only thing separating two drives of the SAME route. Every card title is
+  // machine-made (`driveLabel()` joins the waypoints; nothing lets a rider name a drive), so a rider
+  // who drove Tahoe City → Emerald Bay four times had four identical cards — while `createdAt` sat in
+  // the DTO, fetched on every load, rendered nowhere. See `docs/designs/my-drives-legibility.md` §3.
+  const date = driveDate(drive.createdAt)
+  const spokenDate = spokenDriveDate(drive.createdAt)
+  // ⚠ ONE expression, two readings — the stop count is now built once and used by BOTH the visible
+  // meta line and the a11y label. They were two copies, and the copies had already drifted: the label
+  // said "1 stops" where the card said "1 stop".
+  const stops = `${drive.clipCount} ${drive.clipCount === 1 ? 'stop' : 'stops'}`
+  // "4 stops · Aug 3" — the house meta separator (`StopRow`'s "View · 1:12"), and ONE Text rather than
+  // a third element in the row, so the date can never be separated from the count it qualifies.
+  const meta = date ? `${stops} · ${date}` : stops
   return (
     <View
       accessible
       accessibilityRole="button"
-      accessibilityLabel={`${label}${drive.clipCount ? `, ${drive.clipCount} stops` : ''}${spoken ? `, ${spoken}` : ''}`}
+      accessibilityLabel={`${label}${drive.clipCount ? `, ${stops}` : ''}${spokenDate ? `, ${spokenDate}` : ''}${spoken ? `, ${spoken}` : ''}`}
     >
       <Card onPress={() => onPress(drive.driveId)}>
         {/* ⚠ NO `numberOfLines`, and this is the reconciliation of the second drift: MY DRIVES ran
@@ -61,8 +80,14 @@ export const DriveCard = memo(function DriveCard({ drive, onPress }: DriveCardPr
           {label}
         </Text>
         <View style={styles.metaRow}>
-          <Text variant="label" color="inkFaint" style={styles.flex}>
-            {drive.clipCount} {drive.clipCount === 1 ? 'stop' : 'stops'}
+          {/* ⚠ NO `flex: 1` here, and that is a FIX, not a tidy-up. With it, the badge always kept its
+              share of the line, so the meta text wrapped INSIDE a half-width column — at the AX Dynamic
+              Type sizes "3 STOPS · YESTERDAY" broke mid-word into "YESTERD" / "AY". It only became
+              visible when the date lengthened this string; "3 STOPS" alone never reached the edge.
+              Sized to content instead, the row's own `flexWrap` moves the BADGE down when the text
+              needs the width, and `space-between` keeps the badge right-aligned at normal sizes. */}
+          <Text variant="label" color="inkFaint">
+            {meta}
           </Text>
           {/* A fill, not a glow — inside DESIGN §8's one-amber budget. */}
           {length ? <Badge tone="amber" label={length} /> : null}
@@ -105,12 +130,14 @@ export function DriveCardSkeleton() {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
   list: { gap: space.md },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
+    // Right-aligns the badge the way the meta text's `flex: 1` used to, WITHOUT reserving the badge a
+    // share of the line the text then has to wrap inside. See the ⚠ on the Text above.
+    justifyContent: 'space-between',
     gap: space.sm,
     marginTop: space.xs,
   },

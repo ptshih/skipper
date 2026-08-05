@@ -96,6 +96,99 @@ export const spokenDriveLength = (seconds?: number | null): string => {
   return m <= 0 ? '' : `${m} minute${m === 1 ? '' : 's'}`
 }
 
+// ── When a drive was made ────────────────────────────────────────────────────
+// The saved-drive list is unbounded (`FREE_DRIVE_CAP` is 50) and every card's title is MACHINE-made —
+// `driveLabel()` joins the route's waypoints, and nothing lets a rider name a drive. So four drives of
+// one route render four byte-identical cards, and the only field that separates them is `createdAt`,
+// which the DTO has always carried and the card has always thrown away. This is that field, rendered.
+// See `docs/designs/my-drives-legibility.md` §3.
+//
+// ⚠ NATURAL CASE, not shouted. The card speaks this through `variant="label"`, and that token already
+// carries `textTransform: 'uppercase'` — returning "TODAY" would render fine and make the spoken twin
+// below shout at a screen reader, which is exactly the show/speak drift this file's pairs exist to stop.
+//
+// English month names rather than `Intl`: multilingual is deferred repo-wide, nothing else in the app
+// touches `Intl`, and a hardcoded table is deterministic under test where the platform's is not.
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const MONTHS_LONG = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+]
+
+/** Which DAY a drive was made, decided ONCE for both renderings below. `null` = nothing to show.
+ *
+ *  ⚠ `today` and `yesterday` are SEPARATE members, not one `{ kind: 'today' | 'yesterday' }`. Written
+ *  that way first, and TS declines to narrow the member away after two separate equality checks, so
+ *  both renderers failed to see `.day`/`.year` on the surviving branch. The suite stayed green — `bun
+ *  test` does not typecheck — and only `tsc` caught it. */
+type DriveDay =
+  | { kind: 'today' }
+  | { kind: 'yesterday' }
+  | { kind: 'on'; short: string; long: string; day: number; year: number | null }
+  | null
+
+/** Local midnight — the comparison must be in the RIDER's timezone, or a drive made at 9pm reads as
+ *  "Yesterday" to anyone east of UTC the moment the UTC date rolls over before theirs does. */
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+
+const driveDay = (iso?: string | null, now: Date = new Date()): DriveDay => {
+  if (!iso) return null
+  const then = new Date(iso)
+  if (!Number.isFinite(then.getTime())) return null // an unparseable timestamp shows nothing, never "Invalid Date"
+  const days = Math.round((startOfDay(now) - startOfDay(then)) / 86_400_000)
+  // `<= 0` rather than `=== 0`: a few seconds of clock skew between the phone and the server must not
+  // print a FUTURE date on a drive the rider just made.
+  if (days <= 0) return { kind: 'today' }
+  if (days === 1) return { kind: 'yesterday' }
+  return {
+    kind: 'on',
+    // Resolved here, once, because `noUncheckedIndexedAccess` makes every lookup `string | undefined`
+    // and doing it in both renderers would need the same guard twice.
+    short: MONTHS_SHORT[then.getMonth()] ?? '',
+    long: MONTHS_LONG[then.getMonth()] ?? '',
+    day: then.getDate(),
+    // The year EARNS its characters only when it is not the current one — "Aug 3 2026" on every card
+    // in a list that is mostly this year is noise, and this row is already carrying the stop count.
+    year: then.getFullYear() === now.getFullYear() ? null : then.getFullYear(),
+  }
+}
+
+/**
+ * The date as the card SHOWS it — `Today`, `Yesterday`, `Aug 3`, `Aug 3 2025` — or '' when there is
+ * none. Same rule `driveLength` makes: a missing value renders NOTHING rather than a placeholder.
+ */
+export const driveDate = (iso?: string | null, now?: Date): string => {
+  const d = driveDay(iso, now)
+  if (!d) return ''
+  if (d.kind === 'today') return 'Today'
+  if (d.kind === 'yesterday') return 'Yesterday'
+  return `${d.short} ${d.day}${d.year == null ? '' : ` ${d.year}`}`
+}
+
+/**
+ * The same date as a screen reader should HEAR it — `August 3`, `August 3, 2025`.
+ *
+ * ⚠ The pair rule again (`spokenLength`, `spokenDriveLength`): a glance format owes a spoken twin, and
+ * both must come from ONE decision. "Aug" is a glance abbreviation; VoiceOver says "awg".
+ */
+export const spokenDriveDate = (iso?: string | null, now?: Date): string => {
+  const d = driveDay(iso, now)
+  if (!d) return ''
+  if (d.kind === 'today') return 'Today'
+  if (d.kind === 'yesterday') return 'Yesterday'
+  return `${d.long} ${d.day}${d.year == null ? '' : `, ${d.year}`}`
+}
+
 // Wikipedia disambiguates place TITLES with a trailing ", <US State>" — "Tahoe Keys,
 // California", "Rubicon, California". Stripped at the VIEW boundary so a scraped article
 // title reads like a place a person would actually say. DISPLAY-ONLY: the data layer keeps
