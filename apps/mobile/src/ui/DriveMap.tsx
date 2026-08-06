@@ -13,6 +13,7 @@ import { bearingDeg } from '@skipper/engine'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated, StyleSheet, View } from 'react-native'
 import MapView, { Marker, Polyline, type LatLng, type Region } from 'react-native-maps'
+import { keptCountUpTo, simplifyIndices } from '../lib/simplify-path'
 import { baseMapProps, puckStyles, RecenterChip, toLatLng } from './mapChrome'
 import { border, radius, space } from '../theme/tokens'
 import { useReducedMotion, useTheme } from '../theme'
@@ -32,6 +33,11 @@ import { useReducedMotion, useTheme } from '../theme'
  * The reasoning lives at the Polyline below; the short version is that a point-space dash cannot
  * survive a HIGH_QUALITY polyline at overview zoom, and MapKit has no zoom expression to fix it. */
 const STATIC_ROUTE_W = 5
+
+/** How far the DRAWN route may stray from the real one, in metres. See the `keptIdx` memo for where
+ *  this number comes from — it is derived from `STATIC_ROUTE_W`, not chosen by eye, so a change to the
+ *  stroke width is a reason to revisit it. ⚠ Display only: the engine never sees a thinned route. */
+const DISPLAY_EPSILON_M = 2
 
 // THE ENDPOINT PIN IS PINE AND BIGGER THAN AN UPCOMING ONE, because on a static overview it is the
 // mark the whole card is read through. `upcoming` is a 12pt disc filled with `surface` — i.e. the
@@ -173,6 +179,20 @@ function DriveMapBase({
   // them to native — the hour-long-drive CPU/GC + bridge regressor). (audit #7)
   const latlngs = useMemo(() => polyline.map(toLatLng), [polyline])
 
+  // ── DISPLAY GEOMETRY — the drawn route, thinned. NOTHING computed reads this. ────────────────
+  // ⚠ THE SPLIT IS THE WHOLE DESIGN: `polyline`/`cum`/`project()` keep every vertex, so the puck's
+  // position and heading are exactly as accurate as before; only what is HANDED TO THE MAP is thinned.
+  // Simplifying the computed side would drift the puck off the road, which is the failure the
+  // cosine-weighted distance maths above exists to prevent.
+  // ⚠ MEASURED, NOT GUESSED (Zephyr Cove → Reno, saved manifest, 2026-08-05): 4559 vertices over
+  // 90.7 km, median spacing 14.1 m. At ε=2 m that is 728 kept — a 6.3x cut — and the curve is flat
+  // past there (ε=5 m → 449, ε=10 m → 303), so a bigger ε buys little for real visual risk.
+  // ⚠ AND ε IS DERIVED FROM THE STROKE, not tuned by eye: the line is `STATIC_ROUTE_W` = 5pt, so at
+  // roughly 1 m/pt — about the tightest zoom this map reaches — a 2 m deviation still falls INSIDE the
+  // line's own width. The simplified route cannot visibly leave the road it replaced.
+  const keptIdx = useMemo(() => simplifyIndices(polyline, DISPLAY_EPSILON_M), [polyline])
+  const dispLatlngs = useMemo(() => keptIdx.map((i) => toLatLng(polyline[i]!)), [keptIdx, polyline])
+
   // Project a 0..1 fraction to the puck point + the segment index it's in (NO array building).
   const project = useCallback(
     (frac: number): { puck: LatLng | null; heading: number; idx: number } => {
@@ -203,9 +223,27 @@ function DriveMapBase({
   const [heading, setHeading] = useState(initial.heading)
   const [segIdx, setSegIdx] = useState(initial.idx)
 
-  // Traveled overlay = route up to the last crossed vertex (the puck Marker covers the sub-vertex
-  // remainder over the static untraveled base). Rebuilt only when segIdx changes. (audit #7)
-  const traveled = useMemo(() => latlngs.slice(0, segIdx + 1), [latlngs, segIdx])
+  // Traveled overlay = the SIMPLIFIED route up to the last crossed vertex, then a final hop to the
+  // puck. Rebuilt only when segIdx changes; the puck tail is appended separately below. (audit #7)
+  //
+  // ⚠ `segIdx` INDEXES THE FULL POLYLINE AND `dispLatlngs` DOES NOT — `keptCountUpTo` is what maps one
+  // space onto the other, and skipping it is the silent bug in this change. Slicing `dispLatlngs` by a
+  // full-polyline index would run the traveled line wildly ahead of the puck (there are ~6 full
+  // vertices per kept one on average, and far more on a straight).
+  const traveledBase = useMemo(
+    () => dispLatlngs.slice(0, keptCountUpTo(keptIdx, segIdx)),
+    [dispLatlngs, keptIdx, segIdx],
+  )
+
+  // ⚠ THE PUCK TAIL IS REQUIRED, NOT A FLOURISH — and only since simplification. The old comment said
+  // "the puck Marker covers the sub-vertex remainder", which was true when vertices were ~14 m apart:
+  // the gap between the last drawn vertex and the puck was smaller than the marker. Kept vertices can
+  // be HUNDREDS of metres apart on a straight, so without this the pine line visibly trails the puck
+  // down a highway. Anchoring the last point to the puck itself makes the split exact at every zoom.
+  const traveled = useMemo(
+    () => (puck ? [...traveledBase, puck] : traveledBase),
+    [traveledBase, puck],
+  )
 
   // Follow `progress` (GPS/sim/preview): move the puck every tick, advance the split only on a vertex
   // change, and glide the camera onto the puck while following — THROTTLED to ~1/sec so a 60fps
@@ -366,12 +404,12 @@ function DriveMapBase({
             that language lives on `RouteTrack`, on surfaces we render ourselves.
             STATIC ONLY: the live drive grows a traveled pine line over this one and carries a puck, so
             it has its own separation and its untraveled backdrop is meant to recede. */}
-        {latlngs.length > 1 && hidePuck ? (
-          <Polyline coordinates={latlngs} strokeColor={colors.surface} strokeWidth={STATIC_ROUTE_W + 4} />
+        {dispLatlngs.length > 1 && hidePuck ? (
+          <Polyline coordinates={dispLatlngs} strokeColor={colors.surface} strokeWidth={STATIC_ROUTE_W + 4} />
         ) : null}
-        {latlngs.length > 1 ? (
+        {dispLatlngs.length > 1 ? (
           <Polyline
-            coordinates={latlngs}
+            coordinates={dispLatlngs}
             // ⚠ `routeTrail` on a basemap, NOT `trackInactive` — that one is the trail on our own
             // surfaces, and on the MAP it is the byte-identical twin of the minor roads underneath
             // (contrast 1.00, both themes). See the role's note in theme.ts.
