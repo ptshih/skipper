@@ -568,9 +568,9 @@ label) and does not justify a build 16; it ships on the next natural rebuild.
 > copy once deleted, and one of them (`02-encounter.png`) is the only surviving render of the roam
 > screen. Apple caps an iPhone set at 10, so the old six had to be deleted BEFORE the new six could be
 > uploaded; that ordering is why the backup was taken first rather than as an afterthought.
-> ⚠ **§9b's 28-second App Preview video is STILL STALE and is NOT covered by this recapture** — it
-> shows the `/sample` flow, and that screen and its route were deleted on 2026-08-05. It cannot merely
-> be re-checked; it needs re-shooting or removing.
+> ✅ **§9b's App Preview video was re-shot the same day and is also live** — 28 s of the reviewer path
+> ending on the taste clip actually playing. It was NOT covered by this stills recapture (a video is
+> its own asset and its own step), which is exactly why it nearly shipped showing a deleted screen.
 
 ## 9a. The original 1.1 recapture brief — ⚠ **kept for its traps, superseded by the block above**
 
@@ -639,14 +639,57 @@ ffmpeg -i shot.png -filter_complex \
   "[0:v]crop=1320:700:0:0[t];[0:v]crop=1320:1308:0:1560[b];[t][b]vstack=inputs=2[o]" -map "[o]" tight.png
 ```
 
-## 9b. App Preview video — UPLOADED 2026-07-28
+## 9b. App Preview video — ✅ **RE-SHOT AND REPLACED 2026-08-06**
 
-One 28s preview at `IPHONE_67`, 1320×2868, H.264 30fps, AAC stereo. Apple validated it
+One 28s preview at `IPHONE_67`, 1320×2868, H.264 30fps, AAC stereo 44.1k. Apple validated it
 (`assetDeliveryState=COMPLETE`). It is the highest-leverage asset on the page for an audio-first app,
 because it's the only one that can carry the Skipper's VOICE — screenshots structurally cannot.
 
-Content is the sample flow, chosen because it's deterministic and needs no GPS: home → one tap →
-the illustrated postcard playing Emerald Bay. How it was made, since it isn't obvious:
+**The 1.1 content is the reviewer path, not the old sample.** Cold open → the rider types
+*"Tahoe City down to South Lake Tahoe"* → "Chewing on that…" → the drawn route card → the
+**A TASTE OF THIS ONE** clip plays. Source is `.scratch/store-screenshots-1.1/preview-1.1.mov`; the
+replaced 1.0 file is in `.scratch/asc-backup-1.0-preview/`. Poster frame `00:00:08:00`, which lands on
+the drawn card.
+
+⚠ **The old one showed the `/sample` postcard, and that screen was deleted on 2026-08-05** — so it
+advertised a flow the app no longer has. It survived the 1.1 sweep because §9's recapture covered
+stills only; a video is its own asset and its own step.
+
+**How this cut was built, because the timing is the whole job:**
+
+- **Two takes, not one.** The real flow contains two model waits (~7s and ~25s). Recording it
+  continuously gives a 40s clip that is mostly a static screen, and Apple's window is 15–30s. So:
+  take A is the cold open + typing + send; take B is the drawn card + the play tap. They are
+  concatenated at the natural "he's thinking → here's your drive" beat.
+- **Find the beats by contact sheet, not by guessing at tool latency.** `fps=1/2,scale=170:-1,tile=7x2`
+  renders a whole take as one readable grid. ⚠ Scene detection (`select='gt(scene,…)'`) finds NOTHING
+  here — the changes are text appearing inside a field, which is far below any scene threshold.
+- **Pin the audio start by cropping the play button across time** (`fps=2,crop=…,tile=14x1`): the ▶→‖
+  flip is the exact frame playback begins. It was 8.25s into take B, which is what `adelay` is set
+  from. Guessing this is how a voice lands a second off the button.
+- ⚠ **`drawtext` is NOT in this ffmpeg build** (homebrew, no `--enable-libfreetype`), so contact-sheet
+  tiles cannot be time-labelled. Count them instead; the `fps` value gives the interval.
+
+```sh
+ffmpeg -y -ss 9.5 -t 2.5 -i takeA.mov -ss 17.0 -t 2.5 -i takeA.mov -ss 7.5 -t 23.0 -i takeB.mov \
+  -i taste.m4a -filter_complex "\
+[0:v]fps=30,scale=1320:2868,setsar=1,setpts=PTS-STARTPTS[v0];\
+[1:v]fps=30,scale=1320:2868,setsar=1,setpts=PTS-STARTPTS[v1];\
+[2:v]fps=30,scale=1320:2868,setsar=1,setpts=PTS-STARTPTS[v2];\
+[v0][v1][v2]concat=n=3:v=1:a=0[v];[3:a]adelay=5750|5750,apad,aformat=channel_layouts=stereo[a]" \
+  -map "[v]" -map "[a]" -t 28 -r 30 -c:v libx264 -profile:v high -pix_fmt yuv420p -crf 20 \
+  -c:a aac -b:a 160k -ar 44100 -ac 2 -movflags +faststart preview-1.1.mov
+```
+
+✅ **Verified before upload, not after:** `volumedetect` reads **-91.0 dB** over the first 5 s (true
+digital silence — the app really is silent until you tap) and **-19.1 dB mean / -5.9 dB peak** from
+8–20 s. A preview whose voice is missing or clipped is not something to discover from a rejection.
+
+⚠ **The narration audio is the REAL clip, pulled from R2 by subject** — `Tahoe Maritime Museum`,
+85.1 s, the same telling `POST /drives/propose` presigns for that route. Use `@skipper/storage`'s
+`getR2Client()`; the env vars are `R2_*`, not `S3_ACCESS_KEY_ID`.
+
+### The original 2026-07-28 method notes — still the mechanics, wrong content
 
 ⚠ **`simctl recordVideo` captures NO audio.** A silent preview of a narration app is close to
 pointless, so the real clip is muxed in afterwards — the exact `/roam/sample` m4a the app is playing on
@@ -1004,8 +1047,9 @@ Re-run the list; don't inherit last release's ticks.
       replaced 1.0 set in `.scratch/asc-backup-1.0-screenshots/`.
 - [x] ✅ **§10's App Review notes are LIVE and re-verified** (3978/4000) — see §10's 2026-08-06 block
       for the six defects they fix and how to check them without trusting the apply script.
-- [ ] **The App Preview VIDEO (§9b) is still stale** — it shows the deleted `/sample` flow. Re-shoot or
-      remove it; it is the one asset the recapture did not cover.
+- [x] ✅ **The App Preview VIDEO (§9b) is re-shot and replaced** — 28 s of the actual reviewer path
+      (type → he draws it → the taste clip plays), `COMPLETE`, 2026-08-06. The old `/sample` cut is
+      backed up in `.scratch/asc-backup-1.0-preview/`.
 - [ ] The coverage sentence in the description still matches reality (it says Tahoe only).
 - [x] ✅ **Availability is United States ONLY — re-verified 2026-08-06 by paging all 175 territories:
       exactly ONE is available**, and its id decodes to `{"s":"6778946770","t":"USA"}`.
