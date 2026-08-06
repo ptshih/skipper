@@ -729,7 +729,7 @@ a screen that moved is the exact failure the 2026-07-30 rewrite was cleaning up.
 Skipper is a hands-free, GPS-triggered audio tour for drivers. You plan a drive by TYPING to the guide in plain language and he lays out the route, the stops, and a story for each one. Two things will help you review it from a desk.
 
 1) COVERAGE IS THE LAKE TAHOE REGION ONLY.
-Every story is written and recorded for a specific place, and our finished collection covers Lake Tahoe and the nearby Nevada side (Reno, Carson City, Virginia City). Everywhere else has no content yet, and the guide will say so honestly and in character rather than failing. That is intended behavior. YOUR OWN LOCATION DOES NOT MATTER for anything below: the app does not ask for location permission until you start an actual drive.
+Every story is written and recorded for a specific place, and the app opens on our finished Lake Tahoe collection. Ask for a road outside it and the guide will tell you so honestly and in character rather than failing. That is intended behavior, not an error. YOUR OWN LOCATION DOES NOT MATTER for anything below: the app does not ask for location permission until you start an actual drive.
 
 2) THE FASTEST REAL LOOK, FROM ANYWHERE: NO ACCOUNT, NO PERMISSION.
 Open the app. The guide opens with "Where are we headed?" over a text box whose grey example text rotates through sample asks. Type:
@@ -787,6 +787,24 @@ notes` without re-reading them, so its success line is not evidence for the fiel
 here. Read `appStoreReviewDetail` directly, as this pass did.
 ⚠ **They were pushed against build `25` (`98a292db`)**, which is the commit every quoted string was
 verified on. Attaching a LATER build re-opens the question.
+
+⚠ **A SEVENTH defect appeared the same afternoon, and it did NOT come from a build.** The coverage
+sentence read *"covers Lake Tahoe and the nearby Nevada side (Reno, Carson City, Virginia City)"* —
+true when written, and made misleading hours later by
+[../decisions/tahoe-reno-region-split.md](../decisions/tahoe-reno-region-split.md), which moved those
+three into a separate `reno-carson` region **applied straight to prod**. A drive resolves anchors from
+ONE region's roster, so Tahoe → Virginia City stopped being plannable and the notes were naming places
+a reviewer could not route to. **Founder call 2026-08-06: drop the Nevada names rather than explain the
+split** — under-promising is the safe direction, and the scripted path is all-Tahoe anyway. Re-pushed
+at **3935/4000** and verified: Reno, Carson City, Virginia City and "Nevada side" are all gone.
+⚠ **The lesson generalises past this listing: reviewer notes can be invalidated by a CORPUS or REGION
+change, with no app release and nothing in git to notice.** The six earlier defects all came from
+client work; this one came from an admin route. Anything that changes what the planner will accept is a
+change to §10.
+✅ Checked while there: `pickRegionId` falls back to `regions[0]` and `GET /regions` is
+`orderBy(asc(displayName))`, so "Lake Tahoe" sorts ahead of "Reno & Carson City" and a fresh install
+lands on Tahoe deterministically — which is the only reason the scripted route still works. ⚠ A future
+region whose name sorts before "Lake Tahoe" would silently take that slot.
 
 1. ⚠ **The sign-in step (08-05).** Skipper now signs riders in with an emailed CODE by default
    (`docs/designs/lowest-friction-signup.md`), and **a reviewer cannot receive that email** — they must
