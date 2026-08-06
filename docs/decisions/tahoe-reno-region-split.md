@@ -111,7 +111,36 @@ Measured against the live DB, 2026-08-06:
 
 Of the 9 saved drives, 8 label `lake-tahoe` and 1 labels `reno-carson`. **None loses its label.**
 
-## 6. What this supersedes
+## 6. ⚠ A NEW REGION SILENTLY RENDERS FEWER COLD-OPEN ROWS
+
+Found on the first launch after the split, and it will bite the next region too (Yosemite is drafted
+and will hit it): **`reno-carson` came up with three suggestion rows where `lake-tahoe` has five.**
+Nothing failed and nothing logged — the cold open just looked thinner.
+
+The mechanism is a budget, not a bug. `composeRegionCopy` spends names from ONE cursor
+(`NAME_COST`: `aToB` 2, `via` 3, `fromStart` 1, `toEnd` 1, `open` 0), and **a shape it cannot afford is
+SKIPPED, not terminal** — by design, so a thin region degrades instead of collapsing. Five rows
+therefore need **seven names**, and the region published five: only 6 of its 36 curated endpoints sat
+at `rank <= EXAMPLE_ANCHOR_MAX_RANK` (3), and `spreadAnchors`' `MIN_ANCHOR_SEPARATION_M` (8 km) floor
+dropped one of those, Minden and Gardnerville sitting ~5 km apart.
+
+**Fixed by promoting `Dayton` and `Washoe Lake State Park` from rank 4 → 3** (admin
+`PATCH /admin/places/:id`, free, no spend, no regeneration) → 7 names, 5 rows. ⚠ The promotion is
+DURABLE: the `curate-places` upsert merges rank with `LEAST(...)`, so a later curation run can only
+improve a rank, never demote a hand-promoted one back.
+
+⚠ **The separation floor is a HARD floor, so a promotion can buy nothing.** Greedy max-min is
+monotonically non-increasing, so the last pick's score IS the whole set's minimum pairwise separation,
+and `spreadAnchors` breaks rather than degrading. Measured: promoting `Gold Hill` — a better *name*
+than either place actually promoted — changes the published set by **zero**, because it sits inside
+8 km of Virginia City. Do not pick these by charm alone; simulate against `pickExampleAnchors` +
+`composeRegionCopy` (both pure and env-free precisely so this is testable without booting `index.ts`).
+
+**So the rule for the next region: a region needs ~7 endpoints at rank ≤ 3 that are MUTUALLY ≥ 8 km
+apart before its cold open reads full.** Curating 36 places is not enough, and the count that matters
+is post-spread, not the row count in `places`.
+
+## 7. What this supersedes
 
 The `curate-places` draft prompt (`packages/studio/src/curate-places.ts`, byte-identical copy in
 `apps/admin/server/places.ts`) carries a ⚠ note built on a Tahoe-specific measurement: the 2026-08-03
