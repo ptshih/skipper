@@ -19,7 +19,13 @@ export { EdgeFade, type EdgeFadeProps } from './EdgeFade'
 export { HEADER_FLOATS, useFloatingHeaderInset } from './screenInsets'
 export { Button, type ButtonProps } from './Button'
 export { Input } from './Input'
-export { Card, type CardProps } from './Card'
+export {
+  Card,
+  CardSegmentRule,
+  cardSegment,
+  type CardProps,
+  type CardSegment,
+} from './Card'
 export { Badge, type BadgeProps, type BadgeTone } from './Badge'
 export { FilterChip, type FilterChipProps } from './FilterChip'
 export { useThemedActionSheet, type ShowActionSheet } from './actionSheet'

@@ -18,7 +18,7 @@
 // The prop surface is deliberately narrower than Screen's (no `center`, no `edges`, no `fadeEdges`):
 // there is one caller today and an unused prop is a maintenance claim nobody is making. Widen it when
 // a second surface needs it, not before.
-import type { ReactElement } from 'react'
+import type { ComponentType, ReactElement } from 'react'
 import { FlatList, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { space } from '../theme/tokens'
@@ -29,13 +29,21 @@ import { useScrollEdgeFades } from './useScrollEdgeFades'
 
 export interface ScreenListProps<T> {
   data: readonly T[]
-  /** Takes the item directly rather than FlatList's `{ item }` wrapper — the call sites read better
-   *  and nothing here needs the index or the separators. ⚠ Returns a single ELEMENT (or null), not a
-   *  ReactNode: that is FlatList's own contract for a row, not a narrowing invented here. */
-  renderItem: (item: T) => ReactElement | null
+  /** Takes the item and its index rather than FlatList's `{ item, index }` wrapper — the call sites
+   *  read better. ⚠ Returns a single ELEMENT (or null), not a ReactNode: that is FlatList's own
+   *  contract for a row, not a narrowing invented here.
+   *  ⚠ The index arrived when MY DRIVES became a segmented run: a row has to know whether it is the
+   *  top, the bottom or the middle of the group to round the right corners. Pair it with the list
+   *  LENGTH at the call site and derive the answer with `cardSegment()` — never by hand. */
+  renderItem: (item: T, index: number) => ReactElement | null
+  /** Drawn between rows (not above the first or below the last) — `CardSegmentRule` for a segmented
+   *  run. ⚠ FlatList wants a COMPONENT here, not an element; passing `<Rule />` renders nothing and
+   *  fails silently. */
+  ItemSeparatorComponent?: ComponentType | null
   keyExtractor: (item: T) => string
-  /** Rides above the first row and scrolls with it. Spaced by `contentContainerStyle`'s gap like any
-   *  other row, so a header cannot drift out of the list's rhythm. */
+  /** Rides above the first row and scrolls with it. ⚠ This shell adds NO space beneath it — a caller
+   *  whose content container carries a `gap` gets it for free, and one whose rows sit flush must space
+   *  the header itself (MY DRIVES does the latter). */
   ListHeaderComponent?: ReactElement | null
   padded?: boolean
   contentContainerStyle?: StyleProp<ViewStyle>
@@ -46,6 +54,7 @@ export function ScreenList<T>({
   renderItem,
   keyExtractor,
   ListHeaderComponent,
+  ItemSeparatorComponent,
   padded,
   contentContainerStyle,
 }: ScreenListProps<T>) {
@@ -62,9 +71,10 @@ export function ScreenList<T>({
       <View style={styles.flex}>
         <FlatList
           data={data as T[]}
-          renderItem={({ item }) => renderItem(item)}
+          renderItem={({ item, index }) => renderItem(item, index)}
           keyExtractor={keyExtractor}
           ListHeaderComponent={ListHeaderComponent}
+          ItemSeparatorComponent={ItemSeparatorComponent}
           contentContainerStyle={[
             padded && styles.padded,
             contentPadding,

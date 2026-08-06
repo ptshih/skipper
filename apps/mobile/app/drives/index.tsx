@@ -40,6 +40,8 @@ import { useIsOffline } from '@/lib/connectivity'
 import { listDownloadedDrives } from '@/lib/offline'
 import { space } from '@/theme/tokens'
 import {
+  cardSegment,
+  CardSegmentRule,
   CreditHint,
   DriveCard,
   DriveCardSkeleton,
@@ -97,6 +99,14 @@ export default function MyDrivesScreen() {
   // True when the /drives fetch failed but saved downloads carried us (dead-zone fallback).
   const [offline, setOffline] = useState(false)
 
+  // ⚠ THE FILTERED ROWS, DERIVED ONCE AND UP HERE — the list renders them and `renderDriveCard` needs
+  // their COUNT to know where the segmented run ends, and that callback is a hook that must sit above
+  // the early returns (see the note below). Deriving it a second time down at the render would be the
+  // repo's most-repeated bug shape: two copies of "the same" set, free to drift. The region control's
+  // reasoning lives with `facets`, further down.
+  const visible = filterDrivesByRegion(drives, regionFilter)
+  const visibleCount = visible.length
+
   // Monotonic request id: the focus load, the reconnect self-heal and a Better Auth `$sessionSignal`
   // refetch all share the same network edge and can fire in one moment. Without this the SLOWER of two
   // overlapping loads wins and can stamp a stale list — or a stale error — over a good one.
@@ -118,9 +128,16 @@ export default function MyDrivesScreen() {
     },
     [navigateOnce, router],
   )
+  // ⚠ `visibleCount`, NOT `drives.length`: the region filter is what decides how long this run is, and
+  // reading the unfiltered total would leave the last VISIBLE row wearing a middle row's square bottom
+  // — the one corner nobody looks at until it is wrong. It is also why the count is threaded through a
+  // ref-free dependency: the segment must be recomputed when a chip changes the length, not only when
+  // the rows change.
   const renderDriveCard = useCallback(
-    (dr: DriveSummary) => <DriveCard drive={dr} onPress={onPressDrive} />,
-    [onPressDrive],
+    (dr: DriveSummary, i: number) => (
+      <DriveCard drive={dr} onPress={onPressDrive} segment={cardSegment(i, visibleCount)} />
+    ),
+    [onPressDrive, visibleCount],
   )
 
   // Keep the filter honest against whatever rows just arrived. Both branches exist for ONE reason —
@@ -290,9 +307,9 @@ export default function MyDrivesScreen() {
     </Text>
   ) : null
 
-  // ⚠ NULL when neither applies, never an empty <View>. The content container's `gap` spaces the
-  // header off the first card, so a zero-height header would still hang an unexplained band of air at
-  // the top of the list. ⚠ `hasCreditHint` rather than a re-derived `remaining <= 5`: it is the same
+  // ⚠ NULL when neither applies, never an empty <View>. `styles.header`'s own `marginBottom` spaces
+  // the header off the first card, so a zero-height header would still hang an unexplained band of air
+  // at the top of the list. ⚠ `hasCreditHint` rather than a re-derived `remaining <= 5`: it is the same
   // expression `<CreditHint>` acts on, so this test cannot fall out of step with what renders.
   // The region scope control. ⚠ IT APPEARS ONLY WHEN IT CAN DO SOMETHING — two or more regions among
   // these drives (`shouldOfferRegionFilter`). That is what keeps it invisible at a single region
@@ -304,7 +321,6 @@ export default function MyDrivesScreen() {
   // region (outside every released bbox, or an offline summary predating the field) has no chip of
   // its own by design and lives under ALL.
   const facets = regionFacets(drives)
-  const visible = filterDrivesByRegion(drives, regionFilter)
   const chooseRegion = (id: string | null) => {
     filterTouched.current = true
     setRegionFilter(id)
@@ -345,8 +361,8 @@ export default function MyDrivesScreen() {
         keyExtractor={keyOfDrive}
         renderItem={renderDriveCard}
         ListHeaderComponent={header}
+        ItemSeparatorComponent={CardSegmentRule}
         padded
-        contentContainerStyle={styles.body}
       />
     </>
   )
@@ -359,22 +375,29 @@ function DrivesSkeleton() {
   return (
     // ⚠ Still a plain <Screen>, NOT <ScreenList>: two silhouettes never overflow, so virtualizing
     // them would buy nothing and cost a list shell around a fixed pair.
-    <Screen scroll padded contentContainerStyle={styles.body}>
+    <Screen scroll padded>
       <Stack.Screen options={SCREEN_OPTIONS} />
-      <SkeletonGroup accessibilityLabel={voice.loading.drives} style={styles.list}>
-        <DriveCardSkeleton />
-        <DriveCardSkeleton />
+      {/* ⚠ NO gap between the two silhouettes — it mirrors the flush list below, and a skeleton whose
+          rhythm disagrees with the real rows reveals as a jump. Same reason they carry SEGMENTS and a
+          rule between them: a pair of separate rounded cards resolving into one segmented run is that
+          jump, just in the corners instead of the spacing. */}
+      <SkeletonGroup accessibilityLabel={voice.loading.drives}>
+        <DriveCardSkeleton segment="first" />
+        <CardSegmentRule />
+        <DriveCardSkeleton segment="last" />
       </SkeletonGroup>
     </Screen>
   )
 }
 
+// ⚠ THE LIST HAS NO ROW GAP (founder, 2026-08-05): the cards stack flush, so the rhythm is carried by
+// each card's own padding and keyline rather than by air between them. That is why the header owns the
+// space beneath ITSELF (`header.marginBottom`) — a `gap` on the content container would space the
+// header correctly and put the air straight back between every pair of cards.
 const styles = StyleSheet.create({
-  body: { gap: space.md },
   // ⚠ WRAPS, and it is not decorative: one chip per region present, and each carries a real region's
   // display name at the AX Dynamic Type sizes this uncapped screen supports. A single row would push
   // the later regions off the edge exactly for the riders reading largest.
   filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
-  header: { gap: space.md },
-  list: { gap: space.md },
+  header: { gap: space.md, marginBottom: space.md },
 })

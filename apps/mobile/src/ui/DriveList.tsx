@@ -12,7 +12,7 @@
 // home's offline branch is a SECTION inside home's own ScrollView, where nesting a VirtualizedList is
 // an error, not a preference. `DriveList` below is the plain mapped column for that second case — the
 // row is identical either way, which is the property worth protecting.
-import { memo } from 'react'
+import { Fragment, memo } from 'react'
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native'
 import type { DriveSummary } from '@/lib/api'
 import {
@@ -24,7 +24,7 @@ import {
 } from '@/lib/labels'
 import { space } from '../theme/tokens'
 import { Badge } from './Badge'
-import { Card } from './Card'
+import { Card, CardSegmentRule, cardSegment, type CardSegment } from './Card'
 import { Skeleton } from './Skeleton'
 import { Text } from './Text'
 
@@ -34,6 +34,9 @@ export interface DriveCardProps {
    *  not de-dupe identical pushes, so a fast double-tap stacks two detail screens) — the card does
    *  not own that, because the two surfaces guard on different state. */
   onPress: (driveId: string) => void
+  /** Position in the segmented run. ⚠ Derive it with `cardSegment()` — never by hand at a call site,
+   *  which is how the two surfaces would start rounding different corners. */
+  segment?: CardSegment
 }
 
 /**
@@ -44,7 +47,7 @@ export interface DriveCardProps {
  * call sites hand it a `useCallback`. `drive` is compared by identity, which is correct: the rows only
  * ever change by a refetch replacing the array.
  */
-export const DriveCard = memo(function DriveCard({ drive, onPress }: DriveCardProps) {
+export const DriveCard = memo(function DriveCard({ drive, onPress, segment }: DriveCardProps) {
   const length = driveLength(drive.durationSeconds)
   // The spoken twin of that badge — same seconds, one arithmetic (see labels.ts).
   const spoken = spokenDriveLength(drive.durationSeconds)
@@ -70,7 +73,7 @@ export const DriveCard = memo(function DriveCard({ drive, onPress }: DriveCardPr
       accessibilityRole="button"
       accessibilityLabel={`${label}${drive.clipCount ? `, ${stops}` : ''}${spokenDate ? `, ${spokenDate}` : ''}${spoken ? `, ${spoken}` : ''}`}
     >
-      <Card onPress={() => onPress(drive.driveId)}>
+      <Card segment={segment} onPress={() => onPress(drive.driveId)}>
         {/* ⚠ NO `numberOfLines`, and this is the reconciliation of the second drift: MY DRIVES ran
             uncapped while home clamped to 2. Uncapped wins on purpose — both surfaces are scrollable
             and non-driving, so Dynamic Type is uncapped including the AX sizes, and a clamp truncates
@@ -110,19 +113,28 @@ export interface DriveListProps {
  */
 export function DriveList({ drives, onPressDrive, style }: DriveListProps) {
   return (
-    <View style={[styles.list, style]}>
-      {drives.map((dr) => (
-        <DriveCard key={dr.driveId} drive={dr} onPress={onPressDrive} />
+    // ⚠ NO `gap` on this column, and that is load-bearing rather than tidy: the rows are a segmented
+    // RUN. Air between them would break the one placard back into a stack of separate cards AND lift
+    // each seam's rule off the two rows it divides. The virtualized twin drops its gap for the same
+    // reason — see MY DRIVES.
+    <View style={style}>
+      {drives.map((dr, i) => (
+        <Fragment key={dr.driveId}>
+          {i > 0 ? <CardSegmentRule /> : null}
+          <DriveCard drive={dr} onPress={onPressDrive} segment={cardSegment(i, drives.length)} />
+        </Fragment>
       ))}
     </View>
   )
 }
 
 /** A drive card's silhouette. Inert; the enclosing `SkeletonGroup` owns the pulse. Shared for the same
- *  reason the card is: it mirrors the card's shape, so a card change that skips it is a visible seam. */
-export function DriveCardSkeleton() {
+ *  reason the card is: it mirrors the card's shape, so a card change that skips it is a visible seam —
+ *  which is why it takes `segment` too. A silhouette of separate cards resolving into one segmented run
+ *  reveals as a jump at exactly the moment the rows arrive. */
+export function DriveCardSkeleton({ segment }: { segment?: CardSegment }) {
   return (
-    <Card>
+    <Card segment={segment}>
       <Skeleton width="72%" height={20} />
       <Skeleton width="48%" height={12} style={styles.skLine} />
     </Card>
@@ -130,7 +142,6 @@ export function DriveCardSkeleton() {
 }
 
 const styles = StyleSheet.create({
-  list: { gap: space.md },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
