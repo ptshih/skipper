@@ -1,6 +1,32 @@
 # App Store Connect — the submission cheat-sheet
 
-> **Status:** ✅ **1.1 TEXT METADATA IS ENTERED AND LIVE (2026-08-03).** Pushed with
+> **Status:** ✅ **1.1.0 IS SUBMITTED — `WAITING_FOR_REVIEW` since 2026-08-06T20:11:36Z.**
+>
+> Review submission `445ea909`, build **25** (`98a292db`). Release type stays **MANUAL**, so approval
+> lands in *Pending Developer Release* and the real Tahoe drive can still happen before launch — that
+> asymmetry is what made [1-1-submission-sweep.md](1-1-submission-sweep.md) §0's trade affordable.
+>
+> **What went in:** build 25 · App Review notes 3935/4000 · six recaptured screenshots · a re-shot
+> 28 s App Preview · description 2565 · promo 168 · keywords 99 · US-only · 12+ · copyright set.
+> Every one read back from the API after writing, never trusted from a 200.
+>
+> ⚠ **The App Privacy label went in UNCHANGED from 1.0, on an explicit founder call (2026-08-06):
+> the planner's free text is TRANSMITTED, not COLLECTED.** The reasoning: nothing persists it — there
+> is no `conversations` table and request bodies are never logged — so Anthropic receives it as a
+> processor. It is a judgement on Apple's definition and the founder made it knowingly. ⚠ **There is
+> no public API for this label** (`appPrivacyDetails`, `appDataUsages` and `appDataUsagesPublishState`
+> all 404 with "relationship does not exist"), so it can be neither verified nor changed from here —
+> if review comes back on it, that is the field to look at, by hand.
+>
+> **Still open, and neither blocks review:** the accessibility declaration is `DRAFT` and publishing is
+> a UI action; and the demo account's password could not be tested from here — since 08-05 a reviewer
+> reaches it only via **"Use a password instead"**.
+>
+> **On approval, do §13** — it is the only remaining checklist and it is what makes the store link work.
+>
+> ---
+>
+> **Prior status (kept for the diff):** ✅ **1.1 TEXT METADATA IS ENTERED AND LIVE (2026-08-03).** Pushed with
 > `bun run asc:metadata -- --apply --version=1.1.0` and verified by an independent read-back:
 > promotional text, description and App Review notes are all the 1.1 copy from §§3/4/10, and the
 > version record is now **`1.1.0`, state `PREPARE_FOR_SUBMISSION`**, release type MANUAL.

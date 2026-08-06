@@ -340,6 +340,11 @@ Everything here is owned by [app-store-submission.md](app-store-submission.md) �
       leg bills Google Routes as well as more model tokens, so it is its own founder call — and it is
       most cheaply proven by just walking §5 on a real build rather than by curl.
 - [ ] **Availability = United States ONLY.** One click, cheapest legal decision on the list.
-- [ ] Submit. Release type stays **MANUAL**, so approval lands in *Pending Developer Release* — the real
-      Tahoe drive can still happen between approval and launch. That asymmetry is what made §0's trade
-      affordable.
+- [x] ✅ **SUBMITTED 2026-08-06T20:11:36Z** — review submission `445ea909`, state `WAITING_FOR_REVIEW`,
+      build 25. Release type stayed **MANUAL**, so approval lands in *Pending Developer Release* — the
+      real Tahoe drive can still happen between approval and launch. That asymmetry is what made §0's
+      trade affordable, and it is now the thing standing between RISK-1 and a launch.
+      ⚠ **This guide is DISCHARGED.** What is left lives in
+      [app-store-submission.md](app-store-submission.md) §13 (the post-approval store link) — plus two
+      items that do not block review: publishing the accessibility declaration (a UI action) and
+      confirming the demo account's password still works behind "Use a password instead".
