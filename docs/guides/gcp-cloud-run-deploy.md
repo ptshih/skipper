@@ -183,6 +183,28 @@ packages/storage/** cloudbuild.yaml bun.lock package.json
 - ⚠ **The dangerous direction is TOO NARROW, not too wide.** An over-broad filter is merely noisy; a
   missing path makes a real API fix look shipped when it never deployed.
 
+**`skipper-admin-deploy` gained `packages/engine/**` on 2026-08-06**, and the reason generalises: a
+trigger's filter must match the Dockerfile's COPY list, and the admin's SPA stage started copying
+`packages/engine/src` that day (see below). Without the path an engine-only change would leave the
+deployed admin bundle stale while everything read as shipped — the exact failure this section records.
+
+### ⚠ The admin SPA bundles workspace SOURCE; a value import needs its `src` copied
+
+`apps/admin/Dockerfile` stage 1 copies each workspace package's `package.json` **but not its `src/`**,
+which was invisible for a long time because every `@skipper/*` import in `client/` was `import type` —
+erased by TypeScript before the bundler resolves anything. The first VALUE import
+(`parseRegionBboxes` in `google-map.tsx`) therefore failed with `Rolldown failed to resolve import
+"@skipper/engine"` **only inside the image**: locally the whole monorepo is on disk, so `bun run build`,
+`tsc --noEmit` and the root `check` all pass and the break appears at deploy.
+
+Adding a value import from another `@skipper/*` package into `apps/admin/client` needs BOTH: a
+`COPY packages/<pkg>/src` in stage 1, and that package in this trigger's `includedFiles`. Verify the way
+that failure demands — build the image, not the workspace:
+
+```bash
+docker build -f apps/admin/Dockerfile --target web -t skipper-admin-webtest .
+```
+
 ## Verify
 
 ```bash

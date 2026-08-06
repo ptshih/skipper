@@ -20,6 +20,15 @@ COPY packages/engine/package.json packages/engine/
 RUN bun -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.workspaces=['apps/admin','packages/db','packages/shared','packages/storage','packages/engine'];fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
  && bun install
 COPY apps/admin apps/admin
+# ⚠ THE SPA BUNDLE NEEDS THIS PACKAGE'S SOURCE, not just its package.json — and it is the ONE workspace
+# package that does. Every other `@skipper/*` import in client/ is `import type`, which TypeScript erases
+# before the bundler ever resolves it, so for a long time copying manifests alone was enough and this
+# COPY did not exist. `google-map.tsx` imports `parseRegionBboxes` as a VALUE (one parser for
+# `regions.bbox`, repo-wide — see docs/decisions/multi-bbox-regions.md), and a value import must resolve
+# to real source. Its absence failed ONLY in the image: locally the whole monorepo is on disk, so
+# `bun run build` and `tsc --noEmit` both pass and the break appears at deploy time.
+# ⚠ Adding another VALUE import from a different @skipper package needs its src copied here too.
+COPY packages/engine/src packages/engine/src
 # The browser Maps JS key is a BUILD-TIME public var (Vite inlines VITE_* into the bundle; it
 # is referrer-restricted, not a secret). Passed via cloudbuild --build-arg.
 ARG VITE_GOOGLE_MAPS_BROWSER_KEY=""

@@ -52,10 +52,14 @@ export function clusterIdsInBbox(bbox: readonly RegionBbox[]) {
  * repetition.
  */
 export async function loadDiversityContext(bbox: readonly RegionBbox[] | null): Promise<string[]> {
-  // ⚠ `null` and `[]` mean OPPOSITE things here and must not be conflated. `null` is "no region" (an
-  // --include-ids run) → WHOLE CORPUS, per the note above. `[]` is "a region whose extent could not be
-  // read" → match nothing, which `inAnyBbox` enforces inside the sub-selects. Writing this as a bare
-  // truthiness test would send an unreadable region down the whole-corpus path.
+  // ⚠ `null` and `[]` mean OPPOSITE things here and the test is written to say which it is asking.
+  // `null` is "no region at all" (an --include-ids run) → WHOLE CORPUS, per the note above. `[]` is "a
+  // region whose extent could not be read" → match nothing, which `inAnyBbox` enforces inside the
+  // sub-selects. An explicit `!== null` because the two differ by KIND, not by emptiness: a bare
+  // truthiness test happens to land the same way today (an empty array is truthy in JS, so it takes
+  // the scoped branch and correctly matches nothing), but it reads as though emptiness were the
+  // question, and the next person to swap the parameter for a nullable-or-empty type would get the
+  // whole corpus for a region they could not parse — the one answer that must never be the fallback.
   const where =
     bbox !== null
       ? and(
