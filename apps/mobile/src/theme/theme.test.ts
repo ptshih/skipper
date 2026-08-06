@@ -51,7 +51,18 @@ const ON_FILL: [keyof ThemeColors, keyof ThemeColors][] = [
   // are theme-independent, so this assertion is the only thing keeping "legible on the artwork" true
   // if either palette constant is ever retuned.
   ['onPhoto', 'photoScrim'],
+  // ⚠ THE HOME POSTER'S ROAD, and this pair exists because the bug already happened. A render
+  // stroked the road in `surface` — which at dusk IS the night background — so it drew dark-on-dark
+  // and the road silently disappeared from the artwork. Nothing failed; it was caught by eye.
+  // `onPhoto` is theme-independent cream, so this holds in both moods (measured 10.50 / 11.24).
+  ['onPhoto', 'posterNear'],
 ]
+// Decorative SHAPES on the poster's planes. Judged at the 3:1 non-text bar (WCAG 2.1 SC 1.4.11), not
+// AA — these are silhouettes, never text. ⚠ `amberToken` is the rig, and the icon exploration already
+// measured amber as sub-3:1 on `pine` and on paper, which is why the rig sits on `posterNear` (the
+// deep plane) and nowhere else. Measured here: 3.82 day / 5.86 dusk.
+const NON_TEXT_SHAPES: [keyof ThemeColors, keyof ThemeColors][] = [['amberToken', 'posterNear']]
+const NON_TEXT = 3
 const AA = 4.5
 
 for (const theme of [lightTheme, darkTheme] as Theme[]) {
@@ -67,6 +78,10 @@ for (const theme of [lightTheme, darkTheme] as Theme[]) {
   for (const [fg, bg] of ON_FILL)
     test(`${theme.name}: ${fg} on ${bg} clears ${AA}:1`, () => {
       expect(contrast(theme.colors[fg], theme.colors[bg])).toBeGreaterThanOrEqual(AA)
+    })
+  for (const [fg, bg] of NON_TEXT_SHAPES)
+    test(`${theme.name}: ${fg} shape on ${bg} clears ${NON_TEXT}:1`, () => {
+      expect(contrast(theme.colors[fg], theme.colors[bg])).toBeGreaterThanOrEqual(NON_TEXT)
     })
 }
 

@@ -30,7 +30,12 @@ export { Badge, type BadgeProps, type BadgeTone } from './Badge'
 export { FilterChip, type FilterChipProps } from './FilterChip'
 export { useThemedActionSheet, type ShowActionSheet } from './actionSheet'
 export { RegionChip, type RegionChipProps } from './RegionChip'
-export { Ridgeline, type RidgelineProps } from './Ridgeline'
+// ⚠ `Ridgeline` WAS DELETED (2026-08-06) — the 472x56 hairline horizon. It was the answer to "the
+// home screen looks stale" and did not land: the same complaint returned three days later, and on
+// device you had to hunt for it. `HomePoster` replaced it, and DESIGN §2's one-signature-move rule
+// is why both could not stay. Recreate from git if a hairline horizon is ever wanted elsewhere.
+// (Its predecessor `Sunburst` went the same way on 2026-08-05, four lines up in this file's history.)
+export { HomePoster, HOME_POSTER_ASPECT, type HomePosterProps } from './HomePoster'
 export { useRegionPicker, type RegionPickerArgs, type PickableRegion } from './RegionPicker'
 export { SuggestionRow, type SuggestionRowProps } from './SuggestionRow'
 export { Segmented, type SegmentedProps, type SegmentedOption } from './Segmented'

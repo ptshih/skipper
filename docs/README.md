@@ -293,6 +293,22 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   charm verdict passed its schema on the first real reply and the job summarizer's metrics came back richer
   than the regex could carry; ⚠ `classify-treatments` stays unproven because `--region` is its narrowest
   scope (~$0.82 minimum, preview included).
+- [home-hero-poster.md](designs/home-hero-poster.md) — 💡 IDEA (2026-08-06): **ONE static WPA-poster
+  background** behind the home cold open — ridge planes, a small lake, and the rig on a switchback road —
+  hidden the moment the conversation starts, and **replacing** `Ridgeline` (one signature move per screen,
+  DESIGN §2). ⚠ **Not per-region, and that is the whole design**: the per-region axis was a consequence of
+  representational art, so non-representational art deletes it — no columns, no DTO field, no cache, no
+  delivery problem. Un-blocks §13's **S2** (the parked rig), refused there only because it *spends a row*
+  — a background spends none. ⚠ **MEASURED: the ask cards own 43% of the screen and the free strip is
+  17%**, so full-bleed is HIDDEN, not dimmed; and a scene compressed into it reads as STRIPES — the eye
+  reads a silhouette at that size. ⚠ Day/dusk is a palette SWAP, not two artworks. ✅ Built with
+  **`react-native-svg`** (Expo-bundled 15.15.4), and §3.6 records why a PNG was the WEAKEST option
+  rather than the safe one: size is a wash (41KB vs 3KB), but a raster cannot re-lay-out for
+  375×667 → 440×956 and its baked hex sits outside `lint:tokens`. ⚠ The road ink must NOT flip by theme
+  (`paper` at dusk IS the night background — the road vanished), making this `onPhoto`'s first
+  production reader; that pairing is now asserted in `theme.test.ts` and mutation-checked.
+  💸 Art is programmatic SVG — **free**; rider spend is zero.
+  Generator: `apps/mobile/assets/brand/explore-poster/gen.py`.
 - [the-road-trip-planner.md](designs/the-road-trip-planner.md) — 💡 VISION: choose a start and an end,
   let the model NUDGE THE ROUTING (never the stops — deterministic selection stands), spurs rather than
   branching, saved as today's drive. ⚠ Touches NO hard invariant once read correctly, and nearly all the

@@ -75,6 +75,19 @@ export interface ThemeColors {
   // dissolve into its OWN colour, and fading to a different transparent leaves a grey cast at the seam.
   photoScrimFade: string
   onPhoto: string // cream that reads on `photoScrim` in both moods
+  // ── THE HOME POSTER'S RIDGE PLANES ────────────────────────────────────────────────────────────
+  // Three depth planes, far → near, for the cold-open background (`HomePoster`).
+  // ⚠ These are DECORATIVE FILLS and must never carry text or a control. They exist as roles rather
+  // than raw hex for the ordinary reason (`lint:tokens`), and as their OWN roles rather than reusing
+  // `accent`/`rule` because the UI palette answers a different question: `accent` at dusk is
+  // `pineGlow`, lifted so an active glyph reads at night, which is exactly wrong for a full-width
+  // plane that should recede. See docs/designs/home-hero-poster.md §3.
+  // ⚠ `onPhoto` is the poster's ROAD, and the contrast between it and `posterNear` is asserted in
+  // theme.test.ts — a render once stroked the road in `surface`, which at dusk IS the night
+  // background, and the road silently vanished.
+  posterFar: string // the distant ridge — atmospheric, never competes with the near planes
+  posterMid: string
+  posterNear: string // the plane the road and the rig sit on
   // ⚠ `areaFill`/`areaStroke` lived here until the 1.1 sweep. They coloured a DISTRICT's convex hull
   // on the map — the AREA trigger, deleted end-to-end in 1.1 (the mode was answering "a roamer can
   // arrive from any direction", which a drive never can). The `<Polygon>` that consumed them went with
@@ -94,7 +107,7 @@ export interface ThemeColors {
 // — `onPrimary`/`onAmber`/`onDanger`, which Button/FilterChip/Badge already render as text on a
 // fill. The two lists differ on purpose and neither is stale: that test asks "safe on the app
 // surface", this asks "is a text colour at all". Everything omitted is a surface, fill, rule, or
-// rgba effect, and stays reachable from `style` / `Icon` / `Glyph` / `Ridgeline`.
+// rgba effect, and stays reachable from `style` / `Icon` / `Glyph` / `HomePoster`.
 export type TextColorRole = keyof Pick<
   ThemeColors,
   | 'ink'
@@ -167,6 +180,9 @@ export const lightTheme: Theme = {
     photoScrim: palette.inkBrown,
     photoScrimFade: fade(palette.inkBrown),
     onPhoto: palette.paperRaised,
+    posterFar: palette.tanRule,
+    posterMid: palette.pine,
+    posterNear: palette.pineDeep,
     // lakeTeal at low alpha — the day basemap is bright paper, so the wash needs less to read
     // than it does at dusk (the same asymmetry `glow` carries at 0.30 light / 0.42 dark).
   },
@@ -207,6 +223,9 @@ export const darkTheme: Theme = {
     photoScrim: palette.inkBrown,
     photoScrimFade: fade(palette.inkBrown),
     onPhoto: palette.paperRaised,
+    posterFar: palette.tanRuleNight,
+    posterMid: palette.pineNight,
+    posterNear: palette.pineDeepNight,
     // lakeTealNight, lifted — over the deep-pine night basemap a 0.14 wash disappears entirely.
   },
 }

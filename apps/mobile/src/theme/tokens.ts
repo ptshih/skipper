@@ -20,6 +20,10 @@ export const palette = {
   inkFaded: '#5C4A30', // secondary text (region, stop type) — kept ~5:1 for glare
   inkFaint: '#74603E', // tertiary hints — darkened to clear 4.5:1 on paper (was #8A7550)
   pine: '#1E5B40', // primary green — CTA fill, active track, success
+  // ⚠ ILLUSTRATION ONLY — the home poster's nearest ridge. It exists because the UI palette had no
+  // deep green: `pine` is the mid plane and there was nothing behind it, so a landscape drawn from UI
+  // roles alone came out flat. Never text, never a control (docs/designs/home-hero-poster.md).
+  pineDeep: '#15402F',
   amberSunset: '#DD7A33', // bright amber — FILLS & tokens only (moving dot, glow)
   amberBurnt: '#9A4D17', // amber that survives as TEXT on paper (~5:1) — kickers
   lakeTeal: '#2C6E7E', // cool route/water accent + scenic badges
@@ -39,6 +43,11 @@ export const palette = {
   parchFaded: '#A99D80', // secondary text on dark
   parchFaint: '#9A9075', // tertiary hints on dark — lifted to clear 4.5:1 (was #7C7158)
   pineGlow: '#5FA877', // pine lifted so "active" still reads on night
+  // ⚠ ILLUSTRATION ONLY — the poster's mid + near ridges at dusk, and NOT `pineGlow`. That token is
+  // deliberately LIFTED so an active control reads at night, which is right for a glyph and far too
+  // loud as a full-width filled plane. A landscape at dusk recedes; a control does not.
+  pineNight: '#2E6B4C',
+  pineDeepNight: '#1B3A2B',
   lanternAmber: '#EBA351', // primary night accent — glow CTA, kicker, token
   lakeTealNight: '#5FA7B8', // cool accent lifted for dark
   tanRuleNight: '#3A4A3E', // muted-pine hairlines that read as "off"

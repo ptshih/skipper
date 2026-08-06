@@ -1,0 +1,6 @@
+out/
+__pycache__/
+*.pyc
+sheet-*.png
+crop-*.png
+coldopen*.png

@@ -137,8 +137,9 @@ export function RegionChip({ regionName, onPress, prominent, leadingIcon }: Regi
   // No name AND no picker: nothing true to say and nothing to do about it, so say nothing. This is
   // the genuine degraded read — `regionsFailed`, or a cold first launch whose `/regions` never
   // landed — where a pill would be an empty promise.
-  // ⚠ Screen-side counterpart: whatever anchors the Ridgeline behind this row must not collapse to
-  // zero height when this renders nothing.
+  // ⚠ Screen-side counterpart: the cold-open backdrop is anchored to the SCROLL VIEWPORT's bottom,
+  // not to this row, so it survives this rendering nothing. That decoupling is deliberate — the old
+  // Ridgeline hung off this row and would have vanished with it.
   if (regionName === null) return null
 
   // ⚠ THE PILL SKIN IS WORN IN BOTH STATES — only the CARET and the press behaviour are

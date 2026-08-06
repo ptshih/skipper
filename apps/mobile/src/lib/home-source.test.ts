@@ -22,11 +22,24 @@ const RAW = await Bun.file(new URL('../../app/index.tsx', import.meta.url)).text
 const HOME = RAW.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
 
 describe('home keeps the decorations that cannot fail loudly', () => {
-  // The watermark used to live INSIDE the hero block; deleting that block would have taken it with
-  // it, silently, leaving a screen that still looked fine and had lost its last poster reference.
-  // It was moved out in its own commit for that reason — this is what stops it drifting back.
-  test('the ridgeline watermark is still rendered', () => {
-    expect(HOME).toContain('<Ridgeline')
+  // The decoration used to be `Ridgeline`, which lived INSIDE the hero block; deleting that block
+  // would have taken it with it, silently, leaving a screen that still looked fine and had lost its
+  // last poster reference. `HomePoster` replaced it (docs/designs/home-hero-poster.md) and inherits
+  // the same hazard: it is decorative and cold-open-only, so losing it breaks no behaviour and fails
+  // no other test — the screen just quietly goes plain again, which is the exact complaint that
+  // produced it.
+  test('the cold-open poster is still rendered', () => {
+    expect(HOME).toContain('<HomePoster')
+  })
+
+  // ⚠ WHERE it is rendered is the load-bearing part, and this is the assertion with teeth. The
+  // poster must be handed to the SHELL's `backdrop` slot so it paints behind the scroll content and
+  // against the bottom edge. Rendered as an ordinary child of the content container it would scroll
+  // away with the cards — a defect that looks fine on a first glance at a full screen and only shows
+  // up once someone scrolls, which is precisely the "no loud symptom" bar this file exists for.
+  test('the poster is handed to the shell as a backdrop, not rendered inline', () => {
+    expect(HOME).toContain('backdrop={backdrop}')
+    expect(HOME).toMatch(/const backdrop = coldOpen \?/)
   })
 })
 

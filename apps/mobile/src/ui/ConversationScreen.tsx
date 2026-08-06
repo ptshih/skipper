@@ -46,6 +46,19 @@ export interface ConversationScreenProps {
   children: ReactNode
   /** Pinned above the keyboard. The composer, or the wrap-up bar. Omit for no footer at all. */
   footer?: ReactNode
+  /**
+   * Decorative artwork pinned to the BOTTOM OF THE SCREEN, behind everything.
+   *
+   * ⚠ THE SCREEN'S bottom, not the scroll viewport's, and the difference is not cosmetic — it was a
+   * real defect caught only on device. Anchored to the viewport (i.e. stopping at the footer) the
+   * whole composition rides ~300px higher than it was drawn, and its top third slides under the
+   * cards: the poster lost its cabin and its lake, while the plane fill meant to hide behind the
+   * composer sat exposed as an empty green field.
+   * ⚠ So the footer DOES paint over its lower part, deliberately. The footer's `backgroundColor` is
+   * load-bearing (without it the transcript scrolls behind the composer at full opacity), and the
+   * artwork is drawn expecting to lose that strip.
+   */
+  backdrop?: ReactNode
   /** Follow content growth while the rider is within CONVERSATION_STICK_PX of the bottom. */
   stickToBottom?: boolean
   /** Bump to request ONE animated scroll-to-end. A discrete rider ACTION, never a stream flush. */
@@ -56,6 +69,7 @@ export interface ConversationScreenProps {
 export function ConversationScreen({
   children,
   footer,
+  backdrop,
   stickToBottom = true,
   scrollSignal = 0,
   contentContainerStyle,
@@ -125,6 +139,13 @@ export function ConversationScreen({
       edges={['left', 'right']}
       style={[styles.flex, { backgroundColor: colors.surface }]}
     >
+      {/* FIRST child of the safe area, so it paints under everything — the scroll content (which is
+          transparent) and the footer (which is not, and covers the strip the artwork expects to lose). */}
+      {backdrop ? (
+        <View style={styles.backdrop} pointerEvents="none">
+          {backdrop}
+        </View>
+      ) : null}
       {/* ⚠ THE OFFSET IS A FUNCTION OF WHERE THIS VIEW STARTS — which is why it is no longer one
           value. The installed KeyboardAvoidingView.js computes its inset from a PARENT-RELATIVE
           layout frame against a SCREEN-coordinate keyboard frame, so the offset owed is the gap
@@ -177,7 +198,14 @@ export function ConversationScreen({
               {
                 // Load-bearing fill: without it the transcript scrolls BEHIND the composer at full
                 // opacity. (The bottom EdgeFade dissolves the scroll edge; it does not hide it.)
-                backgroundColor: colors.surface,
+                // ⚠ EXCEPT OVER A BACKDROP, where it is dropped ON PURPOSE (founder, 2026-08-06:
+                // "i thought the graphic would cover all the way to the bottom"). The artwork runs to
+                // the screen edge and the composer floats on it. Safe HERE and nowhere else: a
+                // backdrop is only ever passed on the COLD OPEN (`coldOpen` in app/index.tsx), where
+                // the transcript is empty by definition — so there is nothing to scroll behind the
+                // composer, which is the whole reason the fill exists. The moment the rider speaks
+                // the backdrop is gone and the fill is back.
+                backgroundColor: backdrop ? 'transparent' : colors.surface,
                 // While the keyboard is up the home indicator is underneath it, so its inset must
                 // go to zero or the composer floats above the keys.
                 paddingBottom: keyboardVisible ? space.sm : space.sm + insets.bottom,
@@ -213,4 +241,6 @@ function useKeyboardVisible(): boolean {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   footer: { paddingHorizontal: space.gutter, paddingTop: space.sm },
+  // Bottom-anchored and full-bleed: the artwork is a horizon, so it belongs against an edge.
+  backdrop: { position: 'absolute', left: 0, right: 0, bottom: 0 },
 })

@@ -18,7 +18,7 @@
 // ⚠ INV-13: nothing here logs. Every string on this screen is rider content or model output, and none
 // of it is persisted — not to disk, not to the region cache (which holds public place NAMES only).
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { StyleSheet, View, type TextInput } from 'react-native'
+import { StyleSheet, useWindowDimensions, View, type TextInput } from 'react-native'
 import { Stack, useFocusEffect, useIsFocused, useRouter } from 'expo-router'
 import { MAX_PLAN_DRAWN, type PlannedRoute, type PlannerExample } from '@skipper/shared'
 // ⚠ The TYPED contract, and the only analytics surface there is (src/lib/analytics.tsx owns the raw
@@ -83,11 +83,10 @@ import {
   DriveList,
   HeaderIconButton,
   Icon,
-  useFloatingHeaderInset,
   PlannerUnavailableCard,
   SkeletonGroup,
+  HomePoster,
   RegionChip,
-  Ridgeline,
   useRegionPicker,
   type IconName,
   SuggestionRow,
@@ -117,7 +116,6 @@ const HOLD_TICK_MS = 100
 /** The ridge's resting offset inside the content box. NAMED because the element adds the floating
  *  bar's height to it at the call site, and a style object cannot be read back for that arithmetic
  *  without lying about the type of `top` (a DimensionValue, not a number). */
-const WATERMARK_TOP = 4
 
 // ⚠ `PreviewItem` MOVED to `src/ui/TranscriptCard.tsx` and is imported from `@/ui` — the card owns
 // its own contract, and `src/ui` may not import from `app/`.
@@ -144,8 +142,12 @@ export default function HomeScreen() {
   // screen owns the audio; PreviewCard stays pure presentation, same rule as everything else here
   // that spends or holds state.
   const preview = useRoutePreview()
-  // Only the watermark needs this, and only because it is absolutely positioned — see its comment.
-  const headerInset = useFloatingHeaderInset()
+  // ⚠ MEASURED, not assumed. The poster's height tracks its own WIDTH (the artwork has a fixed
+  // aspect), so on a short phone it would eat a bigger share of the screen than on a tall one —
+  // and iOS size classes cannot tell a 375x667 SE from a 440x956 Pro Max, so there is no
+  // Apple-blessed hook to branch on (docs/research/fitting-one-screen-across-iphone-sizes.md §1).
+  // The `maxHeight` below is that branch, read off real dimensions.
+  const { width: winWidth, height: winHeight } = useWindowDimensions()
   // Drives the offline INVERSION below (MY DRIVES first, no composer) and the reconnect self-heal.
   // Fails OPEN — an unknown verdict means online — so the degraded layout only ever appears on a
   // DEFINITE offline (see connectivity.ts).
@@ -1241,7 +1243,7 @@ export default function HomeScreen() {
   // What stood here — enamel kicker → Alfa-Slab headline → the parked rig on its trail → tagline —
   // is GONE, and the reason is not space: that stack is a LANDING PAGE, and Skipper already has one
   // at skipper.fm. In the app it re-sold someone who had already installed and was standing there
-  // wanting to plan a drive. The poster survives as the watermark below.
+  // wanting to plan a drive. The poster survives as the cold-open BACKDROP below.
   //
   // ⚠ THE ONE-AMBER ORDERING THIS BLOCK USED TO GUARD IS NOW SATISFIED BY CONSTRUCTION. The old
   // comment was right that `RouteTrack glow` had to be gone before a route card's amber MIN badge or
@@ -1249,22 +1251,18 @@ export default function HomeScreen() {
   // deleted the cold open carries no amber at all, so there is no ordering left to keep correct —
   // which is why `collapsed` no longer gates anything here.
   //
-  // ⚠ ANCHORED TO THE SCREEN, NOT TO ANY BLOCK ABOVE IT — that is the whole reason it is its own
-  // element. It used to live inside the hero's View, so deleting that block (done, just above) would
-  // have taken the last WPA poster reference off the screen SILENTLY, with nothing failing and no
-  // test able to see it. It was moved out in its own commit FIRST, for exactly that reason.
-  // ⚠ It also stopped being CLIPPED: the old `hero` style carried `overflow: 'hidden'`, so most of
-  // the burst was cropped to that box. That — not the opacity — is why it read as invisible.
-  // ⚠ THE INSET IS PAID HERE AND NOWHERE ELSE. This is ABSOLUTELY positioned, and Yoga measures an
-  // absolute child's `top` from the parent's border box — the content padding that moves every other
-  // block clear of the floating bar does not move this one. Without it the ridge climbs up behind the
-  // status bar and dissolves under the bar's own fade, which is not a subtle regression: it is the
-  // last WPA poster reference on the screen.
-  const watermark = (
-    <View style={[styles.watermark, { top: WATERMARK_TOP + headerInset }]} pointerEvents="none">
-      <Ridgeline width={472} height={56} />
-    </View>
-  )
+  // ⚠ THE WATERMARK IS NOW A POSTER, AND `Ridgeline` IS DELETED. The hairline it drew (472x56, ~6%
+  // of screen height) was the answer to "the home screen looks a bit stale" and it did not land —
+  // the same complaint came back three days later. DESIGN §2 allows ONE signature move per screen,
+  // and a poster already contains a ridge, so the two could not both stay.
+  // ⚠ COLD OPEN ONLY, keyed to the SAME `coldOpen` that gates the examples and the placeholder copy
+  // — one expression, so the backdrop cannot drift out of step with what "nothing said yet" means.
+  // It leaves the moment the rider speaks: the transcript is the screen after that, and artwork
+  // behind a growing conversation is a legibility problem with no upside.
+  // ⚠ It is handed to the SHELL, not rendered here, because it must sit behind the scroll content
+  // and against the bottom edge. An absolutely-positioned child of the content container would
+  // scroll away with the cards.
+  const backdrop = coldOpen ? <HomePoster width={winWidth} maxHeight={winHeight * 0.34} /> : null
 
   // The region this conversation is pinned to.
   const masthead = (
@@ -1634,15 +1632,18 @@ export default function HomeScreen() {
   const footer = composer
 
   return (
-    <ConversationScreen footer={footer} scrollSignal={scrollSignal} contentContainerStyle={styles.body}>
+    <ConversationScreen
+      footer={footer}
+      backdrop={backdrop}
+      scrollSignal={scrollSignal}
+      contentContainerStyle={styles.body}
+    >
       <Stack.Screen options={screenOptions} />
 
       {/* ⚠ The dormant `regions.length > 1` FilterChip row that used to sit here is DELETED, not
           disabled. It was invisible (one region auto-selects), so leaving it alongside the new chip
           would have shipped TWO region switchers that both only appear the day region 2 lands —
           a defect with no symptom until the moment it is most confusing. */}
-      {watermark}
-
       {masthead}
 
       {/* ⚠ OFFLINE IS THE ONLY PLACE MY DRIVES STILL APPEARS ON HOME, and the asymmetry is the whole
@@ -1672,14 +1673,6 @@ const styles = StyleSheet.create({
   hintRow: { flexDirection: 'row', gap: space.sm },
   // Optically centres the mark on the first line of a 13.5pt row.
   hintSpark: { marginTop: 2 },
-  // Pinned to the screen's content box, not to any block inside it — see `watermark`'s comment.
-  // ⚠ THE OFFSETS ARE SMALL ON PURPOSE. At 168 with -54/-38 the burst's outer rays were cut by BOTH
-  // screen edges hard enough to read as a rendering fault rather than a poster bleed. Smaller, and
-  // barely overhanging, it reads as one whole sunburst that happens to sit in the corner.
-  // ⚠ Higher and shorter than the first cut, and NEGATIVE horizontal insets on purpose: the ridge
-  // must run OFF both screen edges. A horizon that stops short of the sides reads as a picture of a
-  // mountain rather than the land the screen is sitting on.
-  watermark: { position: 'absolute', top: WATERMARK_TOP, left: -16, right: -16 },
   // The cold open is prose on the paper, like every other skipper turn — but it carries no speaker
   // rule: nothing has been said yet for it to be answering.
   opening: { marginTop: space.sm },
