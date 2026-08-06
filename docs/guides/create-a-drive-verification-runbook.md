@@ -109,7 +109,12 @@ OK before firing.
    by default, in a dev build too** — `simMode` defaults FALSE everywhere and `__DEV__` does NOT seed
    it (that default is what would otherwise have silently simulated the founder's real drive and
    suppressed the admin trace recorder). For a couch pass, flip **Settings → Developer → SIMULATED
-   GPS** on first; the "Real time" vs "8× faster" knob then appears pre-drive. Either way confirm stops
+   GPS** on first; the "Real time" vs "8× faster" knob then appears pre-drive. ⚠ **"8× faster" now
+   compresses only the QUIET road** — it drops to true time whenever a clip is playing, so narration no
+   longer falls behind the car (it used to, unavoidably: the road compresses and audio cannot, so the
+   fire-queue backed up a stop at a time). That makes 8× safe for watching the trigger→play loop, but
+   the GAPS between stops are still compressed — judge PACING on "Real time", or read it exactly off
+   `bun run sim <driveId> --gaps`. Either way confirm stops
    TRIGGER by proximity (not on a timer), pace sanely (≥3-min gaps), the stop list auto-scrolls, and
    the drive ends cleanly (done card with the stop tally). Also tap a stop the road has **already
    passed** — it re-hears that clip (a live trigger preempts it); an **upcoming** row must not respond

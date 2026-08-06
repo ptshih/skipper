@@ -33,16 +33,23 @@ export type GpsFixSource = (
   onError?: (err: unknown) => void,
 ) => FixSubscription
 
-/** A shared timer pump: walk `items`, emit one per `dtMs`, honouring stop/pause/resume. */
+/**
+ * A shared timer pump: walk `items`, emit one per `dtMs`, honouring stop/pause/resume.
+ *
+ * ⚠ `dtMs` MAY BE A FUNCTION, re-read before every tick rather than captured once. That is what lets
+ * the simulator change its own replay rate mid-drive (see `SimSourceOptions.timeScale`); a captured
+ * number cannot, because the pump schedules the next tick from inside the previous one.
+ */
 function pumpSubscription<T>(
   items: T[],
-  dtMs: number,
+  dtMs: number | (() => number),
   emit: (item: T) => void,
   onDone?: () => void,
 ): FixSubscription {
   let i = 0
   let timer: ReturnType<typeof setTimeout> | null = null
   let halted = false
+  const delay = typeof dtMs === 'function' ? dtMs : () => dtMs
 
   const tick = () => {
     timer = null
@@ -53,7 +60,9 @@ function pumpSubscription<T>(
     }
     emit(items[i]!)
     i++
-    timer = setTimeout(tick, dtMs)
+    // ⚠ Read AFTER emitting: `emit` is what advances the drive, so a rate that depends on drive state
+    // (audio playing / not) must be sampled once that state reflects the fix just delivered.
+    timer = setTimeout(tick, delay())
   }
   const clear = () => {
     if (timer !== null) {
@@ -76,7 +85,7 @@ function pumpSubscription<T>(
     resume: () => {
       if (halted) {
         halted = false
-        if (timer === null) timer = setTimeout(tick, dtMs)
+        if (timer === null) timer = setTimeout(tick, delay())
       }
     },
   }
@@ -92,8 +101,20 @@ export interface SimSourceOptions {
    * 30-min drive takes 30 min); 8 = 8× faster (same fix DATA, emitted 8× sooner) so you can
    * watch a whole drive trigger in a few minutes. Does NOT change speeds the trigger sees —
    * each GpsFix still reports its real `speedMps`/`tSec`; only the delivery cadence compresses.
+   *
+   * ⚠ **A FUNCTION MAKES IT ADAPTIVE, and that is the fix for the backlog compression causes.** The
+   * road compresses; the AUDIO cannot — a clip is a fixed number of real seconds. So at a constant 8×
+   * every clip takes 8× as much *drive* to finish as it would in the car, the fire-queue backs up a
+   * stop at a time, and narration drifts arbitrarily far behind the map. It is not a rounding error:
+   * break-even is (gap between stops ÷ clip length), which on a measured Tahoe drive is ≈2.8×, so ANY
+   * meaningful fast-forward diverges. (Lowering the constant only slows the divergence.)
+   *
+   * Passing `() => playing ? 1 : 8` compresses only the QUIET road and runs true-time whenever the
+   * skipper is speaking. Every clip then finishes in its real geographic position, and — the property
+   * that matters — a GENUINE overlap still shows up, because time is never compressed while audio is
+   * playing. Measured coverage on that drive was 35%, so the saving is most of what 8× ever offered.
    */
-  timeScale?: number
+  timeScale?: number | (() => number)
 }
 
 /**
@@ -117,9 +138,11 @@ export function simulatedSource(polyline: LngLat[], opts: SimSourceOptions = {})
       onError?.(e)
       return { stop: () => {}, pause: () => {}, resume: () => {} }
     }
-    // Real spacing between fixes is 1/tickHz seconds; compress by timeScale for testing.
-    const dtMs = Math.max(1, 1000 / tickHz / Math.max(0.0001, timeScale))
-    return pumpSubscription(fixes, dtMs, onFix, onEnd)
+    // Real spacing between fixes is 1/tickHz seconds; compress by timeScale for testing. Resolved per
+    // tick rather than once, so an adaptive scale (see the option's ⚠) can change it mid-drive.
+    const scaleAt = typeof timeScale === 'function' ? timeScale : () => timeScale
+    const dtAt = () => Math.max(1, 1000 / tickHz / Math.max(0.0001, scaleAt()))
+    return pumpSubscription(fixes, dtAt, onFix, onEnd)
   }
 }
 

@@ -8,7 +8,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { LngLat } from '@skipper/engine'
 import { createFixMapper, MAX_FIX_ACCURACY_M, type RawFix } from './gps-util'
-import { replayHeadless } from './gps-source'
+import { replayHeadless, simulatedSource } from './gps-source'
 
 // A due-north straight line from (0,0), ~11.1 m per 0.0001° of latitude. 201 vertices ≈ 2.2 km.
 const LINE: LngLat[] = Array.from({ length: 201 }, (_, i) => [0, i * 0.0001])
@@ -183,5 +183,82 @@ describe('replayHeadless — the harness form', () => {
     expect(fixes).toHaveLength(0)
     expect(rejected).toBe(100)
     expect(ended).toBe(false)
+  })
+})
+
+// ── The ADAPTIVE sim time scale ──────────────────────────────────────────────
+// The road can be compressed; AUDIO cannot. At a constant 8× every clip needs 8× as much drive to
+// finish as it would in the car, so the fire-queue backs up a stop at a time and narration drifts
+// arbitrarily far behind the map — the "narrations never finish" report. Break-even is (gap between
+// stops ÷ clip length), ≈2.8× on a measured Tahoe drive, so lowering the constant only slows the
+// divergence. The fix is a scale that is 1 while a clip plays and fast only on the quiet road.
+//
+// ⚠ What makes that possible is that the pump re-reads the rate BEFORE EVERY TICK. A captured number
+// reads it once and no later change can ever take effect — the whole feature would silently no-op
+// while every other assertion here still passed. That is what the first test pins.
+describe('simulatedSource — the adaptive time scale', () => {
+  const LINE: LngLat[] = [
+    [-120.0, 39.0],
+    [-119.99, 39.0],
+    [-119.98, 39.0],
+  ]
+
+  /** Collect up to `n` fixes, recording the wall-clock ms between them. */
+  const collect = (source: ReturnType<typeof simulatedSource>, n: number) =>
+    new Promise<{ count: number; gaps: number[] }>((resolve) => {
+      const gaps: number[] = []
+      let count = 0
+      let last = Date.now()
+      const sub = source(
+        () => {
+          const now = Date.now()
+          if (count > 0) gaps.push(now - last)
+          last = now
+          count++
+          if (count >= n) {
+            sub.stop()
+            resolve({ count, gaps })
+          }
+        },
+        () => resolve({ count, gaps }),
+      )
+    })
+
+  test('re-reads the scale on EVERY tick, so a mid-drive change can take effect', async () => {
+    let reads = 0
+    const src = simulatedSource(LINE, {
+      mph: 600,
+      tickHz: 100,
+      timeScale: () => {
+        reads++
+        return 1000 // clamps dt to the 1ms floor — keeps the test quick
+      },
+    })
+    const { count } = await collect(src, 6)
+    expect(count).toBe(6)
+    // A captured number would have been read exactly once. This is the regression that would make the
+    // whole adaptive path a silent no-op.
+    expect(reads).toBeGreaterThan(1)
+  })
+
+  test('a plain number still works — replaySource and the non-fast sim both pass one', async () => {
+    const src = simulatedSource(LINE, { mph: 600, tickHz: 100, timeScale: 1000 })
+    const { count } = await collect(src, 5)
+    expect(count).toBe(5)
+  })
+
+  test('slowing the scale mid-stream actually slows delivery', async () => {
+    // Fast until the 3rd fix, then ~20ms/tick — the shape of "the skipper started talking".
+    let emitted = 0
+    const src = simulatedSource(LINE, {
+      mph: 600,
+      tickHz: 100,
+      timeScale: () => (emitted++ < 3 ? 1000 : 0.5),
+    })
+    const { gaps } = await collect(src, 6)
+    // The last gap is taken under the slow scale; the first under the fast one. A generous threshold —
+    // the ratio here is ~20:1, so this is not a tight timing assertion.
+    expect(gaps[gaps.length - 1]!).toBeGreaterThan(10)
+    expect(gaps[0]!).toBeLessThan(10)
   })
 })

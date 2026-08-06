@@ -64,6 +64,12 @@ const DRIVE_HOST_NAME = 'Skipper'
 const SIM_MPH = 60
 // "Fast" sim multiplier: replay the same fixes 8× sooner so a full drive triggers in
 // a couple minutes on the couch (the fix DATA — speeds, headings — is unchanged).
+//
+// ⚠ APPLIED ONLY WHILE NOTHING IS SPEAKING — see `simScaleAt` below. A constant 8× compresses the
+// road but cannot compress AUDIO, so every clip needs 8× as much drive to finish as it would in the
+// car and the fire-queue backs up a stop at a time. That is the "narrations never finish" report, and
+// it is arithmetic rather than a tuning miss: break-even is (gap between stops ÷ clip length), ≈2.8×
+// on a measured Tahoe drive, so any useful fast-forward diverges.
 const SIM_FAST_SCALE = 8
 
 
@@ -847,10 +853,19 @@ export function useDrive(driveId: string | undefined, opts: UseDriveOptions = {}
       }
       onRaw = rec.record
     }
+    // ⚠ ADAPTIVE, not a constant: fast-forward the QUIET road and drop to true time the moment the
+    // skipper speaks. `clipBusy` is the same ref that gates the pump, so "the road is compressed" and
+    // "a clip is playing" can never disagree — one fact, read from one place. The effect is that every
+    // clip finishes in its real geographic position however fast the empty stretches are replayed.
+    //
+    // ⚠ It also cannot HIDE a real overlap, which is why this beats simply lowering the constant: time
+    // runs at true rate for the whole duration of every clip, so a stop whose trigger point genuinely
+    // arrives mid-clip still fires mid-clip and still queues, exactly as it would in the car.
+    const simScaleAt = () => (clipBusy.current ? 1 : SIM_FAST_SCALE)
     const source =
       mode === 'live'
         ? liveSource(data.polyline, onRaw)
-        : simulatedSource(data.polyline, { mph: SIM_MPH, timeScale: fast ? SIM_FAST_SCALE : 1 })
+        : simulatedSource(data.polyline, { mph: SIM_MPH, timeScale: fast ? simScaleAt : 1 })
     subRef.current = source(handleFix, handleEnd, handleSourceError)
     // ── drive_started. The engine is armed and the fix source is subscribed: this is the one line in
     // the app where a drive genuinely BEGINS. Every entry point either reaches it or ends in nothing
