@@ -37,7 +37,7 @@ import { describe, expect, test } from 'bun:test'
 // why deleting the line would be a symptom rather than a fix.
 process.env.BETTER_AUTH_SECRET ??= 'test-only-secret-that-signs-nothing-real'
 
-// Booting without a mailer logs the expected "RESET WILL FAIL" warning — real and correct in
+// Booting without a mailer logs the expected "SIGN-IN AND SIGN-UP WILL FAIL" warning — real and correct in
 // production, noise here. Silence it across the import only.
 const origWarn = console.warn
 console.warn = () => {}

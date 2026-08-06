@@ -1,14 +1,26 @@
 # Lowest-friction signup — what the wall could ask for instead of a password
 
-> **Status:** 📐 **BUILD-READY — founder call 2026-08-05: email OTP becomes the DEFAULT for both signup
-> and sign-in; password survives as a HIDDEN sign-in fallback only.** §8 is the spec. Nothing is built
-> yet. §0–§7 are the investigation that produced the call and stay as the record; §7's question is
-> ANSWERED by §8. Every claim is verified against the installed `better-auth@1.6.23` source, the live
-> prod env + DB, the served AASA, and the CURRENT App Store guideline text — not from memory.
+> **Status:** ✅ **BUILT 2026-08-05** — email OTP is the DEFAULT for signup and sign-in; password
+> survives as a hidden sign-in fallback; Settings can set one. Root `bun run check` and `apps/mobile`
+> `bun run check` both green. §8 is the spec it was built from and stayed accurate except where marked
+> ⚠ CORRECTION (§8.3 — the server has no freshness gate at all, so the re-auth bar is OURS). §0–§7 are
+> the investigation that produced the founder call and stay as the record.
 >
-> ⚠ **Read §8.1 before writing any code.** The naive version of this design is actively unsafe: signing
-> in by email code **DELETES the rider's password** unless their address is already verified, so
-> "password as a quiet fallback" is a door that closes the first time you use the front one.
+> ⚠ **STILL OWED — the desk passes cannot prove these two.** (1) A real send/receive of a code through
+> Resend, end to end on a device: the mailer is only exercised by the reset flow today, and OTP now
+> sits on the FRONT DOOR, so a deliverability problem is a total signup outage. (2) An on-device pass
+> of the collapsed sign-in screen and the two deletion confirmations — `bun test` cannot reach either
+> (no native modules), and the iOS one-time-code autofill is most of the friction win.
+>
+> ⚠ **App Store Connect has NOT been re-entered.** The review notes now tell the reviewer to tap "Use
+> a password instead"; ASC still serves the old text, and a reviewer who cannot receive a code stalls
+> with no way forward. See docs/guides/app-store-submission.md.
+>
+> ⚠ **§8.1 is the sharp edge and it is now MITIGATED, not gone.** An email-code sign-in **DELETES the
+> password** of any account whose address is unverified. The two that existed were backfilled to
+> `emailVerified = true` (founder-authorised, verified: at-risk count went 2 → 0), and accounts created
+> from here are verified from birth. Do not "clean up" that backfill — it is what keeps App Review's
+> password login alive.
 
 ---
 
@@ -352,13 +364,29 @@ not the address exists (`routes.mjs:100`), matching the reset flow's existing po
 **A code-created account has no password, so it could never delete itself — a guaranteed rejection on
 the one guideline CLAUDE.md flags as non-negotiable.**
 
-The server already allows the fix: `password` is **optional** on `/delete-user`, documented *"required
-if session is not fresh"* (`api/routes/update-user.mjs:220,235`). So:
+The server already allows the fix: `password` is **optional** on `/delete-user`, and is verified only
+when it is actually sent (`api/routes/update-user.mjs:220,268`). So:
 
-- Confirm with a **fresh session**; fall back to a re-auth (send a code, verify) when the session is
-  stale, and accept the password when the account still has one.
+- Ask for the password when the account HAS one (which is what keeps App Review's flow working), and
+  for a freshly emailed code when it doesn't. Which one is resolved at tap time from
+  `listAccounts()` — `providerId === 'credential'` is the only real answer to "does this account have
+  a password"; nothing on the session carries it.
 - ⚠ This is arguably a BETTER confirmation than a password — it proves control of the address at the
   moment of erasure rather than knowledge of a string.
+
+⚠ **CORRECTION, found while building (2026-08-05).** The OpenAPI text on that field says the password
+is *"required if session is not fresh"* — **the code does not do that.** `/delete-user` sits on
+`sensitiveSessionMiddleware`, which resolves an AUTHORITATIVE session but performs **no freshness
+check**; the middleware that checks `freshAge` is `freshSessionMiddleware`, a different one, declared
+a few lines away in `api/routes/session.mjs`. So the server would accept a bare `deleteUser({})` from
+any live session, and there is **no inherited re-auth bar at all**.
+
+That inverts the reasoning without changing the plan: the emailed-code step is not us satisfying a
+server requirement, it is us **keeping a bar the server never enforced**. Settings' own comment called
+re-auth *"the right bar for an irreversible erasure regardless of session age"* — that judgement did
+not change just because the password did. ⚠ Anyone later "simplifying" the code step because the API
+accepts the call without it would be lowering the bar on the most destructive action in the product.
+`test/auth-otp.test.ts` pins both halves (optional-password AND the absent freshness gate).
 - ⚠ `docs/guides/app-store-submission.md` scripts the reviewer through *"type the account password"*.
   That guide and the ASC review notes must be updated in the same pass, or the reviewer follows steps
   that no longer match the app.

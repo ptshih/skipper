@@ -245,10 +245,15 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   the 1:1 `pois`↔`narrations` atom, no `roam_clips` table, and 1.1 then removed the mode outright.)
 
 ### designs/
-- [lowest-friction-signup.md](designs/lowest-friction-signup.md) — 📐 **BUILD-READY, founder call
-  2026-08-05** (TODO #76): **email OTP becomes the DEFAULT for signup AND sign-in; password survives as a
-  HIDDEN sign-in fallback** (kept because App Review cannot receive a code). §8 is the spec. ⚠ **§8.1 is
-  the one to read first** — an email-code sign-in **DELETES the rider's password** unless their address is
+- [lowest-friction-signup.md](designs/lowest-friction-signup.md) — ✅ **BUILT 2026-08-05** (TODO #76):
+  **email OTP is the DEFAULT for signup AND sign-in; password survives as a HIDDEN sign-in fallback**
+  (kept because App Review cannot receive a code), and Settings can set one. ⚠ Still OWED: a real
+  send/receive through Resend (the mailer is now on the FRONT DOOR, so a deliverability problem is a
+  signup outage), an on-device pass of the collapsed screen, and **re-entering the review notes in ASC**
+  — a reviewer who cannot receive a code stalls unless told to tap "Use a password instead". ⚠ §8.3
+  carries a CORRECTION found while building: `/delete-user` has no freshness gate at all (that is
+  `freshSessionMiddleware`, a different middleware), so the re-auth bar on deletion is OURS to keep.
+  §8 is the spec. ⚠ **§8.1 is the one to read first** — an email-code sign-in **DELETES the rider's password** unless their address is
   already verified (`revokeUnprovenAccountAccess`, and magic-link does it too), so the naive "quiet
   fallback" closes itself on first use. Measured against the live DB: **2 password accounts, both ours** —
   no migration problem, and the mitigation is one `emailVerified = true` backfill. ⚠ **§8.3 is a 5.1.1(v)

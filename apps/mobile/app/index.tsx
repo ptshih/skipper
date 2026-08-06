@@ -1317,7 +1317,7 @@ export default function HomeScreen() {
     },
     [navigateOnce, router],
   )
-  const onSignUpCard = useCallback(() => router.push('/sign-in?mode=up'), [router])
+  const onSignUpCard = useCallback(() => router.push('/sign-in'), [router])
   const onDismissGateCard = useCallback(
     (id: string) => patchCard(id, { state: 'ready' }),
     [patchCard],

@@ -251,7 +251,7 @@ export default function MyDrivesScreen() {
         message={voice.empty.drivesSignedOut}
         action={{
           label: voice.gate.action,
-          onPress: () => navigateOnce(() => router.push('/sign-in?mode=up')),
+          onPress: () => navigateOnce(() => router.push('/sign-in')),
         }}
       />
     )

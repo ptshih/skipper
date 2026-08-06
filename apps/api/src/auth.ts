@@ -3,9 +3,13 @@
 // Access: anonymous (no/guest session) -> free (a signed-in account). There is no paid tier —
 // premium is bought as CREDITS, not a plan (docs/decisions/cut-tiers.md).
 // The front door (plan / propose / sample) is open/anonymous; drives are user-owned. Auth layers
-// around both. Email/password is enabled now; Google/Apple are registered only when their creds
-// are present (placeholders otherwise) so the server boots without them. The anonymous plugin
-// gives guests a session that links to a real account on sign-up.
+// around both. EMAIL OTP is the default way in — one call signs up and signs in (see the plugin
+// below); email/password stays enabled as the hidden fallback, chiefly because App Review cannot
+// receive an emailed code. Google/Apple are registered only when their creds are present
+// (placeholders otherwise) so the server boots without them — ⚠ and the Apple half is NOT merely
+// "dark": its client secret is an ES256 JWT Apple caps at six months, so it needs machinery that
+// does not exist yet (docs/designs/lowest-friction-signup.md §1a). The anonymous plugin gives
+// guests a session that links to a real account on sign-up.
 //
 // Secret comes from env (BETTER_AUTH_SECRET); the base URL is derived per-request from the
 // validated Host header (there is no BETTER_AUTH_URL) — see the `baseURL` config below.
@@ -29,14 +33,14 @@
 
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { admin, anonymous } from 'better-auth/plugins'
+import { admin, anonymous, emailOTP } from 'better-auth/plugins'
 import { expo } from '@better-auth/expo'
 import { createLazyProxy } from '@skipper/db'
 import * as authSchema from '@skipper/db/auth-schema'
 import { purgeUserData } from './account'
 import { authDb } from './auth-db'
 import { ensureFreeGrant, shouldGrantAtSignup } from './credits'
-import { emailConfigured, sendPasswordResetEmail } from './email'
+import { emailConfigured, sendPasswordResetEmail, sendSignInCodeEmail } from './email'
 
 // The mobile app's deep-link scheme — must match apps/mobile app.json `scheme`
 // and the expoClient `scheme`. OAuth callbacks + cross-origin auth use it.
@@ -102,8 +106,10 @@ export function assertAuthEnv(): void {
   // hours after the deploy, which is a warning nobody sees.
   if (!emailConfigured()) {
     console.warn(
-      '[api] RESEND_API_KEY is not set — password RESET WILL FAIL. Set it, and verify the EMAIL_FROM ' +
-        'domain with Resend, before opening public signup.',
+      '[api] RESEND_API_KEY is not set — SIGN-IN AND SIGN-UP WILL FAIL, not just password reset. ' +
+        'Email OTP is the default way in (docs/designs/lowest-friction-signup.md §8), so without a ' +
+        'mailer the ONLY accounts that can still authenticate are the ones that set a password. ' +
+        'Set it, and verify the EMAIL_FROM domain with Resend, before opening public signup.',
     )
   }
 }
@@ -274,14 +280,27 @@ function createAuth() {
       },
     },
     emailAndPassword: {
+      // ⚠ STILL ON, BUT IT IS NO LONGER THE FRONT DOOR — it is the hidden FALLBACK (founder call
+      // 2026-08-05). Email OTP above is the default for signing up and signing in; the app offers
+      // password only behind "Use a password instead" on the sign-in screen, and NO signup path
+      // mints one. It stays enabled for two reasons, both concrete:
+      //  1. ⚠ APP REVIEW CANNOT RECEIVE AN EMAILED CODE. The reviewer signs in as
+      //     `review@skipper.fm` with a password held in App Store Connect. Turning this off would
+      //     leave a special-cased reviewer address or a fixed test code as the alternative — i.e. a
+      //     deliberate bypass on the auth path, which is the worse trade. See
+      //     docs/guides/app-store-submission.md.
+      //  2. A rider who sets a password in Settings (§8.6) has a way in that does not depend on mail
+      //     arriving — the hedge for OTP making deliverability load-bearing on SIGN-IN.
+      // ⚠ Do NOT read this flag as "password signup is supported". The server would still accept
+      // `/sign-up/email`; nothing in the app calls it, and that is the product decision.
       enabled: true,
-      // Reset is the ONLY route back into a locked-out account: email/password is the sole sign-in
-      // method in prod (socialProviders registers nothing without creds) and there's no email
-      // verification, so a forgotten password otherwise costs the rider their drives AND their
-      // credits — permanently, since the ledger never refunds. `url` is Better Auth's one-time link
-      // (1 h default); it lands on the rider's phone but resolves on the WEB (skipper.fm/reset-password,
-      // the client's `redirectTo`) — a mail link can't be trusted to open a specific app, and a
-      // reset that only works on the device that lost access isn't a reset.
+      // Reset exists for the fallback above, and only for it: a rider who deliberately set a
+      // password can still forget it, and without this that costs them their drives AND their
+      // credits permanently, since the ledger never refunds. (It is no longer the ONLY route back
+      // into a locked-out account — an emailed code is, for everyone else.) `url` is Better Auth's
+      // one-time link (1 h default); it lands on the rider's phone but resolves on the WEB
+      // (skipper.fm/reset-password, the client's `redirectTo`) — a mail link can't be trusted to
+      // open a specific app, and a reset that only works on the device that lost access isn't a reset.
       sendResetPassword: async ({ user, url }) => {
         await sendPasswordResetEmail(user.email, url)
       },
@@ -384,6 +403,50 @@ function createAuth() {
           // Nothing to migrate on sign-up: the anonymous surfaces (plan / propose / sample) keep no
           // per-user server state, and drives are created (and owned) only by a signed-in account —
           // so there is no anonymous per-user state to move.
+        },
+      }),
+      // EMAIL OTP — THE DEFAULT WAY IN, for signing up AND signing in (founder call 2026-08-05,
+      // docs/designs/lowest-friction-signup.md §8). Password is no longer how anyone creates an
+      // account; it survives only as the hidden fallback on the sign-in screen.
+      //
+      // ⚠ ONE CALL DOES BOTH. `signIn.emailOtp` creates the user when the address is new and signs
+      // them in when it isn't (`plugins/email-otp/routes.mjs`) — which is why the client's sign-in
+      // and sign-up screens collapsed into one. Three consequences worth knowing:
+      //  • It creates through `internalAdapter.createUser`, so `databaseHooks.user.create.after`
+      //    below fires and the FREE_DRIVE_CAP grant lands — on this path exactly as on any other.
+      //    That hook's UNIVERSALITY is what makes a second signup route safe; test/auth-otp.test.ts
+      //    pins it.
+      //  • It sets `emailVerified: true` at creation. That is not cosmetic — see the ⚠ below.
+      //  • The anonymous plugin's link matcher already names `/sign-in*` and `/email-otp/*`
+      //    explicitly (verified in the installed plugin source), so INV-4's link-and-delete happens
+      //    here with no work from us.
+      //
+      // ⚠ AN OTP SIGN-IN DELETES AN UNVERIFIED ACCOUNT'S PASSWORD. `revokeUnprovenAccountAccess`
+      // (better-auth `dist/db/revoke-unproven-account-access.mjs`, called from the sign-in route and
+      // from magic-link) drops every `credential` account row AND all sessions when the user's
+      // `emailVerified` is false. It is a correct anti-squatting measure — you claimed an address
+      // with a password, the real owner proves ownership, your credential dies — but Skipper never
+      // had email verification, so EVERY pre-2026-08-05 account was unverified and would have lost
+      // its password the first time it used this path. The two that existed (the founder's and App
+      // Review's `review@skipper.fm`) were backfilled to `emailVerified = true` before this shipped;
+      // accounts created from here are verified from birth and are never exposed to it. ⚠ Which is
+      // also what keeps App Review's password login working — do not "clean up" that backfill.
+      emailOTP({
+        // ⚠ NO `otpLength` / `expiresIn` / `rateLimit` OVERRIDES, deliberately. The plugin's own
+        // defaults are 6 digits, 300 s, and 3 requests per 60 s PER ENDPOINT — the last one tighter
+        // than this file's 100/60 s baseline, so passing our own would LOOSEN the guard on a route
+        // that spends a real email on every call. Leaving them unset is the safer edit.
+        // ⚠ That limiter is better-auth's default IN-MEMORY store, so like every other ceiling here
+        // it is per-container, not a global bound (same M4 shared-store upgrade as ./rate-limit).
+        //
+        // ⚠ THIS IS A RIDER-TRIGGERED SEND ON AN ANONYMOUS-REACHABLE ROUTE. It is not a model or a
+        // Routes call, but every request costs a Resend email and can be aimed at a stranger's
+        // inbox. The 3/60 s ceiling is the only thing bounding both.
+        sendVerificationOTP: async ({ email, otp }) => {
+          // `type` is ignored on purpose: 'sign-in' is the only one we ask for, and one message that
+          // cannot tell a new rider from a returning one is what keeps the send enumeration-safe
+          // (see ./email). If a second type is ever enabled, branch here — don't reuse this copy.
+          await sendSignInCodeEmail(email, otp)
         },
       }),
       // Admin roles. Adds user.role (plugin sets 'user' on signup; server-set input:false) + ban/impersonate columns

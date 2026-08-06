@@ -674,14 +674,14 @@ He answers and draws it up. You will see the route and its stops under the headi
 On the opening screen, under the example suggestions, tap "Not near Tahoe? Hear a quick sample." It opens a curated Lake Tahoe narration (Emerald Bay State Park) that begins playing on its own - real audio, about a minute. Also no account and no permission.
 
 FULLER EXPERIENCE (optional) - a complete multi-stop drive, still with no GPS:
-  - Tap "Sign in" (top-left) and use the demo account above.
+  - Tap "Sign in" (top-left). Skipper signs you in with a code emailed to you, so tap "Use a password instead" and use the demo account above.
   - The demo account already has a saved drive. Under "MY DRIVES", tap "Tahoe City -> South Lake Tahoe".
   - You land on a screen titled "Drive". Under the heading "THE ROUTE" is the line "Tap a stop to hear it." Tap any stop to play that stop's full narration (about a minute each). It plays one stop at a time and does not auto-advance, so tap the next when you are ready.
   - Please do not tap "Start the drive" from a desk. That is the live, GPS-triggered drive: it waits until you physically reach a stop near Lake Tahoe, so in Cupertino nothing will play. It is also the ONLY place in the app that asks for location.
   - To build one yourself while signed in, repeat step 2 and tap "Make this drive". Each drive you create uses one of the account's free drive credits.
 
 ACCOUNT DELETION (Guideline 5.1.1(v)):
-Sign in first, then: Settings (gear, top-right) -> "Delete account" -> type the account password at "Enter your password to confirm" -> "Permanently delete" -> confirm "Delete forever". It permanently deletes the account, its saved drives, and its remaining credits immediately. Nothing is emailed, and it cannot be undone. If you would like the demo account to stay usable for a second pass, you can create a throwaway account first (any email, no verification) and delete that one instead - the flow is identical.
+Sign in first, then: Settings (gear, top-right) -> "Delete account" -> type the account password at "Enter your password to confirm" -> "Permanently delete" -> confirm "Delete forever". It permanently deletes the account, its saved drives, and its remaining credits immediately. Nothing is emailed, and it cannot be undone. (An account created with an emailed code has no password, so for those the same screen asks for a fresh emailed code instead of a password; the demo account above has a password.)
 
 LOCATION USE:
 "When In Use" only, and only once you start a drive - planning, the sample and the preview clip never ask. It is used to time narration to your position while driving. There is no background location and no advertising. If you create a drive, its start and end coordinates are saved with that drive on your account. You may also see a one-time "Motion & Fitness" prompt; motion is used only to gauge speed and heading so each stop plays at the right moment. Coarse location and device identifiers are used for app functionality and product analytics (the sign-in session record, PostHog, and the bundled Google Maps SDK), as declared in our App Privacy labels.
@@ -702,6 +702,17 @@ Thank you. Happy to help if anything is unclear.
 - **Location is addressed three times on purpose** — in the preamble, at "Start the drive", and in
   its own section. 1.1's answer genuinely improved (nothing before the drive asks), and 5.1.1 friction
   is cheaper to prevent than to appeal.
+- ⚠ **THE SIGN-IN STEP CHANGED ON 2026-08-05 AND ASC HAS NOT BEEN RE-ENTERED.** Skipper now signs
+  riders in with an emailed CODE by default (docs/designs/lowest-friction-signup.md), and **a reviewer
+  cannot receive that email** — they must tap **"Use a password instead"** to reach the demo account.
+  The block above says so; whatever is currently live in App Store Connect does NOT. Re-paste before
+  the next submission, or review stalls at a code prompt with no way forward, which reads as a broken
+  app rather than a misleading note.
+- ⚠ **Unrelated staleness in the same block, flagged not fixed (2026-08-05):** step 3 still tells the
+  reviewer to tap *"Not near Tahoe? Hear a quick sample."* That screen and its `GET /sample` route
+  were DELETED on 2026-08-05 (see apps/api/src/index.ts). The anonymous taste is now the route preview
+  clip in step 2, which the notes already describe — so step 3 needs deleting rather than rewriting,
+  but that is the founder's call on reviewer-facing copy, not a silent edit.
 
 ### LIVE on the 1.0.0 record — read back from ASC 2026-07-30
 

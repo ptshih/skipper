@@ -36,6 +36,7 @@ import {
   SERVER_IDLE_TIMEOUT_SEC,
   SERVER_MAX_BODY_BYTES,
 } from './limits'
+import { accountRoutes } from './password'
 import { planRoutes } from './plan-route'
 import { withSession, type ApiEnv } from './entitlements'
 import { composeRegionCopy, PLANNER_COPY } from './planner-copy'
@@ -353,6 +354,12 @@ app.route('/drives/plan', planRoutes)
 // step 8a) so `POST /drives/propose` can serve the anonymous preview. Do NOT add a wall here; it
 // would re-wall the whole funnel, and test/drive-access.test.ts is what catches it.
 app.route('/drives', driveRoutes)
+
+// Account self-service that better-auth deliberately does NOT expose to a client. Today that is
+// exactly one thing: `POST /account/password`, which lets a rider who signed up with an emailed code
+// SET a password (better-auth's own `setPassword` is `serverOnly`). ⚠ Its wall is per-ROUTE inside
+// the sub-app, same convention as `/drives` — do not add one here. See ./password.
+app.route('/account', accountRoutes)
 
 /* ⚠ `GET /sample` AND ITS `NO_SAMPLE` SOFT-404 WERE DELETED HERE (founder, 2026-08-05), together with
  * the mobile screen that was their only caller and the `SAMPLE_NARRATION_QID` config that fed them.

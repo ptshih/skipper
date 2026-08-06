@@ -223,7 +223,13 @@ type AnalyticsEventProps = {
   wall_shown: { source: WallSource }
   /** A NEW account was created. ⚠ Sign-UP only — never fire this for an existing-account sign-in. The
    *  wall's conversion rate is the number this funnel exists to produce, and a returning rider is not
-   *  a conversion; mixing them in makes the wall look like it works. */
+   *  a conversion; mixing them in makes the wall look like it works.
+   *  ⚠ SINCE 2026-08-05 THAT DISTINCTION IS INFERRED, NOT KNOWN. Signing up and signing in became the
+   *  same call (an emailed code creates the account when the address is new), and better-auth returns
+   *  a byte-identical `{ token, user }` from both branches — no `isNewUser` flag exists. The emitter
+   *  now guesses from `user.createdAt` recency; `NEW_ACCOUNT_WINDOW_MS` in app/sign-in.tsx states the
+   *  tolerance and which direction it fails in (it under-counts on a fast device clock). Read this
+   *  number as a floor, not a census. */
   signup_completed: EmptyProps
   /** `POST /drives` succeeded — the credit is spent and is never refunded.
    *  ⚠ No driveId, deliberately: it is joinable to `drives.user_id`. */

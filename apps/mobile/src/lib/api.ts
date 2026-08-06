@@ -274,6 +274,22 @@ export const deleteDrive = async (driveId: string): Promise<void> => {
 }
 
 
+/** Set a password on an account that has none — the opt-in fallback for a rider who signed up with an
+ *  emailed code (Settings → "Set a password").
+ *
+ *  ⚠ NOT an `authClient` call, and it can't be: better-auth declares `setPassword` `serverOnly`, so it
+ *  is unreachable from the client SDK by design. `apps/api/src/password.ts` is the sanctioned wrapper.
+ *  ⚠ Goes through `fetchJson`, so it carries the session cookie and surfaces the server's `message`
+ *  verbatim through ApiError — which is what lets the 409 ("this account already has a password")
+ *  render as itself rather than as the generic failure. */
+export const setAccountPassword = async (newPassword: string): Promise<void> => {
+  await fetchJson('/account/password', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ newPassword }),
+  })
+}
+
 /** The per-platform app-version policy for the launch-time update gate (see VersionGate). */
 export const getVersion = async (): Promise<VersionPolicy[]> =>
   parseDto(versionResponse, await fetchJson('/version')).policies

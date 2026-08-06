@@ -1,7 +1,7 @@
 // Better Auth client for Expo — sessions stored in expo-secure-store, deep-link
 // scheme `skipper` (must match app.json `scheme` and the server's trustedOrigins).
 import { createAuthClient } from 'better-auth/react'
-import { adminClient, anonymousClient } from 'better-auth/client/plugins'
+import { adminClient, anonymousClient, emailOTPClient } from 'better-auth/client/plugins'
 import { expoClient } from '@better-auth/expo/client'
 import * as SecureStore from 'expo-secure-store'
 // ⚠ AN IMPORT CYCLE, TAKEN KNOWINGLY: auth → offline → api → auth. It is benign under exactly one
@@ -47,6 +47,13 @@ export const authClient = createAuthClient({
     // question; every check goes through isSignedIn() below. Registered BEFORE expoClient() so the
     // storage/deep-link plugin stays last, as it was.
     anonymousClient(),
+    // Email OTP client — mirrors the server's `emailOTP()` (apps/api/src/auth.ts). This is THE way in
+    // now, for signing up and signing in alike: `signIn.emailOtp` creates the account when the address
+    // is new and signs the rider in when it isn't, which is why there is no longer a separate sign-up
+    // call anywhere in the app. Exposes `emailOtp.sendVerificationOtp` + `signIn.emailOtp`.
+    // ⚠ It registers an atomListener on `/sign-in/email-otp` → `$sessionSignal`, so `useSession()`
+    // refetches on its own after a code lands — do NOT add a manual refetch alongside it.
+    emailOTPClient(),
     expoClient({
       scheme: 'skipper',
       storagePrefix: 'skipper',
@@ -55,8 +62,24 @@ export const authClient = createAuthClient({
   ],
 })
 
-export const { signIn, signUp, useSession, updateUser, deleteUser, requestPasswordReset } =
-  authClient
+// ⚠ `signUp` IS DELIBERATELY NOT RE-EXPORTED ANY MORE. Nothing in the app creates an account with a
+// password: `signIn.emailOtp` does both jobs (it creates the user when the address is new), so a
+// second signup path would be a second place the FREE_DRIVE_CAP grant and the anonymous link have to
+// be reasoned about — for no rider-visible gain. The server still accepts `/sign-up/email`; that it
+// has no client caller is the product decision (apps/api/src/auth.ts `emailAndPassword`).
+//
+// `emailOtp` carries `sendVerificationOtp`; `signIn.emailOtp` redeems the code. `listAccounts` is how
+// the app learns whether an account has a PASSWORD — better-auth exposes no such flag on the session,
+// and `providerId === 'credential'` is the real answer rather than an inferred one.
+export const {
+  signIn,
+  useSession,
+  updateUser,
+  deleteUser,
+  requestPasswordReset,
+  emailOtp,
+  listAccounts,
+} = authClient
 
 /** Better Auth's raw sign-out. PRIVATE on purpose: the wrapped `signOut` below must be the only one
  *  importable from anywhere, or the guarantee it exists to make is opt-in again. */

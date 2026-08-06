@@ -37,8 +37,10 @@ export function AccountGate({
         <Button
           icon="ticket"
           title={voice.gate.action}
-          // The gate is the free-ACCOUNT funnel, so route to create-account mode, not sign-in.
-          onPress={() => router.push('/sign-in?mode=up')}
+          // ⚠ No `?mode=up` any more: signing up and signing in are ONE call since 2026-08-05
+          // (an emailed code creates the account when the address is new), so there is no
+          // create-account branch left to select. See app/sign-in.tsx.
+          onPress={() => router.push('/sign-in')}
           style={styles.cta}
         />
         <Button

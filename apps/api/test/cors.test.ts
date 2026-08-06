@@ -11,7 +11,9 @@ import { describe, expect, test } from 'bun:test'
 // and THAT is the bug — a process that boots clean and then fails open to anonymous on every route.
 process.env.BETTER_AUTH_SECRET ??= 'test-only-secret-that-signs-nothing-real'
 
-// Booting without a mailer logs the expected "RESET WILL FAIL" warning — real and correct there,
+// Booting without a mailer logs the expected "SIGN-IN AND SIGN-UP WILL FAIL" warning — real and
+// correct there (email OTP is the default way in since 2026-08-05, so a missing mailer takes the
+// front door down, not just password reset),
 // just noise here. It now comes from `assertAuthEnv()` rather than auth.ts's module scope, which is
 // still inside this window because index.ts calls it at top level. Silence it across the import only.
 const origWarn = console.warn

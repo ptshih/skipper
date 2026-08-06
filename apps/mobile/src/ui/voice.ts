@@ -565,15 +565,38 @@ export const voice = {
     sizeHint: (mb: string) => `About ${mb} MB.`,
   },
   auth: {
+    // ⚠ ONE HEADER FOR THE DEFAULT PATH, and it cannot say "welcome back". Since 2026-08-05 signing
+    // up and signing in are the SAME call (`signIn.emailOtp` creates the account when the address is
+    // new), so at the moment this screen renders we genuinely do not know which one is happening —
+    // and must not appear to, since the send is enumeration-safe. "Come along for the ride" is an
+    // invitation that reads right either way; `signInHeader` survives only on the password fallback,
+    // which is the one branch that IS necessarily a returning rider.
+    header: 'Come along for the ride',
     // "folks" is the skipper's address everywhere else (loading, GPS, drive-complete) — keep
     // it consistent here instead of the one-off "traveler".
     signInHeader: 'Welcome back, folks',
-    signUpHeader: 'Come along for the ride',
     // Road idiom, not the London-Underground "Mind the gap" (the persona is a road-trip guide).
     subhead: 'Mind the potholes.',
-    // Password reset — the ONLY way back into a locked-out account (email/password is the only
-    // sign-in method in prod, and there's no email verification). The rider here is anxious and
-    // possibly about to lose their drives and credits, so the copy drops the bit and just helps.
+    // ── Email OTP: the default way in. Says "no password" out loud because that IS the pitch — the
+    // rider is being asked for an email at the moment they most expect a password form.
+    emailHint: 'Give me an email and I’ll send you a six-digit code. No password to remember.',
+    sendCode: 'Send me a code',
+    codeHeader: 'Check your email',
+    // ⚠ Does NOT name the address back to the rider. It is on the previous step of the same screen,
+    // and echoing it here is the one place this flow could confirm an address exists.
+    codeHint: 'Six digits, on their way. They run out in five minutes — mind the spam bin.',
+    codeCta: 'Let’s roll',
+    codeResend: 'Send another code',
+    codeChangeEmail: 'Use a different email',
+    // The fallback's two doors. ⚠ Password is deliberately understated: it is kept for App Review and
+    // for riders who set one on purpose, not offered as an equal choice.
+    usePassword: 'Use a password instead',
+    useCode: 'Email me a code instead',
+    // Password reset — now reachable only from the password FALLBACK, and only for a rider who
+    // deliberately set one (nobody is issued a password at signup any more). It is no longer the only
+    // way back into a locked-out account — an emailed code is, for everyone else — but for this rider
+    // it is still the difference between keeping and losing their drives and credits, so the copy
+    // drops the bit and just helps.
     forgot: 'Forgot your password?',
     resetHeader: 'Let’s get you back in',
     resetHint:
@@ -610,12 +633,35 @@ export const voice = {
     deleteIntro:
       'This removes your account, your saved drives, and any credits you have left. It happens straight away and can’t be undone.',
     deletePasswordLabel: 'Enter your password to confirm',
+    // ⚠ THE CODE CONFIRMATION IS OUR BAR, NOT THE SERVER'S. better-auth's `deleteUser` sits on
+    // `sensitiveSessionMiddleware`, which resolves an authoritative session but does NOT check
+    // freshness — so a passwordless account could be erased by anyone holding the unlocked phone,
+    // with one tap. Settings' original comment called re-auth "the right bar for an irreversible
+    // erasure regardless of session age"; keeping that bar means asking for a code when there is no
+    // password to ask for. Do not "simplify" this away because the API would accept the call.
+    deleteCodeLabel: 'Enter the code we emailed you',
+    deleteCodeIntro:
+      'For something this permanent, I need to know it’s really you. I’ve sent a six-digit code to your email.',
+    deleteSendCode: 'Email me a code',
+    deleteCodeFailed: 'That code didn’t work. Try again, or send a fresh one.',
     deleteAction: 'Permanently delete',
     deleteTitle: 'Delete your account?',
     deleteBody:
       'Your account, your drives, and your remaining credits go for good. This can’t be undone.',
     deleteCta: 'Delete forever',
     deleteFailed: 'Could not delete your account',
+    // ── Set a password (§8.6). The hedge for OTP making mail deliverability load-bearing on SIGN-IN:
+    // a rider who sets one has a way in that doesn't depend on an email arriving. The copy says that
+    // plainly rather than selling it as a security feature, because that is what it's actually for.
+    password: 'PASSWORD',
+    // ⚠ ONE hint, phrased to be true whether or not the account already has a password — the screen
+    // deliberately does not pre-check (the server's 409 is the authoritative answer, and asking would
+    // cost a network call on every Settings open to duplicate what the write already returns).
+    passwordHint:
+      'You sign in with an emailed code. Set a password too if you’d rather not wait on email — either one will get you in.',
+    passwordLabel: 'New password',
+    passwordAction: 'Set a password',
+    passwordSaved: 'Password set. Either way in works now.',
     // Developer: an admin-only sub-screen (Settings → Developer → /developer), gated on the
     // server-set user.role (Better Auth admin plugin) === 'admin'. `developer` labels the entry
     // row; the controls (sim GPS) live on the sub-screen. They used to sit inline on Settings for

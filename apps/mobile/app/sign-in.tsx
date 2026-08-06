@@ -1,46 +1,150 @@
 import { useRef, useState } from 'react'
 import { StyleSheet, TextInput, View } from 'react-native'
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+import { Stack, useRouter } from 'expo-router'
 import { track } from '@/lib/analytics'
-import { PASSWORD_RESET_URL, requestPasswordReset, signIn, signUp } from '@/lib/auth'
+import {
+  emailOtp,
+  PASSWORD_RESET_URL,
+  requestPasswordReset,
+  signIn,
+} from '@/lib/auth'
 import { space } from '@/theme/tokens'
 import { Button, Input, Screen, Text, voice } from '@/ui'
 
-// Email/password sign-in + sign-up. (Google/Apple are wired server-side and turn
-// on once their OAuth creds are set; add provider buttons here when they are.)
+// THE WAY IN. Since 2026-08-05 (founder call, docs/designs/lowest-friction-signup.md §8) that is an
+// EMAILED CODE, and signing up and signing in are no longer different things: `signIn.emailOtp`
+// creates the account when the address is new and signs the rider in when it isn't. This screen used
+// to be a three-way `'in' | 'up' | 'reset'` machine with a `?mode=up` deep link picking the branch;
+// the whole distinction is gone, which is most of why this file got shorter rather than longer.
+//
+// Password survives as a FALLBACK behind one ghost button, for two reasons worth keeping straight:
+// App Review cannot receive an emailed code (they sign in as review@skipper.fm with a password held
+// in App Store Connect), and a rider who set one in Settings has a way in that does not depend on
+// mail arriving. ⚠ There is deliberately NO password SIGN-UP branch — nothing in the app calls
+// `signUp.email` any more, and `@/lib/auth` no longer re-exports it.
+
+/** How recently `user.createdAt` must sit for this to count as a NEW account.
+ *
+ *  ⚠ THIS IS A HEURISTIC AND IT REPLACED A FACT, so it is worth knowing why. The old screen knew it
+ *  was a sign-UP because the rider had tapped a different button (`mode === 'up'`). With one call
+ *  doing both, the client cannot know: better-auth returns a BYTE-IDENTICAL `{ token, user }` from
+ *  both branches of `/sign-in/email-otp` — there is no `isNewUser` flag (verified in the installed
+ *  1.6.23 source). `createdAt` is a core field and survives `parseUserOutput`, so its recency is the
+ *  only signal left.
+ *
+ *  ⚠ IT COMPARES A SERVER TIMESTAMP TO THE DEVICE CLOCK, so a skewed phone can misread it. Five
+ *  minutes, not five seconds, is the tolerance for that: a returning rider's account is days old, so
+ *  the window can be wide without false positives, and a device running BEHIND still reads new
+ *  accounts as new (the delta goes negative, which passes). The one lossy case is a device running
+ *  more than five minutes FAST, which under-counts signups — a conservative failure, and the right
+ *  direction for the number the wall's conversion rate is read against. */
+const NEW_ACCOUNT_WINDOW_MS = 5 * 60 * 1000
+
+/** Did this sign-in just CREATE the account? See NEW_ACCOUNT_WINDOW_MS for why this is a guess. */
+function wasJustCreated(user: { createdAt?: string | Date } | undefined): boolean {
+  if (!user?.createdAt) return false
+  const created = new Date(user.createdAt).getTime()
+  if (Number.isNaN(created)) return false
+  return Date.now() - created < NEW_ACCOUNT_WINDOW_MS
+}
+
 export default function SignInScreen() {
   const router = useRouter()
-  // The free-ticket AccountGate links here to CREATE an account (?mode=up); the
-  // header/settings "Sign in" links omit the param and land on sign-in ('in').
-  const { mode: modeParam } = useLocalSearchParams<{ mode?: string }>()
-  // 'reset' is reachable only from the in-screen "Forgot your password?" ghost — it's deliberately
-  // NOT a ?mode= value, since nothing should deep-link a rider straight into a reset.
-  const [mode, setMode] = useState<'in' | 'up' | 'reset'>(modeParam === 'up' ? 'up' : 'in')
+  // 'email' → 'code' is the default path. 'password' and 'reset' are the fallback, reachable only by
+  // an explicit tap. ⚠ No `?mode=` param any more: with signup and sign-in unified there is nothing
+  // for a caller to select, and every call site now pushes a bare '/sign-in'.
+  const [step, setStep] = useState<'email' | 'code' | 'password' | 'reset'>('email')
   const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Password reset. `resetSent` latches the enumeration-safe confirmation in place of the form —
-  // the rider's next move is in their email app, not here.
-  const [resetting, setResetting] = useState(false)
   const [resetSent, setResetSent] = useState(false)
-  // Chain the soft keyboard's return key through the form (email → password → submit)
-  // so a rider never has to dismiss it to reach the next field or the CTA. (Name is
-  // NOT collected at sign-up — it's an optional field in Settings after signing in.)
   const passwordRef = useRef<TextInput>(null)
 
-  // Ask the server to mail a reset link. The reply is enumeration-safe on BOTH sides: the server
-  // answers identically for a known and an unknown address, and so must this screen — hence a flat
-  // `resetSent` latch with no branch on the result. The only error worth showing is a transport
-  // failure, which is about THIS request, not about who exists.
+  /** Leave for wherever the rider came from. A DEEP LINK straight here has nothing beneath it, so
+   *  back is a no-op — fall back to home so success never strands them on a form they're done with. */
+  const leave = () => {
+    if (router.canGoBack()) router.back()
+    else router.replace('/')
+  }
+
+  // Ask the server to mail a code. ⚠ Enumeration-safe on BOTH sides, exactly like the reset flow: the
+  // server dispatches whether or not the address exists (better-auth's send route, with signup
+  // enabled), and this screen must not branch on the result either — it always advances to the code
+  // step. Anything else would turn the form into an oracle for who has an account.
+  const sendCode = async () => {
+    if (busy || !email.trim()) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await emailOtp.sendVerificationOtp({ email: email.trim(), type: 'sign-in' })
+      if (res.error) {
+        setError(res.error.message ?? voice.error.generic)
+        return
+      }
+      setCode('')
+      setStep('code')
+    } catch {
+      setError(voice.error.generic)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Redeem the code. This is the call that signs up OR signs in — see the file header.
+  const submitCode = async () => {
+    if (busy || !code.trim()) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await signIn.emailOtp({ email: email.trim(), otp: code.trim() })
+      if (res.error) {
+        setError(res.error.message ?? voice.error.generic)
+        return
+      }
+      // ── signup_completed: past the error guard (so an account really exists), before the navigation
+      // (which unmounts this screen). ⚠ NEW ACCOUNTS ONLY — a returning rider is not a wall
+      // conversion, and folding the two together makes the wall look like it works. That distinction
+      // used to be free (`mode === 'up'`); it is now the `wasJustCreated` guess above.
+      // ⚠ No properties, deliberately: no email, no user id (INV-13 / the analytics no-person rule).
+      if (wasJustCreated(res.data?.user)) track('signup_completed', {})
+      leave()
+    } catch {
+      setError(voice.error.generic)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // The fallback. Sign-IN only — there is no password sign-up path any more.
+  const submitPassword = async () => {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await signIn.email({ email: email.trim(), password })
+      if (res.error) {
+        setError(res.error.message ?? 'Authentication failed')
+        return
+      }
+      // ⚠ No `signup_completed` here, and not because of an oversight: this branch cannot create an
+      // account, so every success is a returning rider by construction.
+      leave()
+    } catch {
+      setError(voice.error.generic)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const sendReset = async () => {
-    if (resetting || !email.trim()) return
-    setResetting(true)
+    if (busy || !email.trim()) return
+    setBusy(true)
     setError(null)
     try {
       const res = await requestPasswordReset({
         email: email.trim(),
-        // Resolves on the web — see PASSWORD_RESET_URL. Must be a server-trusted origin.
         redirectTo: PASSWORD_RESET_URL,
       })
       if (res.error) {
@@ -51,82 +155,51 @@ export default function SignInScreen() {
     } catch {
       setError(voice.error.generic)
     } finally {
-      setResetting(false)
-    }
-  }
-
-  const submit = async () => {
-    if (busy) return // guard the unguarded ghost mode-switch from racing a submit
-    setBusy(true)
-    setError(null)
-    try {
-      const res =
-        mode === 'in'
-          ? await signIn.email({ email, password })
-          : // Name is optional and set later in Settings, so sign-up starts it empty
-            // (the DB column is NOT NULL; '' satisfies it without faking a name).
-            await signUp.email({ email, password, name: '' })
-      if (res.error) {
-        setError(res.error.message ?? 'Authentication failed')
-        return
-      }
-      // ── signup_completed: past the error guard (so it means a real account exists), before the
-      // navigation (which unmounts this screen).
-      //
-      // ⚠ SIGN-UP ONLY, never any successful submit. An existing-account sign-in is a RETURNING
-      // rider, not a wall conversion — and the wall's conversion rate is the single number this
-      // funnel exists to produce, so folding the two together makes the wall look like it works.
-      // Hence `=== 'up'` rather than `!== 'in'`.
-      //
-      // ⚠ It reads the `mode` STATE, not the `?mode=` route param. The "Have an account? / Need an
-      // account?" ghost below flips this state WITHOUT touching the route, so `modeParam` is stale
-      // the instant a rider uses it: someone who arrived at ?mode=up from the AccountGate and
-      // switched to signing in would be counted as a brand-new account. (`mode` can also be
-      // 'reset', which never reaches here — the reset branch renders sendReset instead.)
-      //
-      // ⚠ No properties, deliberately: no email, no user id. INV-4 is why it costs nothing — Better
-      // Auth hard-deletes the anonymous row at link, so PostHog's device distinct_id is already the
-      // only spine that carries wall_shown → here → drive_created across the wall.
-      if (mode === 'up') track('signup_completed', {})
-      // Normally we came from a screen that pushed us here (back returns to it). But a
-      // DEEP LINK straight to /sign-in has nothing beneath it, so back is a no-op — fall
-      // back to home so success never strands the rider on the (now-irrelevant) form.
-      if (router.canGoBack()) router.back()
-      else router.replace('/')
-    } catch {
-      // A rejected call (no connectivity, DNS/TLS failure, an unexpected throw) must
-      // not wedge the button in its loading state forever — `finally` always clears
-      // busy. Show the in-character generic rather than a raw fetch error string.
-      setError(voice.error.generic)
-    } finally {
       setBusy(false)
     }
   }
 
+  const title =
+    step === 'reset' ? 'Reset password' : step === 'password' ? 'Sign in' : 'Get your ticket'
+  const header =
+    step === 'reset'
+      ? voice.auth.resetHeader
+      : step === 'password'
+        ? voice.auth.signInHeader
+        : step === 'code'
+          ? voice.auth.codeHeader
+          : voice.auth.header
+  const sub =
+    step === 'reset'
+      ? voice.auth.resetHint
+      : step === 'code'
+        ? voice.auth.codeHint
+        : step === 'password'
+          ? voice.auth.subhead
+          : voice.auth.emailHint
+
+  const errorLine = error ? (
+    <Text variant="dim" color="danger">
+      {error}
+    </Text>
+  ) : null
+
   return (
     <Screen scroll padded edges={['bottom']} contentContainerStyle={styles.body}>
-      <Stack.Screen
-        options={{
-          title: mode === 'reset' ? 'Reset password' : mode === 'in' ? 'Sign in' : 'Create account',
-        }}
-      />
+      <Stack.Screen options={{ title }} />
 
       <View style={styles.head}>
         <Text variant="display" color="ink">
-          {mode === 'reset'
-            ? voice.auth.resetHeader
-            : mode === 'in'
-              ? voice.auth.signInHeader
-              : voice.auth.signUpHeader}
+          {header}
         </Text>
         <Text variant="body" color="inkDim">
-          {mode === 'reset' ? voice.auth.resetHint : voice.auth.subhead}
+          {sub}
         </Text>
       </View>
 
       {resetSent ? (
-        // The link is out (or the address wasn't ours — same words either way, by design). The form
-        // is gone because the rider's next move is in their mail app, not on this screen.
+        // The link is out (or the address wasn't ours — same words either way, by design). The form is
+        // gone because the rider's next move is in their mail app, not on this screen.
         <>
           <Text variant="body" color="ink">
             {voice.auth.resetSent}
@@ -136,7 +209,42 @@ export default function SignInScreen() {
             title="Back to sign in"
             onPress={() => {
               setResetSent(false)
-              setMode('in')
+              setStep('password')
+            }}
+          />
+        </>
+      ) : step === 'code' ? (
+        <>
+          <Input
+            placeholder="123456"
+            accessibilityLabel="Emailed code"
+            keyboardType="number-pad"
+            // ⚠ The whole friction win rides on these two: iOS surfaces the code on the lock screen
+            // and offers one-tap autofill straight into this field, so the rider never opens Mail.
+            // That is why the code is in the email SUBJECT too (apps/api/src/email.ts).
+            textContentType="oneTimeCode"
+            autoComplete="one-time-code"
+            returnKeyType="go"
+            onSubmitEditing={submitCode}
+            value={code}
+            onChangeText={setCode}
+          />
+          {errorLine}
+          <Button
+            title={voice.auth.codeCta}
+            loading={busy}
+            disabled={!code.trim()}
+            onPress={submitCode}
+            style={styles.cta}
+          />
+          <Button variant="ghost" title={voice.auth.codeResend} onPress={sendCode} />
+          <Button
+            variant="ghost"
+            title={voice.auth.codeChangeEmail}
+            onPress={() => {
+              setError(null)
+              setCode('')
+              setStep('email')
             }}
           />
         </>
@@ -150,67 +258,89 @@ export default function SignInScreen() {
             keyboardType="email-address"
             textContentType="username"
             autoComplete="email"
-            returnKeyType={mode === 'reset' ? 'go' : 'next'}
+            returnKeyType={step === 'password' ? 'next' : 'go'}
             submitBehavior="submit"
-            onSubmitEditing={mode === 'reset' ? sendReset : () => passwordRef.current?.focus()}
+            onSubmitEditing={
+              step === 'password'
+                ? () => passwordRef.current?.focus()
+                : step === 'reset'
+                  ? sendReset
+                  : sendCode
+            }
             value={email}
             onChangeText={setEmail}
           />
-          {mode === 'reset' ? null : (
+          {step === 'password' ? (
             <Input
               ref={passwordRef}
               placeholder="Password"
               accessibilityLabel="Password"
               secureTextEntry
-              textContentType={mode === 'in' ? 'password' : 'newPassword'}
-              autoComplete={mode === 'in' ? 'current-password' : 'new-password'}
+              textContentType="password"
+              autoComplete="current-password"
               returnKeyType="go"
-              onSubmitEditing={submit}
+              onSubmitEditing={submitPassword}
               value={password}
               onChangeText={setPassword}
             />
-          )}
-
-          {error ? (
-            <Text variant="dim" color="danger">
-              {error}
-            </Text>
           ) : null}
 
-          {mode === 'reset' ? (
+          {errorLine}
+
+          {step === 'reset' ? (
             <>
               <Button
                 title={voice.auth.resetSend}
-                loading={resetting}
+                loading={busy}
                 disabled={!email.trim()}
                 onPress={sendReset}
                 style={styles.cta}
               />
-              <Button variant="ghost" title="Back to sign in" onPress={() => setMode('in')} />
+              <Button variant="ghost" title="Back to sign in" onPress={() => setStep('password')} />
             </>
-          ) : (
+          ) : step === 'password' ? (
             <>
               <Button
-                title={mode === 'in' ? 'Sign in' : 'Create account'}
+                title="Sign in"
                 loading={busy}
-                onPress={submit}
+                onPress={submitPassword}
                 style={styles.cta}
               />
               <Button
                 variant="ghost"
-                title={mode === 'in' ? 'Need an account? Sign up' : 'Have an account? Sign in'}
-                onPress={() => setMode(mode === 'in' ? 'up' : 'in')}
+                title={voice.auth.useCode}
+                onPress={() => {
+                  setError(null)
+                  setPassword('')
+                  setStep('email')
+                }}
               />
-              {mode === 'in' ? (
-                <Button
-                  variant="ghost"
-                  title={voice.auth.forgot}
-                  onPress={() => {
-                    setError(null)
-                    setMode('reset')
-                  }}
-                />
-              ) : null}
+              <Button
+                variant="ghost"
+                title={voice.auth.forgot}
+                onPress={() => {
+                  setError(null)
+                  setStep('reset')
+                }}
+              />
+            </>
+          ) : (
+            <>
+              <Button
+                title={voice.auth.sendCode}
+                loading={busy}
+                disabled={!email.trim()}
+                onPress={sendCode}
+                style={styles.cta}
+              />
+              <Button
+                variant="ghost"
+                title={voice.auth.usePassword}
+                onPress={() => {
+                  setError(null)
+                  setStep('password')
+                }}
+              />
             </>
           )}
         </>
