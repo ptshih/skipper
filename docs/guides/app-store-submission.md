@@ -452,6 +452,19 @@ that look close but genuinely aren't: a drive's `label` is server-generated from
 (`apps/api/src/drives.ts`), and endpoints resolve to a curated anchor allowlist — no geocode — so
 there is no Search History.
 
+✅ **RE-DERIVED 2026-08-06 — the twelve are still COMPLETE and correct; do not redo this.** Two things
+happened after the 07-24 derivation that each look like they should add a row, and neither does:
+
+- **Email OTP (08-05) added no data type.** Sign-in codes and password resets go out through
+  **Resend**, so a rider's address reaches a new sub-processor — but *Email Address* is already
+  declared (Linked, App Functionality), and a transactional processor handling an address you already
+  collect adds no new type. It IS a change to `skipper.fm/privacy`, which named only the reset mail
+  and was corrected the same day.
+- **No new collecting SDK shipped.** `apps/mobile/package.json` diffed against `1aeb813f` (the commit
+  that derived this table) shows only patch bumps plus `@expo/react-native-action-sheet` and
+  `react-native-svg` — a native sheet wrapper and a drawing library, neither of which collects
+  anything or ships a `PrivacyInfo.xcprivacy` row that would land here.
+
 ⚠ **1.1 note (2026-08-02) — re-decide this one before pasting the label.** "No free text" was true of
 the deleted FROM/TO pickers and is NOT true of the planner: the rider types prose to
 `POST /drives/plan`, which reaches our server and Anthropic. The declaration still looks right —
@@ -840,6 +853,10 @@ a narration-only product is unusable to a deaf rider, and **the script text is a
 `narrations`** — the data to caption every stop exists today, unshipped. That's a real feature with the
 hard part done, not an accessibility chore. Revisit it as product work, not compliance.
 
+✅ **Re-read 2026-08-06 and UNCHANGED:** `state=DRAFT`, `deviceFamily=IPHONE`, claimed exactly
+`supportsDarkInterface` + `supportsSufficientContrast` — the two evidence-backed ones above, and no
+drift in the seven declared false. So the only thing this still needs is PUBLISHING, in the UI.
+
 ⚠ The declaration sits in `state=DRAFT`, and **that is now CONFIRMED to be un-fixable from the API**
 (re-tested 2026-08-03): `PATCH /v1/accessibilityDeclarations/{id}` with `state: PUBLISHED` returns
 **409 `ENTITY_ERROR.ATTRIBUTE.NOT_ALLOWED` — "The attribute 'state' can not be included in a 'UPDATE'
@@ -898,9 +915,13 @@ Re-run the list; don't inherit last release's ticks.
       behind "Use a password instead" — so confirm the reviewer can actually reach and use it.
 - [ ] Screenshots captured in dark mode (§9).
 - [ ] The coverage sentence in the description still matches reality (it says Tahoe only).
-- [ ] **Availability is United States ONLY** (§1). It defaults to every territory — if this ships wide,
-      you have taken on GDPR without a policy that answers it. Check this last; it is one click and it
-      is the single cheapest legal decision on the list.
+- [x] ✅ **Availability is United States ONLY — re-verified 2026-08-06 by paging all 175 territories:
+      exactly ONE is available**, and its id decodes to `{"s":"6778946770","t":"USA"}`.
+      `availableInNewTerritories: false`, so it will not silently expand later. It defaults to every
+      territory — if this ever ships wide, you have taken on GDPR without a policy that answers it
+      (§1). ⚠ Read it from `/v1/apps/{id}/appAvailabilityV2` and then page its
+      `territoryAvailabilities` relationship; the `?include=` shortcut returns an EMPTY included array
+      and reads as "no territories available", which is indistinguishable from a real problem.
 
 ## 13. After approval — the store link goes live
 
