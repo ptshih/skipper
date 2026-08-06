@@ -651,6 +651,12 @@ because it's the only one that can carry the Skipper's VOICE — screenshots str
 replaced 1.0 file is in `.scratch/asc-backup-1.0-preview/`. Poster frame `00:00:08:00`, which lands on
 the drawn card.
 
+⚠ **`previewFrameTimeCode` sent on CREATE is IGNORED — it must be PATCHed afterwards.** The POST
+carried `00:00:08:00` and the asset came back reading **`00:00:05:01`**, the previous preview's value,
+silently inherited. On this cut 5 s is the "Chewing on that…" beat, so the store thumbnail would have
+been a loading state rather than the drawn drive. A separate `PATCH /v1/appPreviews/{id}` set it and a
+read-back confirmed. **Always read this field back**; nothing warns you.
+
 ⚠ **The old one showed the `/sample` postcard, and that screen was deleted on 2026-08-05** — so it
 advertised a flow the app no longer has. It survived the 1.1 sweep because §9's recapture covered
 stills only; a video is its own asset and its own step.
