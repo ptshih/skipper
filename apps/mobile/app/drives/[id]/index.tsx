@@ -827,8 +827,12 @@ export default function DriveDetailScreen() {
                 onPress={() => void (repairable ? repair() : startDownload())}
               />
               <Text variant="dim" color="inkFaint" align="center">
-                {/* The size rides along only when this really is a download; a repair moves no bytes. */}
-                {[voice.offline.saveHint, repairable ? null : sizeLine].filter(Boolean).join(' ')}
+                {/* ⚠ A repair gets its OWN caption, not the download's with the size stripped off. It
+                moves no bytes, so BOTH halves of the download line would lie to it: the megabytes
+                (nothing transfers) and the words "every stop is down" (nothing comes down). */}
+                {repairable
+                  ? voice.offline.repairHint
+                  : [voice.offline.saveHint, sizeLine].filter(Boolean).join(' ')}
               </Text>
             </View>
           )}

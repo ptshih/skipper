@@ -189,15 +189,18 @@ reach it at all.
 
 ## 4. Offline — ⚠ not a side-quest any more: it is the ONLY way a drive plays
 
-- [ ] **"Save for offline"** on the detail screen, then Airplane Mode.
+- [ ] **"Load up the drive"** on the detail screen, then Airplane Mode.
       **Expect:** saved drives still open and play; the placard's `Not saved` chip is gone; the drive
       runs end to end with **zero network**. There is no "Playing from download" chip to look for — it
       was deleted, because a chip asserting what is now always true asserts nothing.
 - [ ] **Home while offline.** Expect the in-persona "Parked till the signal's back" card, MY DRIVES
       moved ABOVE it, and no crash.
 - [ ] **⚠ THE GATE, in its three states** (replaces the deleted *"This drive isn't saved yet"* alert).
-      On an UNSAVED drive, online: there is **no Start at all** — the CTA is "Save for offline" with a
-      courtesy "About N MB." line (a LABEL, never a prompt). While it runs: Start is present but
+      On an UNSAVED drive, online: there is **no Start at all** — the CTA is "Load up the drive" over
+      "Start opens up once every stop is down." plus a courtesy "About N MB." (a LABEL, never a
+      prompt). ⚠ The old "Save for offline" / "Signal's thin out there — best saved now" pair is gone:
+      it sold an optional precaution, and this is the only way to Start. While it runs: Start is
+      present but
       **disabled**, reading "Saving for the road…" with "Start opens up the moment the last stop
       lands." under it and `Saving k/total` on the placard chip. When it lands: Start enables itself
       with no tap from you. **Watch for:** a **"Start anyway"** button anywhere — that string was

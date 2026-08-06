@@ -44,8 +44,10 @@
 >   Save it first / Start anyway / Cancel* is deleted — `'Start anyway'` was deleted as a STRING, not
 >   relocated, because a live one is how a gate quietly grows a bypass. The copy now downloads
 >   automatically the moment a drive is CREATED, Start renders disabled with progress beside it while
->   that runs, and it turns itself on when the last clip lands. The separate "Save for offline" button
->   collapsed INTO that CTA: it appears only when nothing is running and a download is what's owed.
+>   that runs, and it turns itself on when the last clip lands. The separate save button collapsed
+>   INTO that CTA: it appears only when nothing is running and a download is what's owed — and it now
+>   reads **"Load up the drive"** (renamed from "Save for offline", founder 2026-08-05, because "save"
+>   named an optional courtesy and this is the only way to Start).
 > - **`?mode` is retired.** The GPS clock is a SETTING (Settings → Developer → SIMULATED GPS,
 >   admin-gated + persisted) defaulting **false everywhere, `__DEV__` included**, and the `__DEV__`
 >   "Simulated drive" ⋯ item is gone. The steps below were rewritten off the param that day; any
@@ -217,7 +219,7 @@ verified — they share the build, so do them together.
   and a StopRow truncates to one line, so a legit long name ending in `…` on the row is **expected**,
   not un-cleaned cruft. (`apps/mobile/src/lib/labels.ts:29-32`)
 - [ ] **Offline permit chip.** Do: signed in, open an UNDOWNLOADED drive and read the placard's permit
-  row *before* doing anything; then tap the "Save for offline" CTA (or `⋯` → "Download for offline").
+  row *before* doing anything; then tap the "Load up the drive" CTA (or `⋯` → "Download for offline").
   Expect: a faint `Not saved` chip with a vector cloud icon at rest → a faint `Saving k/total` label
   while it runs → a `Saved offline` chip with the "downloaded" icon; the `⋯` item flips to a
   destructive "Remove download". Watch-for: the chip colliding with the `N STOPS · ~M MIN` text on a
@@ -227,10 +229,13 @@ verified — they share the build, so do them together.
   (`apps/mobile/app/drives/[id]/index.tsx` — the permit-row chip ladder + `styles.permitRow`)
 - [ ] **★ The download GATE, in its three states (2026-08-05 — replaces the deleted unsaved-drive
   alert).** Do: signed in, walk one drive through all three. Expect —
-  **(a) nothing saved, online:** there is no Start at all; the CTA is **"Save for offline"** with the
-  `saveHint` and a courtesy **"About N MB."** size line under it. Tap it. (⚠ If bytes for this drive
-  already exist on disk the same slot reads **"Recover it without downloading again"** and the size
-  line is correctly absent — a repair moves no bytes.)
+  **(a) nothing saved, online:** there is no Start at all; the CTA is **"Load up the drive"** over
+  `saveHint` ("Start opens up once every stop is down.") plus a courtesy **"About N MB."** size line.
+  Tap it. (⚠ If bytes for this drive already exist on disk the same slot reads **"Recover it without
+  downloading again"** over a DIFFERENT caption, `repairHint` — "Start opens up once it's back
+  together." — and the size line is correctly absent. **Watch for the download's caption leaking into
+  the repair:** "…once every stop is down" beside a button promising no download is the exact
+  contradiction `repairHint` exists to prevent.)
   **(b) while it runs:** the CTA becomes **"Saving for the road…"**, *disabled*, with
   "Start opens up the moment the last stop lands." under it and `Saving k/total` on the placard chip.
   **(c) when it lands:** the CTA turns itself into the live Start with **no tap from you**.
@@ -250,8 +255,8 @@ verified — they share the build, so do them together.
 - [ ] **★ Auto-download at CREATE, and only at create.** Do: create a NEW drive from the home
   conversation and watch the detail screen you are pushed onto without touching anything; then open an
   OLD, never-saved drive from MY DRIVES. Expect: the new one starts saving by itself within a second or
-  two and Start enables when it lands; the old one starts NOTHING and shows the "Save for offline" CTA
-  until you ask. Watch-for: an old drive spending tens of MB on a glance (the auto-start got keyed on
+  two and Start enables when it lands; the old one starts NOTHING and shows the "Load up the drive"
+  CTA until you ask. Watch-for: an old drive spending tens of MB on a glance (the auto-start got keyed on
   the navigation push instead of the create handler — the two pushes are byte-identical, which is the
   whole trap). (`apps/mobile/app/index.tsx` — the create handler's `downloadDrive`)
 
@@ -292,7 +297,7 @@ opening one at all needs an account; that is what the gates below catch.
   to home. Watch-for: wrong ghost label, or it popping the stack to the drives list.
   (`apps/mobile/app/drives/[id]/index.tsx:51-67,150-157`)
 - [ ] **Signed-in user never sees the gate.** Do: sign in (free account), tap "Start the drive" and
-  separately "Save for offline" (or `⋯` → "Download for offline"). Expect: the live drive opens (⚠ on
+  separately "Load up the drive" (or `⋯` → "Download for offline"). Expect: the live drive opens (⚠ on
   an UNSAVED drive there is no Start to tap at all — the download gate above owns that CTA; save it
   first, which is a wait, not an alert to dismiss), and a *location* permission gate may follow —
   that's GPS, §7. Download shows the not-saved→saving→saved chip; no AccountGate. Watch-for: a signed-in user still hitting "Grab your ticket" (session cookie not sent);

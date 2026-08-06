@@ -482,8 +482,13 @@ export const voice = {
     refresh: 'Refresh the download', // ⋯ menu re-pull for an expired copy
     // NOT saved — the honest counterpart to the "Saved offline" chip. This slot used to render
     // NOTHING when a drive wasn't downloaded, so streaming (and the dead-zone stop-skipping it
-    // invites) was the silent, invisible default. Neutral tone: streaming is a legitimate choice on
-    // a road with signal, so this states a fact, it doesn't scold.
+    // invites) was the silent, invisible default.
+    // ⚠ THE NEUTRAL TONE OUTLIVED THE ARGUMENT THAT SET IT — don't re-derive it from the old one.
+    // It was neutral because streaming was a legitimate choice on a road with signal; §10 of
+    // download-before-start.md retired streaming entirely, so that reasoning is dead. It stays
+    // neutral for a different reason: the CTA directly below is where the rider learns this drive
+    // cannot roll yet and is handed the one thing to do about it. A chip that scolded would say it
+    // twice, and the first time in the place with no button.
     notSaved: 'Not saved',
     // Bytes on disk that THIS build can't read — a saved manifest in a format with no migration
     // across (see offline.ts MANIFEST_MIGRATIONS). Distinct from "Not saved" because it is
@@ -498,18 +503,30 @@ export const voice = {
     // at the two things that DO work from here; both live in the same ⋯ menu.
     repairFailed:
       'Couldn’t match what’s on the phone to this drive. Download it again, or remove the leftovers.',
-    save: 'Save for offline', // the main-path button under the Start CTA (was ⋯-menu-only)
-    // ⚠ REGION-FREE ON PURPOSE (founder, 2026-08-03), and this one had no alternative: it sits on the
-    // drive-detail Save button, and a `DriveManifest` carries no region — so there was nothing here to
-    // template FROM. (The counter-example used to be `/sample`'s copy, which kept its "Lake Tahoe"
-    // deliberately; that screen was deleted 2026-08-05, so this is now simply the rule.) Naming a
-    // region would have been wrong for every drive outside it. §7 holds either way: this says
-    // something true about the ROAD, which is route information, not a fact about a place on it.
+    // ⚠ THIS IS NO LONGER 'Save for offline' (founder, 2026-08-05), and the rename is the whole point.
+    // That label was minted when the download was an optional courtesy taken against a dead zone — it
+    // began life ⋯-menu-only. Under docs/designs/download-before-start.md the local copy is the ONLY
+    // way to Start, and "save" is an archival, do-it-for-later verb: it undersold a hard requirement.
+    // "Load up" is the road idiom for what actually happens — the drive goes in the vehicle before you
+    // pull out of the lot.
+    save: 'Load up the drive',
     // ⚠ ONE LINE, deliberately (founder, 2026-08-03) — it is a caption tucked under a button, and the
-    // two-line version it replaced wrapped mid-thought and cost the itinerary a row of screen. The
-    // full argument gets made by the gate below instead, where the rider can act on it.
-    // "Signal's thin" is the same phrasing `error.download` uses — one road, one voice.
-    saveHint: 'Signal’s thin out there — best saved now.',
+    // two-line version it replaced wrapped mid-thought and cost the itinerary a row of screen. ⚠ The
+    // real budget is ~40 characters, NOT a full line: `sizeHint` is appended to this at the render
+    // site, and the two share the row.
+    // ⚠ It deliberately stopped arguing the dead-zone case ('Signal's thin out there — best saved
+    // now'). That line hedged — "best" is advice about a precaution — and this is not a precaution.
+    // It now names the one thing a gated rider actually wants to know, and hands off to
+    // `gateSavingHint` mid-download so the two states read as one thought:
+    // "…once every stop is down" → "…the moment the last stop lands."
+    // ⚠ REGION-FREE, like everything in this block: a `DriveManifest` carries no region, so naming one
+    // would be wrong for every drive outside it.
+    saveHint: 'Start opens up once every stop is down.',
+    // The same caption for the REPAIR branch, which shares this CTA. ⚠ It CANNOT reuse `saveHint`: a
+    // repair reassembles a manifest from bytes already on the phone, so "once every stop is down"
+    // would contradict the button right above it ("Recover it without downloading again") and promise
+    // a transfer that never starts. Same shape, same hand-off, no download.
+    repairHint: 'Start opens up once it’s back together.',
     // ⚠ THE UNSAVED-DRIVE ALERT IS GONE, and with it `unsavedTitle` / `unsavedBody` / `unsavedSave` /
     // `unsavedStart` (docs/designs/download-before-start.md §1, §6). Start stopped being a three-way
     // Alert a rider talks their way past and became a STATE: the copy comes down automatically at
@@ -534,6 +551,12 @@ export const voice = {
     // with no signal and no saved bytes there is no drive to allow, only silence. Opens on "No signal
     // out here" like its three siblings above so the four read as one idea.
     gateNothingSaved: 'No signal out here, and this one isn’t saved yet. We’ll roll when the bars are back.',
+    // The DEEP-LINK gate's action (play.tsx). ⚠ It is NOT `save`, and giving it one label was already
+    // half-wrong before the rename: `save` labels a button that starts a transfer, while this one only
+    // walks back to the drive screen — which owns the download, its progress, its size line and the
+    // "no signal and nothing saved" case this screen cannot tell apart. Sharing the string now would
+    // read 'Load up the drive' on a tap that loads nothing, which is a promise, not a label.
+    gateBackToDrive: 'Back to the drive',
     // The size disclosure (§3). ⚠ COURTESY, NEVER A GATE — there is no "download over cellular?"
     // prompt, and adding one would be re-litigating a founder call made on the measurement (the
     // largest drive we have ever built is ~11 MB). Plain and short: a caption under a button, and a

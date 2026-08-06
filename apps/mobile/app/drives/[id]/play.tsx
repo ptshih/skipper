@@ -353,7 +353,7 @@ export default function DriveScreen() {
         title="Drive"
         message={voice.offline.saveHint}
         action={{
-          label: voice.offline.save,
+          label: voice.offline.gateBackToDrive,
           onPress: () =>
             router.canGoBack() ? router.back() : router.replace(`/drives/${id}`),
         }}

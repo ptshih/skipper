@@ -361,14 +361,22 @@ rating, a count, a duration. A string that VARIES by region templates from the A
 (`voice.plan.example*` fill `{a}`/`{b}` from `region.exampleAnchors`, so a chip can never name a road
 the skipper doesn't run).
 
-⚠ **The `/sample` postcard is a deliberate carve-out** (founder, 2026-08-03): `voice.sample.kicker`
-("POSTCARD FROM LAKE TAHOE") and `voice.sample.homeLink` ("Not near Tahoe?…") name a region on
-purpose, because that screen is about ONE fixed curated clip and there is nothing to template from —
-a region-free version would just be vaguer, not more correct. The same call went the other way for
-`voice.offline.saveHint`, which sits on a drive-detail button whose `DriveManifest` carries no
-region: naming one there would have been wrong for every drive outside it, so it speaks about the
-ROAD instead. The rule the two share is not "no place name ever" — it's **never author a fact the
-API owns**.
+⚠ **The rule is not "no place name ever" — it's never author a fact the API owns.** The carve-out
+that used to illustrate it (`/sample`'s "POSTCARD FROM LAKE TAHOE", founder 2026-08-03) named a
+region on purpose, because that screen was about ONE fixed curated clip with nothing to template
+from. It is no longer an example of anything: **`voice.sample` and the `/sample` screen were both
+deleted 2026-08-05**, so today every string in `voice` is region-free and the carve-out has no live
+instance. Kept as a note rather than dropped because the *reasoning* is what to reach for when the
+next fixed-content screen appears — the test is whether there is a fact the API owns, not whether a
+place name appears.
+
+The counter-case still stands and is the one to copy: `voice.offline.saveHint` sits on a drive-detail
+button whose `DriveManifest` carries no region, so naming one would be wrong for every drive outside
+it. ⚠ It no longer speaks "about the ROAD" — that described the retired *"Signal's thin out there —
+best saved now"*. It now speaks about the **CONTROL** ("Start opens up once every stop is down."),
+which is region-free for a stronger reason than the old line was: it describes this app's own
+behaviour, which is true everywhere, rather than a claim about coverage that was only true in some
+places.
 
 ## 8. In-car & accessibility rules
 
