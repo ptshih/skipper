@@ -112,7 +112,11 @@ public, a staged clip stays staged. (`audio_url`, `script`, `facts_hash`, `attri
 
 - **Region Release** — `POST /admin/regions/:slug/release`: `db.batch` of
   `UPDATE regions SET released_at = now() WHERE released_at IS NULL` (idempotent) +
-  `UPDATE narrations SET released_at = now() WHERE released_at IS NULL AND <poi in region bbox>`. Re-running
+  `UPDATE narrations SET released_at = now() WHERE released_at IS NULL AND <poi in region bbox>`. ⚠ Since
+  2026-08-06 a region may be SEVERAL boxes and that predicate spans ALL of them (`inAnyBbox`); the parse is
+  all-or-nothing, so a region whose bbox is malformed 400s rather than releasing part of itself — release is
+  irreversible, and half a region published is not recoverable. See [multi-bbox-regions.md](multi-bbox-regions.md).
+  Re-running
   it is the "push newly-staged clips public" bulk action. Gate behind an **irreversible** confirm
   (`useConfirm({ tone: 'destructive' })`, "this can't be undone").
 - **Per-clip release** — a release toggle on the POI detail drawer's narration tab (`PoisView.tsx`

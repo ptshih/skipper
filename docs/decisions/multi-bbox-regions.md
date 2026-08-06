@@ -98,10 +98,27 @@ both stored at `(39, -119.85)` — sit on the `-119.85` seam and resolve into bo
 curated endpoints do**, so the planner roster and the allowlist are untouched, and drive labels are
 unaffected (a label tests the drive's START, which is always a curated place).
 
-⚠ Those two coordinates are rounded to two decimals; the curated `places` row for the same town carries
-`39.0040567, -119.8472149`, which is ~400 m away and cleanly inside `reno-carson`. So the collision is a
-**data-precision artifact, not a boundary error** — worth fixing at the POI, not at the geometry. It is
-NOT fixed here: moving a released clip's coordinate moves where it triggers for riders.
+⚠ **INVESTIGATED 2026-08-06, AND THE OBVIOUS FIX IS THE WRONG ONE — DO NOT "CORRECT" THOSE PINS.**
+The first read was that `(39, -119.85)` is a sloppy two-decimal value worth hand-correcting. It is not:
+
+1. **Wikidata stores exactly that.** `Q3459757` (Genoa) carries `39, -119.85` at **precision 1
+   arcminute (~1.8 km)**, and `Q115951395` (Genoa Historic District) carries the same value. Our rows
+   faithfully mirror the source; the imprecision is upstream, so editing ours means DIVERGING from it.
+2. **A re-sweep would revert it anyway.** `upsertPoi` sets `lat: excluded.lat` / `lng: excluded.lng`
+   outright (`pipeline/persist.ts`), so the next `discover-pois` for the region overwrites any hand
+   edit. A fix that a free, idempotent, re-runnable job silently undoes is not a fix.
+3. **The repo already has the right mechanism, and it is already correct here.** A misleading centroid
+   is what `speakable_lat/lng` exists for, and it is `coalesce`-preserved across a re-fetch precisely
+   so a correction STICKS. Both Genoa rows already carry a road-snapped anchor at
+   `39.0017, -119.8459` (secondary road) — the real town, cleanly inside `reno-carson` — and the drive
+   corpus prefers the speakable anchor over the centroid, so **playback already triggers in the right
+   place**. Nothing a rider experiences is wrong.
+
+What remains is membership-only: `pois.lat/lng` is what region containment reads, so those two rows
+count toward both regions' POI totals and appear in both diversity contexts. Both are already released,
+no curated endpoint straddles, and drive labels test a curated place — so the practical impact is nil.
+Correcting it upstream at Wikidata (`docs/guides/upstream-wikipedia-corrections.md`) is the only fix
+that would actually hold.
 
 Do not "fix" the seam by making an edge exclusive. Inclusive edges are load-bearing, and a half-open
 boundary would leave a point on the line in NEITHER region, which is strictly worse than in both.

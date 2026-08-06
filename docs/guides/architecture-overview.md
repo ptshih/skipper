@@ -164,8 +164,10 @@ route-preview clip play before a drive exists and still stream, by design.
 
 Schema: `packages/db/src/schema.ts`; the Better Auth pool is `packages/db/src/auth-schema.ts`.
 
-- **`regions`** — a bbox. Region is *geometry*, never a foreign key: a POI's region is point-in-bbox,
-  a drive derives its region by intersecting its route bbox. There is no `region_id` anywhere.
+- **`regions`** — a bbox, or SEVERAL `;`-separated in the same column (2026-08-06). Region is *geometry*,
+  never a foreign key: a POI's region is point-in-ANY-box, a drive derives its region by intersecting its
+  route bbox. There is no `region_id` anywhere. ⚠ The SINGULAR `parseRegionBbox` refuses a multi-box value
+  so an unconverted reader matches nothing rather than half a region (`decisions/multi-bbox-regions.md`).
 - **`pois`** — the facts cache. Wikidata QID is the dedup key; every POI is Wikidata-discovered.
   Carries `fact_sheet`, `facts_hash`, `facts_fetched_at`. A re-fetch that materially changes the
   facts makes every narration grounded on them stale.

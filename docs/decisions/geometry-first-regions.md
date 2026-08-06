@@ -6,14 +6,18 @@ drops the `asides` table + the intro/outro player framing). Corpus-CLI slice BUI
 `discover`/`enrich`/`generate-narrations` take `--region <slug>`, resolved to the region's discovery bbox
 via `studio/src/pipeline/region.ts` (point-in-bbox selection); `--bbox` is gone as a user input and the
 admin sends the region slug. Supersedes the abandoned plan to stamp a `region_id` on `pois`.
+⚠ **AMENDED 2026-08-06: a region may be SEVERAL boxes**, `;`-separated in the same column, so "point-in-bbox"
+below now reads "point-in-ANY-box" everywhere. The rule this record establishes — region is GEOMETRY, derived at
+query time, never an FK — is unchanged and is in fact what made the extension cheap. See
+[multi-bbox-regions.md](multi-bbox-regions.md).
 
 ## The rule
 
-A **region is a bounding box** (geometry), not an identity a row points at. Membership is **derived by
+A **region is a bounding box — or several** (geometry), not an identity a row points at. Membership is **derived by
 geometry at query time**, never stored as a foreign key on anything that has its own coordinates:
 
-- **A POI's region = point-in-bbox.** `pois` carries NO `region_id`. "POIs in region X" =
-  `lat/lng BETWEEN X.bbox`. The corpus CLIs (`discover`/`enrich`/`generate-narrations`) take
+- **A POI's region = point-in-bbox** (point-in-ANY-box since 2026-08-06). `pois` carries NO `region_id`.
+  "POIs in region X" = `lat/lng BETWEEN X.bbox`, OR'd across X's boxes (`inAnyBbox`, `@skipper/db/bbox`). The corpus CLIs (`discover`/`enrich`/`generate-narrations`) take
   `--region <slug>` and resolve it to that bbox internally — bbox is never a user-facing input.
 - **A DRIVE's region = bbox, not a stored FK.** `drives` carries NO `region_id`. A drive stores its own
   route **bbox** (`bbox_min/max_lat/lng`), derived from the frozen polyline at create time. That bbox is

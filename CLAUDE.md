@@ -111,8 +111,8 @@ itself is recorded in `docs/guides/1-1-cutover-runbook.md`). RISK-1's real drive
   is a 400 **before** any billed Routes call. An off-list ask gets the in-persona "don't know that one" —
   never a geocode. This is what makes "grounded by construction" true, and why `curate-places` is product
   surface, not a leftover CLI.
-- **Region is a BBOX, never a stored FK (geometry-first).** A POI's region = point-in-bbox; a drive stores
-  its route bbox + derives region by intersect — NO `region_id` anywhere. `docs/decisions/geometry-first-regions.md`.
+- **Region is a BBOX — or SEVERAL, `;`-separated — never a stored FK.** POI region = point-in-ANY-box; a drive
+  derives region by intersecting its route bbox — NO `region_id`. ⚠ the SINGULAR `parseRegionBbox` REFUSES a multi-box value (fail-closed). `docs/decisions/geometry-first-regions.md` + `multi-bbox-regions.md`.
 - **`pois` deduped by Wikidata QID (`pois_qid_uq`).** Every poi is Wikidata-discovered (`source` ∈
   {wikipedia, wikidata}); `(source, source_id)` is a secondary guard, not the arbiter (it survives a
   scenic↔story tier flip). Keep `source`/`source_id` for attribution — Wikipedia is **CC BY-SA**, so the

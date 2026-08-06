@@ -15,6 +15,7 @@
 //    (google.maps.Rectangle has no native dashed stroke, so the box is a solid green outline.)
 
 import { useEffect, useRef, useState } from 'react'
+import { parseRegionBboxes } from '@skipper/engine'
 import {
   APIProvider,
   Map,
@@ -86,26 +87,45 @@ function placePinFill(p: PlacePin): string {
   return p.featured ? PLACE_PIN_COLORS.featured : p.endpointEligible ? PLACE_PIN_COLORS.endpoint : PLACE_PIN_COLORS.break
 }
 
-/** Parse "lng_min,lat_min,lng_max,lat_max" → corner numbers, or null. Pure (no google). */
-function bboxCorners(bbox: string): { south: number; west: number; north: number; east: number } | null {
-  const p = bbox.split(',').map(Number)
-  if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return null
-  const [swLng, swLat, neLng, neLat] = p as [number, number, number, number]
-  return { south: swLat, west: swLng, north: neLat, east: neLng }
+/**
+ * Corners of every box a region is made of. Pure (no google).
+ *
+ * ⚠ PARSES THROUGH @skipper/engine RATHER THAN SPLITTING ON ','. This file used to carry its own
+ * `bbox.split(',')` parser, which is how it BROKE the moment a region became several boxes: a
+ * multi-box value splits into 7 fields, one of them `NaN`, so the whole thing read as malformed and
+ * the map silently drew NO region outline at all. That is the fifth independently-written parser of
+ * this one string in this repo's history, and the reason there is now exactly one
+ * (docs/decisions/multi-bbox-regions.md). The engine is zero-dep and browser-safe, so importing it
+ * here costs nothing.
+ */
+function bboxCorners(bbox: string | null): { south: number; west: number; north: number; east: number }[] {
+  return parseRegionBboxes(bbox).map((b) => ({ south: b.swLat, west: b.swLng, north: b.neLat, east: b.neLng }))
 }
 
-/** Center of a bbox, or the Tahoe default. Pure (used for the uncontrolled defaultCenter at first paint). */
+/** Center of a region's whole extent, or the Tahoe default. Pure (used for the uncontrolled
+ *  defaultCenter at first paint). Spans every box, so a two-box region opens showing both. */
 function centerOfBbox(bbox: string | null): google.maps.LatLngLiteral {
-  const c = bbox ? bboxCorners(bbox) : null
-  return c ? { lat: (c.south + c.north) / 2, lng: (c.west + c.east) / 2 } : DEFAULT_CENTER
+  const cs = bboxCorners(bbox)
+  if (cs.length === 0) return DEFAULT_CENTER
+  const south = Math.min(...cs.map((c) => c.south))
+  const north = Math.max(...cs.map((c) => c.north))
+  const west = Math.min(...cs.map((c) => c.west))
+  const east = Math.max(...cs.map((c) => c.east))
+  return { lat: (south + north) / 2, lng: (west + east) / 2 }
 }
 
-/** A google.maps.LatLngBounds from a bbox string — call only once the API is loaded. */
+/** Bounds enclosing EVERY box — the camera frame, so a multi-box region fits entirely on screen.
+ *  ⚠ This is the one place a region's HULL is the right answer: it is a viewport, not a membership
+ *  test. Nothing is decided from it. Call only once the API is loaded. */
 function boundsFromBbox(bbox: string | null): google.maps.LatLngBounds | null {
-  if (!bbox) return null
-  const c = bboxCorners(bbox)
-  if (!c) return null
-  return new google.maps.LatLngBounds({ lat: c.south, lng: c.west }, { lat: c.north, lng: c.east })
+  const cs = bboxCorners(bbox)
+  if (cs.length === 0) return null
+  const bounds = new google.maps.LatLngBounds()
+  for (const c of cs) {
+    bounds.extend({ lat: c.south, lng: c.west })
+    bounds.extend({ lat: c.north, lng: c.east })
+  }
+  return bounds
 }
 
 /** Re-fit the camera to the bbox whenever it changes (so editing a saved region shows its box). */
@@ -119,24 +139,27 @@ function FitBounds({ bbox }: { bbox: string | null }) {
   return null
 }
 
-/** The committed-bbox outline (solid green; google.maps.Rectangle has no native dash). */
+/** The committed-bbox outline (solid green; google.maps.Rectangle has no native dash).
+ *  ⚠ ONE RECTANGLE PER BOX, never one around the hull — a region of several boxes does NOT include the
+ *  ground between them, and drawing the hull would show an operator a region that does not exist. */
 function BboxOutline({ bbox }: { bbox: string | null }) {
   const map = useMap()
   useEffect(() => {
     if (!map) return
-    const bounds = boundsFromBbox(bbox)
-    if (!bounds) return
-    const rect = new google.maps.Rectangle({
-      map,
-      bounds,
-      clickable: false,
-      strokeColor: BBOX_GREEN,
-      strokeOpacity: 1,
-      strokeWeight: 2,
-      fillColor: BBOX_GREEN,
-      fillOpacity: 0.05,
-    })
-    return () => rect.setMap(null)
+    const rects = bboxCorners(bbox).map(
+      (c) =>
+        new google.maps.Rectangle({
+          map,
+          bounds: new google.maps.LatLngBounds({ lat: c.south, lng: c.west }, { lat: c.north, lng: c.east }),
+          clickable: false,
+          strokeColor: BBOX_GREEN,
+          strokeOpacity: 1,
+          strokeWeight: 2,
+          fillColor: BBOX_GREEN,
+          fillOpacity: 0.05,
+        }),
+    )
+    return () => rects.forEach((r) => r.setMap(null))
   }, [map, bbox])
   return null
 }
@@ -215,28 +238,53 @@ function MapUnavailable({ className }: { className?: string }) {
 }
 
 /** A draw-a-rectangle bbox picker. Shows the current bbox, and a "Draw bbox" toggle: while on, drag a
- *  box (the map won't pan); on release it fills the field and exits draw mode. Normal drag = pan. */
+ *  box (the map won't pan); on release it fills the field and exits draw mode. Normal drag = pan.
+ *
+ *  ⚠ TWO MODES SINCE A REGION MAY BE SEVERAL BOXES. "Draw bbox" REPLACES the whole field, which is
+ *  what redrawing a region means; on a multi-box region that would silently discard the other boxes,
+ *  so "＋ Add box" APPENDS instead. The distinction has to be in the BUTTON rather than inferred,
+ *  because both are legitimate intentions against the same gesture, and guessing wrong destroys work
+ *  the operator cannot see happening. The add button only appears once there is something to add to. */
 export function BboxMap({ bbox, onBbox, className }: { bbox: string; onBbox: (bbox: string) => void; className?: string }) {
-  const [drawing, setDrawing] = useState(false)
+  const [drawing, setDrawing] = useState<null | 'replace' | 'append'>(null)
+  const existing = bboxCorners(bbox).length
   if (!BROWSER_KEY) return <MapUnavailable className={className} />
+  const emit = (drawn: string) => onBbox(drawing === 'append' && bbox.trim() ? `${bbox.trim()};${drawn}` : drawn)
   return (
     <div className={`relative w-full overflow-hidden rounded-lg border ${className ?? 'h-72'}`}>
+      <div className="absolute right-2 top-2 z-10 flex gap-1">
       <button
         type="button"
         onClick={(e) => {
           e.stopPropagation()
-          setDrawing((d) => !d)
+          setDrawing((d) => (d === 'replace' ? null : 'replace'))
         }}
-        className="absolute right-2 top-2 z-10 rounded-md border bg-background/90 px-2 py-1 text-xs font-medium shadow-sm hover:bg-background"
+        className="rounded-md border bg-background/90 px-2 py-1 text-xs font-medium shadow-sm hover:bg-background"
       >
-        {drawing ? 'Drawing… drag a box' : '✏ Draw bbox'}
+        {drawing === 'replace' ? 'Drawing… drag a box' : existing > 1 ? '✏ Replace all' : '✏ Draw bbox'}
       </button>
+      {existing > 0 && (
+        <button
+          type="button"
+          title="Draw an ADDITIONAL box — the region becomes every box, and the ground between them is NOT included"
+          onClick={(e) => {
+            e.stopPropagation()
+            setDrawing((d) => (d === 'append' ? null : 'append'))
+          }}
+          className="rounded-md border bg-background/90 px-2 py-1 text-xs font-medium shadow-sm hover:bg-background"
+        >
+          {drawing === 'append' ? 'Drawing… drag a box' : '＋ Add box'}
+        </button>
+      )}
+      </div>
       <APIProvider apiKey={BROWSER_KEY}>
-        <Map {...MAP_OPTIONS} defaultCenter={centerOfBbox(bbox)} defaultZoom={bboxCorners(bbox) ? 9 : 8}>
+        <Map {...MAP_OPTIONS} defaultCenter={centerOfBbox(bbox)} defaultZoom={bboxCorners(bbox).length > 0 ? 9 : 8}>
           {/* While drawing, stop re-fitting so the camera holds still under the drag. */}
           <FitBounds bbox={drawing ? null : bbox} />
-          {!drawing && <BboxOutline bbox={bbox} />}
-          <DrawController active={drawing} onBbox={onBbox} onDone={() => setDrawing(false)} />
+          {/* ⚠ Keep the committed boxes VISIBLE while appending — you cannot place a second box
+              sensibly without seeing the first. Replacing hides them, because they are about to go. */}
+          {drawing !== 'replace' && <BboxOutline bbox={bbox} />}
+          <DrawController active={drawing !== null} onBbox={emit} onDone={() => setDrawing(null)} />
         </Map>
       </APIProvider>
     </div>
@@ -373,7 +421,7 @@ export function PlacesMap({
   return (
     <div className={`relative w-full overflow-hidden rounded-lg border ${className ?? 'h-72'}`}>
       <APIProvider apiKey={BROWSER_KEY}>
-        <Map {...MAP_OPTIONS} defaultCenter={centerOfBbox(bbox)} defaultZoom={bbox && bboxCorners(bbox) ? 9 : 8}>
+        <Map {...MAP_OPTIONS} defaultCenter={centerOfBbox(bbox)} defaultZoom={bboxCorners(bbox).length > 0 ? 9 : 8}>
           <FitBounds bbox={bbox} />
           <BboxOutline bbox={bbox} />
           <PlaceMarkerLayer places={places} selectedId={selectedId} onSelect={onSelect} />

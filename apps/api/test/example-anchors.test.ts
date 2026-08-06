@@ -72,6 +72,42 @@ describe('pickExampleAnchors — geometry-first bucketing', () => {
     expect(out.get('b')).toEqual(['Mount Rose'])
   })
 
+  // ── multi-bbox regions ─────────────────────────────────────────────────────────────────────────
+  // The live shape: `reno-carson` is the east box PLUS the detached I-80 corner north-west of Reno.
+  // This is an ANONYMOUS per-request path (every app launch hits GET /regions), so it gets its own
+  // pins rather than relying on the engine's parser tests alone.
+  const RENO_TWO_BOX = '-119.85,38.80,-119.45,39.65;-120.40,39.40,-119.85,39.65'
+
+  test('a place in the DETACHED second box is published for the region', () => {
+    const verdi = place('Verdi', 39.509, -120.048) // west of the first box's western edge
+    const out = pickNames([region('reno', RENO_TWO_BOX)], [verdi])
+    expect(out.get('reno')).toEqual(['Verdi'])
+  })
+
+  test('a place in the GAP between the boxes is published for NOBODY', () => {
+    // Emerald Bay sits inside the two boxes' HULL but in neither box — it is Tahoe's ground. Publishing
+    // it here would put a neighbour's endpoint in this region's allowlist (INV-1).
+    const emerald = place('Emerald Bay', 38.95, -120.11)
+    const out = pickNames([region('reno', RENO_TWO_BOX)], [emerald])
+    expect(out.get('reno')).toEqual([])
+  })
+
+  test('both boxes contribute to one region — not just the first', () => {
+    const reno = place('Reno', 39.53, -119.81)
+    const verdi = place('Verdi', 39.509, -120.048)
+    const out = pickNames([region('reno', RENO_TWO_BOX)], [reno, verdi])
+    expect(out.get('reno')?.sort()).toEqual(['Reno', 'Verdi'])
+  })
+
+  test('a MALFORMED box voids the whole region rather than publishing the readable half', () => {
+    // All-or-nothing: a region publishing anchors from half of itself reads as a thin region, not as
+    // an error — so nothing is published and `ready` is false.
+    const reno = place('Reno', 39.53, -119.81)
+    const out = pickExampleAnchors([region('reno', '-119.85,38.80,-119.45,39.65;garbage')], [reno])
+    expect(out.get('reno')?.names).toEqual([])
+    expect(out.get('reno')?.ready).toBe(false)
+  })
+
   test('every region gets an entry, even one with no places in range', () => {
     const out = pickNames([region('r1', TAHOE), region('r2', RENO)], [place('Tahoe City', 39.17, -120.14)])
     expect(out.get('r2')).toEqual([])
