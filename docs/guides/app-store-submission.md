@@ -1071,9 +1071,20 @@ Re-run the list; don't inherit last release's ticks.
       released, so 1.1.0 is the first public release and Apple hides the field.
 - [x] ✅ **The demo account is healthy** — `review@skipper.fm` exists with a credit balance of **99**
       and still owns the saved drive §10 sends the reviewer to, "Tahoe City → South Lake Tahoe"
-      (read back from the live DB 2026-08-06). ⚠ Its PASSWORD is still owed a check and cannot be
-      checked from here: it lives only in ASC, and since 2026-08-05 the password form is a FALLBACK
-      behind "Use a password instead" — so confirm the reviewer can actually reach and use it.
+      (read back from the live DB 2026-08-06).
+      ✅ **Its PASSWORD is VERIFIED WORKING against prod (2026-08-06).** It CAN be checked from here
+      after all — `appStoreReviewDetail.demoAccountPassword` is readable over the API, so the check is
+      a real sign-in, not an inspection: `POST /api/auth/sign-in/email` → **200**, user
+      `review@skipper.fm` / "App Review", `isAnonymous: false`, `emailVerified: true`; the session
+      cookie then fetched `GET /drives` → **200, 1 drive: "Tahoe City → South Lake Tahoe"** — the exact
+      drive §10 sends the reviewer to. ⚠ **Never print, log or commit that password**; read it, use it,
+      discard it.
+      ⚠ **Auth rides the Better Auth session COOKIE, not a bearer token** (`apps/mobile/src/lib/api.ts`).
+      A bearer `Authorization` header gets a **401** on `/drives` and looks exactly like a dead
+      credential — it is not; it is the wrong scheme. That cost one false alarm here.
+      ⚠ Still worth one manual pass in the UI: since 2026-08-05 the password form is a FALLBACK behind
+      **"Use a password instead"**, so the credential working says nothing about the reviewer being
+      able to REACH it.
 - [x] ✅ **Screenshots captured in dark mode AND UPLOADED (§9)** — six new 1.1 frames built and pushed
       2026-08-06; all six `COMPLETE` at 1320×2868. Sources in `.scratch/store-screenshots-1.1/`, the
       replaced 1.0 set in `.scratch/asc-backup-1.0-screenshots/`.
