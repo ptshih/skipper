@@ -97,6 +97,17 @@ const REQUEST_TIMEOUT_MS = 15_000
 // preview activity. Authenticated calls (the rider's own drives) leave it false so the cookie still
 // rides.
 //
+// ⚠ IT HAS NO CALLERS TODAY, and both reasons are worth knowing. The `?preview=1` funnel is gone, and
+// the planner is anonymous BY CONSTRUCTION instead — `planTurn` does not import `authClient`, so
+// there is no cookie to send and no flag a future caller can forget (see planner.ts). That is the
+// stronger pattern: prefer it over this flag for anything genuinely anonymous.
+// ⚠ Its ONE historical caller was `getBootstrap`, where it was WRONG and cost the admin staged-region
+// preview for two days (see that function). So the rule this leaves behind: the flag is for a call
+// carrying something the rider TYPED. A call that merely reads public config is not that, and marking
+// one anonymous silently strips every session-derived answer the server would otherwise give — here,
+// `isAdmin`. Kept rather than deleted for the same reason as `ignoreOffline` below: it names a real
+// distinction. Do not reach for it without re-reading this.
+//
 // ⚠ THE RULE THAT OUTLIVED THE HEADER IT WAS WRITTEN FOR: a client-identity header used to ride every
 // call, including anonymous ones, and that was defensible only because it carried a version and a
 // capability list — nothing identifying a device or an install. It is gone with the capability channel
@@ -231,12 +242,19 @@ export function parseDto<T>(schema: { parse: (data: unknown) => T }, data: unkno
  *
  * ⚠ NO BAKED FALLBACK on failure — a default string in the app is exactly what serving this deleted,
  * because it is the copy nobody remembers to update and it fails by looking fine.
+ *
+ * ⚠ IT SENDS THE SESSION, AND MUST. It carried `anonymous: true` from 2026-08-04 (`5d842738`, which
+ * moved the region list here) until 2026-08-06, and that silently broke the admin staged-region
+ * preview: `isAdmin` is the SOLE bypass of the release gate, the server can only apply it if the
+ * session reaches it, and a cookie-less call is indistinguishable from a rider's. The app showed one
+ * region, nothing errored, and no test could see it. The predecessor `listRegions` sent the cookie.
+ * ⚠ This does NOT weaken the anonymous-call rule below, because the rule is about content a rider
+ * TYPED (the planner) — this request carries none, and the same launch already identifies the rider
+ * on `GET /drives`. Do not "restore" the flag here. `apps/api/test/regions-cache.test.ts` (server)
+ * and `./api-source.test.ts` (client) pin both halves.
  */
 export const getBootstrap = async (rotation: number): Promise<Bootstrap> =>
-  parseDto(
-    bootstrap,
-    await fetchJson(`/bootstrap?rotation=${encodeURIComponent(String(rotation))}`, undefined, { anonymous: true }),
-  )
+  parseDto(bootstrap, await fetchJson(`/bootstrap?rotation=${encodeURIComponent(String(rotation))}`))
 
 // ⚠ THERE IS NO `listAnchors` ANY MORE, and re-adding one would be a real exposure, not a
 // convenience. GET /drives/anchors dumped a region's entire curated allowlist WITH exact lat/lng —

@@ -148,3 +148,36 @@ per-clip; the release gate is human and region-first.
   (so a post-release regen gets a second ear-pass). Revisit only if live regens prove a quality problem.
 - **Per-clip hand-pick at region release** — release is auto-release-all; finer trickle-out uses the
   per-clip release after the region is open.
+
+## ⚠ Addendum 2026-08-06 — the bypass is only as good as the call that carries the session
+
+The gate itself never broke, and neither did `isAdmin`. But **the admin staged-region preview was dead
+in the app for two days** (2026-08-04 → 08-06) and nobody could see it, so the failure mode is recorded
+here rather than only in the code.
+
+**What happened.** `5d842738` moved the cold open's region list from `listRegions()` to
+`getBootstrap()`, and the new call was marked `{ anonymous: true }` — a client flag that omits the
+session cookie. The server then saw every launch as anonymous, applied the release filter correctly,
+and returned released regions only. `isAdmin` is the SOLE bypass, and it cannot fire on a request that
+carries no session. The app showed one region instead of two; nothing threw, nothing logged, and
+`bun run check` stayed green.
+
+**Why it went unnoticed.** One region is a completely plausible screen — the corpus really is Tahoe
+only. There is no state that looks *wrong*, so the only detector was a human remembering that a second
+region used to be listed.
+
+**The durable rule this leaves.** *The release-gate bypass depends on a client decision that lives
+nowhere near the gate.* An endpoint can be perfectly correct and still answer as though the caller were
+a stranger, because anonymity is chosen at the call site. So:
+
+- A call that merely reads public config must NOT be marked anonymous. That flag is for a request
+  carrying something the rider TYPED (the planner) — and the planner is better served by being
+  anonymous *by construction* (it does not import the auth client at all) than by a flag.
+- Anything that grants an operator a different answer needs a test on BOTH sides. Both halves now
+  exist: `apps/api/test/regions-cache.test.ts` (the server honours `isAdmin` on `/regions` AND
+  `/bootstrap`) and `apps/mobile/src/lib/api-source.test.ts` (the client actually sends the session).
+
+⚠ This is the SECOND time this exact preview has been silently disabled by the client, which is why it
+is written down as a pattern rather than a one-off: `ecc30f7d` reverted an earlier `?includeStaged=1`
+opt-in whose stated failure was *"the mobile client never learned to send the param — an admin simply
+stopped seeing staged regions in the app."* Same outcome, different mechanism, both invisible.

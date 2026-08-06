@@ -1,5 +1,17 @@
 /**
- * `GET /regions` — the memo, and the release gate it must never cross.
+ * `GET /regions` AND `GET /bootstrap` — the memo, and the release gate it must never cross.
+ *
+ * ⚠ BOTH ROUTES LIVE HERE ON PURPOSE, and it is the lesson of a real outage rather than tidiness.
+ * They answer the same question through the same `loadRegionsPayload`, and `/bootstrap` took over
+ * the cold open's region list on 2026-08-04 (`5d842738`) with NO test of any kind while this file
+ * guarded `/regions` carefully. Two days later the admin staged-region preview was found broken.
+ * (That defect was on the CLIENT — `getBootstrap` passed `anonymous: true`, so the session never
+ * reached the server and `isAdmin` could not fire; the client half is pinned in
+ * `apps/mobile/src/lib/api-source.test.ts`.) A guarantee proven on one route says nothing about the
+ * other, so proving it twice, here, is what stops the next split from being silent.
+ * ⚠ And they must share ONE FILE rather than one each: bun's `mock.module` is PROCESS-WIDE, so a
+ * second file mocking `@skipper/db` and `../src/session` poisons this one and `session.test.ts`
+ * (measured — it passed alone and broke three suites). Add route cases here, not in a new file.
  *
  * The route memoizes its response because it is hit on every app launch and its answer changes only
  * when an operator releases a region or re-runs `curate-places`. A cache in front of a RELEASE-GATED
@@ -131,5 +143,38 @@ describe('the release gate the memo must not cross', () => {
     sessionToReturn = null
     regionRows = [RELEASED]
     expect(await names(await get())).not.toContain('Yosemite')
+  })
+})
+
+describe('GET /bootstrap honours the same gate — the route that shipped without one', () => {
+  // ⚠ The stub does NOT re-implement the release filter: it returns whatever it is handed. So a rider
+  // case seeds only released rows (standing in for the filtered query) and an admin case seeds both.
+  // What is under test is which of those the route ASKS for — i.e. that `isAdmin` reaches
+  // `loadRegionsPayload` at all, which is precisely what the outage broke.
+  const boot = () => app.fetch(new Request('http://localhost/bootstrap?rotation=0'))
+
+  test('an anonymous rider sees released regions only', async () => {
+    expect(await names(await boot())).toEqual(['Lake Tahoe'])
+  })
+
+  test('a signed-in NON-admin is still just a rider', async () => {
+    // The bypass is `isAdmin`, never "has an account" — a free account is not an operator.
+    sessionToReturn = { user: { id: 'rider-1', role: 'user', isAnonymous: false } }
+    expect(await names(await boot())).toEqual(['Lake Tahoe'])
+  })
+
+  test('AN ADMIN SEES THE STAGED REGION — the outage these cases were added for', async () => {
+    sessionToReturn = ADMIN
+    regionRows = [RELEASED, STAGED]
+    expect(await names(await boot())).toContain('Yosemite')
+  })
+
+  test('an admin response is never served to the next rider here either', async () => {
+    sessionToReturn = ADMIN
+    regionRows = [RELEASED, STAGED]
+    await boot()
+    sessionToReturn = null
+    regionRows = [RELEASED]
+    expect(await names(await boot())).not.toContain('Yosemite')
   })
 })
