@@ -12,6 +12,12 @@
 //   • the free allotment (FREE_DRIVE_CAP) ............ apps/api/src/credits.ts
 //   • CC BY-SA obligations on narration .............. packages/studio (narrations.attribution)
 //   • music licensing ................................ apps/mobile/src/lib/licenses.ts
+//   • HOW A RIDER SIGNS IN ........................... apps/api/src/{auth,email}.ts. ⚠ "Your account"
+//     told the rider to keep their PASSWORD to themselves and called their email "the only way back
+//     in if you forget your password". OTP shipped 2026-08-05: the emailed code is the credential
+//     now, and most accounts have no password to forget. Understating that in the BINDING document
+//     is worse than in /privacy — it is the paragraph that assigns responsibility for account
+//     access. Corrected 2026-08-06, same pass as /privacy; the two must move together.
 //   • THE LIVE PLANNER ............................... apps/api/src/{plan-route,planner}.ts
 //     Added 2026-08-02. Until then this document described exactly ONE AI — the pre-baked narration
 //     — while 1.1's primary interaction is a live model call on every message. The two documents the
@@ -51,7 +57,7 @@ import Legal from '../layouts/Legal.astro'
   heading="Terms of Use"
   kicker="The rules of the road"
   description="The terms for using Skipper: drive safely, the narration is AI-generated and may be wrong, credits aren't refundable, and there's no warranty."
-  updated="August 2, 2026"
+  updated="August 6, 2026"
 >
   <div class="legal-summary framed">
     <h2>The short version</h2>
@@ -154,9 +160,10 @@ import Legal from '../layouts/Legal.astro'
 
   <h2>Your account</h2>
   <p>
-    Planning a drive works without an account; making one needs it. Keep your password to yourself; you're
-    responsible for what happens under your account. Give us an email address that's actually yours, and
-    keep it current: it's the only way back in if you forget your password.
+    Planning a drive works without an account; making one needs it. You're responsible for what happens
+    under your account, so keep your sign-in code, and your password if you set one, to yourself. Give us
+    an email address that's actually yours and keep it current: we sign you in by emailing a code to it,
+    so it isn't just how you get back in, it's how you get in at all.
   </p>
   <p>
     You can delete your account from Settings at any time. It's immediate and it's total; see the

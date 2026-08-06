@@ -23,6 +23,14 @@
 //   • the credit ledger ................ packages/db/src/schema.ts (credit_entries)
 //   • erasure on delete ................ apps/api/src/account.ts (purgeUserData)
 //   • the sub-processor list ........... apps/api/src/{email,storage}.ts, packages/routing
+//   • HOW A RIDER SIGNS IN ............. apps/api/src/{auth,email}.ts. ⚠ This drifted for a day and
+//     the drift was in the LEGAL direction: OTP shipped 2026-08-05 and this page still read "email
+//     and password is the only way in" and "we send exactly ONE kind of email: a password reset" on
+//     08-06. Both were simply false — the emailed six-digit code IS the front door now, most accounts
+//     have no password at all, and Resend carries two messages, not one. Corrected 2026-08-06.
+//     ⚠ The lesson worth keeping: an auth change is a change to THIS PAGE and to /terms, because
+//     "how you get in" is simultaneously a security fact, a sub-processor fact and a credential fact.
+//     Nothing failed when it drifted; no test covers this file.
 //   • analytics + crash reporting ...... apps/mobile/src/lib/analytics.tsx (PostHog)
 //   • the NRS 603A request address ..... hello@skipper.fm (founder call 2026-07-24). Manoa, Inc.
 //     operates from Las Vegas, so Nevada's NRS 603A applies and — unlike CCPA — carries NO revenue
@@ -41,7 +49,7 @@ import Legal from '../layouts/Legal.astro'
   heading="Privacy Policy"
   kicker="The fine print, minus the fog"
   description="How Skipper handles your location, your account, and your drives. Short version: as little as possible, no ads, and your location never leaves your phone."
-  updated="August 2, 2026"
+  updated="August 6, 2026"
 >
   <div class="legal-summary framed">
     <h2>The short version</h2>
@@ -157,15 +165,23 @@ import Legal from '../layouts/Legal.astro'
   </p>
   <ul>
     <li>Your <strong>email address</strong> and a <strong>display name</strong>.</li>
-    <li>Your <strong>password, stored as a hash</strong>, never as plain text, and not readable by us.</li>
+    <li>Your <strong>password, stored as a hash</strong>, never as plain text, and not readable by us,
+      if you set one. Most accounts have no password at all: see below.</li>
     <li>Session records, which include your <strong>IP address</strong> and your device's browser/app
       identification string. This is how you stay signed in and how we can tell a session apart from an
       attacker's.</li>
   </ul>
   <p>
-    There is no sign-in with Google or Apple: those aren't configured, so email and password is the only
-    way in. We send exactly <strong>one</strong> kind of email: a password reset, when you ask for one.
-    There is no marketing email, because there is no marketing list.
+    You sign in with a <strong>six-digit code we email you</strong>. There is nothing to remember and,
+    unless you choose otherwise, no password on your account at all. You can set one in the app under
+    Settings if you would rather have a way in that doesn't depend on an email arriving. There is no
+    sign-in with Google or Apple: those aren't configured.
+  </p>
+  <p>
+    We send exactly <strong>two</strong> kinds of email, and only when you ask for them: your sign-in
+    code, and a password reset if you have set a password and forgotten it. The same kind of code
+    confirms it's really you before we delete your account. There is no marketing email, because there
+    is no marketing list.
   </p>
 
   <h2>Drives and credits</h2>
@@ -235,7 +251,8 @@ import Legal from '../layouts/Legal.astro'
     <dt>Cloudflare R2</dt>
     <dd>Stores the narration audio files. Audio is private and served through short-lived signed links.</dd>
     <dt>Resend</dt>
-    <dd>Sends the password-reset email. Your address is passed to them only for that message.</dd>
+    <dd>Sends our two transactional emails: your sign-in code, and a password reset if you have set a
+      password. Your address is passed to them only for those messages.</dd>
     <dt>PostHog</dt>
     <dd>Product analytics and crash reporting (US region). Receives the anonymous usage events, screen
       views, crash reports, device information, and IP-derived approximate location described above,
