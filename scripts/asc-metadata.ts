@@ -205,7 +205,7 @@ async function main() {
   console.log('  · keywords + subtitle — version-locked and unchanged for 1.1 (§5)')
   console.log('  · the App Privacy label (§8) — Apple exposes NO public API for it; hand entry, and the')
   console.log('    1.1 free-text question is a founder call, not a paste')
-  console.log('  · screenshots (§9) — half the live set shows deleted product; a real recapture')
+  console.log('  · screenshots (§9) — uploaded 2026-08-06 via the ASC assets API, not by this script')
   console.log('  · the demo account password — lives in ASC and nowhere else, on purpose')
   console.log('  · the submission itself — this only stages the listing')
 
@@ -252,15 +252,29 @@ async function main() {
 
   // Read back rather than trusting the 200s. This whole script exists because "we pushed it" and "it
   // is what's live" have already come apart in this project.
+  //
+  // ⚠ reviewNotes IS READ BACK SEPARATELY AND MUST STAY THAT WAY. It lives on `appStoreReviewDetail`,
+  // a different resource from the localization, so the localization GET below says NOTHING about it.
+  // Until 2026-08-06 this block checked only promotionalText + description while `✓ App Review notes`
+  // was printed straight after the PATCH — so the field with the highest rejection cost in the whole
+  // listing was the one field the script asserted without looking. Absence of a 4xx is not evidence
+  // the bytes landed (CLAUDE.md: "assert the work happened").
   const after = await asc('GET', `/v1/appStoreVersionLocalizations/${loc.id}`)
   const okPromo = after.data.attributes.promotionalText?.trim() === intended.promotionalText
   const okDesc = after.data.attributes.description?.trim() === intended.description
-  console.log(`\nRead-back: promotionalText ${okPromo ? '✓' : '✗'} · description ${okDesc ? '✓' : '✗'}`)
+  const afterDetail = await asc('GET', `/v1/appStoreVersions/${version.id}/appStoreReviewDetail`)
+  const okNotes = afterDetail?.data?.attributes?.notes?.trim() === intended.reviewNotes
   console.log(
-    okPromo && okDesc
+    `\nRead-back: promotionalText ${okPromo ? '✓' : '✗'} · description ${okDesc ? '✓' : '✗'}` +
+      ` · reviewNotes ${okNotes ? '✓' : '✗'}`,
+  )
+  const allOk = okPromo && okDesc && okNotes
+  console.log(
+    allOk
       ? '\n✓ Listing updated. Flip §12\'s "1.1 metadata entered" checkbox.\n'
       : '\n⚠ Read-back MISMATCH — check the listing by hand before submitting.\n',
   )
+  if (!allOk) process.exitCode = 1
 }
 
 main().catch((e) => {

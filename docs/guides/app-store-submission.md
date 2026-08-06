@@ -34,12 +34,15 @@
 > and is ATTACHED, TestFlight still serves build 16 (`1.0.1`, 2026-07-30), pre-1.1 code calling the
 > deleted `/roam/*`.
 >
-> ⚠ **THE 2026-08-06 RE-VERIFICATION FOUND §10's REVIEWER NOTES STALE IN SIX PLACES, THREE OF THEM
-> DEAD ENDS** — the sample step points at a deleted screen, "tap a stop to hear it" now returns an
-> error line unless the drive is downloaded first, and sign-in is an emailed code a reviewer cannot
-> receive. §10 carries the corrected block and the full list. **It is fixed in this doc and NOT yet
-> pushed** (`asc:metadata` still reports `reviewNotes WOULD CHANGE`), because the notes quote UI
-> strings and must be pushed against the frozen client of the build actually being attached.
+> ✅ **THE 2026-08-06 PASS FIXED §10's REVIEWER NOTES (six defects, three of them dead ends) AND THE
+> SCREENSHOTS, AND BOTH ARE NOW LIVE.** The notes' sample step pointed at a deleted screen, "tap a stop
+> to hear it" returned an error line unless the drive was downloaded first, and sign-in had become an
+> emailed code a reviewer cannot receive. All six are corrected, pushed, and verified against
+> `appStoreReviewDetail` directly (3978/4000) — §10 carries the list. The six screenshots showing
+> deleted product were replaced the same day (§9).
+> ⚠ **Both were pushed against build `25` (`98a292db`)**, the commit their quoted strings and captured
+> screens were verified on. **Attaching a later build re-opens both** — that coupling is the thing this
+> listing keeps losing.
 >
 > **Prior submission state (as of 2026-07-30), kept for the diff.** `1.0.0` was `WAITING_FOR_REVIEW`
 > (submitted 2026-07-28T21:42:22Z) with **build 15** attached; **build 16 (`1.0.1`)** is `VALID` in
@@ -554,8 +557,13 @@ label) and does not justify a build 16; it ships on the next natural rebuild.
 > switched back to **Real GPS**, which is the resting state the sweep guide requires. Worth knowing
 > because it is silent: a drive started with it on is simulated and records no trace.
 >
-> **Still owed:** uploading them. The six live 1.0 assets are still what ASC serves (verified
-> 2026-08-06: 6 at `APP_IPHONE_67` + 1 preview video), and replacing them is a deliberate act.
+> ✅ **UPLOADED 2026-08-06 and LIVE.** The six 1.0 assets were deleted and these six put in their
+> place at `APP_IPHONE_67`, order pinned to the filename order above. Apple validated all six:
+> `assetDeliveryState=COMPLETE`, 1320×2868, no errors.
+> ⚠ **The replaced 1.0 assets are backed up in `.scratch/asc-backup-1.0-screenshots/`** — ASC keeps no
+> copy once deleted, and one of them (`02-encounter.png`) is the only surviving render of the roam
+> screen. Apple caps an iPhone set at 10, so the old six had to be deleted BEFORE the new six could be
+> uploaded; that ordering is why the backup was taken first rather than as an afterthought.
 > ⚠ **§9b's 28-second App Preview video is STILL STALE and is NOT covered by this recapture** — it
 > shows the `/sample` flow, and that screen and its route were deleted on 2026-08-05. It cannot merely
 > be re-checked; it needs re-shooting or removing.
@@ -766,8 +774,19 @@ Thank you. Happy to help if anything is unclear.
 
 Every anchor in the block above was re-read against the shipped screens on 2026-08-06 and **six were
 stale**, because the client kept moving after the notes were written on 08-02. They are fixed above and
-listed here so nobody "restores" an older copy. **None of this is live in ASC yet** — `asc:metadata`
-reports `reviewNotes WOULD CHANGE`, so what a reviewer would read today still contains all six.
+listed here so nobody "restores" an older copy.
+
+✅ **PUSHED TO ASC 2026-08-06** (`bun run asc:metadata -- --apply`) and verified INDEPENDENTLY, not
+from the script's own report: the live `appStoreReviewDetail.notes` is **3978 chars** and contains
+*"Where are we headed?"*, *"Use a password instead"*, *"Load up the drive"*, *"the top-left button
+becomes a list icon"* and *"Two things will help you"*, while *"Well now"*, *"Not near Tahoe"*,
+*"Hear a quick sample"*, *"Three things will help you"*, *"Under the heading THE ROUTE"*,
+*"Under MY DRIVES"* and *"a text box reading"* are all gone.
+⚠ **The apply script reads back only promotionalText and description** — it prints `✓ App Review
+notes` without re-reading them, so its success line is not evidence for the field that matters most
+here. Read `appStoreReviewDetail` directly, as this pass did.
+⚠ **They were pushed against build `25` (`98a292db`)**, which is the commit every quoted string was
+verified on. Attaching a LATER build re-opens the question.
 
 1. ⚠ **The sign-in step (08-05).** Skipper now signs riders in with an emailed CODE by default
    (`docs/designs/lowest-friction-signup.md`), and **a reviewer cannot receive that email** — they must
@@ -953,8 +972,11 @@ Re-run the list; don't inherit last release's ticks.
       (read back from the live DB 2026-08-06). ⚠ Its PASSWORD is still owed a check and cannot be
       checked from here: it lives only in ASC, and since 2026-08-05 the password form is a FALLBACK
       behind "Use a password instead" — so confirm the reviewer can actually reach and use it.
-- [x] ✅ **Screenshots captured in dark mode (§9)** — six new 1.1 frames built 2026-08-06 into
-      `.scratch/store-screenshots-1.1/`. ⏳ **Not uploaded**; ASC still serves the six 1.0 assets.
+- [x] ✅ **Screenshots captured in dark mode AND UPLOADED (§9)** — six new 1.1 frames built and pushed
+      2026-08-06; all six `COMPLETE` at 1320×2868. Sources in `.scratch/store-screenshots-1.1/`, the
+      replaced 1.0 set in `.scratch/asc-backup-1.0-screenshots/`.
+- [x] ✅ **§10's App Review notes are LIVE and re-verified** (3978/4000) — see §10's 2026-08-06 block
+      for the six defects they fix and how to check them without trusting the apply script.
 - [ ] **The App Preview VIDEO (§9b) is still stale** — it shows the deleted `/sample` flow. Re-shoot or
       remove it; it is the one asset the recapture did not cover.
 - [ ] The coverage sentence in the description still matches reality (it says Tahoe only).
