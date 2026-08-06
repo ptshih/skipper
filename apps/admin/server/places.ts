@@ -324,10 +324,17 @@ const DRAFT_TOOL: Anthropic.Tool = {
  * ⚠ SCOPE IS THE BBOX, NEVER THE DISPLAY NAME — that is why this takes a `BboxCorners` at all.
  * It used to read "Stay strictly inside ${regionName}", and a model told "strictly inside Lake Tahoe"
  * correctly excludes Truckee, Reno, Carson City and Virginia City: none of them are in the Tahoe Basin.
- * But the lake-tahoe bbox reaches every one of them, `discover-pois` swept them, and 28 released fused
+ * But the lake-tahoe bbox reached every one of them, `discover-pois` swept them, and 28 released fused
  * tellings sat out there with no curated endpoint a rider could name to drive to one — finished audio
  * nobody could route to. The name is prose and is routinely NARROWER than the geometry; a region IS a
  * bbox (geometry-first regions), so the bounds do the scoping and the name is demoted to flavour.
+ *
+ * ⚠ THAT TAHOE EXAMPLE IS HISTORICAL AS OF 2026-08-06; THE RULE IT ARGUES IS NOT. `lake-tahoe`'s box no
+ * longer reaches Reno or Carson City — they are their own region now, carrying the curated endpoints
+ * they already had, which is the OTHER way to solve the orphaned-endpoint problem widening was solving
+ * (docs/decisions/tahoe-reno-region-split.md). Do not read the split as "scope by name after all": it
+ * makes this rule MORE load-bearing, not less, because `reno-carson`'s nickname is narrower than its box
+ * in exactly the same way (Virginia City and Genoa are not Reno). The prompt below is unchanged.
  *
  * ⚠ THE NAME ANCHORS HARDER THAN IT LOOKS — MEASURED, not theorised. The first bbox-scoped run
  * (2026-08-03, target 100 → 103 drafted, 93 written) reached NORTH into the Donner corridor (Truckee,
