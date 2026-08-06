@@ -87,8 +87,13 @@ floor × lead curve off it — which is what finally answers
 
 Fire these in this order — the cloud build runs unattended while you do the local one.
 
-- [x] ✅ **Production build → TestFlight — DONE 2026-08-03: build `1.1.0 (20)` is uploaded and in
-      Apple's processing queue.** Run as
+- [x] ✅ **Production build → TestFlight — RE-CUT SEVERAL TIMES SINCE. As of 2026-08-06, build
+      `1.1.0 (25)` is BUILDING off `98a292db` (HEAD); `24` finished 2026-08-05 off `7a4ad4f6`.**
+      ⚠ **20 is history — it predates OTP sign-in, the download gate rework, MY DRIVES becoming its own
+      screen and the home poster.** Do not attach it. This line has now been wrong three times for the
+      same reason, so treat every build number in this file as a timestamp, not a fact:
+      `npx eas-cli build:list --platform ios --limit 3` from `apps/mobile` is the answer.
+      The original 2026-08-03 note, kept for its traps:  Run as
       `eas build --profile production --platform ios --auto-submit --non-interactive`; the auto-submit
       is worth it, since it hands the artifact straight to ASC with no second command.
       ⚠ **It is 19, not the 17 this line used to predict**, and the reason is a trap worth knowing:
@@ -238,9 +243,16 @@ cleaning up. Do this on the **production/TestFlight** build, signed out, on cell
       and this line went stale the same day. The composer reads a ROTATING example
       ("somewhere pretty, back by 5", "{a} to {b}", …); the bare **"Tell me where to"** is the fallback
       shown only when the region has no curated names, so do not treat a rotating placeholder as wrong.
-      ⚠ There are exactly **two** example rows — "Drive somewhere" and "Let the skipper pick". The third
-      ("Take a loop") was removed 2026-08-03 with the loop default
-      ([../decisions/no-same-road-loops.md](../decisions/no-same-road-loops.md) §8).
+      ⚠ **The example rows are SERVER-COMPOSED now and there are FIVE, not two** (re-verified against
+      prod `GET /bootstrap` on 2026-08-06). This line said "exactly two — Drive somewhere and Let the
+      skipper pick" and went stale on 2026-08-04, when the rows moved out of `voice.ts` into
+      `apps/api/src/planner-copy.ts`. Live today: *Drive somewhere · Pass through somewhere · Say
+      where I'm starting · Say where I'm going · Let the skipper pick*, each filled with the region's
+      OWN curated anchors and rotated per device — so **the names differ between launches and that is
+      correct, not a bug**. How many rows appear is a function of how many curated names the region
+      has (a thin region loses the three-name row first), so count only that the rows are sensible,
+      never that there are N of them. "Take a loop" is still gone
+      ([../decisions/no-same-road-loops.md](../decisions/no-same-road-loops.md) §8) and must not come back.
 - [ ] Type exactly `Tahoe City down to South Lake Tahoe`. Expect a route under **YOUR DRIVE** and a
       player under **A TASTE OF THIS ONE** that plays a real clip. **No sign-in, no location prompt
       anywhere on this path** — that claim is the strongest thing in the notes and it must be literally true.
@@ -256,10 +268,20 @@ cleaning up. Do this on the **production/TestFlight** build, signed out, on cell
 - [ ] Ask for a route the corpus does not run (e.g. Cupertino → Santa Cruz). Expect the in-persona
       refusal, and judge it as a reviewer would: **does it read as honest, or as broken?** This is the
       one live failure mode §10 exists to route around.
+- [ ] **Sign-in is an emailed CODE now (2026-08-05), and the reviewer cannot receive it.** Tap
+      "Sign in" (top-left) and confirm **"Use a password instead"** is present and reaches the demo
+      account. **Watch for:** that link being hard to find or missing — it is the reviewer's ONLY way
+      in, and without it review stalls at a code prompt with no way forward.
 - [ ] **Account deletion, verbatim from §10:** Settings (gear) → "Delete account" → password →
       "Permanently delete" → "Delete forever". Use a throwaway account, not the demo one. Expect the
       account, its drives and its remaining credits to be gone immediately. ⚠ This is the one guideline
       a reviewer can check in 30 seconds (5.1.1(v)).
+      ⚠ **Walk the PASSWORDLESS branch too, and it is the likelier one now.** An account created with
+      an emailed code has no password, so the same screen asks for a fresh emailed code instead
+      (`deleteCodeLabel`, "Enter the code we emailed you"). That bar is OURS, not better-auth's —
+      `deleteUser` does not check session freshness — so a broken code path here means either a dead
+      end or a one-tap erasure, and neither is acceptable. The demo account has a password, so §10's
+      quoted path stays the password one.
 - [ ] Sign in as the demo account and confirm **MY DRIVES** shows the saved drive and it still opens.
 
 ## 6. Then, and only then: the listing
@@ -273,13 +295,22 @@ Everything here is owned by [app-store-submission.md](app-store-submission.md) �
       `scripts/compose-screenshot.ts`, rebuilt 2026-08-03; it had never been committed), so this is a
       recapture again rather than a build. Dark mode + `simctl status_bar` override, and capture on an
       **iPhone 17 Pro Max** simulator — it is natively 1320×2868, so nothing is resampled.
+      ⚠ **The hero moved AGAIN on 2026-08-06** (`98a292db`): the cold open now carries a POSTER above
+      the question ([../designs/home-hero-poster.md](../designs/home-hero-poster.md)), and MY DRIVES
+      left home for its own screen on 08-05 (`7fd0fd8d`). Any capture taken before those two shows a
+      home screen that no longer exists. **This is the step that keeps getting invalidated by client
+      work, so shoot it LAST** — after the build being submitted is cut, from that build.
 - [x] ✅ **The 1.1 metadata is entered** — done 2026-08-03 with
       `bun run asc:metadata -- --apply --version=1.1.0`, verified by an independent read-back. The
       record is now `1.1.0` / `PREPARE_FOR_SUBMISSION`. Re-check any time with a no-flag
       `bun run asc:metadata`; it prints "already matches" for all three fields.
-- [ ] **Attach the NEWEST 1.1.0 build** — `20` as of 2026-08-03, but read the number back from EAS
-      rather than trusting this line; every rebuild supersedes it (19 was superseded within hours).
-      Wait for Apple's processing to finish before it can be attached.
+- [ ] **Attach the NEWEST 1.1.0 build** — `25` was building off HEAD as of 2026-08-06, but read the
+      number back from EAS rather than trusting this line; every rebuild supersedes it (19 was
+      superseded within hours, and 20 → 25 happened over three days). Wait for Apple's processing to
+      finish before it can be attached.
+      ⚠ **Attach the build whose commit matches the client the §5 walkthrough and the §10 notes were
+      verified against.** That coupling is the thing this step keeps losing: the notes quote UI
+      strings, so a build cut after the notes were pushed can silently invalidate them again.
       ⚠ The record has NO build right now, on purpose: renaming it to 1.1.0 left
       build 15 (short version `1.0.0`, the pre-1.1 roam client) attached, because Apple neither
       detaches nor warns. It was detached; `asc:metadata` now checks this every run. Apple only offers
@@ -289,13 +320,20 @@ Everything here is owned by [app-store-submission.md](app-store-submission.md) �
       `POST /drives/plan`, which reaches our server and Anthropic; nothing persists it. Transmitted vs
       *collected* is a judgement on Apple's definition and it is **founder's, not a docs edit** —
       deciding it wrong is rejection-class.
-- [ ] **Re-run §12's pre-flight.** Server side was green on 2026-08-03: `/health`, `/regions`, site
-      `/privacy` `/terms` `/support` all 200; `/roam/sample` 404 (correct). ⚠ That run also probed
-      `/sample` for a 200 — **void as of 2026-08-05**, the route is deleted; expect 404 after the next
-      API deploy and do NOT read it as a regression;
-      `delete-user` **400**, not 404. Still owed: one anonymous `POST /drives/plan` against prod — it
-      spends model tokens, so it is a deliberate act, and it is the only proof `ANTHROPIC_API_KEY` is
-      set on the deployed service.
+- [x] ✅ **§12's pre-flight — RE-RUN 2026-08-06 against prod, all green.** `/health` **200**,
+      `/regions` **200**, site `/privacy` `/terms` `/support` all **200**, `/sample` **404** (correct —
+      the route is deleted; do NOT read it as a regression), `delete-user` **400** (not 404, so
+      deletion is deployed and a reviewer can exercise 5.1.1(v)).
+      ✅ Also confirmed live and worth recording because it is the cold open's whole content:
+      `GET /bootstrap?rotation=0` **200** with 5 composed example rows for Lake Tahoe.
+      ⚠ `GET /planner/copy` **404s and that is CORRECT** — it existed for one afternoon and
+      `/bootstrap` replaced it (`apps/api/src/index.ts:94` says so). Probing it and reporting a
+      regression is a trap this sweep fell into once already.
+      ⏳ **Still owed, and it is the ONLY red item on the server side: one anonymous
+      `POST /drives/plan` against prod.** It spends model tokens, so it is a deliberate act — and it
+      is the only proof `ANTHROPIC_API_KEY` is set on the deployed service. If it is NOT set, every
+      reviewer attempt gets the in-persona outage line and the app reads as broken rather than
+      unconfigured, on the exact path §10 sends them down first.
 - [ ] **Availability = United States ONLY.** One click, cheapest legal decision on the list.
 - [ ] Submit. Release type stays **MANUAL**, so approval lands in *Pending Developer Release* — the real
       Tahoe drive can still happen between approval and launch. That asymmetry is what made §0's trade

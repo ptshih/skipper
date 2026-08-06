@@ -25,12 +25,21 @@
 > 1.1.0 build** once Apple finishes processing it. Submitting a mismatched build ships the wrong app
 > under the right number.
 >
-> ⚠ **1.1.0 reached TestFlight on 2026-08-03 — newest build is `20`.** ⚠ **Do not treat that number
-> as stable, and never predict one:** `autoIncrement` burns a number at QUEUE time, so a failure, a
-> cancellation or a rebuild each consume one. This release has already spent 17 (failed on a PostHog
-> dSYM `content_hash_mismatch`, fixed in `e529dd3`), 18 (cancelled), 19 (superseded hours later) and
-> 20. Read the number back from EAS. Until one clears processing and is ATTACHED, TestFlight still
-> serves build 16 (`1.0.1`, 2026-07-30), pre-1.1 code calling the deleted `/roam/*`.
+> ⚠ **Newest build as of 2026-08-06 is `25`, BUILDING off `98a292db` (HEAD); `24` finished 08-05.**
+> ⚠ **Do not treat that number as stable, and never predict one:** `autoIncrement` burns a number at
+> QUEUE time, so a failure, a cancellation or a rebuild each consume one. This release has already
+> spent 17 (failed on a PostHog dSYM `content_hash_mismatch`, fixed in `e529dd3`), 18 (cancelled),
+> 19, 20, and 21–25 across three more days of client work. Read the number back from EAS
+> (`npx eas-cli build:list --platform ios --limit 3`, from `apps/mobile`). Until one clears processing
+> and is ATTACHED, TestFlight still serves build 16 (`1.0.1`, 2026-07-30), pre-1.1 code calling the
+> deleted `/roam/*`.
+>
+> ⚠ **THE 2026-08-06 RE-VERIFICATION FOUND §10's REVIEWER NOTES STALE IN SIX PLACES, THREE OF THEM
+> DEAD ENDS** — the sample step points at a deleted screen, "tap a stop to hear it" now returns an
+> error line unless the drive is downloaded first, and sign-in is an emailed code a reviewer cannot
+> receive. §10 carries the corrected block and the full list. **It is fixed in this doc and NOT yet
+> pushed** (`asc:metadata` still reports `reviewNotes WOULD CHANGE`), because the notes quote UI
+> strings and must be pushed against the frozen client of the build actually being attached.
 >
 > **Prior submission state (as of 2026-07-30), kept for the diff.** `1.0.0` was `WAITING_FOR_REVIEW`
 > (submitted 2026-07-28T21:42:22Z) with **build 15** attached; **build 16 (`1.0.1`)** is `VALID` in
@@ -656,13 +665,13 @@ a screen that moved is the exact failure the 2026-07-30 rewrite was cleaning up.
 
 <!-- asc:reviewNotes — scripts/asc-metadata.ts reads the block below. Keep the marker attached to its fence. -->
 ```
-Skipper is a hands-free, GPS-triggered audio tour for drivers. You plan a drive by TYPING to the guide in plain language and he lays out the route, the stops, and a story for each one. Three things will help you review it from a desk.
+Skipper is a hands-free, GPS-triggered audio tour for drivers. You plan a drive by TYPING to the guide in plain language and he lays out the route, the stops, and a story for each one. Two things will help you review it from a desk.
 
 1) COVERAGE IS THE LAKE TAHOE REGION ONLY.
 Every story is written and recorded for a specific place, and our finished collection covers Lake Tahoe and the nearby Nevada side (Reno, Carson City, Virginia City). Everywhere else has no content yet, and the guide will say so honestly and in character rather than failing. That is intended behavior. YOUR OWN LOCATION DOES NOT MATTER for anything below: the app does not ask for location permission until you start an actual drive.
 
 2) THE FASTEST REAL LOOK, FROM ANYWHERE: NO ACCOUNT, NO PERMISSION.
-Open the app. The guide opens with "Well now - where are we headed?" and a text box reading "Tell me where to". Type:
+Open the app. The guide opens with "Where are we headed?" over a text box whose grey example text rotates through sample asks. Type:
 
     Tahoe City down to South Lake Tahoe
 
@@ -670,13 +679,11 @@ He answers and draws it up. You will see the route and its stops under the headi
 
 "Make this drive" is where an account becomes necessary; signed out it says "You'll need a free account to keep this drive."
 
-3) ONE-TAP AUDIO IF YOU WOULD RATHER NOT TYPE.
-On the opening screen, under the example suggestions, tap "Not near Tahoe? Hear a quick sample." It opens a curated Lake Tahoe narration (Emerald Bay State Park) that begins playing on its own - real audio, about a minute. Also no account and no permission.
-
 FULLER EXPERIENCE (optional) - a complete multi-stop drive, still with no GPS:
-  - Tap "Sign in" (top-left). Skipper signs you in with a code emailed to you, so tap "Use a password instead" and use the demo account above.
-  - The demo account already has a saved drive. Under "MY DRIVES", tap "Tahoe City -> South Lake Tahoe".
-  - You land on a screen titled "Drive". Under the heading "THE ROUTE" is the line "Tap a stop to hear it." Tap any stop to play that stop's full narration (about a minute each). It plays one stop at a time and does not auto-advance, so tap the next when you are ready.
+  - Tap "Sign in" (top-left). Skipper signs riders in with a code emailed to them, which you cannot receive, so tap "Use a password instead" and use the demo account above.
+  - Once signed in, the top-left button becomes a list icon. Tap it to open "My Drives". The demo account already has a saved drive: tap "Tahoe City -> South Lake Tahoe".
+  - You land on a screen titled "Drive". FIRST tap "Load up the drive" and let it finish. A drive's audio plays only from the copy saved on the phone, so a stop tapped before the download lands will report that it did not come down. On wifi this takes well under a minute.
+  - Then, under the line "Tap a stop to hear it.", tap any stop to play that stop's full narration (about a minute each). It plays one stop at a time and does not auto-advance, so tap the next when you are ready.
   - Please do not tap "Start the drive" from a desk. That is the live, GPS-triggered drive: it waits until you physically reach a stop near Lake Tahoe, so in Cupertino nothing will play. It is also the ONLY place in the app that asks for location.
   - To build one yourself while signed in, repeat step 2 and tap "Make this drive". Each drive you create uses one of the account's free drive credits.
 
@@ -684,7 +691,7 @@ ACCOUNT DELETION (Guideline 5.1.1(v)):
 Sign in first, then: Settings (gear, top-right) -> "Delete account" -> type the account password at "Enter your password to confirm" -> "Permanently delete" -> confirm "Delete forever". It permanently deletes the account, its saved drives, and its remaining credits immediately. Nothing is emailed, and it cannot be undone. (An account created with an emailed code has no password, so for those the same screen asks for a fresh emailed code instead of a password; the demo account above has a password.)
 
 LOCATION USE:
-"When In Use" only, and only once you start a drive - planning, the sample and the preview clip never ask. It is used to time narration to your position while driving. There is no background location and no advertising. If you create a drive, its start and end coordinates are saved with that drive on your account. You may also see a one-time "Motion & Fitness" prompt; motion is used only to gauge speed and heading so each stop plays at the right moment. Coarse location and device identifiers are used for app functionality and product analytics (the sign-in session record, PostHog, and the bundled Google Maps SDK), as declared in our App Privacy labels.
+"When In Use" only, and only once you start a drive - planning and the preview clip never ask. It is used to time narration to your position while driving. There is no background location and no advertising. If you create a drive, its start and end coordinates are saved with that drive on your account. You may also see a one-time "Motion & Fitness" prompt; motion is used only to gauge speed and heading so each stop plays at the right moment. Coarse location and device identifiers are used for app functionality and product analytics (the sign-in session record, PostHog, and the bundled Google Maps SDK), as declared in our App Privacy labels.
 
 Thank you. Happy to help if anything is unclear.
 ```
@@ -702,17 +709,42 @@ Thank you. Happy to help if anything is unclear.
 - **Location is addressed three times on purpose** — in the preamble, at "Start the drive", and in
   its own section. 1.1's answer genuinely improved (nothing before the drive asks), and 5.1.1 friction
   is cheaper to prevent than to appeal.
-- ⚠ **THE SIGN-IN STEP CHANGED ON 2026-08-05 AND ASC HAS NOT BEEN RE-ENTERED.** Skipper now signs
-  riders in with an emailed CODE by default (docs/designs/lowest-friction-signup.md), and **a reviewer
-  cannot receive that email** — they must tap **"Use a password instead"** to reach the demo account.
-  The block above says so; whatever is currently live in App Store Connect does NOT. Re-paste before
-  the next submission, or review stalls at a code prompt with no way forward, which reads as a broken
-  app rather than a misleading note.
-- ⚠ **Unrelated staleness in the same block, flagged not fixed (2026-08-05):** step 3 still tells the
-  reviewer to tap *"Not near Tahoe? Hear a quick sample."* That screen and its `GET /sample` route
-  were DELETED on 2026-08-05 (see apps/api/src/index.ts). The anonymous taste is now the route preview
-  clip in step 2, which the notes already describe — so step 3 needs deleting rather than rewriting,
-  but that is the founder's call on reviewer-facing copy, not a silent edit.
+### ⚠ The 2026-08-06 re-verification — SIX defects, three of them dead ends
+
+Every anchor in the block above was re-read against the shipped screens on 2026-08-06 and **six were
+stale**, because the client kept moving after the notes were written on 08-02. They are fixed above and
+listed here so nobody "restores" an older copy. **None of this is live in ASC yet** — `asc:metadata`
+reports `reviewNotes WOULD CHANGE`, so what a reviewer would read today still contains all six.
+
+1. ⚠ **The sign-in step (08-05).** Skipper now signs riders in with an emailed CODE by default
+   (`docs/designs/lowest-friction-signup.md`), and **a reviewer cannot receive that email** — they must
+   tap **"Use a password instead"** to reach the demo account. Without this, review stalls at a code
+   prompt with no way forward, which reads as a broken app rather than a misleading note.
+2. ⚠ **Step 3 pointed at a deleted screen.** It told the reviewer to tap *"Not near Tahoe? Hear a
+   quick sample."*; that screen and `GET /sample` were deleted on 08-05, and prod answers **404**
+   (verified 2026-08-06). The step is DELETED rather than rewritten — the anonymous taste is the route
+   preview clip step 2 already describes — and the preamble drops from "Three things" to "Two".
+3. ⚠ **"Tap a stop to hear it" was a broken promise, and this is the worst of the six.** Since the
+   download-before-start gate, the drive-detail mini-preview plays **only what is already on the
+   phone**, and opening an old drive from MY DRIVES deliberately starts no download. A reviewer
+   following the old notes tapped a stop and got *"That stop didn't come down with the rest."* The
+   block now tells them to tap **"Load up the drive"** first.
+4. ⚠ **The opening line quote was the cut kicker.** `voice.ts` `openingQuestion` is
+   **"Where are we headed?"**; *"Well now —"* went with the tic (founder, 2026-08-03).
+5. ⚠ **The composer no longer "reads 'Tell me where to'".** That string is now the FALLBACK for a
+   region with no curated names; the live placeholder rotates through `plan.placeholderShapes` filled
+   with the region's own anchors. The notes describe the rotation instead of quoting one frame of it.
+6. ⚠ **MY DRIVES is a SCREEN, not a section on Home** (`7fd0fd8d`). Signed in, the header-left slot
+   swaps from the "Sign in" button to a **list icon** that pushes `/drives`, titled "My Drives". The
+   old notes said "Under 'MY DRIVES'", which describes a home-page section that no longer exists. The
+   *"THE ROUTE"* heading the notes also named is gone from the detail screen for the same kind of
+   reason.
+
+**The durable lesson, since this is the second consecutive rewrite of this block for the same cause:**
+these notes quote UI strings, and UI strings are the fastest-moving prose in the repo. Nothing fails
+when they drift — no test, no lint, no build. **Re-read every quoted string against the screens
+immediately before pushing, never from this file's memory**, and push them LAST, after the client is
+frozen for the build being submitted.
 
 ### LIVE on the 1.0.0 record — read back from ASC 2026-07-30
 
@@ -828,16 +860,21 @@ and each one can silently regress between releases — a deploy can take `delete
 account can run out of credits, and the coverage sentence rots the day a second region generates.
 Re-run the list; don't inherit last release's ticks.
 
-- [ ] The API is deployed with `delete-user` live (a reviewer WILL test deletion — it's the one
-      guideline they can check in 30 seconds). Verify: `POST https://api.skipper.fm/api/auth/delete-user`
-      returns **anything but 404**. A bare POST with no body answers **400** (measured 2026-07-30); with
-      a well-formed body and no session it answers 401. **404 is the only failing answer** — it means
-      the route never deployed.
-- [ ] `https://skipper.fm/privacy`, `/terms`, `/support` all return 200.
-- [ ] **The sample plays in prod:** `GET https://api.skipper.fm/sample` returns 200 with a clip
-      (needs `SAMPLE_NARRATION_QID` set + the API deployed). ⚠ **The path changed in 1.1** — this
-      item read `/roam/sample` until 2026-08-02, which now 404s on a *healthy* deploy. Probing the
-      old path would have reported a working sample as broken, and vice versa.
+- [x] ✅ **`delete-user` is live** (a reviewer WILL test deletion — it's the one guideline they can
+      check in 30 seconds). `POST https://api.skipper.fm/api/auth/delete-user` answered **400** on
+      2026-08-06. A bare POST with no body answers 400; with a well-formed body and no session, 401.
+      **404 is the only failing answer** — it means the route never deployed.
+- [x] ✅ `https://skipper.fm/privacy`, `/terms`, `/support` all **200** (2026-08-06).
+- [x] ✅ **`/health` and `/regions` both 200; `/bootstrap?rotation=0` 200** with five composed example
+      rows for Lake Tahoe (2026-08-06) — that endpoint IS the cold open's content, so it is the one
+      worth probing.
+- [x] ⛔ **`GET /sample` is DELETED — expect 404, and this item is VOID as a 200 check.** It read
+      "the sample plays in prod" until 2026-08-06. The route and its screen went on 2026-08-05
+      (`docs/designs/onboarding-gate-reconsidered.md`); prod answers 404 and that is HEALTHY.
+      ⚠ Same class of trap as the `/roam/sample` → `/sample` rename before it, and now the second time
+      this line has described a path that moved: probing a dead path reports a healthy deploy as
+      broken. ⚠ `GET /planner/copy` 404s for the same reason (`/bootstrap` replaced it) — do not add
+      it back as a check.
 - [ ] **The planner answers anonymously:** `POST https://api.skipper.fm/drives/plan` returns a turn
       with no session. This is 1.1's primary review path (§10) and it needs `ANTHROPIC_API_KEY` set
       in the deployed service — if it isn't, every reviewer attempt gets the in-persona outage line
@@ -848,7 +885,11 @@ Re-run the list; don't inherit last release's ticks.
       this tick — that check is cheap and ASC does not warn when the doc and the listing drift apart.
 - [ ] **A build whose short version is `1.1.0` is attached.** The record deliberately has NONE right
       now — see the Status block. ⚠ ASC does not warn about a mismatch; `asc:metadata` does.
-- [ ] The demo account exists, its password is in ASC, and it has credits left to create a drive.
+- [x] ✅ **The demo account is healthy** — `review@skipper.fm` exists with a credit balance of **99**
+      and still owns the saved drive §10 sends the reviewer to, "Tahoe City → South Lake Tahoe"
+      (read back from the live DB 2026-08-06). ⚠ Its PASSWORD is still owed a check and cannot be
+      checked from here: it lives only in ASC, and since 2026-08-05 the password form is a FALLBACK
+      behind "Use a password instead" — so confirm the reviewer can actually reach and use it.
 - [ ] Screenshots captured in dark mode (§9).
 - [ ] The coverage sentence in the description still matches reality (it says Tahoe only).
 - [ ] **Availability is United States ONLY** (§1). It defaults to every territory — if this ships wide,
