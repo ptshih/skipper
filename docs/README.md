@@ -245,9 +245,21 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   the 1:1 `pois`↔`narrations` atom, no `roam_clips` table, and 1.1 then removed the mode outright.)
 
 ### designs/
-- [lowest-friction-signup.md](designs/lowest-friction-signup.md) — 📋 **INVESTIGATION, decision owed
-  2026-08-05** (TODO #76): what the wall could ask for instead of a password. ⚠ **The headline is that it
-  CANNOT be measured first** — the `wall_shown` → `signup_completed` funnel is already correctly built and
+- [lowest-friction-signup.md](designs/lowest-friction-signup.md) — 📐 **BUILD-READY, founder call
+  2026-08-05** (TODO #76): **email OTP becomes the DEFAULT for signup AND sign-in; password survives as a
+  HIDDEN sign-in fallback** (kept because App Review cannot receive a code). §8 is the spec. ⚠ **§8.1 is
+  the one to read first** — an email-code sign-in **DELETES the rider's password** unless their address is
+  already verified (`revokeUnprovenAccountAccess`, and magic-link does it too), so the naive "quiet
+  fallback" closes itself on first use. Measured against the live DB: **2 password accounts, both ours** —
+  no migration problem, and the mitigation is one `emailVerified = true` backfill. ⚠ **§8.3 is a 5.1.1(v)
+  blocker**: `settings.tsx` deletes with `disabled={!password}`, so a code-created account could never
+  delete itself; the server already allows a fresh-session confirmation instead. ✅ No migration (the
+  plugin ships no schema), so no `db:generate` TTY blocker. ⚠ The unified flow also breaks
+  `signup_completed` — both OTP branches return an identical `{token,user}` with no `isNewUser`.
+  §8.6 adds a **"set a password" control in Settings** (founder ask) — safe because OTP accounts are
+  verified from birth, but ⚠ `setPassword` is `serverOnly`, so it needs a custom `apps/api` route and the
+  same fresh-session re-auth §8.3 needs.
+  Investigation record (§0–§7) kept: ⚠ **it CANNOT be measured first** — the `wall_shown` → `signup_completed` funnel is already correctly built and
   reporting from every EAS profile, but 1.1 is unreleased so the population is empty (the same collapse
   [download-before-start](designs/download-before-start.md) §Q5 hit the same day). ⚠ "Google and Apple are
   already plumbed and merely dark" is **half true**: Google is, Apple is NOT — its `clientSecret` is an

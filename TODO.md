@@ -922,11 +922,36 @@ Each surfaced on its own (three while testing the planner against the corpus, tw
 2026-08-04 and 2026-08-05) and none belongs to the b-side spec above, where they had previously come to
 rest. Every item below carries its own full context.
 
-- [ ] #76 (mobile, med, founder) **Lowest-friction signup — INVESTIGATED 2026-08-05, decision owed.**
-      Founder ask 2026-08-05. Full write-up:
-      [docs/designs/lowest-friction-signup.md](docs/designs/lowest-friction-signup.md) — read §6/§7, they
-      carry the recommendation and the one question that is the founder's. What the investigation SETTLED,
-      so it is not re-derived:
+- [ ] #76 (mobile, med, founder) **Lowest-friction signup — DECIDED 2026-08-05, ready to build.**
+      **Founder call: email OTP becomes the DEFAULT for signup AND sign-in; password survives as a HIDDEN
+      "use a password instead" fallback on sign-in only (password SIGNUP is removed).** Spec + the whole
+      argument: [docs/designs/lowest-friction-signup.md](docs/designs/lowest-friction-signup.md) **§8**.
+      ⚠ **Read §8.1 before writing code** — an email-code sign-in calls `revokeUnprovenAccountAccess`,
+      which **DELETES the rider's `credential` row and all sessions** unless `emailVerified` is already
+      true (magic-link does it too). Skipper has no verification, so the naive build ships a fallback that
+      destroys itself on first use. Measured on the live DB 2026-08-05: **2 password accounts, both ours**
+      (founder + `review@skipper.fm`) — no migration problem, and the mitigation is one
+      `emailVerified = true` backfill on those rows, which is also what keeps App Review's login alive.
+      ⚠ **§8.3 is an App Store 5.1.1(v) BLOCKER that must ship in the same change:** `settings.tsx` calls
+      `deleteUser({ password })` with `disabled={!password}`, so a code-created account could NEVER delete
+      itself. The server already takes a fresh session instead (`password` is optional — "required if
+      session is not fresh"). `docs/guides/app-store-submission.md` scripts the reviewer through "type the
+      account password" and must be updated with it.
+      ✅ **No migration** — the email-otp plugin ships no `schema` export and reuses `verification`, so the
+      `db:generate`-needs-a-TTY blocker does not apply.
+      **Also in scope (founder, 2026-08-05): a "set a password" control in Settings** (§8.6) — a rider who
+      signed up with a code can opt into one. ✅ Safe: OTP-created accounts are `emailVerified: true` from
+      birth, so §8.1 can never eat a password set this way. ⚠ `setPassword` is
+      `createAuthEndpoint.serverOnly` — `authClient` CANNOT call it, so this needs a small custom
+      `apps/api` route behind PER-ROUTE `requireAccount`. ⚠ It also carries `sensitiveSessionMiddleware`,
+      so it needs the SAME fresh-session re-auth primitive §8.3 needs — build that once, both use it.
+      ⚠ It throws `PASSWORD_ALREADY_SET` if a credential row exists (it is *set*, not *change*), so
+      Settings must know which state the account is in — `session.user` does not say.
+      ⚠ The unified flow BREAKS `signup_completed` (it keys off the client's `mode === 'up'`, which stops
+      existing) and both OTP branches return a byte-identical `{token,user}` with **no `isNewUser`** —
+      rebuild it off `user.createdAt` recency in the SAME commit, because per §0 that event is the only
+      thing that could ever validate this change after release.
+      What the investigation SETTLED, so it is not re-derived:
       ⚠ **It cannot be measured first.** The `wall_shown{source}` → `signup_completed` funnel is already
       correctly built (`sign-in.tsx:90` fires only on `mode==='up'`, so a returning rider can't inflate it)
       and reports from every EAS profile — but 1.1 is unreleased, so the population is empty by

@@ -1,11 +1,14 @@
 # Lowest-friction signup — what the wall could ask for instead of a password
 
-> **Status:** 📋 **INVESTIGATION COMPLETE, DECISION OWED — 2026-08-05** (founder ask, TODO #76). Every
-> claim below is verified against the installed `better-auth@1.6.23` source, the live prod env, the
-> served AASA, and the CURRENT App Store guideline text — not from memory. **Nothing is built.** The
-> headline is §0: the TODO's own suggested starting point (measure the drop in PostHog) **cannot be
-> executed**, and the reason is structural, not a tooling gap. §6 carries the recommendation and the
-> one question that is genuinely the founder's.
+> **Status:** 📐 **BUILD-READY — founder call 2026-08-05: email OTP becomes the DEFAULT for both signup
+> and sign-in; password survives as a HIDDEN sign-in fallback only.** §8 is the spec. Nothing is built
+> yet. §0–§7 are the investigation that produced the call and stay as the record; §7's question is
+> ANSWERED by §8. Every claim is verified against the installed `better-auth@1.6.23` source, the live
+> prod env + DB, the served AASA, and the CURRENT App Store guideline text — not from memory.
+>
+> ⚠ **Read §8.1 before writing any code.** The naive version of this design is actively unsafe: signing
+> in by email code **DELETES the rider's password** unless their address is already verified, so
+> "password as a quiet fallback" is a door that closes the first time you use the front one.
 
 ---
 
@@ -254,7 +257,7 @@ The reasoning, in order of weight:
 ⚠ **Whatever lands, the guard TODO #76 asks for is a test that `databaseHooks.user.create.after` grants
 on the new path** — i.e. that the hook's universality (§3) is a fact, not a coincidence.
 
-## §7 — The one question that is actually the founder's
+## §7 — The one question that is actually the founder's — ✅ ANSWERED, see §8
 
 Everything above is verifiable. This is not:
 
@@ -264,6 +267,155 @@ robustness, C (OTP) is, and it is far cheaper. The recommendation picks C becaus
 present defect and the friction is a hypothesis that §0 shows cannot be tested yet — but that is a
 judgement about which risk is worse, and it is the founder's to make.
 
+**Answered 2026-08-05: robustness, and go further than C — make OTP the DEFAULT for sign-in too.**
+
 ⚠ **Independent of the answer, one thing should be fixed now:** `.env.example`'s
 `APPLE_CLIENT_SECRET=...` line invites a future agent to paste a static secret that expires inside six
 months. It should say so, or the Apple entries should come out until §1a's machinery exists.
+
+---
+
+## §8 — THE BUILD (founder call 2026-08-05)
+
+**Email OTP is the default and only VISIBLE way to sign up or sign in. Password sign-in survives behind
+a secondary "Use a password instead" affordance. Password SIGNUP is removed outright — no new account
+can ever hold one.**
+
+Rejected alongside it, with reasons, so neither is re-proposed:
+- **Removing password entirely** — ⛔ App Review cannot receive an email code. The reviewer signs in as
+  `review@skipper.fm` with a password stored in ASC. The alternative is a fixed test code or a
+  special-cased reviewer address, i.e. **a deliberate bypass on the auth path**, which is a worse risk
+  than keeping one quiet legacy route.
+- **Keeping password fully visible as a peer** — it does not reduce friction (the wall still shows a
+  password field), keeps the lockout, and does not even avoid §8.1's trap.
+
+### ⚠ §8.1 — THE TRAP: an email-code sign-in DELETES the rider's password
+
+`revokeUnprovenAccountAccess` (`better-auth/dist/db/revoke-unproven-account-access.mjs`), called from
+the OTP sign-in route (`plugins/email-otp/routes.mjs:425`) **and** from magic-link — so this is a
+property of the whole email-proof family, not of OTP:
+
+```js
+if (!user || user.emailVerified) return;                       // verified → untouched
+for (const account of accounts)
+  if (account.providerId === "credential") await deleteAccount(account.id);   // ⚠ the PASSWORD row
+await deleteUserSessions(userId);                              // ⚠ and every session
+```
+
+It is a correct anti-squatting measure (you claimed an address with a password; the real owner proves
+ownership; your credential dies). But **Skipper has no email verification, so EVERY existing account is
+`emailVerified: false`** — meaning the naive build ships a fallback that destroys itself on first use of
+the default path, silently, with the rider left tapping a password that no longer exists.
+
+**Blast radius, measured against the live DB 2026-08-05** (read-only, `.scratch/otp-blast-radius.ts`):
+
+```
+user rows: verified=false anon=false → 2      verified=false anon=true → 4
+credential (password) account rows: 2
+AT RISK (password + unverified):    2
+```
+
+**Two accounts, both ours** (founder + `review@skipper.fm`). There is no migration problem and there
+never will be a cheaper moment. ⚠ **Mitigation is mandatory and one statement:** set
+`emailVerified = true` on those rows before shipping. They are known-real addresses; marking them proven
+is honest, and it is what keeps the App Review password alive through §8.1.
+
+### §8.2 — Server (`apps/api/src/auth.ts`)
+
+1. Add `emailOTP({ … })` to `plugins`. ✅ **No migration** — the plugin ships no `schema` export and
+   stores codes in the existing `verification` table. (Confirmed: `dist/plugins/email-otp/` has no
+   `schema.mjs`.) This dodges the `db:generate`-needs-a-TTY blocker entirely.
+2. `sendVerificationOTP` routes through the existing `./email` Resend sender — already live in prod.
+3. Keep `emailAndPassword.enabled: true` (the hidden fallback + App Review). **Keep `sendResetPassword`
+   too** — a password that exists still needs a reset, and it is now the fallback's only recovery.
+4. ⚠ **Defaults are already sane, do not loosen them:** 6 digits, `expiresIn: 300` (5 min), and the
+   plugin registers its OWN rate limit of **3/60 s per endpoint** — tighter than `auth.ts`'s 100/60 s
+   baseline. Leave `rateLimit` unset so the plugin's own numbers apply.
+5. ⚠ **This is a new RIDER-TRIGGERED send on an anonymous-reachable route.** It is not a model or Routes
+   call, but every request costs a Resend email and can be pointed at a stranger's inbox. The 3/60 s
+   ceiling is the only guard, and — like `auth.ts`'s other limits — it is better-auth's default
+   IN-MEMORY store, so it is **per container, not a global bound**. Same M4 shared-store upgrade as the
+   rest.
+
+✅ **Already correct, do not re-plumb** (§3): the anonymous link matcher names `/sign-in*` and
+`/email-otp/verify-email` explicitly, so INV-4 holds; `signIn.emailOtp` creates the user through
+`internalAdapter.createUser`, so `databaseHooks.user.create.after` fires and the `FREE_DRIVE_CAP` grant
+lands exactly once; and it sets `emailVerified: true` on creation, so a code-created account is proven
+from birth and never subject to §8.1.
+
+✅ **Enumeration-safe by construction:** with signup enabled, the send route dispatches a code whether or
+not the address exists (`routes.mjs:100`), matching the reset flow's existing posture.
+
+### §8.3 — ⚠ Account deletion MUST be reworked in the SAME change (App Store 5.1.1(v))
+
+`apps/mobile/app/settings.tsx` calls `deleteUser({ password })` with the button `disabled={!password}`.
+**A code-created account has no password, so it could never delete itself — a guaranteed rejection on
+the one guideline CLAUDE.md flags as non-negotiable.**
+
+The server already allows the fix: `password` is **optional** on `/delete-user`, documented *"required
+if session is not fresh"* (`api/routes/update-user.mjs:220,235`). So:
+
+- Confirm with a **fresh session**; fall back to a re-auth (send a code, verify) when the session is
+  stale, and accept the password when the account still has one.
+- ⚠ This is arguably a BETTER confirmation than a password — it proves control of the address at the
+  moment of erasure rather than knowledge of a string.
+- ⚠ `docs/guides/app-store-submission.md` scripts the reviewer through *"type the account password"*.
+  That guide and the ASC review notes must be updated in the same pass, or the reviewer follows steps
+  that no longer match the app.
+
+### §8.4 — Client (`apps/mobile/app/sign-in.tsx`)
+
+The screen collapses. Today's `'in' | 'up' | 'reset'` machine becomes: **email → code → done**, because
+`signIn.emailOtp` signs in an existing rider and creates a new one through the *same* call. "Sign in"
+and "Create account" stop being different screens. `'reset'` survives only under the password fallback.
+
+⚠ **The analytics signal breaks and must be rebuilt in the same commit.** `signup_completed` fires on
+the client's `mode === 'up'` (`sign-in.tsx:90`) — which will no longer exist. **Both OTP branches return
+a byte-identical `{ token, user }`; there is no `isNewUser` flag** (`routes.mjs:407–434`). `createdAt` is
+a core field and survives `parseUserOutput`, so a recency check on the returned user recovers the
+signal — but it is a heuristic and must be written down as one. ⚠ This matters more than it looks:
+**§0 says this change can only ever be validated after release, and this event is the instrument that
+would do it.** Breaking it silently would leave the decision permanently unmeasurable.
+
+### §8.5 — Owed tests
+
+- The `FREE_DRIVE_CAP` grant fires exactly once on the OTP path (TODO #76's explicit ask) — a
+  regression guard on `user.create.after` being UNIVERSAL, not per-route.
+- An account with no password can complete deletion (guards §8.3 against a silent 5.1.1(v) regression).
+- ⚠ A guard on §8.1: a verified account keeps its `credential` row across an OTP sign-in. This is the
+  one that protects App Review's login, and nothing else would catch its loss.
+
+### §8.6 — "Set a password" in Settings (founder ask, 2026-08-05)
+
+A rider who signed up with a code has no password. Settings should let them opt into one. This is
+consistent with §8, not a walk-back of it: **no signup path mints a password; a signed-in rider may
+choose one.**
+
+✅ **It is SAFE by construction, and the reason is worth knowing.** §8.1's trap only fires on accounts
+with `emailVerified: false`. Every OTP-created account is verified **from birth**
+(`routes.mjs:410` sets `emailVerified: true` at creation), so a password set this way is **never** at
+risk of being silently deleted by a later code sign-in. The trap is a legacy-account problem only, and
+§8.1's backfill closes it permanently.
+
+⚠ **The endpoint is NOT client-reachable.** `setPassword` is declared
+`createAuthEndpoint.serverOnly` (`api/routes/update-user.mjs:184`) — deliberately, since it sets a
+credential without knowing the old one. `authClient` cannot call it. So this needs a **small custom
+route in `apps/api`** behind `requireAccount`, calling `auth.api.setPassword({ body, headers })`
+server-side. ⚠ That is a new route on the auth surface: it must be per-ROUTE gated like every other
+owner route (never on a `.use('*')` mount) and must reject an anonymous session.
+
+⚠ **It requires a FRESH session** — `setPassword` carries `sensitiveSessionMiddleware`, the same guard
+`/delete-user` uses. **So §8.3 and this share one primitive:** a re-authenticate step (send a code →
+verify → session is fresh again). Build it once; both call it. Skipping that means the button works
+right after sign-in and mysteriously 401s a day later.
+
+⚠ Semantics to get right: the endpoint **throws `PASSWORD_ALREADY_SET`** if a credential row already
+exists (`update-user.mjs:213`) — it is *set*, not *change*. An account that already has one must be
+routed to `changePassword` (which demands the current password) instead, so Settings needs to know which
+state it is in. `session.user` does not carry that; it needs deriving.
+
+**Why it earns its place beyond preference:** it is a hedge against the one new single point of failure
+§8 introduces. With OTP as the default, **email deliverability becomes load-bearing on sign-IN, not just
+recovery** — a rider whose code lands in spam has no way in at all. A password they set deliberately is
+the way back that does not depend on mail arriving. ⚠ Owed test: setting a password does not disturb the
+`credential`-row invariant §8.5 guards, and the route 401s an anonymous session.
