@@ -1,5 +1,5 @@
 // The live-drive MAP — a tinted Google basemap (Trailhead 89, day/dusk) with our
-// brand-owned overlay drawn on top: the route line (traveled pine / untraveled dashed
+// brand-owned overlay drawn on top: the route line (traveled pine / untraveled solid
 // tan), the stop markers (passed / upcoming / active / endpoint), and the live-position puck. The
 // puck rides the ROUTE at `progress` — the same 0..1 the car token uses on `RouteTrack`
 // — so it's mode-agnostic (live GPS, sim, and the couch preview all drive `progress`)
@@ -19,14 +19,18 @@ import { useReducedMotion, useTheme } from '../theme'
 
 // THE UNTRAVELED LINE ON A STATIC OVERVIEW (`hidePuck`) IS DRAWN HEAVIER THAN IN A LIVE DRIVE, and
 // the reason is that it is doing a different job. In the drive it is a BACKDROP — the traveled pine
-// grows over it and the puck says where you are, so a sparse 2-on-10 dash reads as "road ahead"
-// without competing. On the proposal card and the detail preview there is no puck and no traveled
-// overlay, so this line IS the route: at card size (a whole lake in ~375×200pt) a 2-on-10 dash is
-// ~17% ink and reads as an EMPTY map. Observed on device 2026-08-03 — the route was mistaken for
-// missing entirely, which is the strongest possible evidence it was too faint.
-// Still dashed, not solid: the dashed track is the design language (RouteTrack uses it too). Denser
-// and thicker, not a different mark.
-const STATIC_ROUTE_DASH = [6, 6]
+// grows over it and the puck says where you are, so it can recede. On the proposal card and the
+// detail preview there is no puck and no traveled overlay, so this line IS the route.
+// ⚠ THE ORIGINAL FINDING STANDS, ONLY ITS UNITS CHANGED. Both lines used to be DASHED, and the
+// overview's was made denser and thicker because at card size (a whole lake in ~375×200pt) a sparse
+// 2-on-10 dash is ~17% ink and read as an EMPTY map — observed on device 2026-08-03, the route was
+// mistaken for missing entirely. Both are SOLID as of 2026-08-05 (see the Polyline below for why),
+// so "enough ink to read as a route" is now carried by WIDTH alone, which is what this constant is.
+// Do not thin it on the theory that a solid line needs less: the 2026-08-03 observation was about how
+// much of the line is actually inked at card size, and solid is simply the honest way to get there.
+/* ⚠ `STATIC_ROUTE_DASH` ([6, 6]) WAS DELETED HERE (2026-08-05) — the route line is solid now.
+ * The reasoning lives at the Polyline below; the short version is that a point-space dash cannot
+ * survive a HIGH_QUALITY polyline at overview zoom, and MapKit has no zoom expression to fix it. */
 const STATIC_ROUTE_W = 5
 
 // THE ENDPOINT PIN IS PINE AND BIGGER THAN AN UPCOMING ONE, because on a static overview it is the
@@ -200,7 +204,7 @@ function DriveMapBase({
   const [segIdx, setSegIdx] = useState(initial.idx)
 
   // Traveled overlay = route up to the last crossed vertex (the puck Marker covers the sub-vertex
-  // remainder over the static dashed base). Rebuilt only when segIdx changes. (audit #7)
+  // remainder over the static untraveled base). Rebuilt only when segIdx changes. (audit #7)
   const traveled = useMemo(() => latlngs.slice(0, segIdx + 1), [latlngs, segIdx])
 
   // Follow `progress` (GPS/sim/preview): move the puck every tick, advance the split only on a vertex
@@ -319,17 +323,47 @@ function DriveMapBase({
         // names (and are the only way a VoiceOver rider can enumerate the route at all).
         accessibilityLabel="Map of the route, with a marker for each stop"
       >
-        {/* Untraveled base: the FULL route, dashed tan — static (identity stable), so it isn't
-            re-serialized to native each tick; the traveled pine grows over it. NOTE: lineDashPattern
-            is iOS-only on Polyline — on Android the untraveled line is solid tan (color/width carry
-            the distinction). (audit #7, #472) */}
+        {/* Untraveled base: the FULL route, SOLID tan — static (identity stable), so it isn't
+            re-serialized to native each tick; the traveled pine grows over it.
+            ⚠ IT WAS DASHED AND THE DASHES WERE DELETED (founder, 2026-08-05: "the map route dashes
+            render fine when zoomed in but distorted when zoomed out"). Reproduced at the fitted
+            overview on a 61-minute route: the line did not read as dashes at all, it read as a fuzzy
+            speckled band.
+            ⚠ THE CAUSE IS VERTEX DENSITY vs SCREEN RESOLUTION, not a bad dash length.
+            `materializeRoute` asks Google for `polylineQuality: 'HIGH_QUALITY'` — deliberately, and it
+            is load-bearing for speed-adaptive trigger geofencing and the drive simulator, so it must
+            NOT be lowered — which puts vertices a few metres apart. Zoomed in, a segment spans several
+            points and a [6,6] dash draws cleanly. Zoomed out, one 6-point dash covers ~300–600 m of
+            road, i.e. a hundred-plus vertices per dash, and the dash phase plus the line joins
+            collapse into noise — with the casing below showing through the wreckage, which is what
+            made it look furry rather than merely dotted.
+            ⚠ AND MAPKIT OFFERS NO WAY OUT. `lineDashPattern` is a fixed array in POINT space with no
+            zoom expression. Engines that support dashes across zoom (Mapbox GL) do it with
+            zoom-dependent `line-dasharray` expressions, and even there it is a known-rough edge
+            (dashes shift at fractional zoom, clip at tile boundaries). Keeping dashes here would mean
+            hand-rolling zoom-aware re-simplification against `onRegionChangeComplete` — fighting the
+            platform for a decoration.
+            ⚠ AND THE CONVENTION AGREES: on a map a dash is SEMANTIC — it marks a different KIND of
+            path (walking leg, ferry, unpaved, approximate). Spending it on the whole driving route
+            spends a signal on decoration. The dashed-trail language is not lost: it lives in
+            `RouteTrack`, on our own surfaces, where we own the coordinate space and it renders exactly
+            as drawn.
+            ⚠ Note this also makes iOS and Android agree. `lineDashPattern` was always iOS-only here,
+            so Android has ALWAYS drawn this line solid and the file already accepted that "color/width
+            carry the distinction". This makes that the rule rather than the Android compromise.
+            (audit #7, #472) */}
         {/* ⚠ THE CASING, and it is why the route survives a basemap it does not control. A single flat
             stroke CANNOT read over both dusk land (#14201B) and dusk water (#5FA7B8): measured, the tan
             that scores 4.97 on land scores 1.24 on the lake, and the value that beats the lake is the
             one that vanished into the roads. Two stacked lines solve what one colour cannot — the
             standard cartographic casing, and the same idiom this file already uses for the active
-            marker's `borderColor: colors.surface`. Solid under a dashed top line reads as a track, and
-            it keeps the dashed-trail language §1 asks for rather than trading it for a solid rope.
+            marker's `borderColor: colors.surface`.
+            ⚠ THE CASING OUTLIVED THE DASHES AND ITS REASON IS UNCHANGED. It was originally argued as
+            "solid under a DASHED top line reads as a track" — the top line went solid on 2026-08-05,
+            and the casing is if anything MORE load-bearing now: contrast against an uncontrolled
+            basemap is a colour problem, not a dash problem, and a single tan stroke still cannot beat
+            both land and lake. What it is no longer doing is keeping a dashed-trail language alive;
+            that language lives on `RouteTrack`, on surfaces we render ourselves.
             STATIC ONLY: the live drive grows a traveled pine line over this one and carries a puck, so
             it has its own separation and its untraveled backdrop is meant to recede. */}
         {latlngs.length > 1 && hidePuck ? (
@@ -345,10 +379,13 @@ function DriveMapBase({
             // day on the theory that its untraveled line is a BACKDROP and may recede — but "recedes"
             // is a matter of WEIGHT, and this was a matter of IDENTITY: drawn in the roads' exact
             // colour, the road ahead was not quiet, it was absent. It still recedes, and by the means
-            // it should: a thinner stroke and a sparser dash than the static overview's.
+            // it should: a thinner stroke than the static overview's.
+            // ⚠ NO `lineDashPattern` ANY MORE — see the block above. The live drive's untraveled line
+            // was `[2, 10]` and is solid now too: it still RECEDES, and by the means the comment above
+            // always said it should — a thinner stroke and a quieter colour than the traveled pine —
+            // rather than by a dash that only survived at one zoom.
             strokeColor={colors.routeTrail}
             strokeWidth={hidePuck ? STATIC_ROUTE_W : 4}
-            lineDashPattern={hidePuck ? STATIC_ROUTE_DASH : [2, 10]}
           />
         ) : null}
         {traveled.length > 1 ? (
