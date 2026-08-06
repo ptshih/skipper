@@ -41,8 +41,9 @@ import {
   type DriveCandidate,
   type DriveStop,
   type LngLat,
-  parseRegionBbox,
+  parseRegionBboxes,
 } from '@skipper/engine'
+import { inAnyBbox } from '@skipper/db/bbox'
 import { CLUSTER_VARIETY_KEY, loadClusterTellings, notSupersededByServedCluster, type ClusterTelling } from './clusters'
 import {
   createDriveRequest,
@@ -125,9 +126,14 @@ export async function loadRegionAnchors(bbox: string | null): Promise<RankableAn
   // ⚠ ONE parser, in @skipper/engine (1.1 sweep). There were four of these, agreeing only by luck —
   // and since a region IS a bbox and never a stored FK, two readers disagreeing about this one string
   // silently move places between regions. `between` below is inclusive, matching `pointInRegionBbox`.
-  const box = parseRegionBbox(bbox)
-  if (!box) return []
-  const { swLng: lngMin, swLat: latMin, neLng: lngMax, neLat: latMax } = box
+  // ⚠ PLURAL, and it is this roster that made multi-bbox necessary in the first place. A region's
+  // roster IS the planner's allowlist (INV-1), so it is also why two regions may not simply overlap:
+  // overlap has no most-specific rule HERE the way labels do, so a widened box would hand one region
+  // its neighbour's endpoints. Several disjoint boxes say the true shape instead.
+  // ⚠ All-or-nothing: a malformed box voids the list, and an empty list returns NO anchors — the
+  // fail-closed direction for an allowlist.
+  const boxes = parseRegionBboxes(bbox)
+  if (boxes.length === 0) return []
   const rows = await withRetry(
     () =>
       db
@@ -144,7 +150,7 @@ export async function loadRegionAnchors(bbox: string | null): Promise<RankableAn
         // ⚠ NO ROLE FILTER ANY MORE, and its absence IS the allowlist: `places` holds destinations and
         // nothing else since 2026-08-04, so membership is eligibility. INV-1 is unchanged in strength —
         // one fewer predicate to keep true, and pruning is a DELETE rather than a flag that never stuck.
-        .where(and(between(places.lat, latMin, latMax), between(places.lng, lngMin, lngMax)))
+        .where(inAnyBbox(places.lat, places.lng, boxes))
         // ⚠ ORDER BY IS NOT COSMETIC HERE, AND IT IS NOT ABOUT THE PICKER.
         // From 1.1 this set IS the planner's allowlist, and it rides inside the CACHED system-prompt
         // prefix on EVERY rider turn. Postgres guarantees no row order without an ORDER BY, so an

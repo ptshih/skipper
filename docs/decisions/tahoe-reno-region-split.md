@@ -71,7 +71,15 @@ This is a measure-zero case with a deterministic answer (`regionForPoint` picks 
 inclusivity is itself deliberate — it is what makes the admin's region POI count and the API's `between`
 anchor query agree. Not worth an exclusive edge; worth knowing about.
 
-## 4. The dormant corner
+## 4. The dormant corner — ✅ RESOLVED 2026-08-06 by multi-bbox
+
+⚠ **THIS SECTION IS HISTORY.** The corner below is no longer dormant: `reno-carson` is now TWO boxes
+(`-119.85,38.80,-119.45,39.65;-120.40,39.40,-119.85,39.65`) and has claimed all of it — 56 clips and 4
+endpoints, verified live. Regions may be several rectangles; see
+[multi-bbox-regions.md](multi-bbox-regions.md). The reasoning below is kept because it is the argument
+that produced that feature, and because the REJECTED alternative in it is still rejected.
+
+
 
 Reno is northeast and Truckee is northwest, so the current box minus the Tahoe box is an **L**, and two
 disjoint rectangles cannot tile an L. The corner — `lat 39.40–39.65 × lng -120.40 to -119.85`, the I-80

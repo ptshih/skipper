@@ -23,13 +23,14 @@
 //   ... --veracity               add the advisory veracity web-check (Opus + web_search, per clip — pricey)
 //   ... --limit N                smoke a cheap N first   ... --max-cost <usd>   hard spend ceiling
 
-import { and, eq, inArray, sql } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '@skipper/db'
+import { inAnyBbox } from '@skipper/db/bbox'
 import { narrations, pois } from '@skipper/db/schema'
 import type { FactSheetEntry, PoiFacts } from '@skipper/db/schema'
 import { STORY_TASTE_DENYLIST } from '@skipper/shared'
 import { announce, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
-import { requireRegionBbox, requireRegionKey, resolveRegion } from './pipeline/region'
+import { requireRegionBboxes, requireRegionKey, resolveRegion } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'
 import { regionLabel } from './pipeline/geo'
 import { resolveStoryGrounding } from './pipeline/select'
@@ -111,7 +112,7 @@ interface Audited {
 
 async function main(): Promise<FinishOutcome> {
   const region = isExplicit ? null : await resolveRegion(regionRaw)
-  const bbox = region ? requireRegionBbox(region) : null
+  const bbox = region ? requireRegionBboxes(region) : null
   // NULL (not a sentinel) when the run spans no single region; the admin shows it as "All".
   const runRegion = region ? region.slug : null
 
@@ -143,8 +144,7 @@ async function main(): Promise<FinishOutcome> {
               ? inArray(pois.id, includeIds)
               : and(
                   eq(pois.source, 'wikipedia'),
-                  sql`${pois.lat} between ${bbox!.swLat} and ${bbox!.neLat}`,
-                  sql`${pois.lng} between ${bbox!.swLng} and ${bbox!.neLng}`,
+                  inAnyBbox(pois.lat, pois.lng, bbox!),
                 ),
           ),
         ),

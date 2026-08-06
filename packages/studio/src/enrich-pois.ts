@@ -31,9 +31,10 @@
 
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
+import { inAnyBbox } from '@skipper/db/bbox'
 import { pois } from '@skipper/db/schema'
 import { announce, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
-import { requireRegionBbox, requireRegionKey, resolveRegion } from './pipeline/region'
+import { requireRegionBboxes, requireRegionKey, resolveRegion } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'
 import { ensurePoiOverridesLoaded } from './pipeline/poi-overrides'
 import { regionLabel } from './pipeline/geo'
@@ -109,7 +110,7 @@ async function main(): Promise<void> {
   // FILTER mode is region-scoped: resolve --region (default: the launch region) → its discovery bbox →
   // point-in-bbox (geometry-first; see pipeline/region.ts). EXPLICIT mode (hand-picked ids) needs no bbox.
   const region = isExplicit ? null : await resolveRegion(regionRaw)
-  const bbox = region ? requireRegionBbox(region) : null
+  const bbox = region ? requireRegionBboxes(region) : null
 
   const rows = await withRetry(
     () =>
@@ -136,8 +137,7 @@ async function main(): Promise<void> {
                 // input value for enum") — which would crash even a free dry-run; `enum::text = text`
                 // compares as text, so an unknown source simply matches nothing (honest 0, no crash).
                 sql`${pois.source}::text = ${sourceFilter ?? 'wikipedia'}`,
-                sql`${pois.lat} between ${bbox!.swLat} and ${bbox!.neLat}`,
-                sql`${pois.lng} between ${bbox!.swLng} and ${bbox!.neLng}`,
+                inAnyBbox(pois.lat, pois.lng, bbox!),
               ),
         ),
     { label: 'load enrich corpus' },

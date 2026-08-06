@@ -30,7 +30,15 @@ const box = (
   id,
   slug: id,
   displayName: id,
-  box: { swLng, swLat, neLng, neLat },
+  boxes: [{ swLng, swLat, neLng, neLat }],
+})
+
+/** A region made of SEVERAL boxes — the L-shaped case one rectangle cannot describe. */
+const multiBox = (id: string, boxes: RegionBox['boxes']): RegionBox => ({
+  id,
+  slug: id,
+  displayName: id,
+  boxes,
 })
 
 // Roughly the Tahoe basin, and a deliberately larger box enclosing it.
@@ -52,6 +60,44 @@ describe('regionForPoint', () => {
   test('MOST SPECIFIC wins when one region nests inside another', () => {
     // The rider is in Tahoe, which is also inside the broader Sierra box. Tahoe is the answer.
     expect(regionForPoint([SIERRA, TAHOE], 39.0, -120.0)?.slug).toBe('lake-tahoe')
+  })
+
+  // ── multi-bbox regions ─────────────────────────────────────────────────────────────────────────
+  // The real shape: `reno-carson` is the east box PLUS the I-80 corner north-west of Reno, which sits
+  // WEST of the east box's own western edge. One rectangle covering both would swallow lake-tahoe.
+  const RENO = multiBox('reno-carson', [
+    { swLng: -119.85, swLat: 38.8, neLng: -119.45, neLat: 39.65 },
+    { swLng: -120.4, swLat: 39.4, neLng: -119.85, neLat: 39.65 },
+  ])
+  const TAHOE_TIGHT = box('lake-tahoe', -120.4, 38.8, -119.85, 39.4)
+
+  test('a point in the DETACHED second box still labels its region', () => {
+    // Verdi (39.509, -120.048) — inside the corner box only. Before multi-bbox it was in no region.
+    expect(regionForPoint([RENO, TAHOE_TIGHT], 39.509, -120.048)?.slug).toBe('reno-carson')
+  })
+
+  test('the added corner does NOT steal points that belong to the neighbour', () => {
+    // Emerald Bay stays Tahoe; downtown Reno stays Reno. Annexing a corner must not move either.
+    expect(regionForPoint([RENO, TAHOE_TIGHT], 38.95, -120.11)?.slug).toBe('lake-tahoe')
+    expect(regionForPoint([RENO, TAHOE_TIGHT], 39.53, -119.81)?.slug).toBe('reno-carson')
+  })
+
+  // ⚠ THE REGRESSION THE `containingRegionBboxArea` RULE EXISTS TO PREVENT. If specificity summed a
+  // region's boxes, annexing the corner would make `reno-carson` "bigger" than a broad enclosing
+  // region and it would LOSE downtown Reno to it — a label moving because of geometry 40 km away.
+  test('specificity uses the CONTAINING box, so annexing a corner cannot lose a label', () => {
+    const BROAD = box('northern-nevada', -120.5, 38.5, -119.0, 39.9)
+    expect(regionForPoint([BROAD, RENO], 39.53, -119.81)?.slug).toBe('reno-carson')
+    // …and the same holds with the corner removed, i.e. the corner changed nothing.
+    const RENO_ONLY = box('reno-carson', -119.85, 38.8, -119.45, 39.65)
+    expect(regionForPoint([BROAD, RENO_ONLY], 39.53, -119.81)?.slug).toBe('reno-carson')
+  })
+
+  test('multi-box regions are ORDER-INDEPENDENT too', () => {
+    const a = regionForPoint([RENO, TAHOE_TIGHT], 39.509, -120.048)?.slug
+    const b = regionForPoint([TAHOE_TIGHT, RENO], 39.509, -120.048)?.slug
+    expect(a).toBe('reno-carson')
+    expect(b).toBe('reno-carson')
   })
 
   test('most-specific is ORDER-INDEPENDENT — the whole point of having a rule', () => {

@@ -52,7 +52,9 @@ describe('the premise: overlapping bboxes really do share places', () => {
 
 describe('the console attributes to EVERY containing region, not the first', () => {
   test('POI attribution filters, and does not find', () => {
-    expect(src).toMatch(/const regionsForPoi = \(lat: number, lng: number\) => regionBoxes\.filter\(/)
+    // `\s*` spans the line break the formatter takes at this width — the assertion is about `.filter`
+    // vs `.find`, so it must not also pin where the line happens to wrap.
+    expect(src).toMatch(/const regionsForPoi = \(lat: number, lng: number\) =>\s*regionBoxes\.filter\(/)
     // the single-assignment helper must be gone, not merely unused
     expect(src).not.toContain('const regionForPoi =')
   })
@@ -61,8 +63,13 @@ describe('the console attributes to EVERY containing region, not the first', () 
     const from = src.indexOf("app.get('/admin/regions'")
     const route = src.slice(from, src.indexOf('\napp.', from + 10))
     // a nested loop over boxed, not a .find() picking one winner
-    expect(route).toMatch(/for \(const \{ slug, box \} of boxed\)/)
+    // (`boxes` PLURAL since multi-bbox regions — the property asserted is unchanged: every containing
+    // region is tallied, rather than one winner being selected)
+    expect(route).toMatch(/for \(const \{ slug, boxes \} of boxed\)/)
     expect(route).not.toMatch(/boxed\.find\(/)
+    // ⚠ …and ONCE per region even when several of its own boxes contain the point — the predicate is
+    // `pointInAnyBbox`, not a per-box tally, so a poi cannot double-count against its own region.
+    expect(route).toContain('pointInAnyBbox(boxes, lat, lng)')
   })
 
   test('the off-road heuristic asks whether ANY containing region has been snapped', () => {

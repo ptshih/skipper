@@ -8,7 +8,7 @@
 import { eq, or, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { regions } from '@skipper/db/schema'
-import { parseRegionBbox, type RegionBbox } from '@skipper/engine'
+import { parseRegionBboxes, type RegionBbox } from '@skipper/engine'
 import { withRetry } from './http'
 
 // ⚠ `RegionBbox` and its parser moved to @skipper/engine in the 1.1 sweep — there were FOUR
@@ -20,8 +20,14 @@ export interface ResolvedRegion {
   id: string
   slug: string
   displayName: string
-  /** Parsed from `regions.bbox` ("lng_min,lat_min,lng_max,lat_max"); null if unset/malformed. */
-  bbox: RegionBbox | null
+  /** Parsed from `regions.bbox` — ONE box, or several separated by `;`. EMPTY if unset/malformed.
+   *
+   *  ⚠ PLURAL, and all-or-nothing: a region may be several rectangles because real regions are not
+   *  rectangles (`reno-carson` owns an I-80 corner that lies west of its own western edge), and one
+   *  malformed box voids the whole list rather than yielding a partial extent. A partial extent is the
+   *  dangerous failure for a PAID run — it scopes the spend to less than the operator authorised and
+   *  still settles green, which is the shape docs/decisions/no-default-region.md already records. */
+  boxes: RegionBbox[]
 }
 
 
@@ -83,14 +89,14 @@ export async function resolveRegion(idOrSlug: string | null | undefined): Promis
     const list = known.map((r) => r.slug).join(', ') || '(none — create one in the admin Regions view)'
     throw new Error(`No region matches "${key}" — pass a region slug or its id. Known slugs: ${list}`)
   }
-  return { id: row.id, slug: row.slug, displayName: row.displayName, bbox: parseRegionBbox(row.bbox) }
+  return { id: row.id, slug: row.slug, displayName: row.displayName, boxes: parseRegionBboxes(row.bbox) }
 }
 
-/** A region's bbox or a clear error — for the SELECT CLIs (enrich/generate) that REQUIRE one to scope. */
-export function requireRegionBbox(region: ResolvedRegion): RegionBbox {
-  if (!region.bbox)
+/** A region's boxes or a clear error — for the SELECT CLIs (enrich/generate) that REQUIRE one to scope. */
+export function requireRegionBboxes(region: ResolvedRegion): RegionBbox[] {
+  if (region.boxes.length === 0)
     throw new Error(
       `Region "${region.slug}" has no discovery bbox — set one in the admin Regions view before enriching/generating.`,
     )
-  return region.bbox
+  return region.boxes
 }

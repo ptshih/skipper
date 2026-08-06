@@ -11,7 +11,7 @@
 // ⚠ The one import, and it keeps this file's env-free property: @skipper/engine is zero-dep and
 // RN-safe by design, so importing it needs no secret, no DB and no network — which is what lets this
 // selection be tested without booting index.ts.
-import { haversineMeters, parseRegionBbox, pointInRegionBbox } from '@skipper/engine'
+import { haversineMeters, parseRegionBboxes, pointInAnyRegionBbox } from '@skipper/engine'
 import { byAnchorRank, flatten } from './anchor-format'
 
 /** How many names a region publishes. A DISPLAY count: it prices nothing and bounds no request body,
@@ -235,17 +235,20 @@ export function pickExampleAnchors(
   const ranked = [...placeRows].sort(byRank)
   const out = new Map<string, RegionAnchors>()
   for (const r of regionRows) {
-    const box = parseRegionBbox(r.bbox)
-    if (!box) {
+    // ⚠ PLURAL: a region may be several boxes, and one malformed box voids the whole list rather than
+    // yielding a partial extent — a region publishing anchors from HALF of itself would read as a
+    // thin region, not as an error. Empty → no names and `ready: false`, exactly as a null bbox did.
+    const boxes = parseRegionBboxes(r.bbox)
+    if (boxes.length === 0) {
       out.set(r.id, { names: [], ready: false })
       continue
     }
     // ⚠ The engine owns BOTH halves of "is this poi in this region" (1.1 sweep) — this file used to
     // carry its own parser AND its own containment test, and a region IS a bbox rather than a stored
     // FK, so two readers disagreeing about axis order or edge-inclusivity would put a region's example
-    // anchors on the wrong side of the lake. `pointInRegionBbox` is inclusive on all four edges, which
-    // is what matches the `between()` in loadRegionAnchors — a place is in exactly the same region
-    // here as it is in the planner's allowlist.
+    // anchors on the wrong side of the lake. `pointInAnyRegionBbox` is inclusive on all four edges of
+    // every box, which is what matches `inAnyBbox` (@skipper/db) in loadRegionAnchors — a place is in
+    // exactly the same region here as it is in the planner's allowlist.
     // ⚠ ONE FULL CONTAINMENT PASS, no early break. The old loop stopped as soon as the display list
     // filled, which was safe when the published names WERE the first few contained rows; the spread
     // below has to see every candidate before it can pick the widest-separated ones, so stopping early
@@ -253,7 +256,7 @@ export function pickExampleAnchors(
     const contained: ExampleAnchorPlace[] = []
     let ready = false
     for (const p of ranked) {
-      if (!pointInRegionBbox(box, p.lat, p.lng)) continue
+      if (!pointInAnyRegionBbox(boxes, p.lat, p.lng)) continue
       // ⚠ SET FROM CONTAINMENT ALONE, ABOVE every filter below — that is what makes `ready` a real
       // answer rather than `names.length > 0` spelled differently. A region whose only curated
       // endpoint has a blank or duplicated display NAME is still perfectly drivable; deriving this

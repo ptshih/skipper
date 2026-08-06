@@ -3,7 +3,12 @@ import {
   ANCHORED_TRIGGER_RADIUS_M,
   angularDiffDeg,
   parseRegionBbox,
+  parseRegionBboxes,
+  formatRegionBboxes,
   pointInRegionBbox,
+  pointInAnyRegionBbox,
+  containingRegionBboxArea,
+  REGION_BBOX_SEPARATOR,
   bearingDeg,
   ACCESS_POINT_MAX_M,
   checkAccessPoint,
@@ -307,5 +312,84 @@ describe('parseRegionBbox / pointInRegionBbox — ONE reader of regions.bbox (1.
     expect(pointInRegionBbox(box, 39.0, -120.0)).toBe(true)
     expect(pointInRegionBbox(box, 39.26, -120.0)).toBe(false)
     expect(pointInRegionBbox(box, 39.0, -120.17)).toBe(false)
+  })
+})
+
+describe('multi-bbox regions — a region is SEVERAL boxes when one rectangle cannot say it', () => {
+  // The shape that forced this: reno-carson owns the I-80 corner NW of Reno, which is WEST of Reno's
+  // own western edge. That set is an L, and widening one rectangle to reach it swallows lake-tahoe.
+  const EAST = '-119.85,38.80,-119.45,39.65'
+  const CORNER = '-120.40,39.40,-119.85,39.65'
+  const BOTH = `${EAST}${REGION_BBOX_SEPARATOR}${CORNER}`
+
+  test('one box parses as a one-element list — every stored value keeps working', () => {
+    expect(parseRegionBboxes(EAST)).toEqual([parseRegionBbox(EAST)!])
+  })
+
+  test('several boxes parse in order', () => {
+    expect(parseRegionBboxes(BOTH)).toEqual([parseRegionBbox(EAST)!, parseRegionBbox(CORNER)!])
+  })
+
+  // ⚠ THE SAFETY PROPERTY OF THE WHOLE CHANGE. A caller that was never converted must match NOTHING,
+  // not the first box — reading half a region silently is how a release publishes half of one, or a
+  // paid sweep bills half of one, with a green run to show for it.
+  test('the SINGLE-box reader REFUSES a multi-box value rather than reading the first', () => {
+    expect(parseRegionBbox(BOTH)).toBeNull()
+    expect(parseRegionBbox(EAST)).not.toBeNull()
+  })
+
+  // ⚠ ALL-OR-NOTHING: a partial parse would silently SHRINK a region, which reads as a smaller region
+  // rather than as an error — the failure mode this is built to refuse.
+  test('one malformed box voids the whole list — never a partial region', () => {
+    expect(parseRegionBboxes(`${EAST};garbage`)).toEqual([])
+    expect(parseRegionBboxes(`garbage;${EAST}`)).toEqual([])
+    expect(parseRegionBboxes(`${EAST};1,2,3`)).toEqual([])
+  })
+
+  test('empty segments are forgiving; absent input is empty', () => {
+    expect(parseRegionBboxes(`${EAST};`)).toEqual([parseRegionBbox(EAST)!])
+    expect(parseRegionBboxes(` ${EAST} ; ${CORNER} `)).toEqual(parseRegionBboxes(BOTH))
+    for (const bad of [null, undefined, '', ';', '  ']) {
+      expect(parseRegionBboxes(bad as string | null)).toEqual([])
+    }
+  })
+
+  // ⚠ The round-trip is SEMANTIC, not byte-exact, and that is a property of numbers rather than a
+  // defect: `38.80` parses to 38.8 and formats back as "38.8". Same box, shorter string. Worth knowing
+  // only because the admin re-saving a region rewrites its stored text — the value moves, the extent
+  // does not. Asserting byte-equality here would pin trailing zeros nothing depends on.
+  test('round-trips through format (semantically)', () => {
+    expect(parseRegionBboxes(formatRegionBboxes(parseRegionBboxes(BOTH)))).toEqual(parseRegionBboxes(BOTH))
+    expect(formatRegionBboxes(parseRegionBboxes(BOTH)).split(REGION_BBOX_SEPARATOR)).toHaveLength(2)
+    // A one-box region round-trips to a string with no separator at all — the stored form is unchanged
+    // for every region that never needed a second box.
+    expect(formatRegionBboxes(parseRegionBboxes(EAST))).not.toInclude(REGION_BBOX_SEPARATOR)
+  })
+
+  test('containment is ANY box, and the corner is genuinely outside the main one', () => {
+    const boxes = parseRegionBboxes(BOTH)
+    // Reno itself — in the main box only.
+    expect(pointInAnyRegionBbox(boxes, 39.53, -119.81)).toBe(true)
+    // Verdi, in the corner: west of the main box's western edge, so ONLY the second box holds it.
+    expect(pointInAnyRegionBbox(boxes, 39.509, -120.048)).toBe(true)
+    expect(pointInRegionBbox(boxes[0]!, 39.509, -120.048)).toBe(false)
+    // Emerald Bay — in neither; it belongs to lake-tahoe.
+    expect(pointInAnyRegionBbox(boxes, 38.95, -120.11)).toBe(false)
+  })
+
+  // ⚠ SMALLEST CONTAINING BOX, NEVER THE TOTAL — else a region gets "less specific", and loses a
+  // label it should win, merely by annexing a far-away corner it also covers.
+  test('specificity is the smallest CONTAINING box, not the summed area', () => {
+    const big = parseRegionBboxes('-121.0,38.0,-119.0,40.0') // one broad box
+    const split = parseRegionBboxes(BOTH)
+    // A point in Reno: the east box (0.40 x 0.85) is far smaller than the broad box (2.0 x 2.0),
+    // so the split region is MORE specific and must win the tie-break.
+    const inReno = { lat: 39.53, lng: -119.81 }
+    const a = containingRegionBboxArea(split, inReno.lat, inReno.lng)!
+    const b = containingRegionBboxArea(big, inReno.lat, inReno.lng)!
+    expect(a).toBeLessThan(b)
+    // …and annexing the corner did NOT change that answer, because the corner does not contain Reno.
+    expect(containingRegionBboxArea(parseRegionBboxes(EAST), inReno.lat, inReno.lng)).toBe(a)
+    expect(containingRegionBboxArea(split, 38.95, -120.11)).toBeNull()
   })
 })

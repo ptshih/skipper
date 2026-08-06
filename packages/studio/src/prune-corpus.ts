@@ -44,11 +44,12 @@
 
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
+import { inAnyBbox } from '@skipper/db/bbox'
 import { narrations, pois } from '@skipper/db/schema'
 import { announce, parseFlags } from './pipeline/ops'
 import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
-import { resolveRegion, requireRegionBbox } from './pipeline/region'
+import { resolveRegion, requireRegionBboxes } from './pipeline/region'
 import { containmentReason } from './pipeline/containment'
 import { colocationReport, findColocations } from './pipeline/colocation'
 
@@ -81,13 +82,10 @@ async function main(): Promise<void> {
   })
 
   const region = await resolveRegion(flags.value('region'))
-  const bbox = requireRegionBbox(region)
+  const bbox = requireRegionBboxes(region)
   console.log(`Region: ${region.displayName} (${region.slug})`)
 
-  const inBbox = [
-    sql`${pois.lat} between ${bbox.swLat} and ${bbox.neLat}`,
-    sql`${pois.lng} between ${bbox.swLng} and ${bbox.neLng}`,
-  ]
+  const inBbox = [inAnyBbox(pois.lat, pois.lng, bbox)]
 
   const ownedByThisTool = sql`(${pois.excludedReason} = ${LINEAR_FEATURE_REASON}
     or ${pois.excludedReason} like ${PRUNE_REASON_PREFIX + '%'})`

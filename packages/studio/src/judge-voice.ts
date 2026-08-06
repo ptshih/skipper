@@ -40,7 +40,7 @@ import { narrations, poiClusters, pois } from '@skipper/db/schema'
 import { MODEL_PRICING } from '@skipper/shared'
 import { announce, numericFlag, parseFlags } from './pipeline/ops'
 import { clusterIdsInBbox, poiIdsInBbox } from './pipeline/diversity-context'
-import { requireRegionBbox, requireRegionKey, resolveRegion } from './pipeline/region'
+import { requireRegionBboxes, requireRegionKey, resolveRegion } from './pipeline/region'
 import { withRetry } from './pipeline/http'
 import { ANTHROPIC_READY } from './config'
 import { JUDGMENT_MODEL } from './models'
@@ -213,7 +213,7 @@ function buildReport(clips: Clip[], scope: string, verdict: CharmVerdict | null)
  */
 async function loadClips(): Promise<Clip[]> {
   const region = isExplicit ? null : await resolveRegion(regionRaw)
-  const bbox = region ? requireRegionBbox(region) : null
+  const bbox = region ? requireRegionBboxes(region) : null
   const scope = isExplicit
     ? // --include-ids takes SUBJECT ids, so a cluster id works the same as a poi id — the operator
       // pastes what `audit-corpus` / the admin handed them without having to know which kind it is.

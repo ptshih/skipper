@@ -35,10 +35,10 @@ import { db } from '@skipper/db'
 import { places } from '@skipper/db/schema'
 import Anthropic from '@anthropic-ai/sdk'
 import { announce, maxCostFlag, parseFlags } from './pipeline/ops'
-import { requireRegionBbox, requireRegionKey, resolveRegion, type RegionBbox } from './pipeline/region'
+import { requireRegionBboxes, requireRegionKey, resolveRegion, type RegionBbox } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'
 import { withRetry, sleep } from './pipeline/http'
-import { isAddressLike, isBusinessLike, isParkingLike, nameDisagrees, resolveCuratedPlace, type CuratedPlace, type PlacesBbox } from './pipeline/places'
+import { isAddressLike, isBusinessLike, isParkingLike, nameDisagrees, resolveCuratedPlaceInBboxes, type CuratedPlace, type PlacesBbox } from './pipeline/places'
 import { ENRICH_MODELS, getAnthropic, type EnrichModelChoice } from './models'
 import { llmSpendLines, llmSpentUsd, recordModelUsage, usageUsd } from '@skipper/shared'
 import { ANTHROPIC_READY, GOOGLE_READY, requireEnv } from './config'
@@ -184,12 +184,43 @@ const DRAFT_TOOL: Anthropic.Tool = {
  * move TOGETHER — there is no shared home for it, since @skipper/shared and @skipper/engine both ship
  * into the mobile bundle and this is operator-only prose.
  */
-function draftSystem(regionName: string, bbox: RegionBbox, targetN: number): string {
+/**
+ * How the area is described to the model — ONE box, or several.
+ *
+ * ⚠ THE ONE-BOX BRANCH IS BYTE-IDENTICAL to the sentence this prompt has always opened with, and that
+ * is a requirement rather than tidiness: this CLI SPENDS, and its output is the planner's allowlist, so
+ * a region that never needed a second box must draft exactly what it drafted before. A silent prompt
+ * change here would surface as a differently-curated region with nothing to blame.
+ *
+ * ⚠ The multi-box branch must say the boxes DO NOT JOIN UP. The gap between two boxes is not merely
+ * outside — it is a neighbouring region's ground, and the whole reason a region is several boxes
+ * instead of one big one (docs/decisions/multi-bbox-regions.md).
+ *
+ * ⚠ DUPLICATED ON PURPOSE, like the prompt it feeds: apps/admin/server/places.ts carries a
+ * byte-identical copy. The two must move TOGETHER.
+ */
+function areaSpec(boxes: readonly RegionBbox[]): string {
+  if (boxes.length === 1) {
+    const bbox = boxes[0]!
+    return `The tour area is a BOX on the map: southwest corner ${bbox.swLat}, ${bbox.swLng} to northeast corner ${bbox.neLat}, ${bbox.neLng} (decimal degrees). The box is the area — all of it, and nothing beyond it.`
+  }
+  const list = boxes
+    .map(
+      (b, i) =>
+        `  Box ${i + 1}: southwest corner ${b.swLat}, ${b.swLng} to northeast corner ${b.neLat}, ${b.neLng}`,
+    )
+    .join('\n')
+  return `The tour area is ${boxes.length} SEPARATE BOXES on the map (decimal degrees):
+${list}
+Those boxes TOGETHER are the area — all of them, and nothing beyond them. ⚠ THEY DO NOT JOIN UP. Ground that lies between two of these boxes is NOT in the area: it belongs to a different tour area entirely, so a place there is exactly as unusable as one hundreds of miles away. Before you include a name, decide WHICH box it falls in — if the answer is "between two of them", drop it.`
+}
+
+function draftSystem(regionName: string, boxes: readonly RegionBbox[], targetN: number): string {
   return `You are curating the set of real-world PLACES a rider can pick to start, end, or break a self-guided driving audio tour, narrated by a charming Jungle-Cruise-style skipper.
 
 == The area you are curating ==
 
-The tour area is a BOX on the map: southwest corner ${bbox.swLat}, ${bbox.swLng} to northeast corner ${bbox.neLat}, ${bbox.neLng} (decimal degrees). The box is the area — all of it, and nothing beyond it.
+${areaSpec(boxes)}
 
 Riders call this area "${regionName}". That is a NICKNAME, not a boundary. A box this size routinely covers ground nobody would file under that name: a neighboring city, the next valley over, a mountain pass, another state line. Those places are in scope exactly as much as the ones the nickname obviously covers, and they are the ones most often left out. Work the WHOLE box, corner to corner — if your list only contains what the nickname brings to mind, you have missed most of the area.
 
@@ -217,7 +248,11 @@ For each place give a precise Google Places \`query\` that uniquely identifies i
 }
 
 /** One forced-tool draft call → the candidate list. Records token usage for the spend tally. */
-async function draftCuratedPlaces(regionName: string, bbox: RegionBbox, targetN: number): Promise<PlaceDraft[]> {
+async function draftCuratedPlaces(
+  regionName: string,
+  bbox: readonly RegionBbox[],
+  targetN: number,
+): Promise<PlaceDraft[]> {
   // ⚠ THIS MUST STREAM, and that is a hard SDK constraint rather than a preference. For a
   // non-streaming call the SDK computes `(60 * 60 * 1000 * max_tokens) / 128_000` and THROWS when the
   // result exceeds its 10-minute default (`calculateNonstreamingTimeout`, verified in the installed
@@ -269,8 +304,8 @@ interface ResolvedRow {
 
 async function main(): Promise<void> {
   const region = await resolveRegion(regionKey)
-  const bbox: RegionBbox = requireRegionBbox(region)
-  const placesBbox: PlacesBbox = bbox // structurally identical corners
+  const bbox: RegionBbox[] = requireRegionBboxes(region)
+  const placesBbox: PlacesBbox[] = bbox // structurally identical corners
   console.log(`Region: ${region.displayName} (${region.slug})\n`)
 
   const estUsd = estimateDraftUsd(model, targetCount)
@@ -315,7 +350,8 @@ async function main(): Promise<void> {
   for (const d of drafts) {
     let place: CuratedPlace | null = null
     try {
-      place = await resolveCuratedPlace(d.query, placesBbox, apiKey)
+      // ⚠ Restricts with the hull, judges with the boxes — see `resolveCuratedPlaceInBboxes`.
+      place = await resolveCuratedPlaceInBboxes(d.query, placesBbox, apiKey)
     } catch (e) {
       console.warn(`  ⚠ ${d.name}: Places resolve failed (${(e as Error).message}) — skipped.`)
       unresolved++

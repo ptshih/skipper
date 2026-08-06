@@ -19,33 +19,26 @@
 // poi's point, a fused one by whether any MEMBER poi sits in the box. That is the same geometry-first
 // rule the rest of the repo uses; `poi_clusters` deliberately stores no coordinates of its own.
 
-import { and, between, isNotNull, sql } from 'drizzle-orm'
+import { and, isNotNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
+import { inAnyBbox } from '@skipper/db/bbox'
 import { narrations, pois } from '@skipper/db/schema'
 import { withRetry } from './http'
 import type { RegionBbox } from './region'
 
-/** Poi ids whose point falls in the box. A sub-select, not a round trip — it inlines into the query. */
-export function poiIdsInBbox(bbox: RegionBbox) {
-  return db
-    .selectDistinct({ id: pois.id })
-    .from(pois)
-    .where(and(between(pois.lat, bbox.swLat, bbox.neLat), between(pois.lng, bbox.swLng, bbox.neLng)))
+/** Poi ids whose point falls in ANY of the region's boxes. A sub-select, not a round trip — it
+ *  inlines into the query. ⚠ An EMPTY list matches nothing (see `inAnyBbox`), never everything. */
+export function poiIdsInBbox(bbox: readonly RegionBbox[]) {
+  return db.selectDistinct({ id: pois.id }).from(pois).where(inAnyBbox(pois.lat, pois.lng, bbox))
 }
 
 /** Cluster ids with at least one MEMBER poi in the box — a cluster is in a region the same
  *  geometry-first way everything else is, by where its members are. */
-export function clusterIdsInBbox(bbox: RegionBbox) {
+export function clusterIdsInBbox(bbox: readonly RegionBbox[]) {
   return db
     .selectDistinct({ id: pois.clusterId })
     .from(pois)
-    .where(
-      and(
-        isNotNull(pois.clusterId),
-        between(pois.lat, bbox.swLat, bbox.neLat),
-        between(pois.lng, bbox.swLng, bbox.neLng),
-      ),
-    )
+    .where(and(isNotNull(pois.clusterId), inAnyBbox(pois.lat, pois.lng, bbox)))
 }
 
 /**
@@ -58,13 +51,18 @@ export function clusterIdsInBbox(bbox: RegionBbox) {
  * a rider can hear two clips from different regions on one drive, so repetition across them is still
  * repetition.
  */
-export async function loadDiversityContext(bbox: RegionBbox | null): Promise<string[]> {
-  const where = bbox
-    ? and(
-        isNotNull(narrations.script),
-        sql`(${narrations.poiId} in ${poiIdsInBbox(bbox)} or ${narrations.clusterId} in ${clusterIdsInBbox(bbox)})`,
-      )
-    : isNotNull(narrations.script)
+export async function loadDiversityContext(bbox: readonly RegionBbox[] | null): Promise<string[]> {
+  // ⚠ `null` and `[]` mean OPPOSITE things here and must not be conflated. `null` is "no region" (an
+  // --include-ids run) → WHOLE CORPUS, per the note above. `[]` is "a region whose extent could not be
+  // read" → match nothing, which `inAnyBbox` enforces inside the sub-selects. Writing this as a bare
+  // truthiness test would send an unreadable region down the whole-corpus path.
+  const where =
+    bbox !== null
+      ? and(
+          isNotNull(narrations.script),
+          sql`(${narrations.poiId} in ${poiIdsInBbox(bbox)} or ${narrations.clusterId} in ${clusterIdsInBbox(bbox)})`,
+        )
+      : isNotNull(narrations.script)
   const rows = await withRetry(
     () => db.select({ script: narrations.script }).from(narrations).where(where),
     { label: 'load diversity context' },

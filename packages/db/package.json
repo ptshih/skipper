@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/client.ts",
     "./schema": "./src/schema.ts",
+    "./bbox": "./src/bbox.ts",
     "./auth-schema": "./src/auth-schema.ts",
     "./hash": "./src/hash.ts"
   },

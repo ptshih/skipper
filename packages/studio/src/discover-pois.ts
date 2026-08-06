@@ -35,7 +35,7 @@ import { colocationReport, findColocations } from './pipeline/colocation'
 import { mapLimit } from './pipeline/concurrency'
 import { runJob } from './pipeline/job-progress'
 import { sleep } from './pipeline/http'
-import { requireRegionBbox, requireRegionKey, resolveRegion } from './pipeline/region'
+import { requireRegionBboxes, requireRegionKey, resolveRegion } from './pipeline/region'
 import type { LngLat } from './pipeline/geo'
 
 /** DB-write fan-out for the corpus upserts. Matches classify-treatments' DB pool — these are Neon
@@ -82,19 +82,27 @@ async function main(): Promise<void> {
   // them would even land in the region the operator named. A sweep with nowhere to look is a missing
   // setup step (set the bbox in the admin Regions view), and enrich/generate have always said so.
   const region = await resolveRegion(regionKey)
-  const bbox = requireRegionBbox(region)
-  const box: { sw: LngLat; ne: LngLat } = {
-    sw: [bbox.swLng, bbox.swLat],
-    ne: [bbox.neLng, bbox.neLat],
-  }
-  console.log(`Region: ${region.displayName} (${region.slug})\n`)
+  const bbox = requireRegionBboxes(region)
+  console.log(
+    `Region: ${region.displayName} (${region.slug})` +
+      (bbox.length > 1 ? ` — ${bbox.length} boxes` : '') +
+      `\n`,
+  )
 
   // 5×7 grid over the corridor (~11×11 km cells — WDQS chokes on wide-area boxes; the
   // original 2×3 attempt timed out on a mid-lake cell), merged by qid, then ONE same-place
   // dedupe across the whole merged set (a place straddling a cell boundary appears in two
   // cells). A cell that still fails after one local retry is SKIPPED and reported — the
   // sweep is idempotent, so a re-run fills the gap.
-  const cells = gridBoxes(box.sw, box.ne, 5, 7)
+  // ⚠ EACH BOX IS GRIDDED SEPARATELY, NEVER THEIR HULL. A region may be several rectangles, and the
+  // hull of two of them also covers the GAP between — ground a neighbouring region owns. Sweeping that
+  // would write a neighbour's POIs during this region's run, and since a poi's region is point-in-bbox
+  // rather than a stored FK, nothing downstream would ever record that they came from the wrong sweep.
+  // The qid dedupe below already absorbs the overlap where two boxes touch, so per-box gridding costs
+  // only WDQS calls — and this CLI is free.
+  const cells = bbox.flatMap((b) =>
+    gridBoxes([b.swLng, b.swLat] as LngLat, [b.neLng, b.neLat] as LngLat, 5, 7),
+  )
   const byQid = new Map<string, WikidataCandidate>()
   const failedCells: number[] = []
   for (const [i, cell] of cells.entries()) {

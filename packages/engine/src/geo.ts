@@ -480,9 +480,120 @@ export interface RegionBbox {
  */
 export function parseRegionBbox(raw: string | null | undefined): RegionBbox | null {
   if (!raw) return null
+  // ⚠ A MULTI-BOX VALUE IS REFUSED HERE, DELIBERATELY, AND IT IS THE SAFETY PROPERTY OF THE WHOLE
+  // MULTI-BBOX CHANGE. This function reads ONE box; `regions.bbox` may now hold several
+  // (see `parseRegionBboxes`). A caller that was never converted would otherwise read the FIRST box
+  // and silently scope itself to part of a region — a release that publishes half a region, or a paid
+  // CLI that sweeps half of one, with nothing failing and a green run to show for it
+  // (docs/decisions/no-default-region.md is the record of what that class of bug already cost).
+  // Refusing makes an un-converted caller match NOTHING, which is loud, local, and free to spot.
+  if (raw.includes(REGION_BBOX_SEPARATOR)) return null
   const p = raw.split(',').map((s) => Number(s.trim()))
   if (p.length !== 4 || p.some((n) => !Number.isFinite(n))) return null
   return { swLng: p[0]!, swLat: p[1]!, neLng: p[2]!, neLat: p[3]! }
+}
+
+/**
+ * The separator between boxes in a multi-box `regions.bbox`.
+ *
+ * ⚠ SEMICOLON BECAUSE COMMA IS TAKEN — the single box is itself comma-delimited, so the two levels
+ * must not share a character or the string cannot be parsed back at all.
+ *
+ * ⚠ The multi-box value lives in the SAME `text` column rather than a new one, on purpose: a region
+ * is still "a string that describes an extent", the one-box form is unchanged and still parses, and
+ * the whole feature therefore needs NO migration — no `db:generate` (which prompts on renames and
+ * needs a real TTY), no `db:push` (which DROPS to match the schema against a database that is also
+ * production). The cost of a wrong schema change here is measured in released clips; the cost of a
+ * longer string is zero.
+ */
+export const REGION_BBOX_SEPARATOR = ';'
+
+/**
+ * Parse `regions.bbox` when it may describe SEVERAL boxes — the reader every region-scoped path
+ * should use. One box parses to a one-element list, so this is a superset of `parseRegionBbox` and
+ * every existing stored value keeps working untouched.
+ *
+ * WHY A REGION IS SOMETIMES SEVERAL BOXES. A region is geometry, and real regions are not rectangles.
+ * The case that forced it: `lake-tahoe` occupies the basin while `reno-carson` sits east of it, and
+ * the I-80 corridor between Truckee and Reno belongs to Reno while being WEST of Reno's western edge.
+ * That set is an L, and one rectangle cannot describe an L — widening Reno's box to reach the corner
+ * makes it swallow Tahoe entirely. See docs/decisions/tahoe-reno-region-split.md.
+ *
+ * ⚠ ALL-OR-NOTHING: one malformed box voids the WHOLE list rather than contributing a shorter one.
+ * A partial parse is the dangerous failure here — it would silently shrink a region to the boxes that
+ * happened to parse, which reads as a smaller region rather than as an error, and is exactly how a
+ * release or a paid sweep covers less than the operator authorised while still settling green. The
+ * honest answer to "I cannot read this region's extent" stays "match nothing" (`parseRegionBbox`'s
+ * own rule, one level up).
+ *
+ * ⚠ Empty segments are tolerated (a trailing `;` is not an error) but a segment that is present and
+ * unparseable is. Tolerating the former keeps hand-editing forgiving; tolerating the latter would
+ * defeat the paragraph above.
+ */
+export function parseRegionBboxes(raw: string | null | undefined): RegionBbox[] {
+  if (!raw) return []
+  const parts = raw
+    .split(REGION_BBOX_SEPARATOR)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+  if (parts.length === 0) return []
+  const out: RegionBbox[] = []
+  for (const part of parts) {
+    const box = parseRegionBbox(part)
+    if (!box) return []
+    out.push(box)
+  }
+  return out
+}
+
+/** Serialize boxes back to the stored form. The inverse of `parseRegionBboxes`, kept beside it so the
+ *  two cannot drift — the admin writes this string and every reader above parses it. */
+export function formatRegionBboxes(boxes: readonly RegionBbox[]): string {
+  return boxes
+    .map((b) => `${b.swLng},${b.swLat},${b.neLng},${b.neLat}`)
+    .join(REGION_BBOX_SEPARATOR)
+}
+
+/**
+ * Is the point inside ANY of the region's boxes? The multi-box form of `pointInRegionBbox`, and
+ * inclusive on every edge for the same reason that one is.
+ */
+export function pointInAnyRegionBbox(
+  boxes: readonly RegionBbox[],
+  lat: number,
+  lng: number,
+): boolean {
+  for (const b of boxes) if (pointInRegionBbox(b, lat, lng)) return true
+  return false
+}
+
+/**
+ * How specifically this region contains the point: the area (raw degrees²) of the SMALLEST of its
+ * boxes that contains it, or `null` when none does.
+ *
+ * ⚠ SMALLEST CONTAINING BOX, NEVER THE TOTAL AREA — and the difference decides real labels. This
+ * feeds `regionForPoint`'s most-specific-wins tie-break, whose job is "a rider in Tahoe means Tahoe,
+ * not the Sierra Nevada". Summing a region's boxes would let a region become "less specific" merely
+ * by annexing a far-away corner it also covers: adding the I-80 corridor to `reno-carson` would
+ * enlarge its total, and a point in downtown Reno could then lose to a broader region that happens to
+ * be one big box. The question being asked is about the point, so only the box the point is in can
+ * answer it.
+ *
+ * Degrees² is not an area anyone should SHOW — a degree of longitude is not a degree of latitude —
+ * but it is only ever COMPARED, and any monotonic measure ranks two nested boxes identically.
+ */
+export function containingRegionBboxArea(
+  boxes: readonly RegionBbox[],
+  lat: number,
+  lng: number,
+): number | null {
+  let best: number | null = null
+  for (const b of boxes) {
+    if (!pointInRegionBbox(b, lat, lng)) continue
+    const area = (b.neLat - b.swLat) * (b.neLng - b.swLng)
+    if (best === null || area < best) best = area
+  }
+  return best
 }
 
 /**

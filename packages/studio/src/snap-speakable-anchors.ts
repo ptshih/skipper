@@ -34,12 +34,13 @@
 
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
+import { inAnyBbox } from '@skipper/db/bbox'
 import { pois } from '@skipper/db/schema'
 import { checkSpeakableAnchor, speakableAnchorMaxM } from '@skipper/engine'
 import { announce, parseFlags } from './pipeline/ops'
 import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
-import { resolveRegion, requireRegionBbox } from './pipeline/region'
+import { resolveRegion, requireRegionBboxes } from './pipeline/region'
 
 const OVERPASS = 'https://overpass-api.de/api/interpreter'
 const UA = 'Skipper/0.1 (https://github.com/ptshih/skipper; hello@skipper.fm) road-snap'
@@ -165,20 +166,33 @@ class RoadIndex {
   }
 }
 
-async function buildRoadIndex(bbox: { swLat: number; swLng: number; neLat: number; neLng: number }): Promise<RoadIndex> {
-  const s0 = bbox.swLat - BBOX_PAD_DEG,
-    n0 = bbox.neLat + BBOX_PAD_DEG
-  const w0 = bbox.swLng - BBOX_PAD_DEG,
-    e0 = bbox.neLng + BBOX_PAD_DEG
-  const dLat = (n0 - s0) / TILES,
-    dLng = (e0 - w0) / TILES
+// ⚠ TILES EACH BOX SEPARATELY into ONE shared index, never the boxes' hull. A region may be several
+// rectangles, and their hull also spans the GAP between them — for `reno-carson` that gap is the Tahoe
+// basin, so tiling the hull would fetch the whole lake's road network to snap a handful of POIs in an
+// I-80 corner. Roads merge into one index because a POI near a box edge must still snap to a road that
+// happens to sit in the neighbouring box; the index is a spatial lookup, not a membership test, so a
+// superset of roads is harmless where a superset of POIs would not be.
+async function buildRoadIndex(
+  boxes: readonly { swLat: number; swLng: number; neLat: number; neLng: number }[],
+): Promise<RoadIndex> {
   const index = new RoadIndex()
-  for (let i = 0; i < TILES; i++)
-    for (let j = 0; j < TILES; j++) {
-      const ways = await fetchTile(s0 + i * dLat, w0 + j * dLng, s0 + (i + 1) * dLat, w0 + (j + 1) * dLng)
-      index.add(ways)
-      console.error(`  tile ${i * TILES + j + 1}/${TILES * TILES}: +${ways.length} ways (${index.size} segments)`)
-    }
+  const total = boxes.length * TILES * TILES
+  let n = 0
+  for (const bbox of boxes) {
+    const s0 = bbox.swLat - BBOX_PAD_DEG,
+      n0 = bbox.neLat + BBOX_PAD_DEG
+    const w0 = bbox.swLng - BBOX_PAD_DEG,
+      e0 = bbox.neLng + BBOX_PAD_DEG
+    const dLat = (n0 - s0) / TILES,
+      dLng = (e0 - w0) / TILES
+    for (let i = 0; i < TILES; i++)
+      for (let j = 0; j < TILES; j++) {
+        const ways = await fetchTile(s0 + i * dLat, w0 + j * dLng, s0 + (i + 1) * dLat, w0 + (j + 1) * dLng)
+        index.add(ways)
+        n++
+        console.error(`  tile ${n}/${total}: +${ways.length} ways (${index.size} segments)`)
+      }
+  }
   return index
 }
 
@@ -192,13 +206,10 @@ async function main(): Promise<void> {
   if (force) console.log('(force: re-snapping POIs that already carry an anchor — OVERWRITES admin corrections)\n')
 
   const region = await resolveRegion(flags.value('region'))
-  const bbox = requireRegionBbox(region)
+  const bbox = requireRegionBboxes(region)
   console.log(`Region: ${region.displayName} (${region.slug})`)
 
-  const conds = [
-    sql`${pois.lat} between ${bbox.swLat} and ${bbox.neLat}`,
-    sql`${pois.lng} between ${bbox.swLng} and ${bbox.neLng}`,
-  ]
+  const conds = [inAnyBbox(pois.lat, pois.lng, bbox)]
   if (classOnly) conds.push(sql`${pois.speakableLat} is not null`, isNull(pois.speakableRoadClass))
   else if (!force) conds.push(isNull(pois.speakableLat)) // lat/lng written together → checking lat suffices
   const rows: PoiRow[] = await db
@@ -222,7 +233,7 @@ async function main(): Promise<void> {
     )
     return
   }
-  console.log(`${rows.length} POI(s) to snap.\n\nFetching drivable roads (OSM/Overpass, ${TILES * TILES} tiles)...`)
+  console.log(`${rows.length} POI(s) to snap.\n\nFetching drivable roads (OSM/Overpass, ${bbox.length * TILES * TILES} tiles)...`)
   const roads = await buildRoadIndex(bbox)
   console.log(`\nIndexed ${roads.size} road segments. Snapping...`)
 

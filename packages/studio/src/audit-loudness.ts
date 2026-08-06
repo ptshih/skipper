@@ -38,13 +38,14 @@
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { unlink, writeFile } from 'node:fs/promises'
-import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
+import { inAnyBbox } from '@skipper/db/bbox'
 import { narrations, pois } from '@skipper/db/schema'
 import { AUDIO_LOUDNESS } from '@skipper/shared'
 import { getR2Client } from '@skipper/storage'
 import { numericFlag, parseFlags } from './pipeline/ops'
-import { resolveRegion, requireRegionBbox } from './pipeline/region'
+import { resolveRegion, requireRegionBboxes } from './pipeline/region'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { ACTIVE_MASTER_TARGET_LUFS, verifyMasteredLoudness } from './pipeline/loudnorm'
@@ -177,15 +178,14 @@ async function main(): Promise<void> {
   console.log(`Active master target: ${fmt(TARGET)} LUFS, delivery ceiling ${fmt(TP_CEILING)} dBTP\n`)
 
   const region = includeIds.length === 0 && regionRaw ? await resolveRegion(regionRaw) : null
-  const bbox = region ? requireRegionBbox(region) : null
+  const bbox = region ? requireRegionBboxes(region) : null
 
   const rows = await withRetry(
     async (): Promise<ClipRow[]> => {
       const conds = []
       if (includeIds.length > 0) conds.push(inArray(narrations.poiId, includeIds))
       else if (bbox) {
-        conds.push(sql`${pois.lat} between ${bbox.swLat} and ${bbox.neLat}`)
-        conds.push(sql`${pois.lng} between ${bbox.swLng} and ${bbox.neLng}`)
+        conds.push(inAnyBbox(pois.lat, pois.lng, bbox))
       }
       if (releasedOnly) conds.push(isNotNull(narrations.releasedAt))
       const sel = db

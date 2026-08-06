@@ -23,16 +23,20 @@
 import { isNotNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { regions } from '@skipper/db/schema'
-import { parseRegionBbox, pointInRegionBbox, type RegionBbox } from '@skipper/engine'
+import { containingRegionBboxArea, parseRegionBboxes, type RegionBbox } from '@skipper/engine'
 import { REGION_GEO_MEMO_TTL_MS } from './limits'
 import { withRetry } from './retry'
 
-/** One released region, reduced to what labelling a drive needs: its identity and its box. */
+/** One released region, reduced to what labelling a drive needs: its identity and its extent.
+ *
+ *  ⚠ `boxes`, PLURAL — a region may be several rectangles (`parseRegionBboxes`), because real regions
+ *  are not rectangles and one of ours is an L: `reno-carson` owns the I-80 corner north-west of Reno,
+ *  which lies WEST of its own western edge. See docs/decisions/multi-bbox-regions.md. */
 export interface RegionBox {
   id: string
   slug: string
   displayName: string
-  box: RegionBbox
+  boxes: RegionBbox[]
 }
 
 /**
@@ -79,9 +83,11 @@ export async function loadRegionBoxes(): Promise<RegionBox[]> {
 
   const boxes: RegionBox[] = []
   for (const r of rows) {
-    const box = parseRegionBbox(r.bbox)
-    if (!box) continue // null or malformed — see the ⚠ above; never defaulted
-    boxes.push({ id: r.id, slug: r.slug, displayName: r.displayName, box })
+    // ⚠ ALL-OR-NOTHING per region: `parseRegionBboxes` voids the whole list if any box is malformed,
+    // so a region never labels off a PARTIAL extent. Empty = dropped, same as before; see the ⚠ above.
+    const parsed = parseRegionBboxes(r.bbox)
+    if (parsed.length === 0) continue // null or malformed — never defaulted
+    boxes.push({ id: r.id, slug: r.slug, displayName: r.displayName, boxes: parsed })
   }
   memo = { at: Date.now(), boxes }
   return boxes
@@ -94,10 +100,11 @@ export interface DriveRegionLabel {
   displayName: string
 }
 
-/** Box area in raw degrees². Only ever COMPARED, never shown — so the fact that a degree of longitude
- *  is not a degree of latitude does not matter here: any monotonic measure of "smaller box" ranks two
- *  nested regions the same way, and nested is the only case this decides. */
-const areaOf = (b: RegionBbox) => (b.neLat - b.swLat) * (b.neLng - b.swLng)
+// Specificity now comes from @skipper/engine's `containingRegionBboxArea` — the area of the SMALLEST
+// of a region's boxes that contains the point, never the summed area. Only ever COMPARED, never shown,
+// so degrees² is fine: any monotonic measure ranks two nested boxes the same way. ⚠ The "smallest
+// CONTAINING box" rule is what stops a region becoming less specific — and losing a label it should
+// win — merely by annexing a far-away corner it also covers. See that function's own note.
 
 /**
  * Which region contains this point? `null` when none does.
@@ -121,9 +128,16 @@ export function regionForPoint(
   lng: number,
 ): DriveRegionLabel | null {
   let best: RegionBox | null = null
+  let bestArea = Infinity
   for (const r of boxes) {
-    if (!pointInRegionBbox(r.box, lat, lng)) continue
-    if (!best || areaOf(r.box) < areaOf(best.box)) best = r
+    // `null` = this region does not contain the point at all. Otherwise the area of the SMALLEST of
+    // its boxes that does — its specificity FOR THIS POINT, which is the only question being asked.
+    const area = containingRegionBboxArea(r.boxes, lat, lng)
+    if (area === null) continue
+    if (!best || area < bestArea) {
+      best = r
+      bestArea = area
+    }
   }
   return best ? { id: best.id, slug: best.slug, displayName: best.displayName } : null
 }

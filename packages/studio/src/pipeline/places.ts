@@ -436,6 +436,43 @@ export async function resolveCuratedPlace(
 }
 
 /**
+ * The multi-box form: resolve a name inside a region that may be SEVERAL rectangles.
+ *
+ * ⚠ RESTRICT WITH THE HULL, JUDGE WITH THE BOXES. Google Places takes ONE rectangle, so the
+ * autocomplete is bounded by the hull enclosing every box — safe, because a superset can only return
+ * extra candidates. The containment test is then against the REAL boxes, because a multi-box region's
+ * hull also covers the gap BETWEEN them, and that gap is a disjoint neighbour's ground. Curated places
+ * ARE the planner's allowlist (INV-1), so a place resolved out of the gap would let a rider name their
+ * neighbour's endpoint from this region.
+ *
+ * ⚠ Byte-for-byte the same shape as `resolvePlaceInBboxes` in apps/admin/server/places.ts — that file
+ * mirrors this one deliberately (the admin does not pull in the @skipper/studio graph). Move both.
+ *
+ * A one-box region takes the identical path as before (the hull of one box is that box).
+ */
+export async function resolveCuratedPlaceInBboxes(
+  query: string,
+  boxes: readonly PlacesBbox[],
+  apiKey: string,
+): Promise<CuratedPlace | null> {
+  if (boxes.length === 0) return null
+  const hull: PlacesBbox = {
+    swLng: Math.min(...boxes.map((b) => b.swLng)),
+    swLat: Math.min(...boxes.map((b) => b.swLat)),
+    neLng: Math.max(...boxes.map((b) => b.neLng)),
+    neLat: Math.max(...boxes.map((b) => b.neLat)),
+  }
+  const placeId = await autocompletePlaceId(query, hull, apiKey)
+  if (!placeId) return null
+  const place = await placeDetails(placeId, apiKey)
+  if (!place) return null
+  const inAny = boxes.some(
+    (b) => place.lat >= b.swLat && place.lat <= b.neLat && place.lng >= b.swLng && place.lng <= b.neLng,
+  )
+  return inAny ? place : null
+}
+
+/**
  * Normalize a raw Google `primaryType` into a SAFE, plainly-spoken category for break
  * narration. `includedType` filters which places RETURN, not their `primaryType`, so a
  * `restaurant` search can hand back `seafood_restaurant` / `fine_dining_restaurant` —

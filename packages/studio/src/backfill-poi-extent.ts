@@ -22,13 +22,14 @@
 //   --region <slug>   scope to a region's bbox (REQUIRED — no default)
 //   --force           re-fetch POIs that already have an area recorded
 
-import { and, eq, isNull, sql } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
+import { inAnyBbox } from '@skipper/db/bbox'
 import { pois } from '@skipper/db/schema'
 import { announce, parseFlags } from './pipeline/ops'
 import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
-import { resolveRegion, requireRegionBbox } from './pipeline/region'
+import { resolveRegion, requireRegionBboxes } from './pipeline/region'
 import { WDQS_ENDPOINT, WDQS_USER_AGENT } from './config'
 import { containmentReason, isContainer } from './pipeline/containment'
 
@@ -100,12 +101,11 @@ async function main(): Promise<void> {
   announce({ tool: 'backfill-poi-extent', blast: ['MUTATES DB'], apply })
 
   const region = await resolveRegion(flags.value('region'))
-  const bbox = requireRegionBbox(region)
+  const bbox = requireRegionBboxes(region)
   console.log(`Region: ${region.displayName} (${region.slug})`)
 
   const conds = [
-    sql`${pois.lat} between ${bbox.swLat} and ${bbox.neLat}`,
-    sql`${pois.lng} between ${bbox.swLng} and ${bbox.neLng}`,
+    inAnyBbox(pois.lat, pois.lng, bbox),
   ]
   if (!force) conds.push(isNull(pois.wikidataTypes))
   const rows = await db.select({ id: pois.id, qid: pois.qid, name: pois.name }).from(pois).where(and(...conds))

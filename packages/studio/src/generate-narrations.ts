@@ -29,12 +29,13 @@
 //   ... --region <slug>          generate a region's narration corpus (REQUIRED unless --include-ids; → its bbox)
 //   ... --include-ids a,b,c      regenerate EXACTLY these poi ids (implies --force)
 
-import { and, eq, inArray, isNotNull, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNotNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
+import { inAnyBbox } from '@skipper/db/bbox'
 import { narrations, pois } from '@skipper/db/schema'
 import type { FactSheetEntry, PoiFacts } from '@skipper/db/schema'
 import { announce, assertReady, day, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
-import { requireRegionBbox, requireRegionKey, resolveRegion } from './pipeline/region'
+import { requireRegionBboxes, requireRegionKey, resolveRegion } from './pipeline/region'
 import { runJob, type FinishOutcome } from './pipeline/job-progress'
 import {
   ensurePoiOverridesLoaded,
@@ -128,7 +129,7 @@ async function main(): Promise<FinishOutcome | void> {
   // Region-scoped selection (geometry-first; see pipeline/region.ts): --region → discovery bbox →
   // point-in-bbox, XOR an explicit id list. Generate is wikipedia-only (the story corpus).
   const region = isExplicit ? null : await resolveRegion(regionRaw)
-  const bbox = region ? requireRegionBbox(region) : null
+  const bbox = region ? requireRegionBboxes(region) : null
 
   // ── Candidate corpus: wikipedia-sourced pois with story-grade extracts, in the region ──
   // A poi's telling is its 1:1 narration — left-joined so a poi with no narration yet
@@ -163,8 +164,7 @@ async function main(): Promise<FinishOutcome | void> {
             ? inArray(pois.id, includeIds)
             : and(
                 eq(pois.source, 'wikipedia'),
-                sql`${pois.lat} between ${bbox!.swLat} and ${bbox!.neLat}`,
-                sql`${pois.lng} between ${bbox!.swLng} and ${bbox!.neLng}`,
+                inAnyBbox(pois.lat, pois.lng, bbox!),
               ),
         ),
     { label: 'load narration corpus' },

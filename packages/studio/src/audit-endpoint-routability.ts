@@ -32,13 +32,14 @@
 //   ... --apply --snap                                ALSO propose an access point per flagged anchor
 //                                                     (a few more Routes calls each; still writes nothing)
 
-import { and, between } from 'drizzle-orm'
+import { and } from 'drizzle-orm'
 import { db } from '@skipper/db'
+import { inAnyBbox } from '@skipper/db/bbox'
 import { places } from '@skipper/db/schema'
 import { haversineMeters, type LngLat } from '@skipper/engine'
 import { materializeRoute } from '@skipper/routing'
 import { announce, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
-import { requireRegionBbox, resolveRegion } from './pipeline/region'
+import { requireRegionBboxes, resolveRegion } from './pipeline/region'
 import { withRetry } from './pipeline/http'
 import { GOOGLE_READY } from './config'
 
@@ -230,7 +231,7 @@ async function main() {
   // ⚠ REQUIRED, no default (docs/decisions/no-default-region.md) — a defaulted region billed the wrong
   // corpus once already, and this CLI spends per anchor in whatever region it resolves.
   const region = await resolveRegion(flags.value('region'))
-  const bbox = requireRegionBbox(region)
+  const bbox = requireRegionBboxes(region)
   const limit = numericFlag(flags, 'limit', { fallback: Infinity, min: 0 })
   const maxCost = maxCostFlag(flags)
   // Only meaningful with --apply: it searches along routes the sweep itself had to fetch first.
@@ -258,8 +259,7 @@ async function main() {
             // Inclusive on all four edges, matching `pointInRegionBbox` and the API's own anchor query
             // — a region's membership rule decided differently here would audit a different set than
             // the picker offers.
-            between(places.lat, bbox.swLat, bbox.neLat),
-            between(places.lng, bbox.swLng, bbox.neLng),
+            inAnyBbox(places.lat, places.lng, bbox),
           ),
         )
         .orderBy(places.name),

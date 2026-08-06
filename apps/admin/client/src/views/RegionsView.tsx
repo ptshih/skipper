@@ -221,7 +221,10 @@ export function RegionsView() {
         <code className="font-mono text-xs">Discover POIs</code> sweeps for this region (
         <code className="font-mono text-xs">lng_min,lat_min,lng_max,lat_max</code>). It's stored on the region and
         resolved by slug at sweep time. It is REQUIRED — a region without one cannot be swept, enriched or
-        generated, and there is no longer a built-in fallback. Set it before running a discovery sweep.
+        generated, and there is no longer a built-in fallback. Set it before running a discovery sweep. ⚠ A region
+        may be SEVERAL boxes, separated by <code className="font-mono text-xs">;</code>, for a shape one rectangle
+        cannot describe — membership is "inside any box", every job sweeps each box separately, and the gap
+        between two boxes belongs to whichever region actually covers it, not to this one.
       </Callout>
 
       {numSelected > 0 && (
@@ -353,7 +356,9 @@ function RegionDialog({
               />
               <p className="text-xs text-muted-foreground">
                 <code className="font-mono">lng_min,lat_min,lng_max,lat_max</code>. Required before this region can
-                be swept — there is no built-in fallback. Use the lookup, or draw a box on the map.
+                be swept — there is no built-in fallback. Use the lookup, or draw a box on the map. For a region
+                that is not one rectangle, separate boxes with <code className="font-mono">;</code> — the region is
+                every box, and the ground BETWEEN two of them is <em>not</em> in it.
               </p>
             </div>
 

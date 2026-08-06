@@ -29,7 +29,7 @@ import { db } from '@skipper/db'
 import { narrations, poiClusters } from '@skipper/db/schema'
 import type { FactSheetEntry } from '@skipper/db/schema'
 import { announce, assertReady, day, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
-import { requireRegionBbox, requireRegionKey, resolveRegion } from './pipeline/region'
+import { requireRegionBboxes, requireRegionKey, resolveRegion } from './pipeline/region'
 import { regionLabel } from './pipeline/geo'
 import { synthesizeWithTailRetake, type TailOutcome } from './pipeline/tts'
 import type { LoudnessOutcome } from './pipeline/loudnorm'
@@ -141,7 +141,7 @@ async function main(): Promise<void> {
   // and the admin surfaces a null region as "All", exactly as the solo generator does.
   const isExplicitRun = includeIds.length > 0 && !flags.value('region') && !query
   const region = isExplicitRun ? null : await resolveRegion(flags.value('region'))
-  const bbox = region ? requireRegionBbox(region) : null
+  const bbox = region ? requireRegionBboxes(region) : null
   const scopeLabel = region ? region.displayName : 'All (explicit ids)'
 
   // A cluster is in the region the same geometry-first way everything else is — by where its members

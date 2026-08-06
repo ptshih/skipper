@@ -265,6 +265,41 @@ export async function resolvePlaceInBbox(
   return inBbox ? place : null
 }
 
+/**
+ * The multi-box form: resolve a name inside a region that may be SEVERAL rectangles.
+ *
+ * ⚠ RESTRICT WITH THE HULL, JUDGE WITH THE BOXES — the two are deliberately different geometries and
+ * conflating them is the bug this shape exists to prevent. Google Places takes ONE rectangle, so the
+ * autocomplete is bounded by the hull enclosing every box; that is safe because a superset can only
+ * return extra candidates. The containment test afterwards is against the REAL boxes, because for a
+ * multi-box region the hull also covers the gap BETWEEN them — and that gap is exactly the ground a
+ * disjoint neighbouring region owns. Curated places ARE the planner's allowlist (INV-1), so a place
+ * resolved out of the gap would let a rider name their neighbour's endpoint from this region.
+ *
+ * A one-box region routes through the identical code path as before (hull of one box is that box).
+ */
+export async function resolvePlaceInBboxes(
+  query: string,
+  boxes: readonly BboxCorners[],
+  apiKey: string,
+): Promise<ResolvedPlace | null> {
+  if (boxes.length === 0) return null
+  const hull: BboxCorners = {
+    swLng: Math.min(...boxes.map((b) => b.swLng)),
+    swLat: Math.min(...boxes.map((b) => b.swLat)),
+    neLng: Math.max(...boxes.map((b) => b.neLng)),
+    neLat: Math.max(...boxes.map((b) => b.neLat)),
+  }
+  const placeId = await autocompletePlaceId(query, hull, apiKey)
+  if (!placeId) return null
+  const place = await placeDetails(placeId, apiKey)
+  if (!place) return null
+  const inAny = boxes.some(
+    (b) => place.lat >= b.swLat && place.lat <= b.neLat && place.lng >= b.swLng && place.lng <= b.neLng,
+  )
+  return inAny ? place : null
+}
+
 /* -------------------------------------------------------------------------- */
 /*  Curate DRAFT — the cheap, reviewable LLM step (no Places calls, no writes)   */
 /* -------------------------------------------------------------------------- */
@@ -355,12 +390,40 @@ const DRAFT_TOOL: Anthropic.Tool = {
  * move TOGETHER — there is no shared home for it, since @skipper/shared and @skipper/engine both ship
  * into the mobile bundle and this is operator-only prose.
  */
-function draftSystem(regionName: string, bbox: BboxCorners, targetN: number): string {
+/**
+ * How the area is described to the model — ONE box, or several.
+ *
+ * ⚠ THE ONE-BOX BRANCH IS BYTE-IDENTICAL to the sentence this prompt has always opened with, and that
+ * is a requirement rather than tidiness: `curate-places` SPENDS, and its output is the planner's
+ * allowlist, so a region that never needed a second box must draft exactly what it drafted before.
+ * A silent prompt change here would show up as a differently-curated region with nothing to blame.
+ *
+ * ⚠ The multi-box branch must say the boxes DO NOT JOIN UP. The gap between two boxes is not merely
+ * outside — it is a neighbouring region's ground, and the whole reason a region is several boxes
+ * instead of one big one (docs/decisions/multi-bbox-regions.md).
+ */
+function areaSpec(boxes: readonly BboxCorners[]): string {
+  if (boxes.length === 1) {
+    const bbox = boxes[0]!
+    return `The tour area is a BOX on the map: southwest corner ${bbox.swLat}, ${bbox.swLng} to northeast corner ${bbox.neLat}, ${bbox.neLng} (decimal degrees). The box is the area — all of it, and nothing beyond it.`
+  }
+  const list = boxes
+    .map(
+      (b, i) =>
+        `  Box ${i + 1}: southwest corner ${b.swLat}, ${b.swLng} to northeast corner ${b.neLat}, ${b.neLng}`,
+    )
+    .join('\n')
+  return `The tour area is ${boxes.length} SEPARATE BOXES on the map (decimal degrees):
+${list}
+Those boxes TOGETHER are the area — all of them, and nothing beyond them. ⚠ THEY DO NOT JOIN UP. Ground that lies between two of these boxes is NOT in the area: it belongs to a different tour area entirely, so a place there is exactly as unusable as one hundreds of miles away. Before you include a name, decide WHICH box it falls in — if the answer is "between two of them", drop it.`
+}
+
+function draftSystem(regionName: string, boxes: readonly BboxCorners[], targetN: number): string {
   return `You are curating the set of real-world PLACES a rider can pick to start, end, or break a self-guided driving audio tour, narrated by a charming Jungle-Cruise-style skipper.
 
 == The area you are curating ==
 
-The tour area is a BOX on the map: southwest corner ${bbox.swLat}, ${bbox.swLng} to northeast corner ${bbox.neLat}, ${bbox.neLng} (decimal degrees). The box is the area — all of it, and nothing beyond it.
+${areaSpec(boxes)}
 
 Riders call this area "${regionName}". That is a NICKNAME, not a boundary. A box this size routinely covers ground nobody would file under that name: a neighboring city, the next valley over, a mountain pass, another state line. Those places are in scope exactly as much as the ones the nickname obviously covers, and they are the ones most often left out. Work the WHOLE box, corner to corner — if your list only contains what the nickname brings to mind, you have missed most of the area.
 
@@ -392,7 +455,7 @@ For each place give a precise Google Places \`query\` that uniquely identifies i
  *  to 502). `model` is the caller's choice (the admin defaults to Opus, the house judgment tier). */
 export async function draftCuratedPlaces(
   regionName: string,
-  bbox: BboxCorners,
+  boxes: readonly BboxCorners[],
   opts: { targetN: number; model: string },
 ): Promise<PlaceDraft[]> {
   // ⚠ EXPLICIT TIMEOUT + LOW maxRetries, and this is a rule, not a preference. A bare `new Anthropic()`
@@ -422,7 +485,7 @@ export async function draftCuratedPlaces(
     // tokens actually emitted are billed — so the cost of headroom is zero, while too little truncates
     // the list and burns the whole call. Opus tops out far above this; 64k is simply well clear.
     max_tokens: 64_000,
-    system: draftSystem(regionName, bbox, opts.targetN),
+    system: draftSystem(regionName, boxes, opts.targetN),
     tools: [DRAFT_TOOL],
     tool_choice: { type: 'tool', name: DRAFT_TOOL.name },
     messages: [{ role: 'user', content: `Draft the curated places for ${regionName}.` }],

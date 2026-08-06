@@ -43,11 +43,12 @@
 import type Anthropic from '@anthropic-ai/sdk'
 import { and, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
+import { inAnyBbox } from '@skipper/db/bbox'
 import { narrations, poiClusters, pois } from '@skipper/db/schema'
 import { announce, numericFlag, parseFlags } from './pipeline/ops'
 import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
-import { resolveRegion, requireRegionBbox } from './pipeline/region'
+import { resolveRegion, requireRegionBboxes } from './pipeline/region'
 import { leaderGroups, mergeDuplicateGroups, metersBetween, pickSubject, type ClassifiedGroup } from './pipeline/clustering'
 import { isContainer } from './pipeline/containment'
 import { z } from 'zod'
@@ -213,12 +214,11 @@ async function main(): Promise<void> {
   announce({ tool: 'classify-treatments', blast: clearOnly ? ['MUTATES DB'] : ['SPENDS $', 'MUTATES DB'], apply })
 
   const region = await resolveRegion(flags.value('region'))
-  const bbox = requireRegionBbox(region)
+  const bbox = requireRegionBboxes(region)
   console.log(`Region: ${region.displayName} (${region.slug})  ·  radius ${radiusM} m`)
 
   const inBbox = [
-    sql`${pois.lat} between ${bbox.swLat} and ${bbox.neLat}`,
-    sql`${pois.lng} between ${bbox.swLng} and ${bbox.neLng}`,
+    inAnyBbox(pois.lat, pois.lng, bbox),
   ]
 
   // Clearing the grouping in scope is BOTH the undo and the first half of an apply: a re-run whose

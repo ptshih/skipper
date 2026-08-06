@@ -39,7 +39,8 @@
 import { Hono } from 'hono'
 import { serveStatic } from 'hono/bun'
 import { csrf } from 'hono/csrf'
-import { and, asc, between, count, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
+import { inAnyBbox } from '@skipper/db/bbox'
 import { db } from '@skipper/db'
 import {
   creditEntries,
@@ -61,9 +62,15 @@ import { CLAUDE_MODELS, classifyStoryEligibility } from '@skipper/shared'
 import { checkAccessPoint, checkSpeakableAnchor } from '@skipper/engine'
 import { groundingHash } from '@skipper/db/hash'
 import { requireAdmin, type AdminEnv } from './auth'
-import { bboxError, bboxOverlapsRect, parseBbox, pointInBbox, type BboxCorners } from './bbox'
+import {
+  bboxError,
+  bboxesOverlapRect,
+  parseBboxes,
+  pointInAnyBbox,
+  type BboxCorners,
+} from './bbox'
 import { mapWithConcurrency } from './concurrency'
-import { draftCuratedPlaces, isAddressLike, isBusinessLike, isParkingLike, nameDisagrees, resolvePlaceInBbox, type PlaceDraft, type ResolvedPlace } from './places'
+import { draftCuratedPlaces, isAddressLike, isBusinessLike, isParkingLike, nameDisagrees, resolvePlaceInBboxes, type PlaceDraft, type ResolvedPlace } from './places'
 import { contentTypeForKey, presignGet } from './storage'
 import {
   buildJobArgs,
@@ -107,10 +114,12 @@ type RegionBoxRow = { slug: string; displayName: string; bbox: string | null }
  *  with no/invalid bbox claims nothing (set one in the Regions view to light up coverage). Shared by
  *  the two derivations so they can't disagree about which regions are even eligible: a POI resolves by
  *  point-in-bbox, a DRIVE by rectangle-overlap, but both must start from the same parse. */
-function regionBoxesOf(rows: RegionBoxRow[]): { slug: string; name: string; box: BboxCorners }[] {
+function regionBoxesOf(rows: RegionBoxRow[]): { slug: string; name: string; boxes: BboxCorners[] }[] {
   return rows.flatMap((r) => {
-    const box = parseBbox(r.bbox)
-    return box ? [{ slug: r.slug, name: r.displayName, box }] : []
+    // ⚠ PLURAL — a region may be several boxes, and one malformed box voids the whole list rather
+    // than yielding a partial extent (see `parseRegionBboxes`). Empty = claims nothing, as before.
+    const boxes = parseBboxes(r.bbox)
+    return boxes.length > 0 ? [{ slug: r.slug, name: r.displayName, boxes }] : []
   })
 }
 
@@ -125,10 +134,22 @@ function regionBoxesOf(rows: RegionBoxRow[]): { slug: string; name: string; box:
  *  the list route into an error page.
  *
  *  The parse-once discipline is the point (see the draft route, which spells out why): the bbox is not
- *  merely a precondition, it SCOPES the work, so the string must not be read twice by two expressions. */
-async function regionWithBox(
-  slug: string,
-): Promise<{ displayName: string; bbox: string | null; box: BboxCorners | null } | null> {
+ *  merely a precondition, it SCOPES the work, so the string must not be read twice by two expressions.
+ *
+ *  ⚠ RETURNS BOTH `boxes` AND `hull`, and the difference is a correctness boundary rather than a
+ *  convenience. `boxes` is the region's TRUE extent and is what decides MEMBERSHIP — what gets counted,
+ *  written, or published. `hull` is the one rectangle that encloses them all, and exists only for
+ *  outward calls whose API takes a single rectangle (Google Places `locationRestriction`). Using the
+ *  hull to RESTRICT is safe because it is a superset: it can only ever return extra candidates, and
+ *  every one is then re-checked against `boxes` before anything is written. Using it to DECIDE would be
+ *  the bug — for a multi-box region the hull covers the gap BETWEEN the boxes, which is precisely the
+ *  ground a disjoint neighbour owns. Restrict with the hull; judge with the boxes. */
+async function regionWithBox(slug: string): Promise<{
+  displayName: string
+  bbox: string | null
+  boxes: BboxCorners[]
+  hull: BboxCorners | null
+} | null> {
   const row = (
     await db
       .select({ displayName: regions.displayName, bbox: regions.bbox })
@@ -136,7 +157,21 @@ async function regionWithBox(
       .where(eq(regions.slug, slug))
       .limit(1)
   )[0]
-  return row ? { ...row, box: parseBbox(row.bbox) } : null
+  if (!row) return null
+  const boxes = parseBboxes(row.bbox)
+  return { ...row, boxes, hull: hullOf(boxes) }
+}
+
+/** The smallest single rectangle enclosing every box. Null for an empty list — "no extent" must not
+ *  become a degenerate box that quietly matches a point on the equator. */
+function hullOf(boxes: readonly BboxCorners[]): BboxCorners | null {
+  if (boxes.length === 0) return null
+  return {
+    swLng: Math.min(...boxes.map((b) => b.swLng)),
+    swLat: Math.min(...boxes.map((b) => b.swLat)),
+    neLng: Math.max(...boxes.map((b) => b.neLng)),
+    neLat: Math.max(...boxes.map((b) => b.neLat)),
+  }
 }
 
 /** A valid, length-bounded http(s) URL — the override's sourceUrl is operator-supplied provenance. */
@@ -218,11 +253,15 @@ app.get('/admin/regions', async (c) => {
   // This was `.find()` (first region by display name wins), which matched the POIs view — the two
   // agreed with each other and both disagreed with what a region release would actually publish.
   // A region with no/invalid bbox claims nothing → poiCount stays null ("no bbox set", ≠ a genuine 0).
-  const boxed = rows.map((r) => ({ slug: r.slug, box: parseBbox(r.bbox) }))
-  const counts = new Map<string, number>(boxed.flatMap((b) => (b.box ? [[b.slug, 0]] : [])))
+  const boxed = rows.map((r) => ({ slug: r.slug, boxes: parseBboxes(r.bbox) }))
+  const counts = new Map<string, number>(boxed.flatMap((b) => (b.boxes.length > 0 ? [[b.slug, 0]] : [])))
   for (const { lat, lng } of poiCoords) {
-    for (const { slug, box } of boxed) {
-      if (box && pointInBbox(box, lat, lng)) counts.set(slug, counts.get(slug)! + 1)
+    for (const { slug, boxes } of boxed) {
+      // ⚠ Counted ONCE per region even when several of its boxes contain the point — `pointInAnyBbox`
+      // is a predicate, not a tally. Boxes within one region may touch or overlap (nothing forbids it),
+      // and a poi double-counted against its own region would inflate the number an operator reads as
+      // "what a release will publish".
+      if (boxes.length > 0 && pointInAnyBbox(boxes, lat, lng)) counts.set(slug, counts.get(slug)! + 1)
     }
   }
 
@@ -307,8 +346,12 @@ app.post('/admin/regions/:slug/release', async (c) => {
       .limit(1)
   )[0]
   if (!region) return c.json({ error: 'not_found' }, 404)
-  const box = parseBbox(region.bbox)
-  if (!box) {
+  // ⚠ ALL-OR-NOTHING PARSE, AND THIS IS THE ROUTE WHERE IT MATTERS MOST. Release is IRREVERSIBLE, so
+  // a region whose bbox parsed only PARTIALLY would publish part of itself and leave the rest staged
+  // with no way to tell afterwards which half went. `parseBboxes` voids the whole list on any
+  // malformed box, and an empty list 400s here rather than scoping to nothing silently.
+  const boxes = parseBboxes(region.bbox)
+  if (boxes.length === 0) {
     return c.json({ error: 'bbox_required', message: 'Set a valid region bbox before releasing.' }, 400)
   }
 
@@ -316,7 +359,7 @@ app.post('/admin/regions/:slug/release', async (c) => {
   const inBboxPoi = db
     .select({ id: pois.id })
     .from(pois)
-    .where(and(between(pois.lat, box.swLat, box.neLat), between(pois.lng, box.swLng, box.neLng)))
+    .where(inAnyBbox(pois.lat, pois.lng, boxes))
 
   // …and the CLUSTERS those pois belong to, for FUSED tellings. ⚠ Without this a fused clip can NEVER
   // be released: its `poi_id` is NULL, so the poi-keyed predicate below can't match it, and
@@ -326,13 +369,7 @@ app.post('/admin/regions/:slug/release', async (c) => {
   const inBboxCluster = db
     .selectDistinct({ id: pois.clusterId })
     .from(pois)
-    .where(
-      and(
-        isNotNull(pois.clusterId),
-        between(pois.lat, box.swLat, box.neLat),
-        between(pois.lng, box.swLng, box.neLng),
-      ),
-    )
+    .where(and(isNotNull(pois.clusterId), inAnyBbox(pois.lat, pois.lng, boxes)))
 
   const [, stamped, stampedFused] = await db.batch([
     // Region row: set ONLY while still draft, so a re-run preserves the first release timestamp.
@@ -532,12 +569,12 @@ app.get('/admin/places', async (c) => {
   if (!slug) return c.json({ error: 'region (slug) is required' }, 400)
   const region = await regionWithBox(slug)
   if (!region) return c.json({ error: 'not_found' }, 404)
-  const box = region.box
-  if (!box) return c.json({ places: [], bbox: null }) // no bbox set → nothing to scope yet
+  const boxes = region.boxes
+  if (boxes.length === 0) return c.json({ places: [], bbox: null }) // no bbox set → nothing to scope yet
   const rows = await db
     .select(placeCols)
     .from(places)
-    .where(and(between(places.lat, box.swLat, box.neLat), between(places.lng, box.swLng, box.neLng)))
+    .where(inAnyBbox(places.lat, places.lng, boxes))
     .orderBy(sql`${places.rank} ASC NULLS LAST`, asc(places.name))
   return c.json({ places: rows, bbox: region.bbox })
 })
@@ -630,12 +667,15 @@ app.post('/admin/places/resolve', async (c) => {
   if (!slug || !query) return c.json({ error: 'region and query are required' }, 400)
   const region = await regionWithBox(slug)
   if (!region) return c.json({ error: 'not_found' }, 404)
-  const box = region.box
-  if (!box) return c.json({ error: 'bbox_required', message: 'Set a valid region bbox before adding places.' }, 400)
+  const boxes = region.boxes
+  if (boxes.length === 0)
+    return c.json({ error: 'bbox_required', message: 'Set a valid region bbox before adding places.' }, 400)
   const apiKey = process.env.GOOGLE_MAPS_API_KEY
   if (!apiKey) return c.json({ error: 'places_unconfigured', message: 'GOOGLE_MAPS_API_KEY is not set.' }, 503)
   try {
-    const place = await resolvePlaceInBbox(query, box, apiKey)
+    // ⚠ Restricts with the hull and judges with the boxes — see `resolvePlaceInBboxes`. A multi-box
+    // region's hull covers the gap between its boxes, which is a neighbour's ground.
+    const place = await resolvePlaceInBboxes(query, boxes, apiKey)
     return c.json({ place }) // place may be null (no in-region match)
   } catch (e) {
     return c.json({ error: 'places_error', message: e instanceof Error ? e.message : String(e) }, 502)
@@ -726,8 +766,8 @@ app.post('/admin/places/draft', async (c) => {
   // ⚠ Parsed ONCE by regionWithBox and passed the RESULT down — the bbox is no longer merely a
   // precondition, it is what SCOPES the draft (see draftSystem). Re-parsing at the call site would be
   // the same string read twice by two expressions, which is the drift this repo keeps paying for.
-  const bbox = region.box
-  if (!bbox) {
+  const bbox = region.boxes
+  if (bbox.length === 0) {
     return c.json({ error: 'bbox_required', message: 'Set a valid region bbox before curating.' }, 400)
   }
   if (!process.env.ANTHROPIC_API_KEY) {
@@ -778,8 +818,9 @@ app.post('/admin/places/curate', async (c) => {
   }
   const region = await regionWithBox(slug)
   if (!region) return c.json({ error: 'not_found' }, 404)
-  const box = region.box
-  if (!box) return c.json({ error: 'bbox_required', message: 'Set a valid region bbox before curating.' }, 400)
+  const boxes = region.boxes
+  if (boxes.length === 0)
+    return c.json({ error: 'bbox_required', message: 'Set a valid region bbox before curating.' }, 400)
   const apiKey = process.env.GOOGLE_MAPS_API_KEY
   if (!apiKey) return c.json({ error: 'places_unconfigured', message: 'GOOGLE_MAPS_API_KEY is not set.' }, 503)
 
@@ -802,7 +843,7 @@ app.post('/admin/places/curate', async (c) => {
     try {
       // `rank` rides along rather than being re-read (and re-asserted) in phase 2: it was validated
       // HERE, so carrying it keeps that proof structural instead of a cast the compiler can't check.
-      return { kind: 'ok' as const, rank, place: await resolvePlaceInBbox(query, box, apiKey) }
+      return { kind: 'ok' as const, rank, place: await resolvePlaceInBboxes(query, boxes, apiKey) }
     } catch (e) {
       return { kind: 'failed' as const, message: e instanceof Error ? e.message : String(e) }
     }
@@ -1454,7 +1495,8 @@ app.get('/admin/pois', async (c) => {
   //   • the off-road heuristic marked only the first region as snapped.
   // It also made a region release look wrong when it wasn't: releasing by raw bbox correctly publishes
   // every clip in the box, but the operator could not SEE the ones the console had filed elsewhere.
-  const regionsForPoi = (lat: number, lng: number) => regionBoxes.filter((b) => pointInBbox(b.box, lat, lng))
+  const regionsForPoi = (lat: number, lng: number) =>
+    regionBoxes.filter((b) => pointInAnyBbox(b.boxes, lat, lng))
 
   // Off-road flag (dogfood 2026-06-25 #5/#7 "flag POIs not near a road — they won't trigger"): a POI with
   // NO road-snapped speakable anchor triggers on its raw centroid, so an off-road pin fires garbage or never.
@@ -2325,7 +2367,7 @@ app.get('/admin/drives', async (c) => {
 
   const result = rows.map((d) => {
     const rect = { minLat: d.bboxMinLat, minLng: d.bboxMinLng, maxLat: d.bboxMaxLat, maxLng: d.bboxMaxLng }
-    const inRegions = regionBoxes.filter((b) => bboxOverlapsRect(b.box, rect))
+    const inRegions = regionBoxes.filter((b) => bboxesOverlapRect(b.boxes, rect))
     return {
       id: d.id,
       label: d.label,
@@ -2463,7 +2505,7 @@ app.get('/admin/drives/:id', async (c) => {
     maxLat: drive.bboxMaxLat,
     maxLng: drive.bboxMaxLng,
   }
-  const inRegions = regionBoxesOf(regionRows).filter((b) => bboxOverlapsRect(b.box, rect))
+  const inRegions = regionBoxesOf(regionRows).filter((b) => bboxesOverlapRect(b.boxes, rect))
 
   return c.json({
     drive: {

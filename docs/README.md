@@ -80,8 +80,14 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   basin + Truckee + Donner + the US-50 approach; Reno, Carson City, Virginia City and the Carson
   Valley become `reno-carson` over the SAME corpus — 436 released clips and 36 curated endpoints
   re-home by geometry alone, no re-spend, no regeneration (founder, 2026-08-06). ⚠ The boxes are
-  DISJOINT by choice, so a Tahoe→Comstock drive is no longer plannable, and the I-80 corner between
-  Truckee and Reno (56 clips) goes DORMANT — two rectangles cannot tile an L.
+  DISJOINT by choice, so a Tahoe→Comstock drive is no longer plannable. ⚠ Its "dormant I-80 corner"
+  is RESOLVED — see below; the corner is Reno's now.
+- [multi-bbox-regions.md](decisions/multi-bbox-regions.md) — a region may be SEVERAL boxes, `;`-separated
+  in the same `text` column (no migration); membership is "inside ANY box". Built because one rectangle
+  cannot describe an L and overlap was not an option: labels tolerate it, the planner ROSTER does not
+  (2026-08-06). ⚠ The SINGULAR `parseRegionBbox` now REFUSES a multi-box string so an unconverted caller
+  matches NOTHING rather than half a region; `inAnyBbox([])` emits literal `false` for the same reason.
+  ⚠ Boxes sharing an edge are not strictly disjoint — edges are inclusive, by design.
 - [device-support-matrix.md](decisions/device-support-matrix.md) — which iPhones we DESIGN for:
   reference 393x852, checks at 440x956 and 375x667, portrait only. ⚠ Opens with the finding that
   reframed it — **the iPhone SE cannot be dropped**: both surviving SE generations run iOS 26 and iOS

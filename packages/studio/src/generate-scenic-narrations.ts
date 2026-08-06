@@ -37,11 +37,12 @@
 //     trusted to the gate, and a road-snapped anchor is required too: a call-out about what you are
 //     looking at is worthless if it fires a kilometre before you can see it.
 
-import { and, eq, isNull, isNotNull, sql } from 'drizzle-orm'
+import { and, eq, isNull, isNotNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
+import { inAnyBbox } from '@skipper/db/bbox'
 import { narrations, pois } from '@skipper/db/schema'
 import { announce, assertReady, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
-import { requireRegionBbox, requireRegionKey, resolveRegion } from './pipeline/region'
+import { requireRegionBboxes, requireRegionKey, resolveRegion } from './pipeline/region'
 import { regionLabel } from './pipeline/geo'
 import { gateNarration } from './pipeline/gate'
 import { openingAngleFor, closingAngleFor, type NarrationRequest } from './pipeline/narrate'
@@ -138,7 +139,7 @@ async function main(): Promise<void> {
   const spread = flags.has('spread')
 
   const region = await resolveRegion(scenicTargetRegion)
-  const bbox = requireRegionBbox(region)
+  const bbox = requireRegionBboxes(region)
   const persona = personaFromKey('skipper')
 
   // The eligible population. Every clause is a REFUSAL with a reason:
@@ -161,8 +162,7 @@ async function main(): Promise<void> {
         isNotNull(pois.kind),
         isNotNull(pois.speakableLat),
         isNotNull(pois.speakableLng),
-        sql`${pois.lat} between ${bbox.swLat} and ${bbox.neLat}`,
-        sql`${pois.lng} between ${bbox.swLng} and ${bbox.neLng}`,
+        inAnyBbox(pois.lat, pois.lng, bbox),
       ),
     )
     .orderBy(pois.name)
