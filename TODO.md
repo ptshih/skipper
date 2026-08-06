@@ -922,29 +922,39 @@ Each surfaced on its own (three while testing the planner against the corpus, tw
 2026-08-04 and 2026-08-05) and none belongs to the b-side spec above, where they had previously come to
 rest. Every item below carries its own full context.
 
-- [ ] #76 (mobile, med, founder) **Lowest-friction signup — investigate the options.** Founder ask 2026-08-05.
-      Today the only way to make an account is **email + password**: `emailAndPassword` is enabled in
-      `apps/api/src/auth.ts`, and `socialProviders` registers a provider ONLY when both its env creds are
-      set — `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` and `APPLE_CLIENT_ID`/`APPLE_CLIENT_SECRET` are
-      catalogued in `.env.example` but are absent from `.env.production`. So **Google and Sign in with
-      Apple are already PLUMBED and merely dark** — this is a credentials-and-decision task first and a
-      build task second. Verify that against the live prod env before planning on it.
-      ⚠ The wall is `POST /drives` ("Make this drive"), which a rider reaches *after* a whole conversation
-      with the skipper. Friction here is spent on riders at their most invested, which is what makes this
-      worth measuring rather than guessing — start by finding where they actually drop (PostHog is the
-      demand instrument already in the repo).
-      ⚠ **App Store 4.8 makes this a coupled choice, not a menu:** offering a third-party sign-in obliges
-      an equivalent privacy-preserving option, which Sign in with Apple satisfies — so "just add Google"
-      is not a smaller step than doing both. ⚠ Confirm against the CURRENT guideline text, not this line.
-      ⚠ Two hard invariants constrain any answer (both in CLAUDE.md): the anonymous row is **hard-deleted
-      at link**, so state that must survive signup lives on the CLIENT and is re-sent — never keyed on the
-      anonymous user id; and the `FREE_DRIVE_CAP` grant fires at SIGNUP with `idempotency_key` giving
-      exactly-once. **A second signup path is a second place that grant can be missed or double-fired**,
-      so whatever lands needs a test on the grant, not just on the sign-in.
-      Also price in the same pass: passkeys, and email OTP / magic link — the latter would retire
-      passwords entirely, and with them the reset email that is currently the ONLY route back into a
-      locked-out account (a forgotten password costs a rider their drives AND their credits, permanently,
-      since the ledger never refunds). Deferring the wall further is a legitimate option to rank too.
+- [ ] #76 (mobile, med, founder) **Lowest-friction signup — INVESTIGATED 2026-08-05, decision owed.**
+      Founder ask 2026-08-05. Full write-up:
+      [docs/designs/lowest-friction-signup.md](docs/designs/lowest-friction-signup.md) — read §6/§7, they
+      carry the recommendation and the one question that is the founder's. What the investigation SETTLED,
+      so it is not re-derived:
+      ⚠ **It cannot be measured first.** The `wall_shown{source}` → `signup_completed` funnel is already
+      correctly built (`sign-in.tsx:90` fires only on `mode==='up'`, so a returning rider can't inflate it)
+      and reports from every EAS profile — but 1.1 is unreleased, so the population is empty by
+      construction. Same collapse `download-before-start.md` §Q5 hit the same day. This is a pre-release
+      judgement call; the instrument validates it AFTER release. Querying needs a personal `phx_…` key.
+      ⚠ **"Google and Apple are already plumbed and merely dark" is HALF TRUE — Google yes, Apple NO.**
+      Apple's `clientSecret` is an ES256 JWT that Apple caps at **six months** (15,777,000 s), so
+      `.env.example`'s static `APPLE_CLIENT_SECRET` entry is a time bomb on the one path a locked-out
+      rider can't route around; it needs TEAM_ID + KEY_ID + a `.p8` + `jose` + an async-factory refactor of
+      `auth.ts` (whose `socialProviders` is a plain object today). ⚠ The native ID-token path does NOT
+      avoid it — `@better-auth/core`'s provider disables itself without a secret (`apple.mjs:26`).
+      ⚠ **4.8 re-read from current text and CONFIRMED, sharper:** email+password is exempt ("your
+      company's own account setup"), and email/password **cannot** be Google's equivalent option — it fails
+      "allows users to keep their email address private". So "just add Google" is strictly LARGER than
+      doing both. Apple alone triggers nothing.
+      ✅ **Already de-risked — do not re-investigate:** the anonymous link matcher
+      (`plugins/anonymous/index.mjs:121`) names `/magic-link/verify`, `/email-otp/verify-email`,
+      `/passkey/verify-authentication`, `/one-tap/callback` and the social callbacks EXPLICITLY, so INV-4
+      holds on every candidate; and the `FREE_DRIVE_CAP` grant hangs off the UNIVERSAL
+      `databaseHooks.user.create.after`, not a per-route hook, so no new path can miss or double-fire it.
+      **Still owed:** a regression test pinning that hook's universality.
+      **Recommendation: email OTP first** (in better-auth core, no native rebuild, no OAuth creds, no 4.8
+      exposure, reuses Resend which is already live in prod — and it fixes the currently-unrecoverable
+      typo'd-email account, where a rider loses drives AND credits permanently). Apple second (better
+      friction, real week of cost). Passkeys last — prerequisite `webcredentials:skipper.fm` + AASA are
+      ALREADY shipped and serving, but the Expo client is community-only (core's throws in RN).
+      ⚠ Fix regardless of the decision: `.env.example`'s `APPLE_CLIENT_SECRET` line must say it expires,
+      or the Apple entries come out until the machinery exists.
 
 - [ ] #69 (corpus, low) **Two released clips about the SAME park, 200 m apart.** `Audrey Harris Park` exists twice in `pois`
       under two Wikidata QIDs — **Q49473201** (39.466388, -119.805833) and **Q107614151** (39.464735,

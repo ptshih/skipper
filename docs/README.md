@@ -245,6 +245,20 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
   the 1:1 `pois`↔`narrations` atom, no `roam_clips` table, and 1.1 then removed the mode outright.)
 
 ### designs/
+- [lowest-friction-signup.md](designs/lowest-friction-signup.md) — 📋 **INVESTIGATION, decision owed
+  2026-08-05** (TODO #76): what the wall could ask for instead of a password. ⚠ **The headline is that it
+  CANNOT be measured first** — the `wall_shown` → `signup_completed` funnel is already correctly built and
+  reporting from every EAS profile, but 1.1 is unreleased so the population is empty (the same collapse
+  [download-before-start](designs/download-before-start.md) §Q5 hit the same day). ⚠ "Google and Apple are
+  already plumbed and merely dark" is **half true**: Google is, Apple is NOT — its `clientSecret` is an
+  ES256 JWT Apple caps at **six months**, so `.env.example`'s static entry is a time bomb, and the provider
+  disables itself without one even on the native ID-token path. 4.8 re-read from CURRENT text: email+password
+  is exempt today, and adding Google **obliges** Apple (email/password cannot be the equivalent option — it
+  fails "keep their email address private"). ✅ Already de-risked: the anonymous link matcher names
+  magic-link, email-OTP, passkey and one-tap paths explicitly, and the free grant hangs off the UNIVERSAL
+  `user.create.after` hook, so no new path can miss or double-fire it. Recommends **email OTP first** (no
+  native rebuild, no rotating secret, and it fixes the unrecoverable typo'd-email account), Apple second,
+  passkeys last (prerequisite AASA already shipped, but the Expo client is community-only).
 - [studio-structured-output-hardening.md](designs/studio-structured-output-hardening.md) — ✅ BUILT
   2026-08-04. Answers the half of [planner-directions-not-taken](decisions/planner-directions-not-taken.md)
   §2 that named `packages/studio` as the AI SDK's first target: **declined, and fixed in-repo instead** —

@@ -1,0 +1,269 @@
+# Lowest-friction signup — what the wall could ask for instead of a password
+
+> **Status:** 📋 **INVESTIGATION COMPLETE, DECISION OWED — 2026-08-05** (founder ask, TODO #76). Every
+> claim below is verified against the installed `better-auth@1.6.23` source, the live prod env, the
+> served AASA, and the CURRENT App Store guideline text — not from memory. **Nothing is built.** The
+> headline is §0: the TODO's own suggested starting point (measure the drop in PostHog) **cannot be
+> executed**, and the reason is structural, not a tooling gap. §6 carries the recommendation and the
+> one question that is genuinely the founder's.
+
+---
+
+## §0 — The premise that does not hold: this cannot be measured first
+
+TODO #76 says *"start by finding where they actually drop (PostHog is the demand instrument already in
+the repo)."* That instinct is right and the instrument is real — but **the population does not exist.**
+
+- **The funnel is already built and correctly shaped.** `wall_shown` carries a `source` discriminating
+  all three walls (`propose`, `create_drive`, `drive_detail`, plus `drive_play`), and
+  `signup_completed` fires **only** on `mode === 'up'` — `sign-in.tsx:90`, deliberately `=== 'up'`
+  rather than `!== 'in'` so a returning rider's sign-in cannot inflate the wall's conversion rate.
+  `wall_shown` → `signup_completed` **is** the number this TODO wants. Nothing needs building.
+- **Events do reach PostHog from real builds.** `EXPO_PUBLIC_POSTHOG_KEY` is absent from
+  `.env.production` and `.env.development` (a local dev build is inert), but `apps/mobile/eas.json`
+  sets it on **all three** profiles — `development`, `preview`, `production` — so TestFlight and
+  production builds report.
+- ⚠ **But 1.1 is deployed and NOT released to riders.** There is no rider traffic through the wall, so
+  the conversion rate is empty-or-noise by construction, no matter what the dashboard shows. Whatever
+  TestFlight testers exist are the founder and invited friends — people who would push through any
+  wall, which is the population least able to answer a friction question.
+- Querying would need a PERSONAL API key (`phx_…`); only the public client key is committed. Project
+  `517151`.
+
+⚠ **This is the same collapse already recorded for a different question today** —
+[download-before-start.md](download-before-start.md) §Q5 reached the identical structural conclusion
+about `stop_skipped{mode:'live'}` on 2026-08-05. Two independent questions have now died on the same
+missing population. That is not a coincidence to note in passing; it is an argument that **RISK-1 (drive
+it once for real) and the release gate what can be decided by evidence at all.**
+
+**So: this is a pre-release judgement call, not a measurement.** The instrumentation is already correct
+and will validate the choice *after* release. Deciding to wait for data is deciding to wait for the
+release — which is a legitimate ranking (§6, option E), just not a cheap one.
+
+---
+
+## §1 — What is true today, verified
+
+| Claim | Verified | Where |
+|---|---|---|
+| Email + password is the **only** way to make an account | ✅ | `apps/api/src/auth.ts` `emailAndPassword.enabled: true` |
+| Google / Apple register **only when both creds are set** | ✅ | `auth.ts:124–131` — `socialProviders` is built conditionally |
+| Those creds are **absent from prod** | ✅ | `.env.production` holds 13 keys; no `GOOGLE_CLIENT_*`, no `APPLE_CLIENT_*` |
+| There is **no email verification** on signup | ✅ | no `requireEmailVerification`; reset is the only recovery |
+| Password reset is the **only** route back in | ✅ | `auth.ts:278–287`, and `RESEND_API_KEY` **is** set in prod |
+| `webcredentials:skipper.fm` entitlement is already shipped | ✅ | `app.json:18` |
+| The AASA already serves it | ✅ | `GET https://skipper.fm/.well-known/apple-app-site-association` → `200`, `{"webcredentials":{"apps":["L24UJYJ5DK.fm.skipper.app"]}}` |
+| No native auth deps installed | ✅ | no `expo-apple-authentication`, no `@react-native-google-signin/*` in `apps/mobile/package.json` |
+
+### ⚠ §1a — "Already PLUMBED and merely dark" is HALF TRUE, and the wrong half is Apple
+
+TODO #76 records that Google and Apple are *"already PLUMBED and merely dark — a credentials-and-decision
+task first and a build task second."* **For Google that is accurate. For Apple it is not, and the gap is
+a time bomb rather than a missing feature.**
+
+Apple's `clientSecret` is not a secret you paste once. It is a **JWT you sign with an ES256 key**, and
+Apple rejects any whose `exp` is more than **15,777,000 seconds (six months)** past `iat` — a hard,
+Apple-enforced ceiling ([Apple: Creating a client secret](https://developer.apple.com/documentation/accountorganizationaldatasharing/creating-a-client-secret),
+[better-auth #1522 "Apple Authentication client secrets will eventually expire"](https://github.com/better-auth/better-auth/issues/1522)).
+Generating it needs **four** inputs, not two: `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY` (a
+`.p8`), and the Services ID.
+
+Consequences, both concrete:
+
+1. **`.env.example` encodes the bomb.** It catalogues `APPLE_CLIENT_ID` + `APPLE_CLIENT_SECRET` as if
+   the secret were static. Fill those two in and Sign in with Apple works — **and then silently stops
+   working within six months**, on the one path a locked-out rider has no way around. No alarm fires;
+   the failure is an `invalid_client` at Apple, months after the deploy, with nobody looking.
+2. **`auth.ts`'s current shape cannot express the fix.** `socialProviders` is typed
+   `Record<string, { clientId: string; clientSecret: string }>` — a plain object. Better Auth supports
+   the regenerating form as an **async factory** (`apple: async () => ({ … })`), which is a different
+   shape. Adding Apple therefore *is* a code change to `auth.ts`, plus a `jose` dependency, plus a
+   decision about where the `.p8` lives.
+
+⚠ **And native Apple sign-in does not avoid this.** The obvious hope — "the native flow verifies an
+ID token, so surely no client secret is needed" — is false in this build. `@better-auth/core`'s Apple
+provider **disables itself outright unless both `clientId` and `clientSecret` are present**
+(`social-providers/apple.mjs:26`), before any ID-token path is reachable. The bundle id only affects
+which `audience` the token is checked against (`apple.mjs:62`:
+`options.audience ?? options.appBundleIdentifier ?? options.clientId`). **The secret machinery is
+mandatory either way.**
+
+---
+
+## §2 — The App Store 4.8 coupling, from the CURRENT text
+
+Fetched from [developer.apple.com/app-store/review/guidelines](https://developer.apple.com/app-store/review/guidelines/),
+not from the TODO's paraphrase. The trigger:
+
+> Apps that use a **third-party or social login service** (such as Facebook Login, Google Sign-In, Log in
+> with X, Sign In with LinkedIn, Login with Amazon, or WeChat Login) to set up or authenticate the user's
+> primary account **must also offer as an equivalent option another login service** with the following
+> features: the login service limits data collection to the user's name and email address; **allows users
+> to keep their email address private** as part of setting up their account; and does not collect
+> interactions with your app for advertising purposes without consent.
+
+Three things this settles:
+
+1. **Skipper is not triggered today.** The exception list includes *"Your app exclusively uses your
+   company's own account setup and sign-in systems"* — email+password is exactly that.
+2. **The TODO's warning is CONFIRMED and sharper than stated.** Adding Google obliges an equivalent
+   option, and **email/password cannot be that option** — it fails the second bullet outright (a rider
+   cannot keep their address private from us when the address *is* the credential). Sign in with Apple
+   is the option that satisfies all three. So *"just add Google"* is strictly **larger** than doing
+   both, because it drags in every cost in §1a and cannot stand alone.
+3. **Apple alone triggers nothing.** SIWA is the canonical equivalent, not a third-party service
+   requiring one. Apple-only is a complete, compliant step.
+
+⚠ Also note 5.1.1(v)'s second sentence, which bears directly on §5's ranking: *"Apps may not require
+users to enter personal information to function, except when directly relevant to the core functionality
+of the app or required by law."*
+
+---
+
+## §3 — What is already de-risked, and it is more than expected
+
+**The anonymous→account link matcher already covers every candidate path.** This was the invariant most
+likely to break under a new signup route (INV-4: the anonymous row is hard-deleted at link; a path that
+misses the matcher would strand a live anonymous session). It does not break. From the installed
+anonymous plugin (`dist/plugins/anonymous/index.mjs:121–122`), the matcher fires on:
+
+```
+/sign-in*   /sign-up*   /callback*   /oauth2/callback*   /magic-link/verify
+/email-otp/verify-email   /one-tap/callback   /passkey/verify-authentication
+/phone-number/verify   /verify-email
+```
+
+**Magic link, email OTP, passkeys, Google One Tap and the social callbacks are all named explicitly.**
+Native `signIn.social({ idToken })` posts to `/sign-in/social`, caught by `/sign-in*`. So every option in
+§4 inherits the correct link-and-delete behaviour with no work.
+
+**The free grant is likewise path-independent.** It hangs off `databaseHooks.user.create.after`
+(`auth.ts:361`) — the *universal* user-creation hook, not a per-route hook — gated by
+`shouldGrantAtSignup` (skips anonymous) and made exactly-once by the `free:<userId>` idempotency key
+under `ON CONFLICT DO NOTHING`. **A new signup path cannot miss or double-fire the grant**, which is
+the specific worry TODO #76 raises. It is structurally already answered.
+
+⚠ TODO #76's ask for *"a test on the grant, not just on the sign-in"* still stands — but as a
+**regression guard on that hook's universality**, not as per-path plumbing.
+
+---
+
+## §4 — The options, each with its real cost
+
+Ordered by rider friction, cheapest-to-the-rider first.
+
+### A. Passkeys — best friction, worst supply chain
+One Face ID prompt; nothing typed; nothing to forget; **kills the lockout problem outright.**
+- ✅ **The prerequisite is already shipped** — passkeys need the `webcredentials:` associated domain
+  and a matching AASA, and §1 confirms both are live. `rpID` would be `skipper.fm`.
+- ⚠ **Server plugin is a separate package** — `@better-auth/passkey`, not in core's plugin set. New dep
+  + an auth-schema regeneration (`bunx @better-auth/cli generate` → `db:generate` → `db:migrate`), and
+  ⚠ `db:generate` **needs a real TTY** (it prompts on renames).
+- ⛔ **The client does not work in Expo.** `@better-auth/passkey/client` calls browser WebAuthn
+  (`navigator.credentials`) and throws *"WebAuthn is not supported in this browser"* in React Native —
+  [better-auth#2235](https://github.com/better-auth/better-auth/issues/2235). The only bridges are
+  **community** Expo modules ([expo-better-auth-passkey](https://github.com/lobehub/expo-better-auth-passkey),
+  [expo-passkey](https://github.com/iosazee/expo-passkey)) wrapping `ASAuthorizationController`. That is
+  an unvetted third-party native module on the auth path, plus a native rebuild.
+- ⚠ **Needs a fallback regardless** — a rider with no passkey on a fresh device still needs a way in.
+  Passkeys are never the *only* method, so they are additive, not a replacement.
+
+### B. Sign in with Apple (native) — one tap, iOS-native, and the compliance keystone
+`expo-apple-authentication` → `signIn.social({ provider: 'apple', idToken })`. On an iOS-only product
+this is the shortest real path: the system sheet, Face ID, done.
+- ⚠ Native rebuild + new dep + the `usesAppleSignIn` entitlement.
+- ⚠ **All of §1a**: Services ID, `.p8` key, `jose`, the async-factory refactor of `auth.ts`, and a
+  **≤6-month secret rotation** that must not be allowed to fail silently.
+- ⚠ **Hide My Email is a duplicate-account vector — see §5.**
+- ✅ Unblocks Google later with no further 4.8 decision.
+
+### C. Email OTP — no password, no native code, no App Store coupling
+`emailOtp()` is **in core** (`better-auth/plugins/email-otp`, confirmed in the installed exports).
+Rider types their email, gets a 6-digit code, iOS keyboard autofills it from the message.
+- ✅ **Zero native modules, zero OAuth creds, zero 4.8 exposure, no `app.json` change.**
+- ✅ **Reuses the mailer already configured in prod** (`RESEND_API_KEY` is set).
+- ✅ **Fixes the lockout problem at the root**: it *proves* the address at signup, so the typo'd-email
+  account — today permanently unrecoverable, drives and credits included, since the ledger never
+  refunds — stops being possible. It also retires the password, and with it the reset flow that is
+  currently the single point of failure on re-entry.
+- ⚠ Friction is real but small: an app-switch to Mail. Strictly worse than one Face ID tap, strictly
+  better than inventing and remembering a password.
+- ⚠ Deliverability becomes load-bearing on the *signup* path, not just recovery. A code that lands in
+  spam is a rider who cannot sign up at all.
+
+### D. Magic link — same family, worse in-app
+`magicLink()` is also in core. But the link opens the **browser**, then needs a deep-link handoff back
+into the app. More moving parts than OTP for the same email round-trip. ⛔ **Dominated by C.**
+
+### E. Defer the wall further — cheapest to build, structurally constrained
+- ⚠ **This is not a UX knob; INV-4 makes it an architecture change.** Letting an anonymous rider create
+  a drive means writing `drives` against a user row Better Auth **hard-deletes at link** — and since
+  2026-08-02 the `databaseHooks.user.delete.before` purge *reaches* that path, so the drive would be
+  **deleted the moment the rider signs up**. Making it work means the drive lives on the CLIENT and is
+  re-POSTed after signup, which is the existing rule ("state that must survive signup lives on the
+  client and is re-sent"), applied to a much bigger object.
+- ✅ **It costs nothing external.** `POST /drives` → `buildDrive` is deterministic selection over the
+  existing corpus; the paid rider calls are `/drives/plan` (tokens) and `/drives/propose` (Routes),
+  both already anonymous. The credit is a product scarcity knob, not a cost recovery.
+- ⚠ So the honest framing: deferring the wall is **free in dollars, expensive in invariants**, and it
+  moves the friction rather than removing it — the rider still has to sign up before they can *drive*
+  what they made.
+
+---
+
+## §5 — Two hazards a new path introduces
+
+1. **⚠ Apple's Hide My Email splits accounts.** A rider who signed up as `pete@gmail.com` and later taps
+   Sign in with Apple **with Hide My Email** presents `…@privaterelay.appleid.com` — a different address,
+   therefore a **new user row, a second `FREE_DRIVE_CAP` grant, and their existing drives invisible.**
+   This is the "second place the grant can be double-fired" TODO #76 predicted; it is real, but it
+   arrives via *identity*, not via a missed hook (§3). Any Apple rollout owes a decision here.
+2. **✅ Auto-linking by verified email works, and is safe.** Verified in
+   `dist/api/routes/callback.mjs:94`: linking is blocked only when the provider is untrusted **and** the
+   email is unverified. `account.accountLinking.trustedProviders` is unset (→ `[]`), but Google and
+   Apple both assert `email_verified`, so a Google sign-in on an address that already has a password
+   account **links to the same row** — no duplicate, no second grant. The hazard is (1) only.
+
+---
+
+## §6 — Recommendation
+
+**Ship C (email OTP) first; hold B (Sign in with Apple) as the deliberate second step; do not start
+with Google under any framing.**
+
+The reasoning, in order of weight:
+
+1. **C is the only option that removes a real defect rather than shaving seconds.** Today a typo'd email
+   at signup is an unrecoverable account — drives *and* credits gone, permanently, because the ledger
+   never refunds and reset mail goes to an address the rider never owned. OTP proves the address at the
+   moment of signup. Every other option leaves that hole open. *"Optimize for charm, not scale"* cuts
+   toward the option that stops a rider losing their drives.
+2. **C is the only option with no native rebuild, no App Store coupling, and no rotating secret.** It is
+   a server plugin plus a screen, on infrastructure (Resend) already live in prod.
+3. **B is the better *friction* answer and should still happen** — one Face ID tap beats an app-switch
+   to Mail on an iOS-only product. It is second because it costs a native rebuild, a `.p8`, an `auth.ts`
+   refactor, a §5.1 identity decision, and a six-month rotation obligation that must be alarmed. That is
+   a real week, and it should be spent knowingly rather than as "turn on the dark config."
+4. **A (passkeys) is the right destination and the wrong next step** — the prerequisite is already
+   shipped, which is genuinely encouraging, but an unvetted community native module on the auth path is
+   not a trade to make before the product has riders. Revisit when a first-party Expo client exists.
+5. **E (defer the wall) is not free** and moves friction rather than removing it. Rank it only if the
+   answer to §0 is "wait for data" — because then it is the *only* option that also increases the
+   population the data would come from.
+
+⚠ **Whatever lands, the guard TODO #76 asks for is a test that `databaseHooks.user.create.after` grants
+on the new path** — i.e. that the hook's universality (§3) is a fact, not a coincidence.
+
+## §7 — The one question that is actually the founder's
+
+Everything above is verifiable. This is not:
+
+**Is the goal to reduce friction, or to stop losing riders to lockout?** They point at different first
+steps. If friction, B (Apple) is the honest answer and its costs should be paid deliberately. If
+robustness, C (OTP) is, and it is far cheaper. The recommendation picks C because the lockout is a
+present defect and the friction is a hypothesis that §0 shows cannot be tested yet — but that is a
+judgement about which risk is worse, and it is the founder's to make.
+
+⚠ **Independent of the answer, one thing should be fixed now:** `.env.example`'s
+`APPLE_CLIENT_SECRET=...` line invites a future agent to paste a static secret that expires inside six
+months. It should say so, or the Apple entries should come out until §1a's machinery exists.
