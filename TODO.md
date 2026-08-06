@@ -25,7 +25,7 @@ the closing paren is the item, unchanged: a headline clause first, then as much 
 ⚠ **A section heading and its preamble are SHARED context for every item under it** — read the preamble
 before acting on an item, and put a new item under the section whose preamble already applies to it.
 
-**next-id: 76.** Ids are never reused, so this counter — not the highest id in the file — is what
+**next-id: 77.** Ids are never reused, so this counter — not the highest id in the file — is what
 survives deleting the newest item. `/todo` takes the max of the two.
 
 > ♻ **Re-baselined 2026-08-03: 2006 → ~700 lines.** Every finished build log was deleted per the rule
@@ -916,11 +916,35 @@ Owed, in dependency order — **nothing below is started**:
       re-rolls retakes. ⚠ Do the prompt tweak and the source widening FIRST; regenerating into a known
       defect buys the same defect at full price.
 
-## Unfiled — four open questions with no section of their own
+## Unfiled — five open questions with no section of their own
 
-Each surfaced on its own (three while testing the planner against the corpus, one a founder question on
-2026-08-04) and none belongs to the b-side spec above, where they had previously come to rest. Every item
-below carries its own full context.
+Each surfaced on its own (three while testing the planner against the corpus, two founder questions —
+2026-08-04 and 2026-08-05) and none belongs to the b-side spec above, where they had previously come to
+rest. Every item below carries its own full context.
+
+- [ ] #76 (mobile, med, founder) **Lowest-friction signup — investigate the options.** Founder ask 2026-08-05.
+      Today the only way to make an account is **email + password**: `emailAndPassword` is enabled in
+      `apps/api/src/auth.ts`, and `socialProviders` registers a provider ONLY when both its env creds are
+      set — `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` and `APPLE_CLIENT_ID`/`APPLE_CLIENT_SECRET` are
+      catalogued in `.env.example` but are absent from `.env.production`. So **Google and Sign in with
+      Apple are already PLUMBED and merely dark** — this is a credentials-and-decision task first and a
+      build task second. Verify that against the live prod env before planning on it.
+      ⚠ The wall is `POST /drives` ("Make this drive"), which a rider reaches *after* a whole conversation
+      with the skipper. Friction here is spent on riders at their most invested, which is what makes this
+      worth measuring rather than guessing — start by finding where they actually drop (PostHog is the
+      demand instrument already in the repo).
+      ⚠ **App Store 4.8 makes this a coupled choice, not a menu:** offering a third-party sign-in obliges
+      an equivalent privacy-preserving option, which Sign in with Apple satisfies — so "just add Google"
+      is not a smaller step than doing both. ⚠ Confirm against the CURRENT guideline text, not this line.
+      ⚠ Two hard invariants constrain any answer (both in CLAUDE.md): the anonymous row is **hard-deleted
+      at link**, so state that must survive signup lives on the CLIENT and is re-sent — never keyed on the
+      anonymous user id; and the `FREE_DRIVE_CAP` grant fires at SIGNUP with `idempotency_key` giving
+      exactly-once. **A second signup path is a second place that grant can be missed or double-fired**,
+      so whatever lands needs a test on the grant, not just on the sign-in.
+      Also price in the same pass: passkeys, and email OTP / magic link — the latter would retire
+      passwords entirely, and with them the reset email that is currently the ONLY route back into a
+      locked-out account (a forgotten password costs a rider their drives AND their credits, permanently,
+      since the ledger never refunds). Deferring the wall further is a legitimate option to rank too.
 
 - [ ] #69 (corpus, low) **Two released clips about the SAME park, 200 m apart.** `Audrey Harris Park` exists twice in `pois`
       under two Wikidata QIDs — **Q49473201** (39.466388, -119.805833) and **Q107614151** (39.464735,
