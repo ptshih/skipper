@@ -329,11 +329,19 @@ Everything here is owned by [app-store-submission.md](app-store-submission.md) �
       ⚠ `GET /planner/copy` **404s and that is CORRECT** — it existed for one afternoon and
       `/bootstrap` replaced it (`apps/api/src/index.ts:94` says so). Probing it and reporting a
       regression is a trap this sweep fell into once already.
-      ⏳ **Still owed, and it is the ONLY red item on the server side: one anonymous
-      `POST /drives/plan` against prod.** It spends model tokens, so it is a deliberate act — and it
-      is the only proof `ANTHROPIC_API_KEY` is set on the deployed service. If it is NOT set, every
-      reviewer attempt gets the in-persona outage line and the app reads as broken rather than
-      unconfigured, on the exact path §10 sends them down first.
+      ✅ **The anonymous planner answers on prod — RUN 2026-08-06 (founder go), and this was the last
+      red item on the server side.** One `POST /drives/plan` with `regionId` = lake-tahoe and the
+      single rider turn §10 tells the reviewer to type, no session, no cookie: **HTTP 200 in 3.3 s**,
+      `{"say":"Tahoe City down to South Lake Tahoe — that the drive you want?","done":false}`.
+      That proves the three things worth proving: `ANTHROPIC_API_KEY` IS set on the deployed service,
+      the anonymous route is genuinely open (no wall, no 401), and the turn comes back in persona
+      rather than as the outage line. The read-back rather than an immediate draw is CORRECT — nothing
+      is drawn until the rider answers.
+      ⏳ **What this does NOT prove, and it is the other half of the reviewer's first minute:** the
+      DRAW turn and `POST /drives/propose` behind it were not exercised, so the route card under
+      "YOUR DRIVE" and the preview clip under "A TASTE OF THIS ONE" are still unproven on prod. That
+      leg bills Google Routes as well as more model tokens, so it is its own founder call — and it is
+      most cheaply proven by just walking §5 on a real build rather than by curl.
 - [ ] **Availability = United States ONLY.** One click, cheapest legal decision on the list.
 - [ ] Submit. Release type stays **MANUAL**, so approval lands in *Pending Developer Release* — the real
       Tahoe drive can still happen between approval and launch. That asymmetry is what made §0's trade

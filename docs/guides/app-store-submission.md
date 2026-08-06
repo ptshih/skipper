@@ -875,10 +875,16 @@ Re-run the list; don't inherit last release's ticks.
       this line has described a path that moved: probing a dead path reports a healthy deploy as
       broken. ⚠ `GET /planner/copy` 404s for the same reason (`/bootstrap` replaced it) — do not add
       it back as a check.
-- [ ] **The planner answers anonymously:** `POST https://api.skipper.fm/drives/plan` returns a turn
-      with no session. This is 1.1's primary review path (§10) and it needs `ANTHROPIC_API_KEY` set
-      in the deployed service — if it isn't, every reviewer attempt gets the in-persona outage line
-      and the app looks broken rather than unconfigured.
+- [x] ✅ **The planner answers anonymously** — verified 2026-08-06 (founder go; it spends model
+      tokens). `POST https://api.skipper.fm/drives/plan`, no session, the exact rider line §10 hands
+      the reviewer: **200 in 3.3 s**, in persona, `done: false`. So `ANTHROPIC_API_KEY` IS set on the
+      deployed service — which is the thing this check exists for, because if it weren't, every
+      reviewer attempt would get the in-persona outage line and the app would read as broken rather
+      than unconfigured, on 1.1's primary review path.
+      ⏳ **The DRAW turn and `POST /drives/propose` behind it are still unproven on prod** — that is
+      what puts the route under "YOUR DRIVE" and the clip under "A TASTE OF THIS ONE". It bills Google
+      Routes on top of model tokens, so it is a separate call, and walking §5 on a real build proves
+      it more cheaply than curl does.
 - [x] ✅ **The 1.1 metadata is entered in ASC** — pushed 2026-08-03 and re-pushed the same day after
       the em-dash sweep re-punctuated §3 and §4, both times read back independently. Re-verify with a
       no-flag `bun run asc:metadata` (it prints "already matches" for all three) rather than trusting
