@@ -520,7 +520,47 @@ label) and does not justify a build 16; it ships on the next natural rebuild.
 
 ---
 
-## 9. Screenshots — ⚠ **STALE for 1.1; recapture is its own step**
+## 9. Screenshots — ✅ **RECAPTURED 2026-08-06; six frames are built and NOT yet uploaded**
+
+> **The new set lives in `.scratch/store-screenshots-1.1/`** (gitignored, so it survives but is not
+> committed — PNGs do not belong in the tree). All six are 1320×2868, captured on a booted **iPhone 17
+> Pro Max** simulator running HEAD's JS over Metro, dark mode, `simctl status_bar` at 9:41 with a full
+> non-charging battery, then composited by `bun run shot:compose`.
+>
+> | # | file | kicker / caption | screen |
+> |---|---|---|---|
+> | 1 | `1-plan.png` | PLAN IT BY TALKING · *Tell him where you're headed, in your own words.* | cold open: poster, "Where are we headed?", the five example rows |
+> | 2 | `2-proposal.png` | HEAR IT FIRST · *He draws up the drive and plays you a real stop from it.* | the drawn route card + "A TASTE OF THIS ONE" + "Make this drive" |
+> | 3 | `3-stories.png` | TOLD ON THE ROAD · *A story for every stop, timed to the drive.* | saved drive, NOW PLAYING dock with the scrubber running |
+> | 4 | `4-map.png` | *Starting in Lake Tahoe.* | the route on the map with all ten stop pins |
+> | 5 | `5-handsfree.png` | EYES ON THE ROAD · *He starts himself at every stop. Nothing to tap.* | READY TO ROLL |
+> | 6 | `6-offline.png` | NO BARS REQUIRED · *Load it up first and the whole drive plays offline.* | the download gate, unsaved, with its size label |
+>
+> ⚠ **Exactly ONE caption names the place** — #4, per §9b's policy. Kept deliberately.
+>
+> ⚠ **THE LIVE-GPS PLAYER SHOT COULD NOT BE STAGED, and the reason is documented rather than a
+> failure.** Shot 3 is the drive-detail mini-preview, not a GPS-triggered stop. A real `simctl location`
+> run along this drive's own polyline (59 waypoints at 20 m/s into a 329 m trigger) moved the car marker
+> but fired **nothing** — "Looking for the satellites" persisted and the counter stayed 0/10. That is
+> exactly [1-1-submission-sweep.md](1-1-submission-sweep.md) §0's prediction: `accuracyOk`
+> (`packages/engine/src/fix-mapper.ts`) rejects the iOS **-1** sentinel outright, and with speed
+> sanitized to 0 the ceiling collapses to its floor, so every simulated fix is dropped. **Do NOT "fix"
+> the trigger engine over this** — it is a simulator artifact, and §0 says so.
+> ⚠ The other route to a rolling player is SIM mode, which **renders a `SIM` tag and a "SIMULATED
+> DRIVE" block** (`app/drives/[id]/play.tsx`) — the exact thing this section has always said must never
+> ship to App Review.
+>
+> ⚠ **The simulator had SIMULATED GPS left ON** (persisted, admin-gated, Settings ▸ Developer). It was
+> switched back to **Real GPS**, which is the resting state the sweep guide requires. Worth knowing
+> because it is silent: a drive started with it on is simulated and records no trace.
+>
+> **Still owed:** uploading them. The six live 1.0 assets are still what ASC serves (verified
+> 2026-08-06: 6 at `APP_IPHONE_67` + 1 preview video), and replacing them is a deliberate act.
+> ⚠ **§9b's 28-second App Preview video is STILL STALE and is NOT covered by this recapture** — it
+> shows the `/sample` flow, and that screen and its route were deleted on 2026-08-05. It cannot merely
+> be re-checked; it needs re-shooting or removing.
+
+## 9a. The original 1.1 recapture brief — ⚠ **kept for its traps, superseded by the block above**
 
 > **Status 2026-08-02.** The six live assets show a product 1.1 deleted. Of the narrative order
 > below: **home is replaced** (the conversation is the home screen now), **the roam encounter shot is
@@ -913,7 +953,10 @@ Re-run the list; don't inherit last release's ticks.
       (read back from the live DB 2026-08-06). ⚠ Its PASSWORD is still owed a check and cannot be
       checked from here: it lives only in ASC, and since 2026-08-05 the password form is a FALLBACK
       behind "Use a password instead" — so confirm the reviewer can actually reach and use it.
-- [ ] Screenshots captured in dark mode (§9).
+- [x] ✅ **Screenshots captured in dark mode (§9)** — six new 1.1 frames built 2026-08-06 into
+      `.scratch/store-screenshots-1.1/`. ⏳ **Not uploaded**; ASC still serves the six 1.0 assets.
+- [ ] **The App Preview VIDEO (§9b) is still stale** — it shows the deleted `/sample` flow. Re-shoot or
+      remove it; it is the one asset the recapture did not cover.
 - [ ] The coverage sentence in the description still matches reality (it says Tahoe only).
 - [x] ✅ **Availability is United States ONLY — re-verified 2026-08-06 by paging all 175 territories:
       exactly ONE is available**, and its id decodes to `{"s":"6778946770","t":"USA"}`.
