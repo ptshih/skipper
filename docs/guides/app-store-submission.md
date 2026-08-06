@@ -18,12 +18,16 @@
 > the order): §9's screenshots, §8's App Privacy label (no public API — hand entry, and the free-text
 > question is a founder call), the two builds, and the on-device passes.
 >
-> ⚠ **NO BUILD IS ATTACHED, deliberately.** Renaming the record to 1.1.0 left build 15 — short version
+> ✅ **BUILD `25` IS ATTACHED (2026-08-06)** — id `9ece8ba8`, `processingState=VALID`, not expired,
+> `usesNonExemptEncryption=false` (so §11's export-compliance question is already answered and ASC will
+> not ask). Read back from the relationship after the PATCH rather than trusting the 204.
+> ⚠ **25 is the commit `98a292db` that §9's screenshots and §10's notes were BOTH verified against.**
+> That three-way coupling is the thing this listing keeps losing: swapping in a later build silently
+> re-opens every quoted UI string and every captured screen.
+> ⚠ The history, because it cost real time: renaming the record to 1.1.0 left build 15 — short version
 > `1.0.0`, the pre-1.1 roam client that 404s against the deployed API — still sitting on it, because
 > Apple does not detach a build when the record is renamed underneath it and warns about it nowhere.
-> It was detached on 2026-08-03; `asc:metadata` now checks for this every run. Attach the **newest
-> 1.1.0 build** once Apple finishes processing it. Submitting a mismatched build ships the wrong app
-> under the right number.
+> It was detached on 2026-08-03; `asc:metadata` checks for this every run.
 >
 > ⚠ **Newest build as of 2026-08-06 is `25`, BUILDING off `98a292db` (HEAD); `24` finished 08-05.**
 > ⚠ **Do not treat that number as stable, and never predict one:** `autoIncrement` burns a number at
@@ -983,8 +987,13 @@ Re-run the list; don't inherit last release's ticks.
       the em-dash sweep re-punctuated §3 and §4, both times read back independently. Re-verify with a
       no-flag `bun run asc:metadata` (it prints "already matches" for all three) rather than trusting
       this tick — that check is cheap and ASC does not warn when the doc and the listing drift apart.
-- [ ] **A build whose short version is `1.1.0` is attached.** The record deliberately has NONE right
-      now — see the Status block. ⚠ ASC does not warn about a mismatch; `asc:metadata` does.
+- [x] ✅ **A build whose short version is `1.1.0` is attached** — build **25** (`9ece8ba8`), attached
+      and read back 2026-08-06. ⚠ ASC does not warn about a mismatch; `asc:metadata` does.
+- [x] ✅ **Everything else the API can see is set** (swept 2026-08-06): copyright `2026 Manoa, Inc.`,
+      age rating `TWELVE_PLUS`, release type MANUAL, review contact + phone, demo account
+      `review@skipper.fm` with a password present, description 2565/4000, promo 168/170,
+      keywords 99/100. `whatsNew` is null and that is CORRECT — 1.0.0 was developer-rejected and never
+      released, so 1.1.0 is the first public release and Apple hides the field.
 - [x] ✅ **The demo account is healthy** — `review@skipper.fm` exists with a credit balance of **99**
       and still owns the saved drive §10 sends the reviewer to, "Tahoe City → South Lake Tahoe"
       (read back from the live DB 2026-08-06). ⚠ Its PASSWORD is still owed a check and cannot be

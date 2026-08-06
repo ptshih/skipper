@@ -304,13 +304,10 @@ Everything here is owned by [app-store-submission.md](app-store-submission.md) �
       `bun run asc:metadata -- --apply --version=1.1.0`, verified by an independent read-back. The
       record is now `1.1.0` / `PREPARE_FOR_SUBMISSION`. Re-check any time with a no-flag
       `bun run asc:metadata`; it prints "already matches" for all three fields.
-- [ ] **Attach the NEWEST 1.1.0 build** — `25` was building off HEAD as of 2026-08-06, but read the
-      number back from EAS rather than trusting this line; every rebuild supersedes it (19 was
-      superseded within hours, and 20 → 25 happened over three days). Wait for Apple's processing to
-      finish before it can be attached.
-      ⚠ **Attach the build whose commit matches the client the §5 walkthrough and the §10 notes were
-      verified against.** That coupling is the thing this step keeps losing: the notes quote UI
-      strings, so a build cut after the notes were pushed can silently invalidate them again.
+- [x] ✅ **Build `25` IS ATTACHED (2026-08-06)** — `processingState=VALID`, off commit `98a292db`,
+      which is the SAME client §9's screenshots and §10's notes were verified against. That three-way
+      coupling is the thing this step keeps losing: the notes quote UI strings, so a build cut after
+      the notes were pushed silently invalidates them. **If you cut another build, re-verify both.**
       ⚠ The record has NO build right now, on purpose: renaming it to 1.1.0 left
       build 15 (short version `1.0.0`, the pre-1.1 roam client) attached, because Apple neither
       detaches nor warns. It was detached; `asc:metadata` now checks this every run. Apple only offers
