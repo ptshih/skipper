@@ -4,11 +4,11 @@ A toy/lifestyle project: an AI-narrated, GPS-triggered driving audio tour with a
 persona, played as phone audio (CarPlay later). **Optimize for charm, not scale — the persona is the
 product.** When a choice trades polish-for-the-builder against scale-for-a-market, pick polish.
 
-⚠ **1.1 is DEPLOYED to prod (2026-08-02) but NOT released to riders** — roam is REMOVED entirely (git is
-the archive) and Create-a-Drive IS a conversation. **What is left is one guide:
-`docs/guides/1-1-submission-sweep.md`** — the builds, the on-device sweep, then the listing (the push
-itself is recorded in `docs/guides/1-1-cutover-runbook.md`). RISK-1's real drive is OFF the critical path
-(founder, 2026-08-03); that guide's §0 owns what the desk passes can't prove, so don't re-argue it here.
+⚠ **1.1 is DEPLOYED to prod (2026-08-02), NOT released to riders, and 1.1.0 is IN APPLE'S QUEUE** —
+`WAITING_FOR_REVIEW`, resubmitted 2026-08-14 after a Guideline 2.1 "information needed" round. Roam is
+REMOVED entirely (git is the archive) and Create-a-Drive IS a conversation. The submission sweep is
+EXECUTED: **`docs/guides/app-store-submission.md` is the live record** — its §14 owns the 2.1 round, its
+§13 the store link on approval; release stays MANUAL. RISK-1's real drive is STILL OWED — Milestones owns it.
 `docs/designs/drives-first-1-1.md` is the build truth — read it before touching `apps/api` or `apps/mobile`.
 
 ## STOP — the expensive or irreversible mistakes
