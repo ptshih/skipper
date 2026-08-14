@@ -1,7 +1,28 @@
 # App Store Connect — the submission cheat-sheet
 
-> **Status:** ✅ **1.1.0 IS SUBMITTED — `WAITING_FOR_REVIEW` since 2026-08-06T20:11:36Z.**
+> **Status:** ✅ **1.1.0 IS BACK IN REVIEW — `WAITING_FOR_REVIEW` since 2026-08-14T07:16:27Z**, after
+> a Guideline 2.1 "Information Needed" round. Nothing in the app failed: Apple's new-app
+> questionnaire asks for seven things, and only item 1 — **a screen recording on a physical device** —
+> was real work. Both are done and **§14 is the record**: the recording (captured, verified, 4.5 MB)
+> and the reply (3901/4000, sent).
 >
+> ⚠ **REPLYING IN RESOLUTION CENTER DOES NOT REQUEUE THE APP — you must click "Resubmit to App
+> Review".** Proven here: the reply went in, and both states sat unchanged at
+> submission `UNRESOLVED_ISSUES` / version `READY_FOR_REVIEW` until the button was clicked. A
+> `READY_FOR_REVIEW` version is *submittable*, not *submitted*; an app can sit out of the queue
+> looking answered. ✅ **Resubmitting reused submission `445ea909` rather than opening a new one**, so
+> the Resolution Center thread stays attached, and **build 25 rode through untouched** with release
+> type still MANUAL.
+>
+> ⚠ **The VERSION-level state is the one that drifts** — it read `REJECTED`, then
+> `READY_FOR_REVIEW`, on two read-only passes twelve minutes apart (the founder was clicking around
+> ASC). The SUBMISSION state is the honest signal every time.
+>
+> ⚠ **Reply, don't resubmit.** Build 25 stays attached and `apps/mobile` has not moved since
+> `98a292db` (verified: zero commits touch it), so every string §10 and §14 quote is still the app
+> under review. A new build would re-open §9's screenshots and §10's notes for nothing.
+>
+> Prior status: submitted `WAITING_FOR_REVIEW` 2026-08-06T20:11:36Z.
 > Review submission `445ea909`, build **25** (`98a292db`). Release type stays **MANUAL**, so approval
 > lands in *Pending Developer Release* and the real Tahoe drive can still happen before launch — that
 > asymmetry is what made [1-1-submission-sweep.md](1-1-submission-sweep.md) §0's trade affordable.
@@ -1099,7 +1120,8 @@ Re-run the list; don't inherit last release's ticks.
       `availableInNewTerritories: false`, so it will not silently expand later. It defaults to every
       territory — if this ever ships wide, you have taken on GDPR without a policy that answers it
       (§1). ⚠ Read it from `/v1/apps/{id}/appAvailabilityV2` and then page its
-      `territoryAvailabilities` relationship; the `?include=` shortcut returns an EMPTY included array
+      `territoryAvailabilities` relationship **at `/v2/appAvailabilities/{id}/…`** (the `/v1/` form of
+      that relationship 404s — see §14c); the `?include=` shortcut returns an EMPTY included array
       and reads as "no territories available", which is indistinguishable from a real problem.
 
 ## 13. After approval — the store link goes live
@@ -1125,3 +1147,263 @@ one is safe to set early, one is not.
       `0.0.0`/`0.0.0`. Raising `minimum` is the one hard-break hatch in the API versioning posture
       (`docs/decisions/api-versioning-posture.md`) and walls every older client — a backend deploy,
       never an App Store release.
+
+---
+
+## 14. Guideline 2.1 — "Information Needed" (2026-08-13)
+
+**What happened:** 1.1.0 came back `REJECTED` under **2.1 · Information Needed**, Apple's standing
+questionnaire for a first submission. It reports **no defect** — no crash, no bug, no guideline
+violation. Seven items are asked for, and six of them are prose we already own (§§1–11 of this file).
+The seventh, item 1, is **a screen recording captured on a physical device**, and that is the whole
+job. The reply goes in **Resolution Center**, on the existing submission; the build does not change.
+
+⚠ **Resolution Center is not the same field as §10.** Apple closes with "include this information in
+the Notes field … for future submissions", which is advice for the NEXT version, not the fix for this
+one. §10 is at **3935/4000** and cannot absorb §14's answer; folding a compressed version in is a
+separate, optional edit (see the end of this section). Answer in Resolution Center first.
+
+### 14a. The recording — ✅ **CAPTURED AND VERIFIED 2026-08-13**
+
+> **Source:** `~/Downloads/ScreenRecording_08-13-2026 23-49-49_1.MP4` — 3:19, **1320×2868 @ 60 fps
+> HEVC**, i.e. an iPhone 16 Pro Max at native resolution, **iOS 26.6** (founder, 2026-08-13).
+> **Attach the compressed cut, not the source:** 85 MB → **4.5 MB** at 736×1600 H.264/AAC, tail
+> trimmed at 196.5 s (the source ends with Control Center open, stopping the capture). Text stays
+> legible at that size — checked on the encoded file, not assumed.
+>
+> ```sh
+> ffmpeg -y -t 196.5 -i raw.MP4 -vf "scale=-2:1600,fps=30" -c:v libx264 -profile:v high -crf 26 \
+>   -preset veryfast -pix_fmt yuv420p -c:a aac -b:a 96k -ar 44100 -ac 2 \
+>   -movflags +faststart skipper-review-walkthrough.mp4
+> ```
+>
+> **Verified against the file itself, not from memory** — every shot below lands, in order, and §14b's
+> timestamps were read off it. Audio is real and unclipped (mean **−22.7 dB**, peak **−2.3 dB**) and
+> plays in three stretches: **42.5–64.7 s** (the taste clip), **116.7–132.2 s** (the drive music bed
+> while rolling), **145.3–160.0 s** (a stop's narration). A silent recording of an audio app answers
+> nothing, which is why this is measured rather than trusted.
+>
+> ✅ **The deletion segment deleted the RIGHT account.** Read back from prod: `review@skipper.fm`
+> still exists with **1 drive and a balance of 99**, `ptshih@gmail.com` (admin) still has **8 drives
+> and 91**, and `hello@skipper.fm` — created on camera, deleted on camera — is **gone with zero
+> orphaned `drives` or `credit_entries` rows**. That last number is also the best evidence yet that
+> `purgeUserData` on the database hook actually works: the 5.1.1(v) claim is not just declared, it is
+> observed.
+>
+> ⚠ **AN iOS SCREEN RECORDING STRUCTURALLY CANNOT SHOW A SYSTEM PERMISSION ALERT** — and this is the
+> durable finding, worth more than this submission. At 113.5–115.5 s the screen **dims and nothing
+> appears**: ReplayKit captures the app's own windows, and the location alert is drawn by another
+> process. Re-recording cannot fix it, on any device. **So Apple's "include any prompts requesting
+> access to sensitive data" bullet is satisfied by EXPLAINING it**, which §14b's item 1 now does — the
+> pre-permission card before it, the dim at 1:53, and the status-bar location indicator from 1:56
+> onward are the three observable facts that bracket the invisible alert.
+
+The bar Apple set: a physical device, the latest OS, starting at LAUNCH, walking the typical user
+flow, and including registration / login / deletion, any paid-content flow, any user-generated
+content, and every sensitive-data prompt.
+
+**Before you press record**
+
+- **Device: the iPhone 16 Pro Max (`iPhone17,2`), on iOS 26.5.2** — the paired phone `xcrun devicectl
+  list devices` reports. ⚠ Check Settings ▸ General ▸ Software Update first; "latest OS" is Apple's
+  own wording and a point release behind is a free thing to be asked about twice.
+- **Install build 25 from TestFlight**, not a dev build. It IS the binary under review, and it is
+  attached, `VALID`, and past processing. (A `expo run:ios --device` build off HEAD would render the
+  same screens — `apps/mobile` has zero commits since `98a292db` — but "recorded on the submitted
+  build" is a sentence worth being able to write.)
+- **Delete the app first** so the recording opens on a true cold launch with no session. Apple's
+  "must begin with launching the app" is literal — start the capture on the Home Screen.
+- **A throwaway email inbox reachable ON the phone.** Sign-up is an emailed six-digit code
+  (`app/sign-in.tsx`: "there is no password sign-up path any more"), and the deletion segment has to
+  destroy a real account. ⚠ **NEVER record deletion on `review@skipper.fm`** — that is the reviewer's
+  own credential and §10 sends them to a drive it owns.
+- Do Not Disturb ON, volume up, Control Center screen recording with the **microphone OFF** — in-app
+  audio is captured either way and the mic only adds room noise. The audio IS the product; a silent
+  recording of an audio app answers nothing.
+
+**The shot list** — in order, one continuous take if you can. Every quoted string below was read out
+of `apps/mobile/src/ui/voice.ts` at HEAD, which is build 25's code.
+
+1. **Cold launch** from the Home Screen. Let the splash land on the cold open: **"Where are we
+   headed?"** over the composer.
+2. **Plan it, signed out.** Type exactly `Tahoe City down to South Lake Tahoe` and send. He answers
+   ("Chewing on that…"), then draws the route under the **YOUR DRIVE** kicker.
+3. **The taste clip.** Press play under **A TASTE OF THIS ONE** and let 10–15 s of real narration
+   play out loud. This is the shot that proves the product, and it happens with no account and no
+   permission prompt — say so in the reply.
+4. **The wall.** Tap **"Make this drive"** while still signed out: *"You'll need a free account to
+   keep this drive."* Apple's paid-content bullet is answered by showing that this is the ONLY wall
+   and it costs nothing.
+5. **Registration.** Sign in ▸ throwaway address ▸ **"Send me a code"** ▸ switch to Mail ▸ read the
+   code ▸ back ▸ enter ▸ **"Let's roll"**. Shows account creation end to end, no password.
+6. **Spend a credit.** **"Make this drive"** again. The drive is built and saved; the remaining-drives
+   line drops by one.
+7. **Download.** On the drive screen, **"Load up the drive"**, let it finish. ⚠ Skipping this is what
+   made the old §10 notes a broken promise — a stop tapped before the download reports it did not
+   come down.
+8. **Real narration from a saved drive.** Under *"Tap a stop to hear it."*, tap a stop, let 15 s play.
+9. **The location prompt — the bullet Apple asked for by name.** Tap **"Start the drive"**: the iOS
+   When-In-Use dialog appears carrying our purpose string (*"Skipper uses your location to play each
+   stop as you reach it on the drive."*), then Motion & Fitness if it fires. Allow both. The player
+   sits on *"Looking for the satellites. Hang tight."* and nothing plays, because the phone is not on
+   the route. Hold ~10 s, then **"Pull over"**. Do not cut this segment: it is the visible proof that
+   nothing before it asked for location.
+10. **My Drives.** The list icon, top-left → the saved drive is in the list.
+11. **Sources & licenses.** Settings (gear) ▸ *"Sources & licenses"* — the CC attribution screen.
+    Answers item 7 with a picture instead of a paragraph.
+12. **Account deletion.** Settings ▸ **"Delete account"** ▸ **"Email me a code"** ▸ fetch it ▸
+    **"Permanently delete"** ▸ **"Delete forever"**. Land back on the signed-out cold open. Optional
+    and worth 5 s: try to sign in with that address again and show there is nothing there.
+
+⚠ **Do NOT open Settings ▸ Developer on camera.** Simulated GPS is admin-gated (`user.role`), so it
+is a mode the reviewer cannot reach; showing it invites a question nobody asked. Same reason §9 bars
+the `SIM` badge from a store asset.
+
+### ONE video, and it is the desk walkthrough — no simulated drive
+
+**Decided 2026-08-13.** Apple's own list is launch, typical flow, registration/login/deletion, paid
+flows, user-generated content, permission prompts. **The trigger firing is not on it.** The
+walkthrough covers every item Apple named, and it already proves the audio twice — the route-preview
+clip (shot 3) and a full stop from a saved drive (shot 8). Shot 9 shows the live drive waiting on a
+fix, which is the honest picture of a Tahoe product reviewed in Cupertino. A simulated clip answers
+an unasked question by putting a developer mode into a review thread. **Hold it in reserve**: if
+review comes back with "we could not see the core feature", send it THEN, against a specific
+question, with the one-sentence explanation. §14b's item 1 already offers a real drive on request.
+
+⚠ **If it is ever sent, the mechanics, so they are not re-derived under time pressure.** The FLAG is
+easy to keep off camera; the PLAYER is not.
+
+- **The flag persists and survives sign-out.** `skipper.simMode` in SecureStore, read at startup
+  (`src/lib/sim-mode.tsx`), and the wrapped `signOut` (`src/lib/auth.ts`) purges downloaded drives
+  and nothing else. **The admin gate is on the WRITER ONLY** — Settings ▸ Developer. `play.tsx:58`
+  reads the value from context with no role check, so it keeps acting after you switch to a
+  throwaway account. Sequence: install ▸ sign in as yourself ▸ toggle ON ▸ sign out ▸ force-quit ▸
+  record. Set it AFTER installing — Keychain items can outlive an app deletion, so rely on neither
+  behaviour.
+- **Two renders cannot be switched off.** `SIMULATED DRIVE` + the *Real time / 8× faster* buttons
+  (`play.tsx:720`, `phase === 'ready'` only, so it is gone once rolling but it IS on the screen you
+  film just before), and the **`SIM` tag** beside "N of M stops" (`play.tsx:688`) for the whole
+  drive. Hiding either means editing the app, which means a build that is not the one under review.
+- **So never hide it — label it.** An unexplained `SIM` badge in a video *you* sent is a worse
+  question than the one it was avoiding. 8× is the right speed: a ten-stop drive in ~2 minutes.
+
+**The genuinely strongest asset, and it is not this:** 60 s of the app firing a stop *while actually
+driving* in Tahoe. No desk pass can fake it and it closes RISK-1
+([1-1-submission-sweep.md](1-1-submission-sweep.md) §0). It is a trip, not a recording session — do
+not hold the reply for it.
+
+**After capture**
+
+```sh
+ffmpeg -i raw.mov -vf "scale=-2:1280" -r 30 -c:v libx264 -crf 28 -preset veryfast \
+  -pix_fmt yuv420p -c:a aac -b:a 96k -movflags +faststart review-walkthrough.mp4
+```
+
+Attach it to the Resolution Center reply. If the file is refused for size, host it and paste the link
+— but a hosted link is a second thing that can break, so try the attachment first.
+
+### 14b. The reply — paste this into Resolution Center
+
+⚠ **RESOLUTION CENTER CAPS THE REPLY AT 4000 CHARACTERS** (founder, 2026-08-13). This block is
+**3901** — 3923 if the field normalises newlines to CRLF, so it clears either way. **Measure after any
+edit**, the same way §10's notes are measured; the first draft answering all seven items in full ran
+**10745** and would have been silently unsendable.
+
+**What the compression gave up, so nobody "restores" it.** The cuts were structural, not cosmetic:
+the signed-in walkthrough was DELETED and replaced by a pointer to §10's notes, which the reviewer
+already has attached to this same version and which say it better; the timestamp index was cut to the
+moments Apple named by name; the licence list kept the licences and dropped the four music artists
+(their attribution is a CC obligation discharged IN THE APP, not in a support thread). Nothing that
+answers one of the seven questions was dropped. ⚠ **The App Review Notes are now load-bearing for
+item 4** — if §10 is ever rewritten, this reply's "see the App Review Notes" stops being true.
+
+⚠ Do **not** paste the demo password here or anywhere else; it lives in App Review Information.
+
+```
+Thank you for the review. Answers in order.
+
+1. SCREEN RECORDING
+Attached: skipper-review-walkthrough.mp4 (3:16), recorded on the device in item 2, on build 25, the build attached here. It opens by launching the app from the Home Screen and planning a drive by typing to the guide. 0:42 a real narration clip from that route, with no account or permission prompt; 1:04 account creation (an email address, then a six-digit code we send; no password); 1:28 a drive created, spending one free drive credit; 1:48 the location prompt; 1:56 the live drive running, 0 of 17 stops played because the device is not on the route; 2:50 in-app account deletion, confirmed at 3:11.
+The iOS location alert is not visible: iOS omits system alerts from screen recordings. Our explanation appears at 1:48, the screen dims behind the alert at 1:53, and the status bar shows the location indicator from 1:56. The account deleted on camera is a throwaway, not the demo account.
+
+2. TESTED ON
+iPhone 16 Pro Max (iPhone17,2) on iOS 26.6 - the physical device the recording was made on, via TestFlight and development builds. Simulator on iOS 26.5: iPhone 17 Pro Max, 17, and SE (3rd gen). iPhone only, portrait only, no iPad; minimum iOS 16.4.
+
+3. WHAT IT IS, AND FOR WHOM
+Skipper is a hands-free audio tour for drivers. You plan a drive by TYPING to a guide character in plain language and he lays out the route, its stops and a researched story for each; then mount the phone and drive, and each story plays by itself as you reach the place it is about. The problem: what is worth knowing about a road is invisible from it, and a driver cannot read. Stories are researched per place ahead of time from cited public sources; where the record is thin the guide says so rather than invent. A downloaded drive plays with no signal. Audience: US road-trippers, day-trip drivers and their passengers.
+
+4. SETUP AND ACCESS
+No setup or sample files. Demo credentials are in App Review Information; the full walkthrough, signed out and signed in, is in this version's App Review Notes. Note: tap "Use a password instead" on the sign-in screen, because we normally email a code you cannot receive.
+
+5. EXTERNAL SERVICES
+Anthropic (Claude) - the planning conversation; the rider's typed request goes there to produce a route. No transcript is stored. Google Maps Platform - Routes API for the route, Maps SDK for the in-app map, Places API in our back office only. Google Cloud Text-to-Speech - narration audio, made ahead of time. Better Auth (self-hosted) for accounts; Resend sends sign-in codes. Google Cloud Run, Neon and Cloudflare R2 host the API, database and audio (private signed URLs). PostHog for analytics and crash reporting. No ad SDKs, data brokers or cross-app tracking, so no App Tracking Transparency prompt. No payment processor: no in-app purchases or subscriptions.
+
+6. REGIONAL DIFFERENCES
+Available in the United States only, and identical everywhere available - no region-gated features, pricing or content. What varies is the audio library, by road not country: it covers the Lake Tahoe region of California and Nevada; elsewhere the guide says so in character. The app asks for location only when you start a drive.
+
+7. REGULATED INDUSTRY / THIRD-PARTY MATERIAL
+Not a regulated industry: no health, financial, gambling, government or medical service, and no navigation. Third-party content is public-source, reused under licences permitting commercial use with attribution, credited in-app (Settings > Sources & licenses, 2:47): Wikipedia (CC BY-SA 4.0), Wikidata (CC0 1.0), Macrostrat (CC BY 4.0), Google Places under the Maps Platform Terms, and music under the Pixabay Content License and CC BY 4.0. We hold no licences needing documentation. There is no user-generated content: the rider's request to the guide is the only free text, is never shown to another user, and needs no reporting or blocking.
+```
+
+### 14c. The state to watch, because it moved on its own
+
+Read-only, twice on 2026-08-13, twelve minutes apart:
+
+| | first read | second read |
+|---|---|---|
+| `appStoreVersions[1.1.0].appStoreState` | `REJECTED` | **`READY_FOR_REVIEW`** |
+| `reviewSubmissions[445ea909].state` | — | **`UNRESOLVED_ISSUES`** |
+
+Nothing here wrote to ASC (`asc:metadata` without `--apply` is a read, and it reported "already
+matches" both times). ✅ **Cause confirmed the same day: the founder was clicking around the ASC UI.**
+**The submission's `UNRESOLVED_ISSUES` is the state that describes reality**; the version-level field
+is the one that drifts.
+
+✅ **The stray clicks broke NOTHING — swept read-only, 2026-08-13.** Worth recording because "I
+accidentally clicked some things" on a live submission is otherwise unfalsifiable, and because this
+list is the sweep to re-run next time:
+
+| checked | reads |
+|---|---|
+| build on the version | **25** (`9ece8ba8`), `VALID`, still attached |
+| submission `445ea909` | `UNRESOLVED_ISSUES`, **not canceled**, and its one item is `READY_FOR_REVIEW` — *not* `REMOVED` |
+| review detail | contact + phone intact · `demoAccountRequired=true` · `review@skipper.fm` · password **still set** · notes **3935** |
+| localization `en-US` | description 2565 · promo 168 · keywords 99 · `whatsNew` null · support + marketing URLs intact |
+| assets | six screenshots `APP_IPHONE_67`, all `COMPLETE` · one preview `IPHONE_67` `COMPLETE` @ `00:00:08:00` |
+| age rating | `TWELVE_PLUS` |
+| availability | **1 of 175** territories — `USA` — `availableInNewTerritories=false` |
+| accessibility declaration | `DRAFT`, `IPHONE`, `supportsDarkInterface` + `supportsSufficientContrast` — unchanged |
+
+⚠ **Two things the API cannot see, so they are the only ones worth eyeballing in the UI:** the App
+Privacy label (§8 — no public API at all) and whether a Resolution Center message was sent.
+⚠ **The item state to fear is `REMOVED`.** The 1.0.0 submission `a7560c44` shows exactly that on its
+item, which is what a withdrawn version looks like from here — a clean contrast against 445ea909's
+live item, and the fastest way to tell "still in review" from "quietly pulled out of it".
+
+⚠ **`territoryAvailabilities` hangs off `/v2/`, not `/v1/`** — `/v1/appAvailabilities/{id}/
+territoryAvailabilities` answers **404 `PATH_ERROR` "The relationship … does not exist"**, and a
+sweep that swallows the error reports **0 of 0 territories**, which reads as *availability was wiped*
+rather than *the path was wrong*. Follow the `related` link the `appAvailabilityV2` payload hands
+you; it is already `/v2/`. Same failure shape §12 warns about for `?include=`, different cause — and
+it cost one false alarm here.
+
+Why it matters: `READY_FOR_REVIEW` means the version is *submittable*, not *submitted*.
+
+✅ **RESOLVED 2026-08-14, and the answer is the durable lesson.** The reply went into Resolution
+Center and **nothing moved** — a re-read showed submission `UNRESOLVED_ISSUES` and version
+`READY_FOR_REVIEW`, exactly as before. **Replying does not requeue the app; "Resubmit to App Review"
+does.** One click later both read `WAITING_FOR_REVIEW` (`submittedDate` 2026-08-14T07:16:27Z), on the
+**same submission id** — so the thread survived — with **build 25 still attached** and release type
+still MANUAL. ⚠ Never let a resubmit swap the build: a newer one re-opens §9's screenshots and §10's
+notes, both verified against `98a292db` and only against it.
+
+### 14d. What is deliberately NOT being changed
+
+- **No new build.** Nothing failed. A rebuild re-opens the three-way coupling §9/§10 keep losing.
+- **No metadata push.** `bun run asc:metadata` (2026-08-13, no flags) reports all three fields already
+  match this doc. Leave them.
+- **§10's notes stay as they are, for now.** Apple's "put it in the Notes next time" is worth doing on
+  the NEXT version, where the 4000-char budget can be re-cut around it — items 3, 5 and 6 compress to
+  roughly 900 characters and the walkthrough would have to give up that much. Doing it now edits a
+  field a reviewer is mid-way through reading, to satisfy advice about a future submission. **Founder
+  call; the compression is the work, not the push.**
