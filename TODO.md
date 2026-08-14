@@ -1,12 +1,11 @@
 # TODO — engineering backlog
 
 > ⚠ **1.1 IS DEPLOYED TO PROD (2026-08-02) BUT NOT RELEASED TO RIDERS, AND IT DELETED ROAM.** The push
-> already happened ([docs/guides/1-1-cutover-runbook.md](docs/guides/1-1-cutover-runbook.md)); **what is
-> left is one executable guide,
-> [docs/guides/1-1-submission-sweep.md](docs/guides/1-1-submission-sweep.md)** — the two builds, the
-> on-device sweep, then the listing. Verified 2026-08-03: build `1.1.0 (20)` is uploaded and
-> `processingState=VALID`, and the 1.1.0 record is `PREPARE_FOR_SUBMISSION` with **no build attached
-> yet**. RISK-1's real drive is OFF the critical path (founder, 2026-08-03).
+> already happened ([docs/guides/1-1-cutover-runbook.md](docs/guides/1-1-cutover-runbook.md)) and the
+> sweep is **EXECUTED**: 1.1.0 is `WAITING_FOR_REVIEW` with build **25** attached, resubmitted
+> 2026-08-14 after a Guideline 2.1 "information needed" round —
+> [docs/guides/app-store-submission.md](docs/guides/app-store-submission.md) §14 is the live record and
+> owns what the next update owes. RISK-1's real drive is OFF the critical path (founder, 2026-08-03).
 > The build truth is [docs/designs/drives-first-1-1.md](docs/designs/drives-first-1-1.md) (D1–D42,
 > INV-1–INV-16) with verified file:line coordinates in
 > [docs/designs/drives-first-1-1-build-notes.md](docs/designs/drives-first-1-1-build-notes.md).
@@ -25,7 +24,7 @@ the closing paren is the item, unchanged: a headline clause first, then as much 
 ⚠ **A section heading and its preamble are SHARED context for every item under it** — read the preamble
 before acting on an item, and put a new item under the section whose preamble already applies to it.
 
-**next-id: 77.** Ids are never reused, so this counter — not the highest id in the file — is what
+**next-id: 79.** Ids are never reused, so this counter — not the highest id in the file — is what
 survives deleting the newest item. `/todo` takes the max of the two.
 
 > ♻ **Re-baselined 2026-08-03: 2006 → ~700 lines.** Every finished build log was deleted per the rule
@@ -375,6 +374,42 @@ updates its own.
 ⚠ `autoIncrement` burns a build number at QUEUE time, so never predict one; read it back.
 - [ ] #15 (store, low, blocked: 1.1 listing live) **Delete this entry once the listing is live** (the argument becomes true again) — or act on it if
       the release slips and testers need a clean wall instead of bare 404s.
+
+## App Store review — what the NEXT update owes (2026-08-14)
+
+1.1.0 came back on **Guideline 2.1 "Information Needed"** — not a defect, it is Apple's standing
+new-app questionnaire — was answered with a physical-device walkthrough plus a 3901-char reply, and was
+**resubmitted 2026-08-14**. [docs/guides/app-store-submission.md](docs/guides/app-store-submission.md)
+§14 is the record. Two lessons from that round, and both bind the NEXT update rather than this one:
+**(1)** Apple expects a location-locked app to ship a screen recording with EVERY submission, and there
+is an **Attachment field** in App Review Information we have never used; **(2)** a Resolution Center
+reply does NOT requeue the app — the "Resubmit to App Review" button does.
+⚠ **Nothing here may attach a new build while 1.1.0 is in review.** Writing the code is fine; attaching
+it is what re-opens §9's screenshots and §10's notes, verified against `98a292db` and only against it.
+
+- [ ] #77 (mobile, high) **Build the reviewer-reachable simulated drive** — build-ready spec at
+      [docs/designs/app-review-demo-mode.md](docs/designs/app-review-demo-mode.md). It serves TWO
+      audiences (the founder filming the submission video, the reviewer reproducing it), and that second
+      one is what makes filming a labelled sim drive honest rather than a leak. ⚠ **The unlock must NOT
+      be `isAdmin`** — that is the SOLE staged bypass (`apps/api/src/drives.ts:1093`) plus staged
+      `/regions`, so granting it to the demo account would hand App Review UNRELEASED content. Add a
+      narrower `isReviewer` and pin it with a test asserting it grants no staged bypass, same commit.
+      ⚠ Rename `voice.drive.simTag` before it reaches an App-Store-facing video — on an iPhone `SIM`
+      reads as the SIM card. ⚠ Film at REAL TIME, not 8×: at 8× the stop gaps fall below a clip's own
+      length and tellings collide. Smaller than it looks — `simulatedSource` and the `'sim' | 'live'`
+      union both survived the July preview cut (`docs/decisions/detail-page-mini-preview.md`).
+- [ ] #78 (store, high) **Write the per-update App Review pass, and freeze prod during a review.**
+      ⚠ **The freeze is the part with teeth, and it applies RIGHT NOW:** dev and prod share one Neon DB
+      and one R2, `db:push` DROPS to match the schema, and `dev:admin` runs unauthenticated against
+      production — so a migration, a region release or a corpus delete while a reviewer has the app open
+      shows them a broken product with nothing anywhere saying why. It has already bitten once quietly:
+      a region split made the reviewer notes misleading hours after they went live, with no app release
+      (`docs/decisions/tahoe-reno-region-split.md`). The guide should carry the freeze rule, the four
+      standing assets (the demo account with a lived-in drive, ONE canonical route string, a committed
+      GPX, the shot list + ffmpeg recipe) and a **lint over §10's review notes** — they quote live UI
+      copy from `voice.ts` that nothing tests, which has already forced two full rewrites and six stale
+      anchors in a single pass. Needs an allowlist for quotes that are not UI copy (the route the
+      reviewer types, Apple's own terms).
 
 ## `apps/api` — the one open item from the 2026-08-02 diligence pass
 
