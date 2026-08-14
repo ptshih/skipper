@@ -891,6 +891,22 @@ submissions**". That is the next version, **not this one** — and the distincti
   together — see §14b for the compressed wording, which is already written and already fits. This
   block is at 3935/4000, so the walkthrough has to give up about that much. Re-cut it deliberately at
   version-prep time; do not shave.
+- ✅ **Apple asks for item 3 independently of the 2.1 round, so it is not just compliance.** Their
+  own review advice tells you to "describe your app's concept and features in your own words",
+  "explain key features and how to enable them" and "identify your target audience" in this very
+  field ([Tech Talk 10885](https://developer.apple.com/videos/play/tech-talks/10885/)). This block
+  is 100% walkthrough today and says none of it — a reviewer learns WHAT TO TAP but never WHAT THE
+  APP IS. That is the gap worth the 900 characters.
+- 🆕 **USE THE ATTACHMENT FIELD — we have never used it.** App Review Information has an
+  **Attachment section**, and Apple's guidance is to "attach the files in the Attachment section in
+  App Store Connect and provide any descriptions or links in the Review Notes field"
+  ([App Review](https://developer.apple.com/distribute/app-review/)). §14's walkthrough video
+  belongs there on the next submission, referenced from this block by one line — which costs far
+  fewer characters than describing what the video shows, and puts it in front of the reviewer
+  BEFORE a question is asked instead of after. See §14a for why a location-locked app is expected to
+  ship a recording every time.
+- **If a round ever stalls or repeats: book an App Review appointment** through Meet with Apple and
+  talk to a reviewer directly. Free, and cheaper than a third guess at what they want.
 
 ✅ **This block is still TRUE as of 2026-08-13, and the proof is unusually good.** The §14 recording
 walked the scripted route — the exact string this block hands the reviewer — against PRODUCTION on
@@ -1297,7 +1313,22 @@ clip (shot 3) and a full stop from a saved drive (shot 8). Shot 9 shows the live
 fix, which is the honest picture of a Tahoe product reviewed in Cupertino. A simulated clip answers
 an unasked question by putting a developer mode into a review thread. **Hold it in reserve**: if
 review comes back with "we could not see the core feature", send it THEN, against a specific
-question, with the one-sentence explanation. §14b's item 1 already offers a real drive on request.
+question, with the one-sentence explanation.
+
+⚠ **COUNTER-EVIDENCE, found 2026-08-14 on Apple's own App Review page — read it before reusing this
+decision.** Apple's standing guidance for exactly our shape of app is: *"If reviewing the app
+requires being in a specific physical location, include a screen recording of the app in action with
+your submission so reviewers can evaluate the experience."*
+([developer.apple.com/distribute/app-review](https://developer.apple.com/distribute/app-review/)).
+Two things follow, and neither reverses the call above for THIS round (the reply is sent and it
+explains the gap in words):
+
+1. **The recording is not a rejection response, it is a STANDING submission asset for this app.** A
+   location-locked app is expected to ship one every time. §14's video should be attached to the next
+   submission up front, not produced under a 2.1 clock.
+2. **"The app in action" is the phrase to weigh.** The one thing our cut cannot show is the app in
+   action *on the road* — which is the product. That tilts the next round's calculus toward a real
+   Tahoe drive (RISK-1, which is owed anyway) rather than toward the simulator.
 
 ⚠ **If it is ever sent, the mechanics, so they are not re-derived under time pressure.** The FLAG is
 easy to keep off camera; the PLAYER is not.
