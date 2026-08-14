@@ -870,6 +870,31 @@ Thank you. Happy to help if anything is unclear.
 - **Location is addressed three times on purpose** — in the preamble, at "Start the drive", and in
   its own section. 1.1's answer genuinely improved (nothing before the drive asks), and 5.1.1 friction
   is cheaper to prevent than to appeal.
+### Owed to the NEXT version — fold §14's answers in here (2026-08-14)
+
+Apple closed the 2.1 round with "include this information in the Notes field … **for future
+submissions**". That is the next version, **not this one** — and the distinction is doing real work:
+
+- ⚠ **Do NOT edit this field while the version is `WAITING_FOR_REVIEW` / `IN_REVIEW`.**
+  `asc:metadata` warns on exactly those states: a localization edit may be refused, or may bounce the
+  submission back out of the queue. §14 cost a round getting into it.
+- ⚠ **§14b's reply now DEPENDS on this block existing.** Its item 4 reads "the full walkthrough,
+  signed out and signed in, is in this version's App Review Notes", which is what bought ~900 of the
+  characters that got the reply under 4000. **Deleting or gutting the walkthrough makes a sentence
+  Apple has already read become false.** If it goes, §14b's item 4 has to grow back first.
+- **The budget, so it is planned rather than squeezed:** Apple's items 3 (what it is / audience /
+  problem), 5 (external services) and 6 (regional differences) compress to roughly **900 characters**
+  together — see §14b for the compressed wording, which is already written and already fits. This
+  block is at 3935/4000, so the walkthrough has to give up about that much. Re-cut it deliberately at
+  version-prep time; do not shave.
+
+✅ **This block is still TRUE as of 2026-08-13, and the proof is unusually good.** The §14 recording
+walked the scripted route — the exact string this block hands the reviewer — against PRODUCTION on
+build 25, and got a real proposal, a real clip, and a 17-stop saved drive. That rules out the failure
+mode this section fears most: reviewer notes invalidated by a CORPUS or REGION change with no app
+release (it happened once already, below). Several `apps/api` region-geometry commits landed after
+build 25, and the drive still plans.
+
 ### ⚠ The 2026-08-06 re-verification — SIX defects, three of them dead ends
 
 Every anchor in the block above was re-read against the shipped screens on 2026-08-06 and **six were
