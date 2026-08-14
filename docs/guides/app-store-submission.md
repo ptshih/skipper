@@ -6,13 +6,17 @@
 > was real work. Both are done and **§14 is the record**: the recording (captured, verified, 4.5 MB)
 > and the reply (3901/4000, sent).
 >
-> ⚠ **REPLYING IN RESOLUTION CENTER DOES NOT REQUEUE THE APP — you must click "Resubmit to App
-> Review".** Proven here: the reply went in, and both states sat unchanged at
-> submission `UNRESOLVED_ISSUES` / version `READY_FOR_REVIEW` until the button was clicked. A
-> `READY_FOR_REVIEW` version is *submittable*, not *submitted*; an app can sit out of the queue
-> looking answered. ✅ **Resubmitting reused submission `445ea909` rather than opening a new one**, so
-> the Resolution Center thread stays attached, and **build 25 rode through untouched** with release
-> type still MANUAL.
+> ⚠ **A Resolution Center reply did not requeue the app by itself — "Resubmit to App Review" did.**
+> Observed: the reply went in, and both states sat unchanged at submission `UNRESOLVED_ISSUES` /
+> version `READY_FOR_REVIEW`; one click later, both read `WAITING_FOR_REVIEW`. ⚠ **Do not read that as
+> "a reply can never get you reviewed"** — the re-read was minutes after the reply, not a review
+> cycle, so a reviewer picking the thread up unprompted was never ruled out. What it does establish is
+> the ASYMMETRY, and that is the part to act on: resubmitting costs at most queue position, while not
+> resubmitting risks the app sitting OUT of the queue looking answered, with nothing in ASC saying so.
+> A `READY_FOR_REVIEW` version is *submittable*, not *submitted*. ✅ **Resubmitting reused submission
+> `445ea909` rather than opening a new one**, so the Resolution Center thread stays attached, and
+> **build 25 rode through untouched** with release type still MANUAL — which is what makes the click
+> cheap enough to be the default.
 >
 > ⚠ **The VERSION-level state is the one that drifts** — it read `REJECTED`, then
 > `READY_FOR_REVIEW`, on two read-only passes twelve minutes apart (the founder was clicking around
@@ -1414,13 +1418,19 @@ it cost one false alarm here.
 
 Why it matters: `READY_FOR_REVIEW` means the version is *submittable*, not *submitted*.
 
-✅ **RESOLVED 2026-08-14, and the answer is the durable lesson.** The reply went into Resolution
-Center and **nothing moved** — a re-read showed submission `UNRESOLVED_ISSUES` and version
-`READY_FOR_REVIEW`, exactly as before. **Replying does not requeue the app; "Resubmit to App Review"
-does.** One click later both read `WAITING_FOR_REVIEW` (`submittedDate` 2026-08-14T07:16:27Z), on the
-**same submission id** — so the thread survived — with **build 25 still attached** and release type
-still MANUAL. ⚠ Never let a resubmit swap the build: a newer one re-opens §9's screenshots and §10's
-notes, both verified against `98a292db` and only against it.
+✅ **RESOLVED 2026-08-14.** The reply went into Resolution Center and **nothing moved** — a re-read
+showed submission `UNRESOLVED_ISSUES` and version `READY_FOR_REVIEW`, exactly as before. One click on
+**Resubmit to App Review** and both read `WAITING_FOR_REVIEW` (`submittedDate` 2026-08-14T07:16:27Z),
+on the **same submission id** — so the thread survived — with **build 25 still attached** and release
+type still MANUAL. ⚠ Never let a resubmit swap the build: a newer one re-opens §9's screenshots and
+§10's notes, both verified against `98a292db` and only against it.
+
+⚠ **State the finding as an asymmetry, not a mechanism** — the re-read was minutes after the reply,
+which cannot rule out a reviewer picking the thread up on their own. **Resubmit anyway**: the cost is
+at most queue position, and the alternative failure is an app parked outside the queue for days while
+ASC shows nothing wrong. ⚠ **The resubmit OVERWRITES `submittedDate`** — `445ea909` used to read
+2026-08-06T20:11:36Z and now reads today. Apple exposes no rejection or review-completed timestamp at
+all, so **a round's turnaround is unmeasurable after the fact**; capture it when it happens or lose it.
 
 ### 14d. What is deliberately NOT being changed
 
