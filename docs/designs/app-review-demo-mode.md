@@ -9,6 +9,28 @@
 > ⚠ **This is deliberately NOT a rider-facing feature.** The couch "simulated drive" for riders was
 > BUILT and then CUT (`../decisions/detail-page-mini-preview.md`, 2026-07-16). That decision stands.
 
+## §0 · TWO audiences, and the second one is why this works (founder, 2026-08-14)
+
+The mode serves **the reviewer reproducing a drive** *and* **the founder capturing the submission
+video with it**. That second use is what makes the first honest, and it dissolves the argument this
+session kept having:
+
+- A `SIM` badge in a video we send is only a problem when it shows a mode the reviewer **cannot
+  reach** and we are **not disclosing**. Once the mode is documented in the review notes and
+  reachable by the demo account, the badge is consistent with the story instead of a leak.
+- So the earlier call — *"one video, no simulated drive"*
+  ([../guides/app-store-submission.md](../guides/app-store-submission.md) §14a) — **is superseded for
+  future submissions** and should be re-read there. It was correct for a video sent with no such
+  feature; it does not survive the feature existing.
+- ⚠ The founder can already do this **today** — admin unlocks sim mode. **The recording is not
+  blocked on this build**; only the reviewer's ability to repeat it is.
+
+⚠ **Film at REAL TIME, not 8×.** `defaultFast: simMode` exists to make desk testing bearable, and it
+is the wrong choice for a camera: at 8× the gaps between stops compress below a clip's own length
+(they run ~0:50–1:52), so tellings would collide or drop and the drive would look broken to exactly
+the audience it is meant to reassure. The shot is **one or two stops firing at real speed** — the
+approach, the trigger, the telling landing — which is 60–90 seconds, not a whole 49-minute drive.
+
 ## §1 · The job, and why the July cut does not settle it
 
 The cut killed a linear run-through as the answer to **"did I get a good drive?"** — the founder's
@@ -35,9 +57,16 @@ at a steady speed and fires stops through the **real trigger engine**, at 1× or
 stand between it and a reviewer:
 
 1. It is gated on **`isAdmin`** — the wrong key, see §3.
-2. It renders `SIMULATED DRIVE` + the `SIM` tag. **KEEP BOTH** — labelling is the practice other
+2. It renders `SIMULATED DRIVE` + the `SIM` tag. **KEEP THE LABELLING** — it is the practice other
    condition-locked apps follow (Bluetooth/NFC/AR apps ship a demo mode and disclose it in the review
    notes), and an unexplained badge in a video *we* sent is a worse question than the one it avoids.
+
+⚠ **RENAME `SIM` — on an iPhone, "SIM" means the SIM card.** `voice.drive.simTag` was written when
+the only readers were us. It is now going into an App-Store-facing video and in front of a reviewer
+who has no reason to read it as "simulated", and a badge that looks like a cellular indicator sitting
+beside a stop counter is a question we are manufacturing. **`DEMO` is the candidate** — unambiguous,
+same length class, and it matches how the notes will describe the feature. `voice.drive.sim`
+("SIMULATED DRIVE") is already clear and stays.
 
 ## §3 · ⚠ The unlock must NOT be `isAdmin`, and this is the whole design risk
 
@@ -90,17 +119,17 @@ same commit.
 
 It does not prove the app works on a real road. `simulatedSource` emits finished fixes — it never
 touches CoreLocation, the accuracy gate, or the iOS `-1` sentinels
-(`../designs/desk-drive-harness.md`). **RISK-1 is untouched by this**, and a reviewer watching a
+(`./desk-drive-harness.md`). **RISK-1 is untouched by this**, and a reviewer watching a
 simulated drive is not evidence the product works. The honest framing in the notes is "this is how
 the drive behaves"; the real drive remains owed.
 
 ## §7 · Open, for the build
 
-- **Does a reviewer need to download the drive first?** Yes — audio is disk-only since 2026-08-05
-  (`download-before-start.md`). The notes already sequence this; keep the order.
-- **1× or 8× default?** `defaultFast: simMode` gives 8×, which turns a 49-minute drive into ~6
-  minutes. Right for a reviewer; confirm the copy names the speed so nothing looks broken.
-- **Does the reviewer role belong in the App Review notes at all, or in the Attachment field?**
-  See §10's next-version block in the submission guide — the video may be the cheaper answer, in
-  which case this feature competes with it rather than complementing it. **Decide which before
-  building both.**
+- ✅ **RESOLVED: the video and this feature are not competitors** (founder, 2026-08-14 — see §0). The
+  mode is HOW the video gets made, and the video is what makes the mode legible. Ship both: attach
+  the recording, and tell the reviewer in one line that they can run the same drive themselves.
+- **Does the sim drive still need the drive downloaded first?** Yes — audio is disk-only since
+  2026-08-05 (`download-before-start.md`). The notes already sequence this; keep the order.
+- **Do the transport controls read right at real time?** The `Real time / 8× faster` pair is desk
+  copy. If a reviewer sees it, "8× faster" is fine, but confirm the default lands on the one the
+  notes tell them to use.

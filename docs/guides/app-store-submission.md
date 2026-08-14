@@ -1330,6 +1330,16 @@ explains the gap in words):
    action *on the road* — which is the product. That tilts the next round's calculus toward a real
    Tahoe drive (RISK-1, which is owed anyway) rather than toward the simulator.
 
+⚠ **SUPERSEDED FOR FUTURE SUBMISSIONS (founder, 2026-08-14) — this decision does not survive the demo
+mode existing.** "No simulated drive in the video" was correct for a clip showing a mode the reviewer
+could not reach, which we were not disclosing. Once the simulated drive is a **documented, reviewer-
+reachable feature**, filming it is consistent rather than a leak — and the mode is *how the video
+gets made*. See [../designs/app-review-demo-mode.md](../designs/app-review-demo-mode.md) §0, which
+also carries the two traps: **film at REAL TIME, not 8×** (at 8× the stop gaps fall below a clip's
+own length and tellings collide), and **rename the `SIM` tag** before it reaches an App-Store-facing
+video, because on an iPhone "SIM" reads as the SIM card. ⚠ The decision above still stands for the
+CURRENT round, which is already submitted with the desk-only cut.
+
 ⚠ **If it is ever sent, the mechanics, so they are not re-derived under time pressure.** The FLAG is
 easy to keep off camera; the PLAYER is not.
 
