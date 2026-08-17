@@ -1,6 +1,17 @@
 # App Store Connect — the submission cheat-sheet
 
-> **Status:** ✅ **1.1.0 IS BACK IN REVIEW — `WAITING_FOR_REVIEW` since 2026-08-14T07:16:27Z**, after
+> **Status:** ⚠ **1.1.0 IS `REJECTED` AGAIN (2026-08-17) — Guideline 2.1, round TWO: "unable to sign
+> in" with the demo account.** The credentials are **VALID** — the exact pair Apple quoted signs in
+> against production, re-verified the same day — and the server logs show the reviewer **never
+> reached the password screen**: they tapped the primary "Send me a code" CTA, landed on the
+> number-pad code step (which has no password option), failed one code attempt and stopped, ~90
+> seconds into the review. **§15 is the record and carries the ready-to-paste reply (1744/4000).
+> The move is the same as §14: reply in Resolution Center, then click Resubmit to App Review.** No
+> build change, no metadata change, no password change — the reply's whole point is that nothing on
+> our side is broken.
+>
+> Prior status (kept for the diff): ✅ 1.1.0 was back in review — `WAITING_FOR_REVIEW` since
+> 2026-08-14T07:16:27Z — after
 > a Guideline 2.1 "Information Needed" round. Nothing in the app failed: Apple's new-app
 > questionnaire asks for seven things, and only item 1 — **a screen recording on a physical device** —
 > was real work. Both are done and **§14 is the record**: the recording (captured, verified, 4.5 MB)
@@ -1483,3 +1494,98 @@ all, so **a round's turnaround is unmeasurable after the fact**; capture it when
   roughly 900 characters and the walkthrough would have to give up that much. Doing it now edits a
   field a reviewer is mid-way through reading, to satisfy advice about a future submission. **Founder
   call; the compression is the work, not the push.**
+
+---
+
+## 15. Guideline 2.1 — round two: "unable to sign in" (2026-08-17)
+
+**What happened:** the 2026-08-14 resubmit came back `REJECTED` on 2026-08-17, again under **2.1 ·
+Information Needed**, but a different complaint: *"We were unable to sign in with the following demo
+account credentials you provided"*, quoting `review@skipper.fm` and the password verbatim. Review
+device: **iPad Air 11-inch (M3)** — the app is iPhone-only, so it ran in compatibility mode (noted,
+not implicated; see 15a). Apple's next-steps offer valid credentials **or "a demonstration mode that
+shows all of the features and functionality"**, and — new this round — state that *"we cannot use a
+demo video showing the app in use to continue the review."*
+
+### 15a. The diagnosis — the credentials are VALID; the reviewer never reached the password screen
+
+Established the same day, each step verified rather than inferred:
+
+1. **The exact credentials Apple quoted sign in against production.** `POST /api/auth/sign-in/email`
+   with the address and password lifted from the rejection text → **HTTP 200** and a real session
+   (2026-08-17T17:03Z). The credential row's hash is untouched since the account was created on
+   2026-07-28 (`account.updatedAt` = `createdAt`), `emailVerified` is still `true` (the 08-05
+   backfill held, so `revokeUnprovenAccountAccess` never had grounds to fire), the user is not
+   banned, and ASC still holds the password. Nothing on our side moved: **zero `apps/api` or
+   `apps/mobile` commits since 08-13**, and build 25 is still the attached binary.
+2. **The reviewer never completed any sign-in.** `review@skipper.fm` has no session dated 08-17; its
+   newest is the founder's build-25 session from 08-06.
+3. **The Cloud Run request log shows the entire review session, and it is ~90 seconds** (07:51–07:52
+   UTC, UA `Skipper/25`): bootstrap → anonymous mint → `POST /email-otp/send-verification-otp` →
+   **200** (a code really was mailed — it landed in the skipper.fm catch-all) → one
+   `POST /sign-in/email-otp` → **400** (a failed code entry) → nothing further. ⚠ **No request to
+   `/sign-in/email` — the password endpoint — exists anywhere in the review window.** They also never
+   touched the planner: no `/drives/plan`, no `/drives/propose`. The review stalled at sign-in and
+   ended there; the anonymous front door §10 leads with was never exercised.
+
+**Root cause, and it is in the client, not the account:** on `app/sign-in.tsx`, **"Use a password
+instead" is a ghost button on the EMAIL step only.** The primary CTA is "Send me a code"; tap it —
+the obvious move — and the code step offers a **number-pad-only** input plus "Send another code" /
+"Use a different email". No password path, and a password cannot even be typed into the field. §10's
+instruction ("tap 'Use a password instead'") is unfollowable from the step the reviewer was actually
+on. So they requested a code for an inbox they cannot read, failed one entry, and stopped — which
+surfaces at Apple's end as "unable to sign in with the credentials provided."
+
+**The durable lesson:** a reviewer follows the primary CTA, not the notes. §10 said the right thing
+in the right field and it did not matter. Anything review-critical must be reachable from EVERY step
+of the flow it lives in, or BE the primary path — notes are advisory; the UI is the instruction.
+(TODO #79 is the one-screen client fix; #77's demo mode is the structural answer Apple's own letter
+names as acceptable.)
+
+### 15b. The reply — paste into Resolution Center, then click Resubmit to App Review
+
+Same mechanics as §14c: the reply alone does not requeue; the **Resubmit** click does, it reuses the
+submission (the thread survives), and the asymmetry argument stands — resubmitting costs at most
+queue position. Measured at **1744/4000** (LF; CRLF normalization adds ~22). ⚠ Do not add the
+password to the reply — Apple already holds it in App Review Information, and this reply's whole
+point is that it works as held.
+
+```
+Thank you for the review. The demo account credentials in App Store Connect are valid. After reading your message we re-verified them against our production server: the exact username and password quoted in your message sign in successfully, unchanged since the account was created.
+
+Our server logs from the review session show what happened, and it is an easy miss: the app's sign-in screen defaults to emailing a six-digit code, and the review device requested a code for review@skipper.fm - an inbox App Review cannot read, which is exactly why we provide a password instead. The password entry is behind a separate button on the sign-in screen, and the logs show that screen was never reached; no password attempt was ever rejected.
+
+To sign in with the demo account:
+
+1. Open the app and tap "Sign in" (top left).
+2. On the sign-in screen, do NOT tap "Send me a code". Tap the smaller "Use a password instead" button directly below it.
+3. Enter the demo credentials from App Review Information and tap "Sign in".
+
+If "Send me a code" was already tapped and the screen says "Check your email": tap "Use a different email" to step back, then tap "Use a password instead".
+
+Also worth knowing: the fastest look at the product needs no account at all. On the opening screen, type "Tahoe City down to South Lake Tahoe" to the guide - he plans the route and plays a real narration clip from the first stop on it (under "A TASTE OF THIS ONE"), with no sign-in and no location prompt. The full walkthrough, signed out and signed in (the demo account holds a saved multi-stop drive), is in this version's App Review Notes.
+
+We will make the password option easier to find in our next update. Thank you - happy to help if anything else is unclear.
+```
+
+**Worth attaching alongside (Resolution Center accepts attachments):** ONE screenshot of the sign-in
+screen with "Use a password instead" visible — the one-glance version of steps 1–3. Capture it from
+the simulator (open the app, tap Sign in, shoot the email step); nothing needs staging and the
+password never appears on screen. Optional, but it converts a paragraph into a picture.
+
+### 15c. What this round changes for the NEXT version — do not lose these
+
+- **TODO #79** — the password fallback must be reachable from the CODE step too. One-screen change,
+  rides the next build.
+- **#77's demo mode got stronger.** Apple's letter names a demonstration mode as a standing
+  alternative to credentials — and simultaneously rules the demo VIDEO out as a review substitute
+  ("we cannot use a demo video … to continue the review"). That reweights §14a's video posture: the
+  recording is supplemental context, never the access answer; the mode and working credentials are.
+- **§10's next re-cut** (the ~900-char fold-in owed from §14) should also move the "Use a password
+  instead" instruction UP — it currently sits mid-list in the FULLER EXPERIENCE section, i.e. after
+  the point where a skimming reviewer has already tapped the wrong button. One candidate: put it in
+  the numbered fast-path section, before anything else mentions signing in.
+- **The demo-account OTP email is a live wire.** The send succeeded and the code landed in the
+  skipper.fm catch-all — harmless (codes die in five minutes), but it means every reviewer attempt
+  quietly emails an inbox nobody reads. The client fix (#79) removes the reason a reviewer would end
+  up there.
