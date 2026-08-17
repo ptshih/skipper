@@ -71,9 +71,15 @@ const REVIEW_DEMO_EMAIL = 'review@skipper.fm'
  * ⚠ This IS a deliberate special case on the auth path — the thing the emailAndPassword comment
  * below once called "the worse trade" (2026-08-05). The 08-17 round is the evidence that flipped
  * it, and the blast radius is one static credential to one demo account (a saved drive, no admin
- * role, no staged content) — the same exposure class as the demo password, which stays as backup.
- * Scoped to the sign-in type only: a forget-password or change-email code for the address stays
- * random.
+ * role, no staged content). Scoped to the sign-in type only: a forget-password or change-email
+ * code for the address stays random — though 'sign-in' is also what the DELETE-ACCOUNT screen's
+ * code confirmation requests, deliberately, so this one code covers the reviewer end to end.
+ *
+ * ⚠ Since later the same day this is the demo account's ONLY credential: its password row was
+ * REMOVED (founder call, 2026-08-17 — submission guide §15d) so the delete-account screen resolves
+ * to the code flow instead of demanding a password ASC no longer shows. If this env var is ever
+ * unset or the deploy rolled back, the review account is fully locked out (recovery is
+ * server-side); the guide's §15d carries the warning.
  */
 export function reviewFixedOtp(email: string, type: string): string | undefined {
   const fixed = process.env.REVIEW_OTP_CODE
@@ -319,13 +325,12 @@ function createAuth() {
       // 2026-08-05). Email OTP above is the default for signing up and signing in; the app offers
       // password only behind "Use a password instead" on the sign-in screen, and NO signup path
       // mints one. It stays enabled for two reasons, both concrete:
-      //  1. ⚠ APP REVIEW CANNOT RECEIVE AN EMAILED CODE. The reviewer signs in as
-      //     `review@skipper.fm` with a password held in App Store Connect. (2026-08-05 called a
-      //     special-cased reviewer code "the worse trade" vs keeping this flag; the 2026-08-17
-      //     rejection — reviewer never found the password fallback — flipped that, and
-      //     `reviewFixedOtp` above now ALSO fixes their emailed code. Both doors stay open:
-      //     password is the backup that works even if the OTP machinery is down. See
-      //     docs/guides/app-store-submission.md §15.)
+      //  1. ⚠ HISTORICAL as of 2026-08-17, kept for the arc: App Review used to sign in with a
+      //     password held in App Store Connect, because they cannot receive an emailed code. The
+      //     08-17 rejection (reviewer never found the password fallback) replaced that with
+      //     `reviewFixedOtp` above, and the demo account's password row was then REMOVED entirely
+      //     (submission guide §15d) — so App Review no longer uses this flag at all. Reason 2 is
+      //     the live reason it stays enabled.
       //  2. A rider who sets a password in Settings (§8.6) has a way in that does not depend on mail
       //     arriving — the hedge for OTP making deliverability load-bearing on SIGN-IN.
       // ⚠ Do NOT read this flag as "password signup is supported". The server would still accept

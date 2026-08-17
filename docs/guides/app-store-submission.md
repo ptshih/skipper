@@ -8,10 +8,12 @@
 > seconds into the review. **§15 is the record; §15d is the FIX (founder go, 2026-08-17): the
 > emailed code is now FIXED for the demo account** (`reviewFixedOtp`, server-only, works with build
 > 25 — the reviewer's natural "Send me a code" tap now succeeds with a code held in ASC and env,
-> never git). ✅ **PUSHED AND VERIFIED ON PROD 2026-08-17 (~18:59Z)** — the fixed code signs the
-> demo account in against api.skipper.fm and fails for any other address. **What remains is §15d
-> steps 3–4: enter the code in ASC, paste §15b's reply (579/4000, terse, OTP-only; substitute the
-> code by hand) + attach the code-step screenshot → Resubmit to App Review.**
+> never git). ✅ **EVERYTHING IS DONE AND VERIFIED EXCEPT ONE CLICK (2026-08-17):** the fixed code
+> is deployed + verified on prod; the reply (§15b, OTP-only) is SENT with the code-step screenshot;
+> §10's notes are REWRITTEN (terse, code-first, `{{REVIEW_OTP_CODE}}` substitution) and PUSHED with
+> read-back; ASC's demo "password" field shows the CODE; and the account's password row is REMOVED
+> (§15d) so deletion keys on the same code. ⚠ A reply alone did not requeue — observed twice now —
+> **the remaining step is the founder clicking "Resubmit to App Review".**
 >
 > Prior status (kept for the diff): ✅ 1.1.0 was back in review — `WAITING_FOR_REVIEW` since
 > 2026-08-14T07:16:27Z — after
@@ -829,50 +831,47 @@ so re-pasting it would have *re-broken* a listing that was already fixed. What w
 3. It claimed **"no tracking, no analytics"** while the app ships PostHog and the Google Maps SDK —
    contradicting our own App Privacy label (§8). A reviewer who diffs those two rejects the build.
 
-### The 1.1 replacement — ✅ **LIVE since 2026-08-03** (written 2026-08-02)
+### The live notes — ✅ **REWRITTEN 2026-08-17** (terse, human voice, fixed-code sign-in)
 
-⚠ **1.1 makes the review path strictly better, and the notes have to say so.** Under 1.0 the only
-account-free, permission-free thing a reviewer could do was play one canned sample clip. Under 1.1 a
-reviewer at a desk in Cupertino can **plan a real drive and hear a real clip from their own route,
-with no account and no location prompt** — the planner, the route proposal and the preview clip are
-all anonymous, and the wall lands at "Make this drive". Lead with that.
+**The 08-17 rewrite (founder ask: "verbose and AI-generated"), what changed and what survived:**
+the walkthrough content is intact — quick look, sign-in, saved drive, the GPS warning, deletion,
+location use — at roughly 60% of the length. The sign-in step now leads with the FIXED code
+(§15d): "Send me a code" then `{{REVIEW_OTP_CODE}}` — which is the demo account's ONLY credential
+since the same evening (§15d removed its password row on a founder call; deletion keys on the same
+code, and ASC's "password" field deliberately shows the code).
+The placeholder is substituted by `asc-metadata.ts` from env at push time, so the committed block
+stays credential-free while the live field carries the value. Deliberately DROPPED: the numbered
+"Two things" frame, the mid-sentence ALL-CAPS, the "Where are we headed?" opening-line quote and
+the rotating-placeholder description (drift-prone anchors of low nav value — the 2026-08-06 pass
+below is the argument), and the wifi-timing aside. Every tap-target string that remains was
+verified on the live screens 2026-08-06 or on 2026-08-17's simulator pass.
 
-⚠ Every label below was read out of `apps/mobile/src/ui/voice.ts` and the screens on 2026-08-02.
-⚠ **Still requires an on-device pass before submission** — these notes describe a build nobody has
-walked through yet (the device verification owed since steps 7-9). A note that walks a reviewer into
-a screen that moved is the exact failure the 2026-07-30 rewrite was cleaning up.
+⚠ **1.1's review-path pitch still holds and the notes still lead with it:** a reviewer at a desk
+plans a real drive and hears a real clip, no account, no location prompt; the wall lands at "Make
+this drive".
 
-<!-- asc:reviewNotes — scripts/asc-metadata.ts reads the block below. Keep the marker attached to its fence. -->
+<!-- asc:reviewNotes — scripts/asc-metadata.ts reads the block below. Keep the marker attached to its fence.
+     ⚠ {{REVIEW_OTP_CODE}} is substituted by the script from env at diff/push time — never paste the real code here. -->
 ```
-Skipper is a hands-free, GPS-triggered audio tour for drivers. You plan a drive by TYPING to the guide in plain language and he lays out the route, the stops, and a story for each one. Two things will help you review it from a desk.
+Skipper is a hands-free audio tour for drivers. You type where you want to go, the guide plans the route, and each stop's story plays by itself as you reach it on the road.
 
-1) COVERAGE IS THE LAKE TAHOE REGION ONLY.
-Every story is written and recorded for a specific place, and the app opens on our finished Lake Tahoe collection. Ask for a road outside it and the guide will tell you so honestly and in character rather than failing. That is intended behavior, not an error. YOUR OWN LOCATION DOES NOT MATTER for anything below: the app does not ask for location permission until you start an actual drive.
-
-2) THE FASTEST REAL LOOK, FROM ANYWHERE: NO ACCOUNT, NO PERMISSION.
-Open the app. The guide opens with "Where are we headed?" over a text box whose grey example text rotates through sample asks. Type:
+QUICK LOOK, NO ACCOUNT: the content covers the Lake Tahoe region only, but your own location never matters at a desk - nothing asks for location permission until you start an actual drive. Open the app and type into the text box:
 
     Tahoe City down to South Lake Tahoe
 
-He answers and draws it up. You will see the route and its stops under the heading "YOUR DRIVE", and below that a player headed "A TASTE OF THIS ONE" - press play. That is a real narration clip from the first stop on the route you just asked for, about a minute of audio. No sign-in and no location prompt anywhere on this path.
+The route appears under "YOUR DRIVE", with a small player under "A TASTE OF THIS ONE" - press play for a real minute of narration from that route. No sign-in, no permission prompts. (Asking for a road outside Tahoe gets a polite in-character refusal - intended, not a bug.)
 
-"Make this drive" is where an account becomes necessary; signed out it says "You'll need a free account to keep this drive."
+SIGN IN (demo account): tap "Sign in" (top left), enter review@skipper.fm, tap "Send me a code", then enter code {{REVIEW_OTP_CODE}} and tap "Let's roll". That code is fixed for the demo account and always works - you do not need to receive the email. (It is the same value shown as the demo password in App Review Information.)
 
-FULLER EXPERIENCE (optional) - a complete multi-stop drive, still with no GPS:
-  - Tap "Sign in" (top-left). Skipper signs riders in with a code emailed to them, which you cannot receive, so tap "Use a password instead" and use the demo account above.
-  - Once signed in, the top-left button becomes a list icon. Tap it to open "My Drives". The demo account already has a saved drive: tap "Tahoe City -> South Lake Tahoe".
-  - You land on a screen titled "Drive". FIRST tap "Load up the drive" and let it finish. A drive's audio plays only from the copy saved on the phone, so a stop tapped before the download lands will report that it did not come down. On wifi this takes well under a minute.
-  - Then, under the line "Tap a stop to hear it.", tap any stop to play that stop's full narration (about a minute each). It plays one stop at a time and does not auto-advance, so tap the next when you are ready.
-  - Please do not tap "Start the drive" from a desk. That is the live, GPS-triggered drive: it waits until you physically reach a stop near Lake Tahoe, so in Cupertino nothing will play. It is also the ONLY place in the app that asks for location.
-  - To build one yourself while signed in, repeat step 2 and tap "Make this drive". Each drive you create uses one of the account's free drive credits.
+SAVED DRIVE: signed in, the top-left button becomes a list icon - tap it for "My Drives" and open "Tahoe City -> South Lake Tahoe". Tap "Load up the drive" first and let it finish; audio plays from the phone's local copy, so a stop tapped before the download lands will say so. Then, under "Tap a stop to hear it.", tap any stop for its full story (about a minute each, no auto-advance).
 
-ACCOUNT DELETION (Guideline 5.1.1(v)):
-Sign in first, then: Settings (gear, top-right) -> "Delete account" -> type the account password at "Enter your password to confirm" -> "Permanently delete" -> confirm "Delete forever". It permanently deletes the account, its saved drives, and its remaining credits immediately. Nothing is emailed, and it cannot be undone. (An account created with an emailed code has no password, so for those the same screen asks for a fresh emailed code instead of a password; the demo account above has a password.)
+Please don't tap "Start the drive" at a desk. That is the live GPS drive: it waits until you physically reach each stop near Lake Tahoe, and it is the only place the app asks for location - "When In Use" only, used to time the stories to the road. A one-time Motion & Fitness prompt may follow; motion is used only for speed and heading. To build a drive yourself: plan a route as above and tap "Make this drive" - signed out it asks for a free account; signed in it spends one of the account's free drive credits, and the drive's start/end coordinates are saved to the account.
 
-LOCATION USE:
-"When In Use" only, and only once you start a drive - planning and the preview clip never ask. It is used to time narration to your position while driving. There is no background location and no advertising. If you create a drive, its start and end coordinates are saved with that drive on your account. You may also see a one-time "Motion & Fitness" prompt; motion is used only to gauge speed and heading so each stop plays at the right moment. Coarse location and device identifiers are used for app functionality and product analytics (the sign-in session record, PostHog, and the bundled Google Maps SDK), as declared in our App Privacy labels.
+ACCOUNT DELETION (5.1.1(v)): Settings (gear, top right) -> "Delete account" -> tap "Email me a code" and enter the same code {{REVIEW_OTP_CODE}} -> "Permanently delete" -> "Delete forever". Deletion is immediate and total: the account, its drives, and its remaining credits. Testing it on the demo account is fine - signing back in with the same code recreates the account (without the saved demo drive).
 
-Thank you. Happy to help if anything is unclear.
+Analytics are PostHog plus the bundled Google Maps SDK, as declared in our App Privacy labels. No ads, no cross-app tracking.
+
+Thank you!
 ```
 
 **Deliberate choices, so they survive the next edit:**
@@ -1549,7 +1548,11 @@ names as acceptable.)
 
 Same mechanics as §14c: the reply alone does not requeue; the **Resubmit** click does, it reuses the
 submission (the thread survives), and the asymmetry argument stands — resubmitting costs at most
-queue position. **579/4000** — deliberately TERSE and OTP-only (founder call, 2026-08-17): one
+queue position. ⚠ **Observed AGAIN 2026-08-17:** the reply went in and a minutes-later read showed
+submission `UNRESOLVED_ISSUES`, item `REJECTED`, version `REJECTED` — the second consecutive round
+where a reply left every state parked. Still short of proof a reviewer never picks a thread up
+unprompted (both reads were minutes after the reply), but the posture it argues is unchanged:
+click Resubmit. **579/4000** — deliberately TERSE and OTP-only (founder call, 2026-08-17): one
 path, numbered taps, nothing to weigh. The password fallback stays out of the reply on purpose — a
 second path is a second chance to wander; it remains documented in §10's notes if a reviewer needs
 it. ⚠ **Send this ONLY after §15d's deploy is verified against production** — it promises the fixed
@@ -1581,7 +1584,8 @@ Thank you!
 
 **Attach: `skipper-signin-code-step-199820.png`** (~/Downloads) — the "Check your email" screen with
 the fixed code already typed and "Let's roll" below it: the reviewer sees their exact target screen.
-Also captured, held in reserve if a reviewer asks about the password path:
+Also captured that day, now HISTORICAL only (§15d later removed the demo account's password, so the
+password path no longer works for it — do not send these):
 `skipper-signin-password-button-annotated.png` + `skipper-signin-password-step.png`. All three were
 shot on the iPhone 17 Pro Max simulator off HEAD — `apps/mobile` is unchanged since build 25's
 commit, so the screens are the build under review. ⚠ The code-step filename (and image) carries the
@@ -1645,11 +1649,28 @@ shape; the wiring test pins that the plugin actually passes `reviewFixedOtp`.
    `POST https://api.skipper.fm/api/auth/email-otp/send-verification-otp` with the review address,
    then `POST …/sign-in/email-otp` with the fixed code → expect 200. (One Resend email to the
    catch-all per send — noise, not spend.)
-3. **Enter the code in App Store Connect** — App Review Information is the reviewer-visible home.
-   The password field keeps the password; the code rides in the reply this round (§15b) and gets
-   its durable notes-field home at the next version (§15c).
-4. **Paste §15b's reply** (substituting the code for `NNNNNN`), **attach the two screenshots**, and
-   click **Resubmit to App Review**.
+3. **Enter the code in App Store Connect** — App Review Information is the reviewer-visible home:
+   **the demo "password" field shows the CODE** (founder call, 2026-08-17 — see below), and the
+   live notes carry it via the `{{REVIEW_OTP_CODE}}` substitution.
+4. **Paste §15b's reply** (substituting the code for `NNNNNN`), **attach the code-step
+   screenshot**, and click **Resubmit to App Review**.
+
+**The same evening, the demo account's PASSWORD ROW WAS REMOVED (founder call, 2026-08-17),** and
+the ASC "password" field now shows the fixed code instead. The chain that forced it: the ASC
+credential pair is what a reviewer types wherever the app asks, so the field should carry the value
+the app's actual flow wants — the code — but the account still HAD a real password, and the
+delete-account screen demands a password from any account holding a `credential` row
+(`app/settings.tsx` resolves the proof at tap time via `listAccounts`). A reviewer testing
+5.1.1(v) would have stalled on a password no longer shown anywhere. With the row gone the account
+is passwordless end to end: sign-in AND deletion both resolve to the code flow (deletion reuses
+OTP type `'sign-in'`, so the SAME fixed code confirms it), and deleting the demo account is
+self-healing — the next fixed-code sign-in recreates it (fresh grant, no saved drive; re-seed the
+demo drive if a reviewer deletes it). Verified on prod immediately after: the old password →
+**401**, the fixed code → **200**. ⚠ Consequences worth remembering: "Use a password instead" now
+FAILS for the demo account with any input (nothing directs a reviewer there any more — §15b's
+reply and §10's notes are both OTP-only); and the OTP path is the ONLY door, so §15d's
+env-unset/rollback warning above is now about total lockout, not degradation — the recovery is
+server-side (set a password via the API, or re-set the env).
 
 ⚠ **If the deploy is ever rolled back or `REVIEW_OTP_CODE` unset, the feature turns OFF silently**
 (`reviewFixedOtp` returns `undefined` and the review address gets random codes again) — the

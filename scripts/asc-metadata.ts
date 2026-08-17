@@ -116,6 +116,21 @@ function blockFromDoc(doc: string, field: string): string {
   return doc.slice(bodyStart, fenceClose).trim()
 }
 
+/**
+ * `{{REVIEW_OTP_CODE}}` → the demo account's fixed sign-in code (apps/api/src/auth.ts
+ * `reviewFixedOtp`; submission guide §15d). The committed doc stays credential-free — same rule as
+ * the demo password: ASC + encrypted env, never git — while the LIVE notes carry the value.
+ * Substituted before the diff AND the push, so "already matches" compares what Apple actually
+ * serves. Fails loudly when the placeholder exists with no env value: pushing the literal
+ * placeholder would hand the reviewer a code that types as nonsense.
+ */
+function fillPlaceholders(field: string, text: string): string {
+  if (!text.includes('{{REVIEW_OTP_CODE}}')) return text
+  const code = process.env.REVIEW_OTP_CODE
+  if (!code) die(`${field} contains {{REVIEW_OTP_CODE}} but REVIEW_OTP_CODE is unset — run under dotenvx.`)
+  return text.replaceAll('{{REVIEW_OTP_CODE}}', code)
+}
+
 function report(field: string, live: string, next: string): boolean {
   const cap = CAPS[field]
   const same = live.trim() === next.trim()
@@ -137,7 +152,7 @@ async function main() {
   const intended = {
     promotionalText: blockFromDoc(doc, 'promotionalText'),
     description: blockFromDoc(doc, 'description'),
-    reviewNotes: blockFromDoc(doc, 'reviewNotes'),
+    reviewNotes: fillPlaceholders('reviewNotes', blockFromDoc(doc, 'reviewNotes')),
   }
 
   // The editable version record. ⚠ Only ONE version is ever in an editable state; picking the newest
