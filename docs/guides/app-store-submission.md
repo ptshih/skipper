@@ -5,10 +5,12 @@
 > against production, re-verified the same day — and the server logs show the reviewer **never
 > reached the password screen**: they tapped the primary "Send me a code" CTA, landed on the
 > number-pad code step (which has no password option), failed one code attempt and stopped, ~90
-> seconds into the review. **§15 is the record and carries the ready-to-paste reply (1744/4000).
-> The move is the same as §14: reply in Resolution Center, then click Resubmit to App Review.** No
-> build change, no metadata change, no password change — the reply's whole point is that nothing on
-> our side is broken.
+> seconds into the review. **§15 is the record; §15d is the FIX (founder go, 2026-08-17): the
+> emailed code is now FIXED for the demo account** (`reviewFixedOtp`, server-only, works with build
+> 25 — the reviewer's natural "Send me a code" tap now succeeds with a code held in ASC and env,
+> never git). **The order is §15d's: push (deploys the API) → verify against prod → paste §15b's
+> reply (1734/4000, code substituted by hand) + attach the sign-in screenshots → Resubmit to App
+> Review.** No build change, no metadata change, no password change.
 >
 > Prior status (kept for the diff): ✅ 1.1.0 was back in review — `WAITING_FOR_REVIEW` since
 > 2026-08-14T07:16:27Z — after
@@ -1546,46 +1548,106 @@ names as acceptable.)
 
 Same mechanics as §14c: the reply alone does not requeue; the **Resubmit** click does, it reuses the
 submission (the thread survives), and the asymmetry argument stands — resubmitting costs at most
-queue position. Measured at **1744/4000** (LF; CRLF normalization adds ~22). ⚠ Do not add the
-password to the reply — Apple already holds it in App Review Information, and this reply's whole
-point is that it works as held.
+queue position. Measured at **1734/4000** (LF; CRLF normalization adds ~20). ⚠ **Send this ONLY
+after §15d's deploy is verified against production** — it promises the fixed code works, and until
+the push lands that promise is false.
+
+⚠ **`NNNNNN` is a PLACEHOLDER — substitute the live `REVIEW_OTP_CODE` value by hand when pasting.**
+The real code lives in the encrypted envs and in App Store Connect, never in git (same rule as the
+password), which is why this committed block cannot carry it. The reply thread is the one place the
+reviewer is guaranteed to see it THIS round; giving it a durable home in the notes field is §15d's
+next-version item. The password itself still stays OUT of the reply — Apple already holds it in App
+Review Information.
+
+⚠ **An earlier cut of this reply (1744 chars, password-path-only) was superseded the same day it was
+written, before sending** — the fixed code (§15d) made "do NOT tap Send me a code" the wrong
+instruction. If §15d's deploy is ever rolled back, that older cut in git history is the fallback.
 
 ```
-Thank you for the review. The demo account credentials in App Store Connect are valid. After reading your message we re-verified them against our production server: the exact username and password quoted in your message sign in successfully, unchanged since the account was created.
+Thank you for the review. The demo account credentials in App Store Connect are valid - we re-verified them against our production server after reading your message, and they sign in successfully exactly as entered. Our server logs show what happened during the review: the app's sign-in screen defaults to emailing a six-digit code, the review device requested a code for review@skipper.fm (an inbox App Review cannot receive), and the password option was never opened, so no password attempt ever reached our server.
 
-Our server logs from the review session show what happened, and it is an easy miss: the app's sign-in screen defaults to emailing a six-digit code, and the review device requested a code for review@skipper.fm - an inbox App Review cannot read, which is exactly why we provide a password instead. The password entry is behind a separate button on the sign-in screen, and the logs show that screen was never reached; no password attempt was ever rejected.
+We have since made sign-in effortless for this account with one server-side change (the build is unchanged): the emailed-code flow now always works for the demo account, using a fixed code.
 
-To sign in with the demo account:
+SIGN IN (either path works):
+1. Open the app, tap "Sign in" (top left), and enter review@skipper.fm.
+2. Tap "Send me a code", then enter this six-digit code: NNNNNN - it is fixed for this demo account and always works; you do not need to receive any email. Tap "Let's roll".
+3. Alternative: instead of "Send me a code", tap the smaller "Use a password instead" button directly below it and use the password from App Review Information. Screenshots of both paths are attached.
 
-1. Open the app and tap "Sign in" (top left).
-2. On the sign-in screen, do NOT tap "Send me a code". Tap the smaller "Use a password instead" button directly below it.
-3. Enter the demo credentials from App Review Information and tap "Sign in".
+Everything else in the App Review Notes stands. The fastest look at the product needs no account at all: on the opening screen, type "Tahoe City down to South Lake Tahoe" to the guide - he plans the route and plays a real narration clip from the first stop on it (under "A TASTE OF THIS ONE"), with no sign-in and no location prompt. Signed in, the demo account has a saved multi-stop drive under "My Drives" (list icon, top left); the full walkthrough is in this version's App Review Notes.
 
-If "Send me a code" was already tapped and the screen says "Check your email": tap "Use a different email" to step back, then tap "Use a password instead".
-
-Also worth knowing: the fastest look at the product needs no account at all. On the opening screen, type "Tahoe City down to South Lake Tahoe" to the guide - he plans the route and plays a real narration clip from the first stop on it (under "A TASTE OF THIS ONE"), with no sign-in and no location prompt. The full walkthrough, signed out and signed in (the demo account holds a saved multi-stop drive), is in this version's App Review Notes.
-
-We will make the password option easier to find in our next update. Thank you - happy to help if anything else is unclear.
+Thank you - happy to help if anything else comes up.
 ```
 
-**Worth attaching alongside (Resolution Center accepts attachments):** ONE screenshot of the sign-in
-screen with "Use a password instead" visible — the one-glance version of steps 1–3. Capture it from
-the simulator (open the app, tap Sign in, shoot the email step); nothing needs staging and the
-password never appears on screen. Optional, but it converts a paragraph into a picture.
+**Attach alongside (Resolution Center accepts attachments) — captured 2026-08-17, in ~/Downloads:**
+`skipper-signin-password-button-annotated.png` (the sign-in screen, demo email filled, red box on
+"Use a password instead") and `skipper-signin-password-step.png` (the password screen itself). Both
+were shot on the iPhone 17 Pro Max simulator off HEAD — `apps/mobile` is unchanged since build 25's
+commit, so the screens are the build under review. No password and no real code appears in either.
 
 ### 15c. What this round changes for the NEXT version — do not lose these
 
-- **TODO #79** — the password fallback must be reachable from the CODE step too. One-screen change,
-  rides the next build.
+- **TODO #79** — the password fallback should be reachable from the CODE step too. One-screen
+  change, rides the next build. ⚠ Downgraded from review-critical to rider UX by §15d: the reviewer
+  no longer needs the password path at all, so this now serves the rare rider who set a password
+  and tapped the code CTA first.
 - **#77's demo mode got stronger.** Apple's letter names a demonstration mode as a standing
   alternative to credentials — and simultaneously rules the demo VIDEO out as a review substitute
   ("we cannot use a demo video … to continue the review"). That reweights §14a's video posture: the
   recording is supplemental context, never the access answer; the mode and working credentials are.
-- **§10's next re-cut** (the ~900-char fold-in owed from §14) should also move the "Use a password
-  instead" instruction UP — it currently sits mid-list in the FULLER EXPERIENCE section, i.e. after
-  the point where a skimming reviewer has already tapped the wrong button. One candidate: put it in
-  the numbered fast-path section, before anything else mentions signing in.
-- **The demo-account OTP email is a live wire.** The send succeeded and the code landed in the
-  skipper.fm catch-all — harmless (codes die in five minutes), but it means every reviewer attempt
-  quietly emails an inbox nobody reads. The client fix (#79) removes the reason a reviewer would end
-  up there.
+- **§10's next re-cut** (the ~900-char fold-in owed from §14) must rewrite the sign-in step around
+  the fixed code: "tap Send me a code, then enter the six-digit demo code from App Review
+  Information" — the reviewer's natural path is now the documented path. ⚠ That needs the CODE to
+  live somewhere the notes can point to without committing it to git: either teach
+  `scripts/asc-metadata.ts` a `{{REVIEW_OTP_CODE}}` substitution at push time (cleanest — the doc
+  stays credential-free and the live notes carry the value), or keep pointing at a line the founder
+  maintains by hand in ASC. Decide at version-prep time; do not paste the value into §10's block.
+- **The demo-account OTP email stopped being a live wire and became the mechanism.** Every send for
+  the review address now arms the FIXED code, so the mail landing unread in the skipper.fm
+  catch-all no longer strands anyone — it is simply unnecessary.
+
+### 15d. The fix — a FIXED sign-in code for the demo account (founder go, 2026-08-17)
+
+**The decision:** instead of only documenting the password fallback harder, make the reviewer's
+NATURAL path work. `reviewFixedOtp` (`apps/api/src/auth.ts`) pins the emailed sign-in code for
+exactly `review@skipper.fm` to the value of **`REVIEW_OTP_CODE`** (encrypted in both env files and
+held in App Store Connect — never in git, same rule as the password). Every "Send me a code" tap
+for that address arms the same code, so the code Apple holds ALWAYS works; re-sends re-arm it.
+This reverses the 2026-08-05 "a fixed test code is the worse trade" call in `auth.ts`, on the
+08-17 evidence that the password fallback fails in practice even when the notes spell it out. The
+password stays enabled as the second door.
+
+**Why it is safe, in one paragraph:** the seam is better-auth's own `generateOTP` option, and every
+vendor call site reads `opts.generateOTP(...) || defaultOTPGenerator(opts)` — so returning
+`undefined` for every other address keeps every rider on stock random codes, byte-for-byte
+(verified in the installed 1.6.23 source; pinned by `apps/api/test/auth-otp.test.ts`). Expiry
+(5 min), the 3-attempt cap, all rate limits and enumeration-safety are untouched — the change pins
+a code's VALUE for one account, never a guard. Scoped to the `sign-in` type only; a
+forget-password or change-email code for the address stays random. Blast radius: one static
+credential to one demo account (a saved drive, no admin role, no staged-content access) — the same
+exposure class as the demo password that already exists.
+
+**Verified before commit, end-to-end, not just by unit test:** an ephemeral API instance off HEAD
+(`PORT=8999`, real env, real DB) — `send-verification-otp` for the review address → 200, then
+`sign-in/email-otp` with the fixed code → **200 with a real session**; the same fixed code for a
+different address → **400 INVALID_OTP** (and the failed attempt created no user row). The unit
+tests pin the scoping (address, type, case-insensitivity, env-unset = off) and the vendor fallback
+shape; the wiring test pins that the plugin actually passes `reviewFixedOtp`.
+
+**The rollout ORDER, because the reply depends on it:**
+
+1. **Push** (founder — a push deploys the API at 100%; the commit carries `auth.ts`, the test, and
+   the re-encrypted env files, and Cloud Run decrypts `.env.production` at boot).
+2. **Verify against production** exactly as the ephemeral pass did, and only then trust it:
+   `POST https://api.skipper.fm/api/auth/email-otp/send-verification-otp` with the review address,
+   then `POST …/sign-in/email-otp` with the fixed code → expect 200. (One Resend email to the
+   catch-all per send — noise, not spend.)
+3. **Enter the code in App Store Connect** — App Review Information is the reviewer-visible home.
+   The password field keeps the password; the code rides in the reply this round (§15b) and gets
+   its durable notes-field home at the next version (§15c).
+4. **Paste §15b's reply** (substituting the code for `NNNNNN`), **attach the two screenshots**, and
+   click **Resubmit to App Review**.
+
+⚠ **If the deploy is ever rolled back or `REVIEW_OTP_CODE` unset, the feature turns OFF silently**
+(`reviewFixedOtp` returns `undefined` and the review address gets random codes again) — the
+password path is what still works in that world, which is exactly why it stays enabled. Nothing
+warns; §15b's promise to Apple is what breaks. Check the env var before any future round.

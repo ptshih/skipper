@@ -410,15 +410,17 @@ it is what re-opens §9's screenshots and §10's notes, verified against `98a292
       copy from `voice.ts` that nothing tests, which has already forced two full rewrites and six stale
       anchors in a single pass. Needs an allowlist for quotes that are not UI copy (the route the
       reviewer types, Apple's own terms).
-- [ ] #79 (mobile, high) **The password fallback is unreachable from the code step — the exact miss
-      that cost the 2026-08-17 rejection.** App Review tapped the primary "Send me a code" CTA for
+- [ ] #79 (mobile, med) **The password fallback is unreachable from the code step — the miss behind
+      the 2026-08-17 rejection.** App Review tapped the primary "Send me a code" CTA for
       `review@skipper.fm`, landed on a number-pad field whose only exits are "Send another code" /
       "Use a different email", failed one code entry and rejected 1.1.0 as "unable to sign in" —
       while the credentials verified 200 against prod the same day (submission guide §15 has the log
-      trail). Fix on the next build: render "Use a password instead" on the CODE step too
-      (`app/sign-in.tsx` shows it only while `step === 'email'`). The durable rule §15 records: a
-      reviewer follows the primary CTA, never the notes — anything review-critical must be reachable
-      from every step of its flow, not documented around.
+      trail). ⚠ Downgraded from high: the REVIEWER case is closed server-side by §15d's fixed code
+      (`reviewFixedOtp`); what remains is rider UX — a rider who set a password but tapped the code
+      CTA first has no way over to it. Fix on the next build: render "Use a password instead" on the
+      CODE step too (`app/sign-in.tsx` shows it only while `step === 'email'`). The durable rule §15
+      records: a reviewer follows the primary CTA, never the notes — anything review-critical must
+      be reachable from every step of its flow, not documented around.
 
 ## `apps/api` — the one open item from the 2026-08-02 diligence pass
 

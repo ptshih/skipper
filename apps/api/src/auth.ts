@@ -46,6 +46,41 @@ import { emailConfigured, sendPasswordResetEmail, sendSignInCodeEmail } from './
 // and the expoClient `scheme`. OAuth callbacks + cross-origin auth use it.
 const MOBILE_SCHEME = 'skipper'
 
+// The App Store Review demo account (docs/guides/app-store-submission.md §10). The address is
+// operational truth recorded there; here it exists to scope `reviewFixedOtp` to exactly one user.
+const REVIEW_DEMO_EMAIL = 'review@skipper.fm'
+
+/**
+ * App Review's FIXED sign-in code (founder call 2026-08-17; submission guide §15d).
+ *
+ * The 2026-08-17 rejection proved the password fallback fails IN PRACTICE: the reviewer tapped the
+ * primary "Send me a code" CTA (as the server logs show), landed on a number-pad step with no
+ * password option, and rejected 1.1.0 as "unable to sign in" — while the credentials verified fine.
+ * This makes the reviewer's NATURAL path work instead of documenting around it: when the review
+ * address requests a sign-in code, the code is the fixed value in REVIEW_OTP_CODE (env, never git;
+ * also held in App Store Connect), so the code Apple already has ALWAYS works. Every send arms the
+ * same value — this pins WHAT the code is, not whether it is checked: expiry (5 min), the attempt
+ * cap and every rate limit apply unchanged.
+ *
+ * ⚠ Returning `undefined` for everyone else is load-bearing and VENDOR-SHAPED: each better-auth
+ * call site is `opts.generateOTP(...) || defaultOTPGenerator(opts)` (verified in the installed
+ * 1.6.23 routes.mjs; pinned by test/auth-otp.test.ts), so a falsy return falls back to the stock
+ * random generator. Riders' codes are untouched byte-for-byte, and enumeration safety is unchanged
+ * (the send behaves identically for every address).
+ *
+ * ⚠ This IS a deliberate special case on the auth path — the thing the emailAndPassword comment
+ * below once called "the worse trade" (2026-08-05). The 08-17 round is the evidence that flipped
+ * it, and the blast radius is one static credential to one demo account (a saved drive, no admin
+ * role, no staged content) — the same exposure class as the demo password, which stays as backup.
+ * Scoped to the sign-in type only: a forget-password or change-email code for the address stays
+ * random.
+ */
+export function reviewFixedOtp(email: string, type: string): string | undefined {
+  const fixed = process.env.REVIEW_OTP_CODE
+  if (fixed && type === 'sign-in' && email.toLowerCase() === REVIEW_DEMO_EMAIL) return fixed
+  return undefined
+}
+
 // The marketing site's origin (Astro on Firebase Hosting) — a DIFFERENT host from this API-only
 // service. It hosts the one auth surface that can't live in the app: the password-reset form. Env
 // override so a local site build (`bun run dev:site`) can be pointed at without editing code.
@@ -285,10 +320,12 @@ function createAuth() {
       // password only behind "Use a password instead" on the sign-in screen, and NO signup path
       // mints one. It stays enabled for two reasons, both concrete:
       //  1. ⚠ APP REVIEW CANNOT RECEIVE AN EMAILED CODE. The reviewer signs in as
-      //     `review@skipper.fm` with a password held in App Store Connect. Turning this off would
-      //     leave a special-cased reviewer address or a fixed test code as the alternative — i.e. a
-      //     deliberate bypass on the auth path, which is the worse trade. See
-      //     docs/guides/app-store-submission.md.
+      //     `review@skipper.fm` with a password held in App Store Connect. (2026-08-05 called a
+      //     special-cased reviewer code "the worse trade" vs keeping this flag; the 2026-08-17
+      //     rejection — reviewer never found the password fallback — flipped that, and
+      //     `reviewFixedOtp` above now ALSO fixes their emailed code. Both doors stay open:
+      //     password is the backup that works even if the OTP machinery is down. See
+      //     docs/guides/app-store-submission.md §15.)
       //  2. A rider who sets a password in Settings (§8.6) has a way in that does not depend on mail
       //     arriving — the hedge for OTP making deliverability load-bearing on SIGN-IN.
       // ⚠ Do NOT read this flag as "password signup is supported". The server would still accept
@@ -438,6 +475,11 @@ function createAuth() {
         // that spends a real email on every call. Leaving them unset is the safer edit.
         // ⚠ That limiter is better-auth's default IN-MEMORY store, so like every other ceiling here
         // it is per-container, not a global bound (same M4 shared-store upgrade as ./rate-limit).
+        //
+        // `generateOTP` IS overridden — the ONE exception to "no overrides", and it changes a
+        // code's VALUE for exactly one address, never a guard. See reviewFixedOtp above for the
+        // whole argument (founder, 2026-08-17).
+        generateOTP: ({ email, type }) => reviewFixedOtp(email, type),
         //
         // ⚠ THIS IS A RIDER-TRIGGERED SEND ON AN ANONYMOUS-REACHABLE ROUTE. It is not a model or a
         // Routes call, but every request costs a Resend email and can be aimed at a stranger's

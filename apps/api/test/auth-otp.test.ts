@@ -13,7 +13,7 @@
  * do not relax the assertion to make it pass. Three of these are the difference between a working
  * account system and a silent data or App Store problem.
  */
-import { describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
@@ -148,7 +148,58 @@ describe('our config, which no typecheck can see', () => {
   // would loosen it — so the absence of an override is the guard, and absence is exactly what a
   // future edit adds to without noticing.
   test('no rateLimit override on the emailOTP plugin', () => {
-    const block = AUTH_TS.slice(AUTH_TS.indexOf('emailOTP('), AUTH_TS.indexOf('emailOTP(') + 2500)
+    const block = AUTH_TS.slice(AUTH_TS.indexOf('emailOTP('), AUTH_TS.indexOf('emailOTP(') + 3500)
     expect(block).not.toMatch(/rateLimit:/)
+  })
+})
+
+describe("reviewFixedOtp: App Review's fixed sign-in code (founder, 2026-08-17)", () => {
+  // Added after the 2026-08-17 rejection: the reviewer tapped "Send me a code" (the primary CTA),
+  // could not receive the email, and never found the password fallback — so their NATURAL path now
+  // works: a sign-in code for the review address is always REVIEW_OTP_CODE. The SCOPING below is
+  // the entire security argument (one address, one OTP type, off when unset), which is why it gets
+  // a real unit test where the rest of this file settles for source pins.
+  const ENV_KEY = 'REVIEW_OTP_CODE'
+  const saved = process.env[ENV_KEY]
+  afterEach(() => {
+    if (saved === undefined) delete process.env[ENV_KEY]
+    else process.env[ENV_KEY] = saved
+  })
+
+  test('fixed code for exactly review@skipper.fm + sign-in, case-insensitively', async () => {
+    const { reviewFixedOtp } = await import('../src/auth')
+    process.env[ENV_KEY] = '123456'
+    expect(reviewFixedOtp('review@skipper.fm', 'sign-in')).toBe('123456')
+    expect(reviewFixedOtp('Review@Skipper.FM', 'sign-in')).toBe('123456')
+    // any other address, any other type, falls through to the plugin's random generator
+    expect(reviewFixedOtp('rider@example.com', 'sign-in')).toBeUndefined()
+    expect(reviewFixedOtp('review@skipper.fm', 'forget-password')).toBeUndefined()
+    expect(reviewFixedOtp('review@skipper.fm', 'email-verification')).toBeUndefined()
+  })
+
+  test('unset env = feature off, even for the review address', async () => {
+    const { reviewFixedOtp } = await import('../src/auth')
+    delete process.env[ENV_KEY]
+    expect(reviewFixedOtp('review@skipper.fm', 'sign-in')).toBeUndefined()
+  })
+
+  // ⚠ THE VENDOR SHAPE THE `undefined` RETURN RESTS ON. Every better-auth call site must read
+  // `opts.generateOTP(...) || defaultOTPGenerator(opts)` — the fallback is what keeps every OTHER
+  // address on random codes. A bump that drops the `||` would silently hand EVERY rider an empty
+  // code or crash the send; this is the assertion that turns that into a red test instead.
+  test('every vendor generateOTP call site falls back on a falsy return', () => {
+    for (const rel of ['dist/plugins/email-otp/routes.mjs', 'dist/plugins/email-otp/index.mjs']) {
+      const src = read(rel)
+      const sites = src.split('opts.generateOTP(').slice(1)
+      expect(sites.length).toBeGreaterThan(0)
+      for (const site of sites) {
+        expect(site.slice(0, 120)).toContain('|| defaultOTPGenerator(')
+      }
+    }
+  })
+
+  test('the plugin is actually wired to reviewFixedOtp (not just defined)', () => {
+    const block = AUTH_TS.slice(AUTH_TS.indexOf('emailOTP('), AUTH_TS.indexOf('emailOTP(') + 3500)
+    expect(block).toMatch(/generateOTP:\s*\(\{\s*email,\s*type\s*\}\)\s*=>\s*reviewFixedOtp\(email,\s*type\)/)
   })
 })

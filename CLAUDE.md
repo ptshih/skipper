@@ -7,8 +7,8 @@ product.** When a choice trades polish-for-the-builder against scale-for-a-marke
 ⚠ **1.1 is DEPLOYED to prod (2026-08-02), NOT released, and 1.1.0 is `REJECTED` (2026-08-17, Guideline
 2.1 round TWO: demo sign-in — the credentials are VALID; the reviewer never found "Use a password
 instead").** Roam is REMOVED (git is the archive); Create-a-Drive IS a conversation. The live record is
-**`docs/guides/app-store-submission.md`** — §15 owns the new round (reply ready; reply + Resubmit), §14 the
-first, §13 the store link on approval; release stays MANUAL. RISK-1's real drive is STILL OWED — Milestones owns it.
+**`docs/guides/app-store-submission.md`** — §15 owns the new round (§15d fixed demo OTP BUILT; push →
+verify → reply + Resubmit), §14 the first, §13 the store link; release stays MANUAL. RISK-1's real drive is STILL OWED.
 `docs/designs/drives-first-1-1.md` is the build truth — read it before touching `apps/api` or `apps/mobile`.
 
 ## STOP — the expensive or irreversible mistakes
