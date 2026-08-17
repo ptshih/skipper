@@ -20,6 +20,7 @@
     "sim": "dotenvx run -f .env.development -- bun packages/sim/src/run.ts",
     "tf:feedback": "dotenvx run -f .env.development -- bun scripts/pull-testflight-feedback.ts",
     "asc:metadata": "dotenvx run -f .env.development -- bun scripts/asc-metadata.ts",
+    "asc:state": "dotenvx run -f .env.development -- bun scripts/asc-review-state.ts",
     "shot:compose": "bun scripts/compose-screenshot.ts",
     "typecheck": "bun --filter '*' typecheck",
     "typecheck:scripts": "tsc -p scripts/tsconfig.json",

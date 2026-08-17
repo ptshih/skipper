@@ -1444,7 +1444,10 @@ is the one that drifts.
 
 ✅ **The stray clicks broke NOTHING — swept read-only, 2026-08-13.** Worth recording because "I
 accidentally clicked some things" on a live submission is otherwise unfalsifiable, and because this
-list is the sweep to re-run next time:
+list is the sweep to re-run next time — **which is now a command: `bun run asc:state`**
+(`scripts/asc-review-state.ts`, promoted 2026-08-17; covers the submission/item/version states and
+the App Review Information row below, and `--set-demo-creds --apply` re-pushes the demo credential
+pair from env if the code rotates or the account is re-created):
 
 | checked | reads |
 |---|---|
