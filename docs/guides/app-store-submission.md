@@ -1555,7 +1555,22 @@ queue position. ⚠ **Observed AGAIN 2026-08-17:** the reply went in and a minut
 submission `UNRESOLVED_ISSUES`, item `REJECTED`, version `REJECTED` — the second consecutive round
 where a reply left every state parked. Still short of proof a reviewer never picks a thread up
 unprompted (both reads were minutes after the reply), but the posture it argues is unchanged:
-click Resubmit. **579/4000** — deliberately TERSE and OTP-only (founder call, 2026-08-17): one
+click Resubmit.
+
+**Researched online 2026-08-17, because the question keeps coming back.** Apple's current help page
+for a submission with unresolved issues lists exactly TWO ways forward — remove the rejected items,
+or edit and **Resubmit to App Review** — and does not name replying as a way to continue; its
+reply-to-messages page frames the thread as correspondence "until you resubmit to App Review"
+([manage-a-submission-with-unresolved-issues](https://www.developer.apple.com/help/app-store-connect/manage-submissions-to-app-review/manage-a-submission-with-unresolved-issues),
+[reply-to-app-review-messages](https://www.developer.apple.com/help/app-store-connect/manage-submissions-to-app-review/reply-to-app-review-messages)).
+The "just reply, no resubmission needed" advice circulating in forums quotes Apple's OLD
+Resolution-Center flow (pre the review-submissions UI this app is under). Practice reports are
+mixed — some developers do get thread replies without resubmitting, and one who replied AND clicked
+Submit was approved within 24 h, confirming no queue-position loss — so the community's settled
+pattern matches ours: **reply with the information, then resubmit; treat an unprompted thread
+pickup as a bonus, never the plan** (forum threads
+[19492](https://developer.apple.com/forums/thread/19492),
+[743567](https://developer.apple.com/forums/thread/743567)). **579/4000** — deliberately TERSE and OTP-only (founder call, 2026-08-17): one
 path, numbered taps, nothing to weigh. The password fallback stays out of the reply on purpose — a
 second path is a second chance to wander; it remains documented in §10's notes if a reviewer needs
 it. ⚠ **Send this ONLY after §15d's deploy is verified against production** — it promises the fixed
