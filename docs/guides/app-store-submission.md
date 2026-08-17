@@ -8,12 +8,14 @@
 > seconds into the review. **§15 is the record; §15d is the FIX (founder go, 2026-08-17): the
 > emailed code is now FIXED for the demo account** (`reviewFixedOtp`, server-only, works with build
 > 25 — the reviewer's natural "Send me a code" tap now succeeds with a code held in ASC and env,
-> never git). ✅ **EVERYTHING IS DONE AND VERIFIED EXCEPT ONE CLICK (2026-08-17):** the fixed code
-> is deployed + verified on prod; the reply (§15b, OTP-only) is SENT with the code-step screenshot;
-> §10's notes are REWRITTEN (terse, code-first, `{{REVIEW_OTP_CODE}}` substitution) and PUSHED with
-> read-back; ASC's demo "password" field shows the CODE; and the account's password row is REMOVED
-> (§15d) so deletion keys on the same code. ⚠ A reply alone did not requeue — observed twice now —
-> **the remaining step is the founder clicking "Resubmit to App Review".**
+> never git). ✅ **RESUBMITTED — `WAITING_FOR_REVIEW` since 2026-08-17T19:41:34Z** (captured
+> because the resubmit overwrites `submittedDate`; §14c). Same submission `445ea909` so the thread
+> survives; **build 25 still attached, `VALID`** — both read back via `bun run asc:state`. The
+> round's full fix, all verified: the fixed code deployed on prod; the reply (§15b, OTP-only) SENT
+> with the code-step screenshot; §10's notes REWRITTEN (terse, code-first, `{{REVIEW_OTP_CODE}}`
+> substitution) and PUSHED with read-back; ASC's demo "password" field shows the CODE; the
+> account's password row REMOVED (§15d) so deletion keys on the same code. Nothing is owed until
+> Apple answers; on approval, do §13.
 >
 > Prior status (kept for the diff): ✅ 1.1.0 was back in review — `WAITING_FOR_REVIEW` since
 > 2026-08-14T07:16:27Z — after

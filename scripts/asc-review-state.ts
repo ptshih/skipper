@@ -103,6 +103,16 @@ for (const v of versions.data ?? []) {
 
 const version = versions.data?.[0]
 if (!version) die('no appStoreVersion at all')
+
+// The build, because a resubmit that silently swaps it re-opens §9's screenshots and §10's notes
+// (both verified against ONE commit) — §14c lists this check for exactly that reason.
+const build = (await asc('GET', `/v1/appStoreVersions/${version.id}/build`)).data
+console.log(
+  build
+    ? `\nBUILD on ${version.attributes.versionString}: ${build.attributes.version} (${build.attributes.processingState}${build.attributes.expired ? ', EXPIRED' : ''})`
+    : `\nBUILD on ${version.attributes.versionString}: ⚠ NONE ATTACHED`,
+)
+
 const detail = (await asc('GET', `/v1/appStoreVersions/${version.id}/appStoreReviewDetail`)).data
 const a = detail.attributes
 const code = process.env.REVIEW_OTP_CODE
