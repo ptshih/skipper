@@ -8,9 +8,10 @@
 > seconds into the review. **§15 is the record; §15d is the FIX (founder go, 2026-08-17): the
 > emailed code is now FIXED for the demo account** (`reviewFixedOtp`, server-only, works with build
 > 25 — the reviewer's natural "Send me a code" tap now succeeds with a code held in ASC and env,
-> never git). **The order is §15d's: push (deploys the API) → verify against prod → paste §15b's
-> reply (1734/4000, code substituted by hand) + attach the sign-in screenshots → Resubmit to App
-> Review.** No build change, no metadata change, no password change.
+> never git). ✅ **PUSHED AND VERIFIED ON PROD 2026-08-17 (~18:59Z)** — the fixed code signs the
+> demo account in against api.skipper.fm and fails for any other address. **What remains is §15d
+> steps 3–4: enter the code in ASC, paste §15b's reply (579/4000, terse, OTP-only; substitute the
+> code by hand) + attach the code-step screenshot → Resubmit to App Review.**
 >
 > Prior status (kept for the diff): ✅ 1.1.0 was back in review — `WAITING_FOR_REVIEW` since
 > 2026-08-14T07:16:27Z — after
@@ -1548,41 +1549,44 @@ names as acceptable.)
 
 Same mechanics as §14c: the reply alone does not requeue; the **Resubmit** click does, it reuses the
 submission (the thread survives), and the asymmetry argument stands — resubmitting costs at most
-queue position. Measured at **1734/4000** (LF; CRLF normalization adds ~20). ⚠ **Send this ONLY
-after §15d's deploy is verified against production** — it promises the fixed code works, and until
-the push lands that promise is false.
+queue position. **579/4000** — deliberately TERSE and OTP-only (founder call, 2026-08-17): one
+path, numbered taps, nothing to weigh. The password fallback stays out of the reply on purpose — a
+second path is a second chance to wander; it remains documented in §10's notes if a reviewer needs
+it. ⚠ **Send this ONLY after §15d's deploy is verified against production** — it promises the fixed
+code works, and until the push lands that promise is false. (Verified 2026-08-17 ~18:59Z: send →
+sign-in with the fixed code → 200 + session on api.skipper.fm; the same code for another address →
+400.)
 
 ⚠ **`NNNNNN` is a PLACEHOLDER — substitute the live `REVIEW_OTP_CODE` value by hand when pasting.**
 The real code lives in the encrypted envs and in App Store Connect, never in git (same rule as the
 password), which is why this committed block cannot carry it. The reply thread is the one place the
-reviewer is guaranteed to see it THIS round; giving it a durable home in the notes field is §15d's
-next-version item. The password itself still stays OUT of the reply — Apple already holds it in App
-Review Information.
+reviewer is guaranteed to see it THIS round; giving it a durable home in the notes field is §15c's
+next-version item.
 
-⚠ **An earlier cut of this reply (1744 chars, password-path-only) was superseded the same day it was
-written, before sending** — the fixed code (§15d) made "do NOT tap Send me a code" the wrong
-instruction. If §15d's deploy is ever rolled back, that older cut in git history is the fallback.
+⚠ Two longer cuts (1744 password-path-only, then 1734 both-paths) were superseded before sending —
+git history holds them; the first is also the fallback if §15d's deploy is ever rolled back.
 
 ```
-Thank you for the review. The demo account credentials in App Store Connect are valid - we re-verified them against our production server after reading your message, and they sign in successfully exactly as entered. Our server logs show what happened during the review: the app's sign-in screen defaults to emailing a six-digit code, the review device requested a code for review@skipper.fm (an inbox App Review cannot receive), and the password option was never opened, so no password attempt ever reached our server.
+Thank you for the review. Our sign-in defaults to an emailed code that App Review cannot receive, which is what blocked you. We have fixed this on our server (the build is unchanged): the demo account now has a fixed sign-in code that always works.
 
-We have since made sign-in effortless for this account with one server-side change (the build is unchanged): the emailed-code flow now always works for the demo account, using a fixed code.
+To sign in:
+1. Tap "Sign in" (top left).
+2. Enter review@skipper.fm and tap "Send me a code".
+3. Enter code NNNNNN and tap "Let's roll". No email needed (screenshot attached).
 
-SIGN IN (either path works):
-1. Open the app, tap "Sign in" (top left), and enter review@skipper.fm.
-2. Tap "Send me a code", then enter this six-digit code: NNNNNN - it is fixed for this demo account and always works; you do not need to receive any email. Tap "Let's roll".
-3. Alternative: instead of "Send me a code", tap the smaller "Use a password instead" button directly below it and use the password from App Review Information. Screenshots of both paths are attached.
+Once signed in, the demo account's saved drive is under "My Drives" (list icon, top left). The full walkthrough is in the App Review Notes.
 
-Everything else in the App Review Notes stands. The fastest look at the product needs no account at all: on the opening screen, type "Tahoe City down to South Lake Tahoe" to the guide - he plans the route and plays a real narration clip from the first stop on it (under "A TASTE OF THIS ONE"), with no sign-in and no location prompt. Signed in, the demo account has a saved multi-stop drive under "My Drives" (list icon, top left); the full walkthrough is in this version's App Review Notes.
-
-Thank you - happy to help if anything else comes up.
+Thank you!
 ```
 
-**Attach alongside (Resolution Center accepts attachments) — captured 2026-08-17, in ~/Downloads:**
-`skipper-signin-password-button-annotated.png` (the sign-in screen, demo email filled, red box on
-"Use a password instead") and `skipper-signin-password-step.png` (the password screen itself). Both
-were shot on the iPhone 17 Pro Max simulator off HEAD — `apps/mobile` is unchanged since build 25's
-commit, so the screens are the build under review. No password and no real code appears in either.
+**Attach: `skipper-signin-code-step-199820.png`** (~/Downloads) — the "Check your email" screen with
+the fixed code already typed and "Let's roll" below it: the reviewer sees their exact target screen.
+Also captured, held in reserve if a reviewer asks about the password path:
+`skipper-signin-password-button-annotated.png` + `skipper-signin-password-step.png`. All three were
+shot on the iPhone 17 Pro Max simulator off HEAD — `apps/mobile` is unchanged since build 25's
+commit, so the screens are the build under review. ⚠ The code-step filename (and image) carries the
+live code — that is FINE for a Resolution Center attachment (the reply body names the code anyway)
+but is one more reason none of these belong in git.
 
 ### 15c. What this round changes for the NEXT version — do not lose these
 
