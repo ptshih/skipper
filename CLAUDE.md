@@ -4,11 +4,11 @@ A toy/lifestyle project: an AI-narrated, GPS-triggered driving audio tour with a
 persona, played as phone audio (CarPlay later). **Optimize for charm, not scale — the persona is the
 product.** When a choice trades polish-for-the-builder against scale-for-a-market, pick polish.
 
-⚠ **1.1 is DEPLOYED to prod (2026-08-02), NOT released, and 1.1.0 is BACK IN THE QUEUE —
-`WAITING_FOR_REVIEW` since 2026-08-17, resubmitted after 2.1 round TWO (demo sign-in; fixed by §15d's
-fixed demo OTP, live + verified).** Roam is REMOVED (git is the archive); Create-a-Drive IS a conversation.
-The live record is **`docs/guides/app-store-submission.md`** — §15 owns that round, §14 the first, §13 the
-store link on approval; `bun run asc:state` reads the queue; release stays MANUAL. RISK-1's real drive is STILL OWED.
+⚠ **1.1.0 is APPROVED (2026-08-19), at `PENDING_DEVELOPER_RELEASE`: NOTHING IS LIVE until the founder
+clicks Release in ASC (MANUAL; the store link 404s until then).** Roam is REMOVED (git is the archive);
+Create-a-Drive IS a conversation. The live record is **`docs/guides/app-store-submission.md`** — §13 rides
+along AT THE RELEASE CLICK (site store link + badge — not before, it'd point at the 404), §15/§14 the review
+rounds; `bun run asc:state` reads the state. RISK-1's real drive is STILL OWED — pending-release is its window.
 `docs/designs/drives-first-1-1.md` is the build truth — read it before touching `apps/api` or `apps/mobile`.
 
 ## STOP — the expensive or irreversible mistakes

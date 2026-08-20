@@ -1,6 +1,15 @@
 # App Store Connect — the submission cheat-sheet
 
-> **Status:** ⚠ **1.1.0 IS `REJECTED` AGAIN (2026-08-17) — Guideline 2.1, round TWO: "unable to sign
+> **Status:** ✅ **1.1.0 IS APPROVED (2026-08-19)** — submission `445ea909` reads `COMPLETE` / item
+> `APPROVED`; the version sits at **`PENDING_DEVELOPER_RELEASE`** with build 25 attached (read back
+> via `bun run asc:state`). Release type is MANUAL, so **nothing is live**:
+> `apps.apple.com/app/id6778946770` still 404s (curl-verified 2026-08-19) until the founder clicks
+> "Release This Version" in ASC. §15e closes the round; the fixed demo code (§15d) is what changed
+> between the two verdicts. **§13 runs AT THE RELEASE CLICK, not now** — its site edits
+> (`APP_STORE_URL`, the badge) would point a live download button at that 404. RISK-1's real Tahoe
+> drive is still owed, and the pending-release window is exactly the slot for it.
+>
+> Prior status (kept for the diff): ⚠ **1.1.0 was `REJECTED` again (2026-08-17) — Guideline 2.1, round TWO: "unable to sign
 > in" with the demo account.** The credentials are **VALID** — the exact pair Apple quoted signs in
 > against production, re-verified the same day — and the server logs show the reviewer **never
 > reached the password screen**: they tapped the primary "Send me a code" CTA, landed on the
@@ -1696,3 +1705,13 @@ server-side (set a password via the API, or re-set the env).
 (`reviewFixedOtp` returns `undefined` and the review address gets random codes again) — the
 password path is what still works in that world, which is exactly why it stays enabled. Nothing
 warns; §15b's promise to Apple is what breaks. Check the env var before any future round.
+
+### 15e. Round two — CLOSED: **APPROVED 2026-08-19**
+
+`bun run asc:state` (2026-08-19): submission `445ea909` `COMPLETE`, item `APPROVED`; version 1.1.0
+at `PENDING_DEVELOPER_RELEASE`, build 25 still the attached binary. First clean pass after two
+rounds spent at the sign-in screen — the round's changes (§15d's fixed code as the ASC "password",
+OTP-only notes and reply) went to review exactly once and it approved, so this configuration is the
+template for future submissions (§15c already folds it into the next version's checklist). The
+store link stays a 404 until the manual release click — §13 is the ride-along **at release**, and
+the release timing is the founder's call (RISK-1's real drive was the reason release stayed MANUAL).
