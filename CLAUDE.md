@@ -73,8 +73,8 @@ rounds; `bun run asc:state` reads the state. RISK-1's real drive is STILL OWED �
 - **Hand-authored tours are DEFERRED; the ONE rider artifact is the user-owned DRIVE.** Auth is Better
   Auth (anonymous → free account; there is NO paid tier — premium is bought as CREDITS, a comp is a large
   admin grant; `docs/decisions/cut-tiers.md`). The open anonymous front door is the **PLANNER**:
-  `POST /drives/plan`, `POST /drives/propose`, ONE presigned preview clip from the rider's own route, and
-  `GET /sample`. The wall lands at `POST /drives` — "Make this drive". A **DRIVE is user-OWNED**
+  `POST /drives/plan`, `POST /drives/propose`, and ONE presigned preview clip from the rider's own route
+  (`GET /sample` DELETED 2026-08-05). The wall lands at `POST /drives` — "Make this drive". A **DRIVE is user-OWNED**
   (`drives.user_id`, never a shared content table). ⚠ `requireAccount` is **per-ROUTE, never on the
   `driveRoutes.use('*', …)` mount** — re-mounting it there silently re-walls the whole preview. Free
   credits are an append-only `credit_entries` ledger (a `FREE_DRIVE_CAP` grant at SIGNUP + lazy backstop;
@@ -286,8 +286,8 @@ rounds; `bun run asc:state` reads the state. RISK-1's real drive is STILL OWED �
 The phone-player bet is unchanged — the artifact is a region's shared `narrations` corpus, reused in order.)
 
 0–2. **BUILT** — Tahoe corpus, the phone player (offline → simulated drive → speed-adaptive triggering +
-   debounce → audio + lock-screen Now Playing), the conversational planner, and `apps/api` (`/sample`,
-   `/regions`, `/drives/plan`, `/drives/propose` anonymous+capped; the rest of `/drives*` behind PER-ROUTE
+   debounce → audio + lock-screen Now Playing), the conversational planner, and `apps/api`
+   (`/regions`, `/drives/plan`, `/drives/propose` anonymous+capped; the rest of `/drives*` behind PER-ROUTE
    `requireAccount`; signed R2 URLs). CarPlay stays deferred past the MVP — the phone plays via
    mount/Bluetooth. ⚠ **The one step still owed is the one that was always the point: drive it once for
    real** (RISK-1 — see the sweep guide's §0).
@@ -315,7 +315,7 @@ stays advisory (no auto-judge for world-truth). `docs/decisions/automated-ground
   lead time; `trigger_radius_m` is a floor. Heading gate only above ~5 mph.
 - **Audio:** `expo-audio` (NOT `expo-av`, removed in SDK 55); background playback via config plugin. The
   skipper takes EXCLUSIVE focus (`doNotMix`) whenever he speaks — the drive IS the audio (curated soundtrack
-  + narration), NOT a voice-over that ducks the rider's music, and pre-drive audio (`GET /sample`, the route
+  + narration), NOT a voice-over that ducks the rider's music, and pre-drive audio (the route
   preview clip) owns the channel the same way. Don't "flip" it to `duckOthers` — ducking was tried and
   rejected. `setAudioModeAsync` is PROCESS-WIDE, so only one surface may own it at a time. See
   `docs/decisions/drive-audio-exclusive-focus.md`.
