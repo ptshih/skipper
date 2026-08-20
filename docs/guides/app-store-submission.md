@@ -1209,7 +1209,10 @@ one is safe to set early, one is not.
       (`layouts/Base.astro`), which used to be two edits that could silently drift apart. Until it's
       set the page shows a "coming soon" pill and the structured data omits the store link — both
       *correct*, so nothing looks broken and nothing fails a test. This checkbox is the only thing
-      that would catch it drifting.
+      that would catch it drifting. **Since the 2026-08-20 pre-release sweep the constant also flips
+      every "coming soon / not in the store" line on the site** (meta description, nav chip, closing
+      lede + micro, the gag-review disclosure, /about, the 404 description) — the post-launch copy is
+      already written and conditional, so go-live stays this one edit plus the badge below.
 - [ ] **Swap in Apple's badge artwork** in `FinalCta.astro`, replacing the placeholder glyph. Their
       marketing guidelines require the official "Download on the App Store" asset.
 - [ ] **Raise the version floor only when you mean it.** `VERSION_POLICIES` ships at a no-op

@@ -4,6 +4,7 @@
 // tokens so it matches the landing page (noindex).
 import Base from '../layouts/Base.astro'
 import Icon from '../components/Icon.astro'
+import { APP_STORE_URL } from '../appStore'
 //
 // ⚠ This page shipped with NO heading of any level until 2026-08-02, so pressing H (or opening the
 // rotor) on a mistyped skipper.fm URL returned nothing and a screen-reader user had to read linearly
@@ -13,7 +14,7 @@ import Icon from '../components/Icon.astro'
 
 <Base
   title="Off the route | Skipper"
-  description="Looks like we’ve drifted off the route. Head back to the trailhead. Skipper is a narrated driving tour for Lake Tahoe, coming soon to iOS."
+  description={`Looks like we’ve drifted off the route. Head back to the trailhead. Skipper is a narrated driving tour for Lake Tahoe, ${APP_STORE_URL ? 'free on iPhone' : 'coming soon to iOS'}.`}
   noindex={true}
 >
   <main id="main" class="lost">

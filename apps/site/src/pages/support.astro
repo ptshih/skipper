@@ -6,6 +6,15 @@
 // answer is the honest one: the corpus is Lake Tahoe only, so most of the world opens the app and
 // hears nothing. Saying that plainly here is better than letting someone conclude the app is broken.
 //
+// ⚠ Facts here that drift with the code:
+//   • the free taste ......... the ROUTE-PREVIEW clip (`POST /drives/propose` → one server-chosen
+//     clip). This page told riders to tap "Not near Tahoe? Hear a quick sample." until 2026-08-20 —
+//     the /sample screen AND `GET /sample` were both deleted on 2026-08-05, so the App Store
+//     listing's own support page walked riders to a control that no longer exists. Same lesson as
+//     the legal pages' 08-06 drift: an app-surface change is a change to THIS PAGE.
+//   • how a rider signs in ... the emailed six-digit code is the front door (most accounts have no
+//     password); the quoted button labels live in apps/mobile/src/ui/voice.ts — quote them exactly.
+//
 // Reuses the Legal shell — this is a document, not a landing page.
 import Legal from '../layouts/Legal.astro'
 ---
@@ -13,8 +22,8 @@ import Legal from '../layouts/Legal.astro'
 <Legal
   heading="Support"
   kicker="Help"
-  description="Help with Skipper: coverage, location, audio, credits, and how to reach a human."
-  updated="August 2, 2026"
+  description="Help with Skipper: coverage, location, audio, credits, sign-in, and how to reach a human."
+  updated="August 20, 2026"
 >
   <p>
     Skipper is a small, hand-built thing. If something's wrong, email
@@ -26,15 +35,15 @@ import Legal from '../layouts/Legal.astro'
   <p>
     That's the honest answer, not a bug. Every story in Skipper is written and recorded for a
     specific place, and right now the only place with a finished collection is
-    <strong>Lake Tahoe, California</strong>. Outside that basin there's nothing for him to tell you
+    <strong>Lake Tahoe</strong>. Outside that basin there's nothing for him to tell you
     about, and he'd rather say so than make something up.
   </p>
   <p>
-    You can still hear him without going anywhere, and without spending anything. On the home screen,
-    tap <strong>“Not near Tahoe? Hear a quick sample.”</strong>. That’s one real telling from up at
-    the lake, no account and no credit. And if you want a taste of a <em>particular</em> drive, tell
-    him where you'd go and he'll play you a clip from the route he comes back with, before you decide
-    to build it. More regions are the plan; there's no date to promise.
+    You can still hear him without going anywhere, and without spending anything. Tell him a Tahoe
+    drive you'd take (Tahoe City down to Emerald Bay works fine from your couch) and he'll play you a
+    real clip from the route he comes back with, before you decide to build anything. No account, no
+    credit. There's a sample on the <a href="/">front page of this site</a>, too. More regions are the
+    plan; there's no date to promise.
   </p>
 
   <h2>The stops aren't playing while I drive</h2>
@@ -73,11 +82,20 @@ import Legal from '../layouts/Legal.astro'
     credits don't come back. If you can't get into your account to delete it, email us.
   </p>
 
+  <h2>The sign-in code didn't arrive</h2>
+  <p>
+    You sign in with a <strong>six-digit code we email you</strong>; most accounts have no password
+    at all. A code is good for five minutes, and the newest one is the one that counts. If it
+    doesn't turn up: check the spam bin, check the email address on the screen is really yours, then
+    tap <strong>“Send another code”</strong>. Still nothing? Email us and a human will get you in.
+  </p>
+
   <h2>Forgot your password</h2>
   <p>
-    On the sign-in screen, tap <strong>“Forgot your password?”</strong> and we'll email a link. It
-    works once and expires after an hour. If it doesn't turn up, check the spam bin before writing
-    to us.
+    Only applies if you set one in Settings; otherwise the code above is your way in. On the sign-in
+    screen, tap <strong>“Use a password instead”</strong>, then <strong>“Forgot your password?”</strong>
+    and we'll email a link. It works once and expires after an hour. If it doesn't turn up, check the
+    spam bin before writing to us.
   </p>
 
   <h2>Is Skipper safe to use while driving?</h2>

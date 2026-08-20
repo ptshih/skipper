@@ -28,8 +28,11 @@ import { APP_STORE_URL } from '../../appStore'
       Every road’s got a story. This one’s got a guy who won’t let it go untold.
     </h2>
     <p class="lede prose final__sub">
-      Skipper pulls into the App Store soon, starting with Tahoe. No sign-ups, no waiting
-      room. When he’s cleared to pick you up, the button lands right here.
+      {
+        APP_STORE_URL
+          ? 'Skipper is in the App Store, starting with Tahoe. No sign-ups, no waiting room. He’s cleared to pick you up; hop in.'
+          : 'Skipper pulls into the App Store soon, starting with Tahoe. No sign-ups, no waiting room. When he’s cleared to pick you up, the button lands right here.'
+      }
     </p>
 
     {
@@ -45,8 +48,11 @@ import { APP_STORE_URL } from '../../appStore'
     }
 
     <p class="final__micro">
-      iPhone · starting in Lake Tahoe. No app to download today, just hit play up top and
-      ride along.
+      {
+        APP_STORE_URL
+          ? 'iPhone · starting in Lake Tahoe. Free to download, and you can still hit play up top and try him first.'
+          : 'iPhone · starting in Lake Tahoe. No app to download today, just hit play up top and ride along.'
+      }
     </p>
 
     <a class="btn btn--ghost final__secondary" href="#top">

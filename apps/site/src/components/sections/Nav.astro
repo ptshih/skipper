@@ -1,9 +1,10 @@
 ---
 // Slim, deliberately near-empty top bar: one brand, one app, one thing. No
 // storefront, no gift banner, no 5-item marketing nav — clarity through
-// restraint (the anti-Autio/Shaka move). The "coming soon" chip is a STATUS,
-// never a link.
+// restraint (the anti-Autio/Shaka move). The chip is a STATUS, never a link —
+// post-launch too: the download CTA belongs to the closing section, not the nav.
 import Icon from '../Icon.astro'
+import { APP_STORE_URL } from '../../appStore'
 ---
 
 <header class="nav" id="site-nav">
@@ -19,8 +20,8 @@ import Icon from '../Icon.astro'
       <a href="#founder">The honest bit</a>
     </nav>
 
-    <span class="nav__chip" title="Not in the App Store yet">
-      <Icon name="signpost" size={14} /> Tahoe first · iOS · soon
+    <span class="nav__chip" title={APP_STORE_URL ? 'In the App Store now' : 'Not in the App Store yet'}>
+      <Icon name="signpost" size={14} /> {APP_STORE_URL ? 'Tahoe first · iOS · out now' : 'Tahoe first · iOS · soon'}
     </span>
   </div>
 </header>

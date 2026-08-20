@@ -59,7 +59,11 @@ interface Props {
 
 const {
   title = 'Skipper: narrated audio driving tours for Lake Tahoe',
-  description = 'A corny old tour guide rides shotgun and narrates your drive: GPS-triggered audio tours for your phone, with a Jungle-Cruise heart. Coming soon to iOS, starting with Lake Tahoe.',
+  // The launch-status clause flips with APP_STORE_URL — part of the one-constant go-live (§13),
+  // like every other "coming soon" line on the site. Indexed copy, so it must not lag the release.
+  description = APP_STORE_URL
+    ? 'A corny old tour guide rides shotgun and narrates your drive: GPS-triggered audio tours for your phone, with a Jungle-Cruise heart. Free on the App Store, starting with Lake Tahoe.'
+    : 'A corny old tour guide rides shotgun and narrates your drive: GPS-triggered audio tours for your phone, with a Jungle-Cruise heart. Coming soon to iOS, starting with Lake Tahoe.',
   image = '/og.png',
   imageAlt = 'Skipper: a narrated Lake Tahoe driving tour; a corny old guide rides shotgun.',
   noindex = false,

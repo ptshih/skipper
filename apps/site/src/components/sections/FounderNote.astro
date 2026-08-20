@@ -10,6 +10,9 @@
 // placeholders to real cards and the heading adjusts. Example shape:
 //   { stars: 5, quote: 'I cackled at the windshield bit.', who: 'TestFlight rider · June' }
 import Icon from '../Icon.astro'
+// The store-status sentence in the disclosure flips on APP_STORE_URL with the rest of the
+// go-live copy — the gag survives launch; "isn't even in the store" doesn't.
+import { APP_STORE_URL } from '../../appStore'
 
 // Deliberately, TRANSPARENTLY fake — over-the-top gag "reviews" nobody could
 // mistake for real. This stays honest because it's an obvious joke (and the body
@@ -42,7 +45,8 @@ const quotes: { stars: number; quote: string; who: string }[] = [
       {
         quotes.length ? (
           <p class="founder__body">
-            Full disclosure: nobody’s actually reviewed Skipper yet. It isn’t even in the store. So
+            Full disclosure: nobody’s actually reviewed Skipper yet.{' '}
+            {APP_STORE_URL ? 'It’s only just pulled into the store.' : 'It isn’t even in the store.'} So
             the Skipper rounded up a few “riders” of, ah, questionable independence. The real ones
             land right here the day they exist. Until then, the only review that counts is your own
             ears, a few scrolls up.

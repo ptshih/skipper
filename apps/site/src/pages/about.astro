@@ -19,14 +19,20 @@
 //
 // Distinct from /support on purpose: that page troubleshoots for people who already installed it.
 // This one answers the questions asked BEFORE installing.
+//
+// ⚠ Copy calls made in the 2026-08-20 pre-release sweep (founder): coverage is "Lake Tahoe", no
+// state — the basin spans California AND Nevada, so naming one was wrong for the east shore; the
+// stop count reads "hundreds" rather than a number, deliberately, so it can't drift stale. The
+// "What do I need?" answer flips on APP_STORE_URL with the rest of the go-live copy.
 import Legal from '../layouts/Legal.astro'
+import { APP_STORE_URL } from '../appStore'
 ---
 
 <Legal
   heading="What Skipper is"
   kicker="Plainly"
   description="Skipper is a free iPhone app that narrates your drive: GPS-triggered audio stories, grounded in cited sources, covering Lake Tahoe. What it does, where it works, and what it costs."
-  updated="July 28, 2026"
+  updated="August 20, 2026"
 >
   <p>
     Skipper is a <strong>narrated audio driving tour for iPhone</strong>. You mount your phone, start
@@ -37,9 +43,9 @@ import Legal from '../layouts/Legal.astro'
 
   <h2>Where does it work right now?</h2>
   <p>
-    <strong>Lake Tahoe, California</strong>, and nowhere else yet. There are more than 300 narrated
-    stops around the basin. Every one is researched and recorded for a specific place, which is the
-    reason coverage grows slowly and the reason it is worth having at all.
+    <strong>Lake Tahoe</strong>, and nowhere else yet. There are hundreds of narrated stops around
+    the basin. Every one is researched and recorded for a specific place, which is the reason
+    coverage grows slowly and the reason it is worth having at all.
   </p>
   <p>
     Outside Tahoe the app will tell you honestly that it doesn't know those roads. That is the
@@ -93,12 +99,23 @@ import Legal from '../layouts/Legal.astro'
   </p>
 
   <h2>What do I need?</h2>
-  <p>
-    An iPhone. Skipper is iOS-only, and it isn't in the App Store yet. This page and the
-    <a href="/">front door</a> are where it lives until it is. When it ships it'll be a US release
-    first. It uses your location only while you're on a drive, to time the stories, never in the
-    background. Details are in the <a href="/privacy">privacy policy</a>.
-  </p>
+  {
+    APP_STORE_URL ? (
+      <p>
+        An iPhone. Skipper is iOS-only, free, and on the
+        <a href={APP_STORE_URL}>App Store</a>, in the US first. It uses your location only while
+        you're on a drive, to time the stories, never in the background. Details are in the
+        <a href="/privacy">privacy policy</a>.
+      </p>
+    ) : (
+      <p>
+        An iPhone. Skipper is iOS-only, and it isn't in the App Store yet. This page and the
+        <a href="/">front door</a> are where it lives until it is. When it ships it'll be a US release
+        first. It uses your location only while you're on a drive, to time the stories, never in the
+        background. Details are in the <a href="/privacy">privacy policy</a>.
+      </p>
+    )
+  }
 
   <h2>Something not answered here?</h2>
   <p>
