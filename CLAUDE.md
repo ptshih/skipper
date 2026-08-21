@@ -240,16 +240,16 @@ block has the canonical listing URL; §13's go-live (site `APP_STORE_URL` + Appl
   when a cheap heuristic would save a few dollars (don't keep an arbitrary char-count pre-filter ahead of a
   paid `enrich` — let the enricher decide). This governs DESIGN; *running* a paid job still needs the founder
   OK (STOP).
-- **STORAGE IS BREAK-FREELY AGAIN (founder, 2026-07-31): 1.0 will probably never be released.** The
-  "assume real riders / additive migrations only" rule is VOID — its premise was a shipped 1.0. Destructive
-  migrations are allowed, corpus tables included. ⚠ Two things keep this from being reckless: (1) a corpus +
-  R2 **snapshot must exist before any destructive work** — the released corpus cost real money and the ledger
-  has no second copy; (2) **`.env.development` and `.env.production` point at the SAME Neon DB and the SAME
-  R2**, so there is no staging — `db:push` (drizzle-kit push DROPS to match the schema) and `dev:admin`
-  (`ADMIN_DEV_BYPASS=1`, unauthenticated, full delete authority) are aimed at PRODUCTION despite the
-  "development" label. The **wire contract** may also break freely: we owe the unreleased 1.0 nothing, there
-  is no URL versioning, and the `/version` floor is seeded at a no-op and gates nobody until deliberately
-  raised (`docs/decisions/api-versioning-posture.md`).
+- **RIDERS ARE REAL (founder, 2026-08-20): 1.1.0 is LIVE, and the break-freely era is OVER.** The
+  2026-07-31 "storage is break-freely" call is VOID — its premise ("1.0 will probably never be released")
+  died at release (`docs/decisions/riders-are-real-posture.md`). Migrations default to ADDITIVE; anything
+  destructive (drops, truncates, `db:push` against a changed schema) needs an explicit founder go PLUS a
+  fresh snapshot — and rider rows (`user`, `drives`, `credit_entries`) are NOT in the corpus snapshot, so
+  destructive work there risks real people's paid-for state. ⚠ Unchanged and now sharper:
+  **`.env.development` and `.env.production` point at the SAME Neon DB and R2** — there is no staging;
+  `db:push` and `dev:admin` (`ADMIN_DEV_BYPASS=1`, full delete authority) aim at PRODUCTION despite the
+  label. The **wire contract now owes the shipped 1.1.0 client** — breaking it strands live apps; the
+  `/version` floor (a no-op today) is the one deliberate hard-break hatch (`api-versioning-posture.md`).
 - **Ground tooling/version decisions in authoritative docs, not memory.** The stack moves fast (bun, Expo/RN,
   drizzle, the SDKs) and training data goes stale — pull the actual current docs for a build/resolution/config
   question and decide from what they SAY; cite what you found so the next agent can re-check (a real miss:
