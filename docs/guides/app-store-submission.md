@@ -1,6 +1,17 @@
 # App Store Connect — the submission cheat-sheet
 
-> **Status:** ✅ **1.1.0 IS APPROVED (2026-08-19)** — submission `445ea909` reads `COMPLETE` / item
+> **Status:** 🚀 **1.1.0 IS LIVE ON THE APP STORE — released 2026-08-20** (founder click; version
+> reads `READY_FOR_SALE`, build 25). The canonical listing is
+> `https://apps.apple.com/us/app/skipper-road-trip-audio-tours/id6778946770` (curl 200; the bare id
+> form 301s there). **§13's go-live shipped the same day:** `APP_STORE_URL` set to the canonical URL
+> and Apple's official badge artwork swapped in (`apps/site/public/app-store-badge.svg`, from their
+> marketing-tools badge API) — one constant flips the button, the JSON-LD `installUrl`, and every
+> conditional "coming soon" line from the 08-20 sweep. Remaining §13 item: the `/version` floor
+> stays a deliberate no-op. ⚠ The ASC **My Apps tile may still show a pre-build-20 icon** — chrome
+> cache, not release state (see the §13 warning). RISK-1's real Tahoe drive is not yet RECORDED as
+> done anywhere in the repo — with the store live it's a post-launch errand now, not a gate.
+>
+> Prior status: ✅ **1.1.0 was APPROVED (2026-08-19)** — submission `445ea909` read `COMPLETE` / item
 > `APPROVED`; the version sits at **`PENDING_DEVELOPER_RELEASE`** with build 25 attached (read back
 > via `bun run asc:state`). Release type is MANUAL, so **nothing is live**:
 > `apps.apple.com/app/id6778946770` still 404s (curl-verified 2026-08-19) until the founder clicks
@@ -1209,7 +1220,10 @@ one is safe to set early, one is not.
 - **Already done — no action.** `apps/api/src/version-policy.ts` carries the real link now. Safe
   ahead of the listing because the client only opens it when the version floor is raised, which can't
   happen before there's a published version to upgrade to.
-- [ ] **Set `APP_STORE_URL` in `apps/site/src/appStore.ts`** to
+- [x] **DONE 2026-08-20** — set to the CANONICAL slug URL
+      (`…/us/app/skipper-road-trip-audio-tours/id6778946770`, what Apple's "Copy link" hands out;
+      the bare id form 301s there) rather than the id form this checkbox originally named.
+      **Set `APP_STORE_URL` in `apps/site/src/appStore.ts`** to
       `https://apps.apple.com/app/id6778946770`. ONE constant, deliberately: it drives BOTH the
       download button (`components/sections/FinalCta.astro`) and the `MobileApplication` JSON-LD
       (`layouts/Base.astro`), which used to be two edits that could silently drift apart. Until it's
@@ -1219,8 +1233,10 @@ one is safe to set early, one is not.
       every "coming soon / not in the store" line on the site** (meta description, nav chip, closing
       lede + micro, the gag-review disclosure, /about, the 404 description) — the post-launch copy is
       already written and conditional, so go-live stays this one edit plus the badge below.
-- [ ] **Swap in Apple's badge artwork** in `FinalCta.astro`, replacing the placeholder glyph. Their
-      marketing guidelines require the official "Download on the App Store" asset.
+- [x] **DONE 2026-08-20** — **Swap in Apple's badge artwork** in `FinalCta.astro`, replacing the
+      placeholder glyph. Their marketing guidelines require the official "Download on the App Store"
+      asset: it lives at `apps/site/public/app-store-badge.svg` (fetched from Apple's
+      marketing-tools badge API), rendered as-provided at 60px with the glow on the wrapper.
 - [ ] **Raise the version floor only when you mean it.** `VERSION_POLICIES` ships at a no-op
       `0.0.0`/`0.0.0`. Raising `minimum` is the one hard-break hatch in the API versioning posture
       (`docs/decisions/api-versioning-posture.md`) and walls every older client — a backend deploy,

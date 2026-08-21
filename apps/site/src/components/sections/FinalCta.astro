@@ -1,16 +1,13 @@
 ---
 // Closing — lead with the charm line UP FRONT (not buried like Autio's tagline)
-// and ONE honest pre-launch beat. The app isn't in the App Store yet, so this
-// slot shows a quiet "coming soon" badge; the moment APP_STORE_URL is set it becomes
-// the real "Download on the App Store" button (the same drop-in pattern as the hero
-// clip — see apps/site/CLIPS.md).
+// and ONE honest launch beat. With APP_STORE_URL set (2026-08-20, release day) this
+// slot is the real download CTA; the "coming soon" pill remains as the fallback the
+// constant would resurrect if it were ever emptied.
 //
-// GO-LIVE: the URL now lives in ../../appStore.ts (ONE constant, shared with the
-// MobileApplication JSON-LD in layouts/Base.astro — see there for why). The only edit
-// left HERE is Apple's marketing requirement: swap the placeholder glyph for the
-// official Apple-provided "Download on the App Store" badge artwork.
-//
-// Why the constant stays empty until approval is documented at its definition.
+// The badge is Apple's OFFICIAL artwork (public/app-store-badge.svg, fetched from
+// their marketing-tools badge API), used as-provided per their guidelines — not a
+// styled .btn: recoloring or re-typesetting the badge is exactly what the guidelines
+// prohibit. The glow lives on the wrapper, never inside the asset.
 import Sunburst from '../Sunburst.astro'
 import Trail from '../Trail.astro'
 import Icon from '../Icon.astro'
@@ -37,8 +34,8 @@ import { APP_STORE_URL } from '../../appStore'
 
     {
       APP_STORE_URL ? (
-        <a class="btn btn--primary final__cta" href={APP_STORE_URL}>
-          <Icon name="download" size={20} /> Download on the App Store
+        <a class="final__badge" href={APP_STORE_URL}>
+          <img src="/app-store-badge.svg" alt="Download on the App Store" width="180" height="60" />
         </a>
       ) : (
         <span class="final__soon" role="status">
@@ -88,10 +85,24 @@ import { APP_STORE_URL } from '../../appStore'
     margin-top: var(--space-xl);
     margin-inline: auto;
   }
-  /* the App Store slot — once live, the page's "stamp" (its one allowed glow,
-     a screen below the hero player). */
-  .final__cta {
+  /* the App Store slot — live: the page's "stamp" (its one allowed glow, a
+     screen below the hero player). The glow sits on the wrapper; the badge
+     artwork itself stays exactly as Apple ships it. */
+  .final__badge {
     margin-top: var(--space-3xl);
+    display: inline-block;
+    border-radius: 10px; /* matches the badge's own corner radius at this height */
+    box-shadow: 0 12px 38px -12px var(--glow);
+    transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur-base) var(--ease);
+  }
+  .final__badge:hover {
+    transform: scale(1.03);
+    box-shadow: 0 14px 44px -12px var(--glow);
+  }
+  .final__badge img {
+    display: block;
+    height: 3.75rem; /* 60px — comfortably above Apple's 40px minimum */
+    width: auto;
   }
   /* pre-launch placeholder: a quiet, deliberate "coming soon" enamel pill —
      NOT amber-filled (it isn't actionable yet), so no glow competes. */
