@@ -253,6 +253,10 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - [fact-overrides-and-veracity.md](decisions/fact-overrides-and-veracity.md) — the
   upstream-source-error loop (`poi_overrides` corrections + the web-checking `--veracity`
   eval) and the durable eval record (`eval_runs`/`eval_scores`); built 2026-06-09.
+- [riders-are-real-posture.md](decisions/riders-are-real-posture.md) — the post-launch storage & wire
+  posture (2026-08-21): additive migrations by default, destructive = founder go + snapshot (which
+  does NOT cover rider rows), the wire contract owes the shipped 1.1.0 client. Supersedes 07-31's
+  break-freely call.
   (Zero-reuse gained a §9 addendum 2026-06-10 — itself superseded; V2 collapsed roam to a MODE over
   the 1:1 `pois`↔`narrations` atom, no `roam_clips` table, and 1.1 then removed the mode outright.)
 
