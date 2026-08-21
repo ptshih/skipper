@@ -1195,6 +1195,12 @@ Re-run the list; don't inherit last release's ticks.
 
 ## 13. After approval — the store link goes live
 
+⚠ **The ASC "My Apps" tile shows a STALE icon and that is normal** (observed 2026-08-20, with 1.1.0
+approved): the web tile caches an old build's icon for days. It is display chrome, not release
+state — the store page takes its icon from the RELEASED build's asset catalog, and build 25's icon
+was verified current via the ASC API (`iconAssetToken`, builds 20–25 all carry the road icon). Do
+not cut a build or resubmit over the tile; it snaps current at or shortly after release.
+
 Apple assigns the app id when the RECORD is created, so `6778946770` has been real since long before
 submission — but `apps.apple.com/app/id6778946770` **404s until the release is actually approved**
 (confirmed 2026-07-27, while the build was TestFlight-only). That gap is why these two are split:
