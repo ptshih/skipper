@@ -181,6 +181,54 @@ anchors, source pins, cluster membership, endpoints or release flags were change
 preparation batch is complete at this conservative subset; broader preparation remains open.
 
 
+## Tahoe comparison and next paid-run request — 2026-09-09
+
+Fresh production reads establish the scale of the remaining work. Counts use point-in-any-box POIs
+and places; a narration counts when its POI or any cluster member belongs. They describe inventory,
+not verified driving quality or endpoint usability.
+
+| Inventory | Tahoe | Yosemite |
+| --- | ---: | ---: |
+| Discovered POIs | 454 | 963 |
+| Road anchors | 245 | 24 |
+| Enriched sheets | 155 | 0 |
+| Groups | 13 | 30 |
+| Individual narrations | 261 | 0 |
+| Combined narrations | 13 | 0 |
+| Released narrations | 274 | 0 |
+| Curated place rows | 132 | 0 |
+
+The baseline is saved locally in `packages/studio/.scratch/osm/launch-baseline.json`. Yosemite's
+region-wide free enrichment preview finds 319 eligible stories (typical estimate $12.76), but a
+first targeted batch lets us inspect fact quality before scaling. This is an initial batch, not a
+replacement for full corridor coverage or Tahoe-comparable completeness.
+
+**Prepared, awaiting founder go:**
+
+1. Endpoint curation: `curate-places --region yosemite-national-park --target 150 --max-cost 2 --apply`.
+   Free preview estimates $0.31 for the Opus draft, plus Google Places resolution charges. The target
+   is guidance, not a strict result limit; the runner resolves the returned draft, ordinarily about
+   150 Autocomplete/Details pairs. `--max-cost 2` checks the draft estimate only, **not total Places
+   spend**. This writes ranked place rows, which require vehicle-access and corridor review before
+   release. Check every corridor and all four gateways against the checklist, including actual
+   parking access for trail destinations. No promise that all drafted rows become usable endpoints.
+2. Initial enrichment: 37 exact POI IDs using Sonnet, typical estimate $1.48, with `--max-cost 10`.
+   The running cost guard stops scheduling after the threshold; in-flight workers can overshoot.
+   Selection is saved in `packages/studio/.scratch/osm/yosemite-enrichment-request.json`. Pass its
+   `eligible[].id` as `--include-ids` **without `--region`**: this CLI's explicit-ID mode excludes
+   filters, and combining them would silently select the region instead. The 50 considered subjects
+   are the 24 anchored subjects plus members of eight groups; 37 qualify for story enrichment, while
+   13 remain scenic candidates. The groups are El Portal and the Yosemite Railroad, Wawona and Its
+   Pioneer History Center, Glacier Point Overlook, Hetch Hetchy and Its Dam, Tuolumne Meadows, Camp 4,
+   Yosemite Valley and Bridalveil Fall, and Tioga Pass. Off-road context is deliberately retained.
+
+Both free previews succeeded with no paid calls or corpus writes. This request includes no narration
+synthesis, paid classification, route audits or public release. Before calibration generation, review
+misclassified members such as Wawona Covered Bridge and Tioga Pass, then verify group geometry and
+story membership. The separate Sentinel Dome/Separate Reality group and the Half Dome group containing
+the whole Yosemite National Park subject are outside this initial enrichment selection and require
+particular review before generation. Group existence alone is not editorial approval.
+
 ## Corpus preparation and approval sequence
 
 1. Snapshot the corpus before preparation. Preserve the `yosemite-national-park` identity. Expand its
