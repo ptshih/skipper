@@ -124,7 +124,8 @@ export function ReferenceView() {
           {' '}downloads and verifies free OSM extracts into local files only. Reuse the state cache for other regions;
           add source IDs for other states. Then preview <code>snap-speakable-anchors.ts --region … --roads-file … --report …</code>.
           {' '}Its separate <code>--apply</code> writes corpus anchors. Missing state coverage and conflicting snapshots
-          stop the run; local files never imply current road access. No model, TTS or route-provider calls.
+          stop the run. Reports include matched way IDs/access tags; known restricted-road and tunnel matches
+          are held from automatic writes. Local files never imply current road access. No model, TTS or route-provider calls.
         </Callout>
         <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
           <li>

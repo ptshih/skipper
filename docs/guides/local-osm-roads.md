@@ -1,7 +1,8 @@
 # Local OSM roads for corpus preparation
 
 **Status:** Built and exercised with California/Nevada for Yosemite and Tahoe on 2026-09-09.
-Local preparation and snapping previews are free. No corpus anchors were changed in that verification.
+Local preparation and snapping previews are free. Reports retain matched way IDs/access tags; known
+restricted-road and tunnel matches are held from automatic anchor writes.
 
 Public Overpass servers are useful for small queries but failed repeatedly during Yosemite preparation.
 The local path downloads a dated Geofabrik extract once, then prepares small region road files with
@@ -36,7 +37,12 @@ required to cover the region. Tahoe requires California **and** Nevada: Californ
 The padded union of all region boxes must be covered by the source polygons, including interior gaps.
 
 The snapping CLI's separate `--apply` writes anchors to the shared production database. Review its
-report first. Preparing a local file or previewing Tahoe does not authorize a new Tahoe anchor run.
+report first. Each proposal carries `road.id` and `road.tags` from the exact selected segment for
+both local OSM and Overpass. A separate `held` list records known access restrictions and tunnel
+matches; `--apply` never writes those proposals. This conservative check does not interpret exceptions
+or seasonal conditions, and absent tags do not prove public access. No alternative road is silently
+substituted to evade a hold. Class-only mode still describes an existing anchor without moving it.
+Preparing a local file or previewing Tahoe does not authorize a new Tahoe anchor run.
 For Yosemite, the existing first-free-batch authorization covers suitable selective anchors; known
 classification and geography issues still need inspection before applying them. Never force-resnap
 operator corrections as part of a refresh.

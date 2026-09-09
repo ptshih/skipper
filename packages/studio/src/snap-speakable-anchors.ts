@@ -44,7 +44,7 @@ import { announce, parseFlags } from './pipeline/ops'
 import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
 import { resolveRegion, requireRegionBboxes } from './pipeline/region'
-import { DRIVABLE, MAJOR, BBOX_PAD_DEG, RoadIndex, type Way } from './pipeline/road-index'
+import { DRIVABLE, MAJOR, BBOX_PAD_DEG, RoadIndex, roadReviewHolds, type Way } from './pipeline/road-index'
 import { loadLocalRoads } from './pipeline/local-roads'
 
 const OVERPASS = process.env.OVERPASS_URL ?? 'https://overpass-api.de/api/interpreter'
@@ -78,14 +78,15 @@ export async function fetchTile(
       }
       if (!res.ok) throw new Error(`Overpass ${res.status}`)
       const data = (await res.json()) as {
-        elements?: { geometry?: { lat: number; lon: number }[]; tags?: { highway?: string } }[]
+        elements?: { id?: number; geometry?: { lat: number; lon: number }[]; tags?: Record<string, string> }[]
         remark?: string
       }
       // Overpass can return HTTP 200 with partial data and a runtime-error remark. Treating
       // that as empty terrain would incorrectly certify missing roads as backcountry.
       if (data.remark || !Array.isArray(data.elements)) throw new Error(`Incomplete Overpass tile: ${data.remark ?? 'missing elements'}`)
       return (data.elements ?? [])
-        .map((el) => ({ geom: el.geometry ?? [], cls: el.tags?.highway ?? 'unclassified' }))
+        .map((el) => ({ geom: el.geometry ?? [], cls: el.tags?.highway ?? 'unclassified',
+          id: el.id == null ? undefined : `w${el.id}`, tags: el.tags }))
         .filter((w) => w.geom.length >= 2)
     } catch (err) {
       if (attempt === 3) throw err
@@ -174,8 +175,9 @@ async function main(): Promise<void> {
   console.log(`\nIndexed ${roads.size} road segments. Snapping...`)
 
   // Snap every POI locally to its nearest road point, validated through the canonical bound.
-  type Snapped = { row: PoiRow; lat: number; lng: number; cls: string }
+  type Snapped = { row: PoiRow; lat: number; lng: number; cls: string; road: NonNullable<ReturnType<RoadIndex['nearest']>>['road'] }
   const toWrite: Snapped[] = []
+  const held: (Snapped & { reasons: string[] })[] = []
   const flagged: { row: PoiRow; distanceM: number | null; maxM: number }[] = []
   for (const row of rows) {
     const pin: LngLat = [row.lng, row.lat]
@@ -192,8 +194,13 @@ async function main(): Promise<void> {
       continue
     }
     const check = checkSpeakableAnchor(pin, [near.lng, near.lat], row.kind)
-    if (check.ok) toWrite.push({ row, lat: near.lat, lng: near.lng, cls: near.cls })
-    else flagged.push({ row, distanceM: check.distanceM, maxM: check.maxM })
+    if (check.ok) {
+      const proposal = { row, lat: near.lat, lng: near.lng, cls: near.cls, road: near.road }
+      const reasons = roadReviewHolds(near.road.tags)
+      // Do not silently move to the next road: that would invent a new vantage to evade the hold.
+      if (reasons.length) held.push({ ...proposal, reasons })
+      else toWrite.push(proposal)
+    } else flagged.push({ row, distanceM: check.distanceM, maxM: check.maxM })
   }
 
   if (classOnly) {
@@ -231,13 +238,13 @@ async function main(): Promise<void> {
       roadSource: local?.provenance ?? { kind: 'overpass', url: OVERPASS },
       proposed: toWrite.map((s) => ({ ...s, distanceM: checkSpeakableAnchor(
         [s.row.lng, s.row.lat], [s.lng, s.lat], s.row.kind,
-      ).distanceM })), flagged,
+      ).distanceM })), flagged, held,
     }, null, 2))
     console.log(`Anchor report saved: ${reportPath}`)
   }
 
   const verb = apply ? 'writing' : 'would write'
-  console.log(`\n${toWrite.length} within bound (${verb}); ${flagged.length} flagged off-road (no anchor).`)
+  console.log(`\n${toWrite.length} within bound (${verb}); ${flagged.length} beyond bounds; ${held.length} held for road review (no anchor).`)
   const byCls = new Map<string, number>()
   for (const s of toWrite) byCls.set(s.cls, (byCls.get(s.cls) ?? 0) + 1)
   const majorN = toWrite.filter((s) => MAJOR.test(s.cls)).length
@@ -264,8 +271,12 @@ async function main(): Promise<void> {
     console.log('PREVIEW — no writes. Re-run with --apply to persist.')
   }
 
+  if (held.length) {
+    console.log(`\n${held.length} proposal(s) held: restricted roads or tunnel segments are not automatically applied.`)
+    for (const h of held) console.log(`  ${h.row.name}: ${h.road.id ?? 'unknown way'} — ${h.reasons.join(', ')}`)
+  }
   if (flagged.length) {
-    console.log(`\n${flagged.length} POI(s) with no drivable road within bound (genuine backcountry — left anchorless):`)
+    console.log(`\n${flagged.length} POI(s) with no indexed road within bound (investigate access/vantage — left anchorless):`)
     for (const f of flagged.slice(0, 20))
       console.log(
         `  ${f.distanceM != null ? Math.round(f.distanceM) + 'm' : 'none'} / ${f.maxM}m  ${f.row.name} (${f.row.kind ?? 'place'})`,

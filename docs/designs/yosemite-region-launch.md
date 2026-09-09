@@ -2,7 +2,8 @@
 
 **Status:** Operator tools deployed and free discovery refreshed 2026-09-09; corpus snapshot complete.
 Local California/Nevada extracts are verified; the first 24 reviewed Yosemite anchors are applied.
-Further anchor review, endpoint curation, paid runs, listening approval and public release remain pending.
+Further anchor review continues; endpoint curation and initial enrichment are running under founder
+approval. Listening approval and public release remain pending.
 Yosemite is not announced.
 
 The launch covers Yosemite's major driving corridors and the approaches from Groveland, Mariposa,
@@ -203,7 +204,7 @@ region-wide free enrichment preview finds 319 eligible stories (typical estimate
 first targeted batch lets us inspect fact quality before scaling. This is an initial batch, not a
 replacement for full corridor coverage or Tahoe-comparable completeness.
 
-**Prepared, awaiting founder go:**
+**Approved and started (founder authorized paid runs while away, 2026-09-09):**
 
 1. Endpoint curation: `curate-places --region yosemite-national-park --target 150 --max-cost 2 --apply`.
    Free preview estimates $0.31 for the Opus draft, plus Google Places resolution charges. The target
@@ -261,7 +262,7 @@ Sources checked for this audit: [NPS Hetch Hetchy parking and dam access](https:
 [NPS trailhead parking](https://www.nps.gov/yose/planyourvisit/thparking.htm). These establish the
 access pattern, not verified endpoint coordinates or a successful route-provider result. No paid
 calls, corpus corrections or publication occurred during this audit; the two prepared paid runs
-above remain awaiting explicit founder approval.
+above were subsequently approved and started; inspect their live job handles/logs before retrying.
 
 ## Corpus preparation and approval sequence
 
@@ -343,3 +344,17 @@ Keywords and screenshots must describe released coverage; leave the geography-fr
 Drizzle's documented Neon HTTP batch supports raw `db.execute` statements, including a first lock
 statement followed by validation/mutation. Context7 was consulted before implementation.
 [Drizzle batch documentation](https://orm.drizzle.team/docs/batch-api).
+
+## Reusable road-review holds
+
+The snapper now retains the selected road way ID and all access tags for both Overpass and local
+extracts. Its separate `held` report list prevents known restricted-road and tunnel matches from
+being automatically applied, including with `--force`; it does not invent another vantage to bypass
+a hold. Seasonal restrictions remain visible for desk review, and absent access tags are not proof
+of public access. Class-only mode continues to describe existing anchors without moving them.
+
+A fresh local Yosemite preview after the first 24 anchors returned 352 proposals, 21 holds and
+566 beyond-bound subjects. Every proposal/hold had a matched way ID; Half Dome was held. The report
+is `packages/studio/.scratch/osm/yosemite-anchor-preview-access-review.json`. Regression checks cover
+Overpass evidence retention, nearest-segment/through-road evidence identity and restricted/tunnel
+holds. This preview performed no corpus writes.

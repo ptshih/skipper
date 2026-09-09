@@ -76,7 +76,7 @@ test('local roads preserve coordinates/class and fingerprint the bytes actually 
     const local = await loadLocalRoads(path, 'test-region', [box])
     const index = new RoadIndex()
     index.add(local.ways)
-    expect(index.nearest(0, 0, true)).toEqual({ distM: 0, lat: 0, lng: 0, cls: 'primary' })
+    expect(index.nearest(0, 0, true)).toEqual({ distM: 0, lat: 0, lng: 0, cls: 'primary', road: { id: 'w1', tags: { highway: 'primary' } } })
     await Bun.write(path, JSON.stringify(file(), null, 2))
     const reformatted = await loadLocalRoads(path, 'test-region', [box])
     expect(reformatted.provenance.sha256).not.toBe(local.provenance.sha256)
