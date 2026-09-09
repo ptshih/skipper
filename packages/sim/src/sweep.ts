@@ -42,9 +42,8 @@
 //
 // READ-ONLY: two SELECTs and the pure engine. It writes nothing, calls no paid API, spends nothing.
 
-import { eq, inArray } from 'drizzle-orm'
-import { db } from '@skipper/db'
-import { drives, narrations, pois, selectionSubject } from '@skipper/db/schema'
+import { loadStops } from './load'
+import { assertReleaseAudit } from './selection'
 import { readFileSync } from 'node:fs'
 import {
   ANCHORED_TRIGGER_RADIUS_M,
@@ -58,7 +57,6 @@ import {
   OFF_ROUTE_MAX_M,
   formatMmss,
   runDrive,
-  triggerRadiusForKind,
 } from '@skipper/engine'
 import type { DriveStopRef, LngLat, RawFix, SimReport } from '@skipper/engine'
 
@@ -176,73 +174,6 @@ interface CellOutcome {
   leadSec?: number
 }
 
-/**
- * Load the drive and resolve every stop's REAL trigger geometry.
- *
- * ⚠ This MIRRORS `run.ts` (which mirrors `rowsToCorpus` in apps/api/src/drives.ts): speakable anchor
- * when present, trigger floor from kind + anchored. That agreement is the whole value of the tool — a
- * sweep computed off different geometry than the car uses is a curve for a drive that does not exist.
- * If run.ts's resolution changes, this changes with it.
- */
-async function loadStops(driveId: string) {
-  const drive = (
-    await db
-      .select({ id: drives.id, label: drives.label, polyline: drives.polyline, selection: drives.selection })
-      .from(drives)
-      .where(eq(drives.id, driveId))
-      .limit(1)
-  )[0]
-  if (!drive) throw new Error(`No drive found for id "${driveId}".`)
-
-  const narrationItems = (drive.selection ?? []).filter((i) => i.kind === 'narration')
-  // ⚠ POI subjects only, as run.ts: a frozen selection can also name a CLUSTER, whose geometry lives in
-  // its members rather than in `pois`. Skipped rather than mis-placed — and counted, so a sweep over a
-  // cluster-heavy drive can't quietly look like a sweep over all of it.
-  const subjects = narrationItems.map((i) => selectionSubject(i))
-  const poiIds = subjects.filter((s) => s?.kind === 'poi').map((s) => s!.id)
-  const skippedClusters = subjects.filter((s) => s != null && s.kind !== 'poi').length
-
-  const rows = poiIds.length
-    ? await db
-        .select({
-          poiId: narrations.poiId,
-          form: narrations.form,
-          durationMs: narrations.audioDurationMs,
-          lat: pois.lat,
-          lng: pois.lng,
-          name: pois.name,
-          kind: pois.kind,
-          speakableLat: pois.speakableLat,
-          speakableLng: pois.speakableLng,
-        })
-        .from(narrations)
-        .innerJoin(pois, eq(pois.id, narrations.poiId))
-        .where(inArray(narrations.poiId, poiIds))
-    : []
-  const byPoi = new Map(rows.map((r) => [r.poiId, r]))
-
-  const stops: SweepStop[] = []
-  for (const item of narrationItems) {
-    const subject = selectionSubject(item)
-    const n = subject?.kind === 'poi' ? byPoi.get(subject.id) : undefined
-    if (!n) continue
-    const anchored = n.speakableLat != null && n.speakableLng != null
-    stops.push({
-      anchored,
-      ref: {
-        seq: item.seq,
-        lat: n.speakableLat ?? n.lat,
-        lng: n.speakableLng ?? n.lng,
-        name: n.name,
-        stopType: n.form,
-        triggerRadiusM: triggerRadiusForKind(n.kind ?? null, anchored),
-        durationMs: n.durationMs,
-      },
-    })
-  }
-  return { drive, stops, skippedClusters }
-}
-
 /** One grid cell: the same `runDrive` the car-agreeing CLI uses, with the anchored floor overridden. */
 function runCell(polyline: LngLat[], stops: SweepStop[], radiusM: number, leadSeconds: number, mph: number) {
   // ⚠ Re-runs the FULL `runDrive` per cell instead of reusing one fix stream across the grid. That is
@@ -351,9 +282,12 @@ async function main() {
     )
   }
 
-  const { drive, stops, skippedClusters } = await loadStops(driveId)
+  const resolved = await loadStops(driveId)
+  const { drive, stops, missing } = resolved
+  for (const item of missing) console.error(`Missing subject at seq ${item.seq}: ${item.subject} (${item.reason})`)
+  if (process.argv.includes('--release-audit')) assertReleaseAudit(resolved)
   if (stops.length === 0) {
-    console.log(`\nDrive "${drive.label ?? drive.id}" resolved 0 poi-backed stops — nothing to sweep.\n`)
+    console.log(`\nDrive "${drive.label ?? drive.id}" resolved 0 playable subjects — nothing to sweep.\n`)
     return
   }
 
@@ -385,6 +319,8 @@ async function main() {
 
   const cell = (r: number, l: number, seq: number): CellOutcome =>
     grid.get(key(r, l))?.get(seq) ?? { fired: false }
+  if (process.argv.includes('--release-audit') && !stops.some(s => cell(baseRadius, baseLead, s.ref.seq).fired))
+    throw new Error('Release audit: no clips triggered at shipping settings')
   const offRouteBySeq = new Map(baseline.stops.map((s) => [s.seq, s.offRouteM]))
   const excluded = new Set(baseline.excludedOffRoute)
   const onRoute = stops.filter((s) => !excluded.has(s.ref.seq)).length
@@ -415,8 +351,8 @@ async function main() {
     `grid: radius ${radii.length} × lead ${leads.length} = ${cellCount} sims · ` +
       `⌖ = today's shipping value (${fmtNum(baseRadius)}m floor, ${fmtNum(baseLead)}s lead), always added to each axis`,
   )
-  if (skippedClusters > 0) {
-    console.log(`⚠ ${skippedClusters} CLUSTER stop(s) skipped — fused tellings have no pois row to place (as run.ts).`)
+  if (missing.length > 0) {
+    console.log(`⚠ ${missing.length} unresolved stop(s) — this sweep is incomplete.`)
   }
   console.log('='.repeat(94))
 

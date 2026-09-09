@@ -14,7 +14,6 @@
 # not COPYed by any image build. studio + engine are DELIBERATELY NOT excluded:
 # the gen image (packages/studio/Dockerfile) COPYs them — excluding 404s its build context.
 apps/mobile
-packages/sim
 
 # dev/test/build cruft
 **/.expo

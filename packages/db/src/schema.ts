@@ -1048,3 +1048,45 @@ export type StudioJob = typeof studioJobs.$inferSelect
 export type NewStudioJob = typeof studioJobs.$inferInsert
 export type Narration = typeof narrations.$inferSelect
 export type Drive = typeof drives.$inferSelect
+
+// Saved operator review evidence is additive; publication remains a monotonic narration latch.
+export const listeningReviews = pgTable('listening_reviews', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  regionSlug: text('region_slug').notNull().references(() => regions.slug),
+  narrationId: uuid('narration_id'),
+  fingerprint: text('fingerprint').notNull(),
+  snapshot: jsonb('snapshot').notNull(),
+  reviewer: text('reviewer').notNull(),
+  approvedAt: timestamp('approved_at', { withTimezone: true }),
+  approvedBy: text('approved_by'),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+export const listeningReviewItems = pgTable('listening_review_items', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  reviewId: uuid('review_id').notNull().references(() => listeningReviews.id, { onDelete: 'cascade' }),
+  narrationId: uuid('narration_id').notNull(),
+  fingerprint: text('fingerprint').notNull(),
+  queue: text('queue').notNull(),
+  verdict: text('verdict').notNull().default('unreviewed'),
+  notes: text('notes').notNull().default(''),
+  advisoryReason: text('advisory_reason').notNull().default(''),
+  technical: jsonb('technical'),
+  reviewer: text('reviewer'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, t => [uniqueIndex('listening_review_item_uq').on(t.reviewId, t.narrationId),
+  check('listening_verdict_valid', sql`${t.verdict} in ('unreviewed', 'good', 'needs_work')`)])
+
+export const listeningEvidence = pgTable('listening_evidence', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  regionSlug: text('region_slug').notNull().references(() => regions.slug),
+  corridor: text('corridor').notNull(),
+  driveId: uuid('drive_id').notNull(),
+  corpusFingerprint: text('corpus_fingerprint').notNull(),
+  route: jsonb('route').notNull(),
+  report: jsonb('report').notNull(),
+  notes: text('notes').notNull(),
+  reviewer: text('reviewer').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+})

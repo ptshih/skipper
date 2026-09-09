@@ -1,0 +1,1 @@
+ALTER TABLE "listening_reviews" ADD COLUMN "published_at" timestamp with time zone;

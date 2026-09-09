@@ -37,9 +37,11 @@
 //   POST /admin/places/curate     -> resolve the pruned drafts against Google Places + upsert role-tagged
 
 import { Hono } from 'hono'
+import { listeningRoutes } from './listening'
+import { loadPublication, releaseReviewed } from './publication'
 import { serveStatic } from 'hono/bun'
 import { csrf } from 'hono/csrf'
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm'
 import { inAnyBbox } from '@skipper/db/bbox'
 import { db } from '@skipper/db'
 import {
@@ -229,6 +231,7 @@ app.use('/admin/*', csrf())
 
 // Everything else is founder-only.
 app.use('/admin/*', requireAdmin)
+app.route('/admin', listeningRoutes)
 
 app.get('/admin/regions', async (c) => {
   const [rows, poiCoords] = await Promise.all([
@@ -330,12 +333,9 @@ app.patch('/admin/regions/:slug', async (c) => {
   return c.json({ region: row })
 })
 
-// Release a region (region-release-gate): flip it DRAFT → RELEASED and bulk-stamp `released_at` on
-// every still-STAGED narration in its bbox (auto-release-all). IRREVERSIBLE by design — never
-// un-release (the read paths serve released clips forever; un-release would orphan saved drives +
-// invalidate offline downloads). Idempotent + re-runnable: a second call keeps the region's original
-// release date but stamps any clips that staged since (the "push new clips public" path).
-// See docs/decisions/region-release-gate.md.
+// Future staged releases require an approved, unchanged Listening Review. The shared resolver
+// defines the set displayed to the operator and the rows stamped in the locked release transaction.
+// Existing release timestamps remain monotonic; an already-completed release is a no-op success.
 app.post('/admin/regions/:slug/release', async (c) => {
   const slug = c.req.param('slug')
   const region = (
@@ -346,55 +346,20 @@ app.post('/admin/regions/:slug/release', async (c) => {
       .limit(1)
   )[0]
   if (!region) return c.json({ error: 'not_found' }, 404)
-  // ⚠ ALL-OR-NOTHING PARSE, AND THIS IS THE ROUTE WHERE IT MATTERS MOST. Release is IRREVERSIBLE, so
-  // a region whose bbox parsed only PARTIALLY would publish part of itself and leave the rest staged
-  // with no way to tell afterwards which half went. `parseBboxes` voids the whole list on any
-  // malformed box, and an empty list 400s here rather than scoping to nothing silently.
-  const boxes = parseBboxes(region.bbox)
-  if (boxes.length === 0) {
-    return c.json({ error: 'bbox_required', message: 'Set a valid region bbox before releasing.' }, 400)
+  try {
+    const current = await loadPublication(slug)
+    if (region.releasedAt && current.value.clips.length === 0) return c.json({
+      region, releasedClips: 0, releasedFusedClips: 0, alreadyReleased: true,
+    })
+    const body = await c.req.json<{ reviewId?: string }>().catch(() => ({} as { reviewId?: string }))
+    if (!body.reviewId || !UUID_RE.test(body.reviewId)) return c.json({ error: 'review_required', message: 'Complete and approve a Listening Review first.' }, 409)
+    const result = await releaseReviewed(slug, body.reviewId)
+    if (!result.approved) return c.json({ error: 'stale_review', message: 'Publication changed or approval is missing. Create a fresh Listening Review.' }, 409)
+    return c.json({ region: { slug, releasedAt: region.releasedAt ?? new Date() },
+      releasedClips: result.count, releasedFusedClips: result.fused, alreadyReleased: region.releasedAt != null })
+  } catch (e) {
+    return c.json({ error: 'release_blocked', message: e instanceof Error ? e.message : 'Release blocked' }, 409)
   }
-
-  const releasedAt = new Date()
-  const inBboxPoi = db
-    .select({ id: pois.id })
-    .from(pois)
-    .where(inAnyBbox(pois.lat, pois.lng, boxes))
-
-  // …and the CLUSTERS those pois belong to, for FUSED tellings. ⚠ Without this a fused clip can NEVER
-  // be released: its `poi_id` is NULL, so the poi-keyed predicate below can't match it, and
-  // `released_at` is what every public read path filters on. It would be paid-for, correct, and
-  // unhearable. A cluster is "in the region" the same geometry-first way everything else is — by where
-  // its members are.
-  const inBboxCluster = db
-    .selectDistinct({ id: pois.clusterId })
-    .from(pois)
-    .where(and(isNotNull(pois.clusterId), inAnyBbox(pois.lat, pois.lng, boxes)))
-
-  const [, stamped, stampedFused] = await db.batch([
-    // Region row: set ONLY while still draft, so a re-run preserves the first release timestamp.
-    db.update(regions).set({ releasedAt }).where(and(eq(regions.slug, slug), isNull(regions.releasedAt))),
-    // Every staged clip in the bbox → released. Re-runnable: only touches released_at IS NULL rows.
-    db
-      .update(narrations)
-      .set({ releasedAt })
-      .where(and(isNull(narrations.releasedAt), inArray(narrations.poiId, inBboxPoi)))
-      .returning({ id: narrations.id }),
-    // The other subject kind. Separate statement rather than an OR, so each half stays an indexed
-    // lookup and the counts are reportable apart.
-    db
-      .update(narrations)
-      .set({ releasedAt })
-      .where(and(isNull(narrations.releasedAt), inArray(narrations.clusterId, inBboxCluster)))
-      .returning({ id: narrations.id }),
-  ])
-
-  return c.json({
-    region: { slug: region.slug, releasedAt: region.releasedAt ?? releasedAt },
-    releasedClips: stamped.length + stampedFused.length,
-    releasedFusedClips: stampedFused.length,
-    alreadyReleased: region.releasedAt != null,
-  })
 })
 
 // Bbox lookup — a Claude estimate the operator can refine conversationally (founder 2026-06-20:
@@ -1674,20 +1639,16 @@ app.post('/admin/pois/:poiId/narration/release', async (c) => {
   // An already-released clip is a no-op success, not a 404 — the client shows the right state.
   if (target.releasedAt) return c.json({ releasedAt: target.releasedAt, alreadyReleased: true })
 
-  const [row] = await db
-    .update(narrations)
-    .set({ releasedAt: new Date() })
-    .where(and(eq(narrations.id, target.id), isNull(narrations.releasedAt)))
-    .returning({ releasedAt: narrations.releasedAt })
-  if (row) return c.json({ releasedAt: row.releasedAt })
-  // Lost a race with a concurrent release: it IS released now, just not by us — so re-read the
-  // stamp rather than echoing `target.releasedAt`, which is null by construction at this point.
-  const [now] = await db
-    .select({ releasedAt: narrations.releasedAt })
-    .from(narrations)
-    .where(eq(narrations.id, target.id))
-    .limit(1)
-  return c.json({ releasedAt: now?.releasedAt ?? null, alreadyReleased: true })
+  const body = await c.req.json<{ reviewId?: string; regionSlug?: string }>().catch(() => ({} as { reviewId?: string; regionSlug?: string }))
+  if (!body.reviewId || !UUID_RE.test(body.reviewId) || !body.regionSlug)
+    return c.json({ error: 'review_required', message: 'Approve a Listening Review for this individual clip first.' }, 409)
+  try {
+    const result = await releaseReviewed(body.regionSlug, body.reviewId, target.id)
+    if (!result.approved) return c.json({ error: 'stale_review', message: 'Clip changed or individual approval is missing.' }, 409)
+    return c.json({ releasedAt: new Date(), alreadyReleased: false })
+  } catch (e) {
+    return c.json({ error: 'release_blocked', message: e instanceof Error ? e.message : 'Release blocked' }, 409)
+  }
 })
 
 /* -------------------------------------------------------------------------- */

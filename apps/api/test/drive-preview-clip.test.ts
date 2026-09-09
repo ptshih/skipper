@@ -358,7 +358,7 @@ describe('⚠ INV-5: the BuildCorpus brand is asserted in exactly ONE place', ()
     // ../src/clusters. Drizzle's `and()` DROPS an undefined operand, so `includeStaged === true`
     // removes the predicate entirely rather than replacing it with a tautology.
     expect(codeOnly(SRC)).toContain('includeStaged ? undefined : isNotNull(narrations.releasedAt)')
-    const clusters = codeOnly(readFileSync(join(import.meta.dir, '../src/clusters.ts'), 'utf8'))
+    const clusters = codeOnly(readFileSync(join(import.meta.dir, '../../../packages/db/src/cluster-tellings.ts'), 'utf8'))
     expect(clusters).toContain('includeStaged ? undefined : isNotNull(narrations.releasedAt)')
   })
 })

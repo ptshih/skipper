@@ -5,7 +5,8 @@
   "type": "module",
   "main": "./src/run.ts",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@skipper/db": "workspace:*",
@@ -15,5 +16,9 @@
   "devDependencies": {
     "@types/bun": "^1.3.14",
     "@types/node": "^26.1.1"
+  },
+  "exports": {
+    "./load": "./src/load.ts",
+    "./selection": "./src/selection.ts"
   }
 }

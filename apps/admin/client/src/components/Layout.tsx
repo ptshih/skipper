@@ -8,12 +8,13 @@ import { api } from '@/lib/api'
 import { qk } from '@/lib/queryKeys'
 import { cn } from '@/lib/utils'
 
-type AppPath = '/jobs' | '/evals' | '/regions' | '/pois' | '/places' | '/drives' | '/users' | '/reference'
+type AppPath = '/jobs' | '/evals' | '/regions' | '/pois' | '/places' | '/drives' | '/users' | '/reference' | '/listening'
 
 const NAV: { to: AppPath; label: string; icon: React.ElementType }[] = [
   { to: '/jobs', label: 'Jobs', icon: Activity },
   { to: '/evals', label: 'Evals', icon: Gauge },
   { to: '/regions', label: 'Regions', icon: Layers },
+  { to: '/listening', label: 'Listening Review', icon: BookOpen },
   { to: '/pois', label: 'POIs', icon: MapPin },
   { to: '/places', label: 'Places', icon: Anchor },
   // The corpus pages above build what a drive is made OF; Drives + Users are the rider-owned side.

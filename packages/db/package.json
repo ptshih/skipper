@@ -10,7 +10,8 @@
     "./schema": "./src/schema.ts",
     "./bbox": "./src/bbox.ts",
     "./auth-schema": "./src/auth-schema.ts",
-    "./hash": "./src/hash.ts"
+    "./hash": "./src/hash.ts",
+    "./cluster-tellings": "./src/cluster-tellings.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",
@@ -22,7 +23,9 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.2",
+    "@skipper/engine": "workspace:*",
+    "@skipper/shared": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",

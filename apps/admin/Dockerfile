@@ -17,7 +17,8 @@ COPY packages/db/package.json packages/db/
 COPY packages/shared/package.json packages/shared/
 COPY packages/storage/package.json packages/storage/
 COPY packages/engine/package.json packages/engine/
-RUN bun -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.workspaces=['apps/admin','packages/db','packages/shared','packages/storage','packages/engine'];fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
+COPY packages/sim/package.json packages/sim/
+RUN bun -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.workspaces=['apps/admin','packages/db','packages/shared','packages/storage','packages/engine','packages/sim'];fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
  && bun install
 COPY apps/admin apps/admin
 # ⚠ THE SPA BUNDLE NEEDS THIS PACKAGE'S SOURCE, not just its package.json — and it is the ONE workspace
@@ -42,6 +43,7 @@ RUN cd apps/admin && bun run build
 FROM oven/bun:1
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
 RUN bun add -g @dotenvx/dotenvx
 
 # Trim the workspace to the server's closure: admin + @skipper/{db,shared,storage,engine}. --production
@@ -52,7 +54,8 @@ COPY packages/db/package.json packages/db/
 COPY packages/shared/package.json packages/shared/
 COPY packages/storage/package.json packages/storage/
 COPY packages/engine/package.json packages/engine/
-RUN bun -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.workspaces=['apps/admin','packages/db','packages/shared','packages/storage','packages/engine'];fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
+COPY packages/sim/package.json packages/sim/
+RUN bun -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));p.workspaces=['apps/admin','packages/db','packages/shared','packages/storage','packages/engine','packages/sim'];fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
  && bun install --production
 
 # The source the server runs (bun executes .ts directly — no dist build).
@@ -61,6 +64,7 @@ COPY packages/db/src packages/db/src
 COPY packages/shared/src packages/shared/src
 COPY packages/storage/src packages/storage/src
 COPY packages/engine/src packages/engine/src
+COPY packages/sim/src packages/sim/src
 COPY .env.production ./
 # the built SPA, served by the Hono server at ADMIN_WEB_ROOT.
 COPY --from=web /app/apps/admin/client/dist ./public

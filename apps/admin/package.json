@@ -23,7 +23,8 @@
     "@vis.gl/react-google-maps": "^1.9.0",
     "drizzle-orm": "^0.45.2",
     "google-auth-library": "^10.9.0",
-    "hono": "^4.12.30"
+    "hono": "^4.12.30",
+    "@skipper/sim": "workspace:*"
   },
   "devDependencies": {
     "@radix-ui/react-dialog": "^1.1.19",

@@ -330,6 +330,27 @@
       "when": 1785857317847,
       "tag": "0046_clammy_meltdown",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1788987663459,
+      "tag": "0047_friendly_jack_power",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1788987943231,
+      "tag": "0048_acoustic_mantis",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1788988249025,
+      "tag": "0049_quick_landau",
+      "breakpoints": true
     }
   ]
 }

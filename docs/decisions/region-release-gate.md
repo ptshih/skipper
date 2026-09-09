@@ -1,6 +1,6 @@
 # Region release gate — staged content + a one-way release latch
 
-> **Status:** ✅ BUILT 2026-06-20 (migration `0029`, applied to the shared DB). Founder-approved model:
+> **Status:** Release latch built; saved-review enforcement implemented 2026-09-09, deployment pending. Original gate BUILT 2026-06-20 (migration `0029`, applied to the shared DB). Founder-approved model:
 > auto-release every clip in a region on release. **Preview gate UPDATED 2026-06-20:** the per-user
 > preview flag moved from a bespoke `user.tester` boolean → the **Better Auth `admin` plugin role**
 > (`role === 'admin'`), so "preview staged content" is now one facet of being an admin (migration `0030`
@@ -19,6 +19,19 @@
 > easy to get wrong: `loadCorpusBySubjectIds` / `corpusForSelection` still apply NO release filter by
 > design — they resolve a FROZEN selection a rider already paid for, and are safe only while every
 > caller stays owner-scoped behind `requireAccount`.
+
+
+## Saved review amendment — 2026-09-09
+
+Future staged publication, including one clip, requires an explicitly approved saved Listening
+Review. The staged set includes individual narrations and combined narrations with any member
+inside any region box. Display, fingerprints, and release writes share one SQL resolver. A short
+locked transaction revalidates the exact set and approval before stamping anything; existing
+released audio and live regeneration retain their monotonic behavior. Completed reviews carry
+publication receipts for idempotent retries. The review tables are additive; deploy their migrations
+before the admin code. See [Yosemite launch](../designs/yosemite-region-launch.md) for workflow,
+limitations, and outstanding operator approvals. The historical direct-release instructions below
+are superseded by this workflow.
 
 ## The problem
 

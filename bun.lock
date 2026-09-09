@@ -22,6 +22,7 @@
         "@skipper/db": "workspace:*",
         "@skipper/engine": "workspace:*",
         "@skipper/shared": "workspace:*",
+        "@skipper/sim": "workspace:*",
         "@skipper/storage": "workspace:*",
         "@tanstack/react-query": "^5.101.2",
         "@tanstack/react-router": "^1.170.18",
@@ -138,6 +139,8 @@
       "version": "0.0.0",
       "dependencies": {
         "@neondatabase/serverless": "^1.1.0",
+        "@skipper/engine": "workspace:*",
+        "@skipper/shared": "workspace:*",
         "drizzle-orm": "^0.45.2",
       },
       "devDependencies": {

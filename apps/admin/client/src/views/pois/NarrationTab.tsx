@@ -57,25 +57,6 @@ export function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarrat
     regenMut.mutate()
   }
 
-  // region-release-gate: release THIS staged clip to the public (the trickle case — a freshly
-  // ear-checked clip inside an already-open region). IRREVERSIBLE; never un-releases.
-  const releaseMut = useMutation({
-    mutationFn: () => api.releaseNarration(poiId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: qk.poiNarration(poiId) })
-      void qc.invalidateQueries({ queryKey: qk.pois() })
-    },
-  })
-  async function handleRelease() {
-    if (!(await confirm({
-      title: 'Release this clip to the public?',
-      body: 'Makes this narration publicly playable in drives. Releasing is permanent — a clip can never be un-released (it would orphan saved drives and break offline downloads). Make sure you’ve heard it.',
-      confirmLabel: 'Release clip',
-      tone: 'destructive',
-    }))) return
-    releaseMut.mutate()
-  }
-
   if (!hasNarration) {
     return (
       <EmptyState icon={Zap} className="rounded-xl border bg-muted/30">
@@ -133,10 +114,10 @@ export function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarrat
           <PendingButton
             variant="default"
             size="sm"
-            onClick={() => void handleRelease()}
-            pending={releaseMut.isPending}
+            onClick={() => { location.href = `/listening?narration=${clip.id}` }}
+            pending={false}
             icon={<Rocket className="h-3 w-3" />}
-            idleLabel="Release"
+            idleLabel="Review release"
             pendingLabel="Releasing…"
           />
         )}
@@ -161,7 +142,6 @@ export function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarrat
           pendingLabel="Queuing…"
         />
       </div>
-      {releaseMut.error && <ErrorCallout error={`Release failed — ${errMsg(releaseMut.error)}`} className="rounded-lg px-3 py-2 text-xs" />}
       {resynthMut.error && <ErrorCallout error={`Re-synth failed — ${errMsg(resynthMut.error)}`} className="rounded-lg px-3 py-2 text-xs" />}
       {regenMut.error && <ErrorCallout error={`Regenerate failed — ${errMsg(regenMut.error)}`} className="rounded-lg px-3 py-2 text-xs" />}
       {suspicious && (

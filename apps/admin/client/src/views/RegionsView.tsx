@@ -6,7 +6,6 @@ import { api, type BboxLlmResult, type BboxRefinement, type Region } from '@/lib
 import { errMsg, fmtDate } from '@/lib/format'
 import { qk } from '@/lib/queryKeys'
 import { useAdminList } from '@/lib/useAdminList'
-import { useConfirm } from '@/components/ui/confirm-dialog'
 import { PageHeader } from '@/components/PageHeader'
 import { DataTable, type Column } from '@/components/ui/data-table'
 import { SelectionBar } from '@/components/ui/selection-bar'
@@ -41,7 +40,6 @@ const CONFIDENCE_META = {
 
 export function RegionsView() {
   const qc = useQueryClient()
-  const confirm = useConfirm()
   const [dialog, setDialog] = useState<DialogMode | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [sel, setSel] = useState<Set<string>>(new Set())
@@ -66,34 +64,6 @@ export function RegionsView() {
   }
   function toggleAll() { setSel(numSelected > 0 ? new Set() : new Set(regions.map((r) => r.slug))) }
   function clearSel() { setSel(new Set()) }
-
-  // region-release-gate: releasing is IRREVERSIBLE + auto-releases every staged clip in the bbox.
-  // Re-running on an already-released region pushes any newly-staged clips public (idempotent).
-  const releaseMut = useMutation({
-    mutationFn: (slug: string) => api.releaseRegion(slug),
-    onSuccess: (res) => {
-      setNotice(
-        res.releasedClips > 0
-          ? `Released ${res.releasedClips} clip${res.releasedClips === 1 ? '' : 's'} in ${res.region.slug}.`
-          : `${res.region.slug} is released — no staged clips were waiting.`,
-      )
-      qc.invalidateQueries({ queryKey: qk.regions() })
-      qc.invalidateQueries({ queryKey: qk.pois() })
-    },
-  })
-
-  async function onRelease(r: Region) {
-    const draft = r.releasedAt == null
-    const ok = await confirm({
-      title: draft ? `Release ${r.displayName} to the public?` : `Release new clips in ${r.displayName}?`,
-      body: draft
-        ? 'This opens the region to everyone and releases every staged clip inside its bbox — per-POI tellings AND the FUSED clip of any group with a member in the box. ⚠ Releasing a fused telling also RETIRES its members: those places stop appearing in new drives, because the group’s one clip now speaks for them. Releasing is permanent — a region can never be un-released (it would orphan saved drives and break offline downloads). Tweak POIs first; testers can preview staged clips in-app.'
-        : 'This region is already public. Re-running release publishes EVERY clip in this region’s bbox that is still staged — not only recent ones: the predicate is “not yet released”, with no since-date. That includes clips shared with an overlapping region, because a place inside two bboxes belongs to both, and any staged FUSED clip whose group has a member in the box — which also retires that group’s members from new drives. Permanent and cannot be undone.',
-      confirmLabel: draft ? 'Release region' : 'Release new clips',
-      tone: 'destructive',
-    })
-    if (ok) releaseMut.mutate(r.slug)
-  }
 
   const columns: Column<Region>[] = [
     {
@@ -158,6 +128,7 @@ export function RegionsView() {
         const released = r.releasedAt != null
         return (
           <div className="flex items-center justify-end gap-1">
+            <a className="text-sm underline" href={`/listening?region=${r.slug}`}>Listening review</a>
             <Button
               variant="ghost"
               size="sm"
@@ -177,12 +148,11 @@ export function RegionsView() {
             <Button
               variant={released ? 'ghost' : 'default'}
               size="sm"
-              disabled={releaseMut.isPending}
-              onClick={() => void onRelease(r)}
+              onClick={() => { location.href = `/listening?region=${r.slug}` }}
               title={released ? 'Publish every clip in this bbox that is still staged (permanent)' : 'Open this region to the public (permanent)'}
             >
               <Rocket className="h-3.5 w-3.5" />
-              {released ? 'Release new' : 'Release'}
+              Review release
             </Button>
           </div>
         )
@@ -205,12 +175,6 @@ export function RegionsView() {
       {err && (
         <Callout variant="error">
           <span className="font-medium">Error loading regions:</span> {errMsg(err)}
-        </Callout>
-      )}
-
-      {releaseMut.error && (
-        <Callout variant="error">
-          <span className="font-medium">Release failed:</span> {errMsg(releaseMut.error)}
         </Callout>
       )}
 
