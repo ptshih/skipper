@@ -1,7 +1,8 @@
 # Yosemite launch and admin listening review
 
 **Status:** Operator tools deployed and free discovery refreshed 2026-09-09; corpus snapshot complete.
-Road-anchor preparation is blocked by Overpass connection failures/timeouts. Paid runs, listening approval and public release remain pending.
+Local California/Nevada road extracts and snapping previews are verified. Selective anchor review,
+paid runs, listening approval and public release remain pending.
 Yosemite is not announced.
 
 The launch covers Yosemite's major driving corridors and the approaches from Groveland, Mariposa,
@@ -130,12 +131,16 @@ responded. The CLI now accepts `OVERPASS_URL` for an explicit alternative and fa
 server errors or HTTP-success runtime-error responses. Regression tests cover those cases, valid empty
 tiles and recovery from a transient error. Public instance documentation was checked through Context7
 and the [OSM instance list](https://wiki.openstreetmap.org/wiki/Overpass_API#Public_Overpass_API_instances).
-The alternative also exhausted its retries with a timeout on the second tile. Both previews exited 1;
-no anchor proposals were applied and Yosemite still has zero road anchors, fact sheets and narrations.
-Resume the same approved free preview when a public instance is responsive, inspect the JSON report,
-and apply only suitable proposals while preserving any intervening operator corrections. The previous
-connection failure is not evidence that a POI is off-road. Discovery and deployment are complete;
-the first free preparation batch remains incomplete at road snapping.
+The alternative also exhausted its retries with a timeout on the second tile; a subsequent retry
+exhausted HTTP 504 responses. No anchors were written from those incomplete results. The local OSM
+path then removed this dependency: verified California/Nevada extracts from the same September 8
+snapshot produced 3,655 Yosemite road ways and a complete preview (397 proposed anchors, 566 beyond
+bounds). The preview is saved at `packages/studio/.scratch/osm/yosemite-anchor-preview.json` and includes
+the source road file's fingerprint. Review suitable proposals before applying, preserving intervening
+operator corrections and retaining contextual off-road members. Yosemite still has zero applied road
+anchors, fact sheets and narrations. See the [local OSM guide](../guides/local-osm-roads.md) for reusable
+state caches, multi-state coverage checks and the Tahoe verification. Discovery and tools are complete;
+the first free preparation batch remains incomplete at selective anchor review/application.
 
 ## Corpus preparation and approval sequence
 

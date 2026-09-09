@@ -1,6 +1,10 @@
 # Road-Snapped Speakable Anchors — Build Spec
 
-> **Status (2026-06-25):** ✅ BUILT + RUN. `snap-speakable-anchors.ts` snaps POI centroids to the nearest
+> **Status (2026-09-09):** Built; Overpass and verified local OSM sources share one snapping algorithm.
+> California/Nevada local extracts and Yosemite/Tahoe previews verified; see the
+> [local OSM guide](../guides/local-osm-roads.md). No anchors were changed in that local-source verification.
+>
+> **Initial rollout (2026-06-25):** `snap-speakable-anchors.ts` snaps POI centroids to the nearest
 > drivable road via **OSM/Overpass** (free, keyless) and ran on Tahoe → **750 speakable anchors, all within
 > bounds**; ~99 left anchorless as genuine backcountry (Desolation Wilderness peaks/lakes). It first used
 > Google Roads "Nearest Roads", but that API's snap threshold wrongly flagged **233/334** road-adjacent

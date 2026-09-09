@@ -119,6 +119,13 @@ export function ReferenceView() {
       </Section>
 
       <Section title="Example: corpus for a new region" subtitle="Discover first (free), then enrich + generate. Always preview before applying.">
+        <Callout>
+          Road preparation (CLI): <code>prepare-local-roads.ts --region … --sources us/california,us/nevada --apply</code>
+          {' '}downloads and verifies free OSM extracts into local files only. Reuse the state cache for other regions;
+          add source IDs for other states. Then preview <code>snap-speakable-anchors.ts --region … --roads-file … --report …</code>.
+          {' '}Its separate <code>--apply</code> writes corpus anchors. Missing state coverage and conflicting snapshots
+          stop the run; local files never imply current road access. No model, TTS or route-provider calls.
+        </Callout>
         <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
           <li>
             Regions page → <Step>Add region</Step> — set the slug + a discovery bbox (the lookup helps find one).

@@ -170,6 +170,7 @@ are the ops CLIs" rather than "these are the ones anyone checked" — and the un
 | `sweep-orphans.ts` | DELETES BYTES | dry-run | ✅ (reference) |
 | `resynth-narration.ts` | SPENDS $ + MUTATES DB | dry-run | ✅ |
 | `snap-speakable-anchors.ts` | MUTATES DB (no spend — OSM) | dry-run | ✅ |
+| `prepare-local-roads.ts` | READ-ONLY on DB; free downloads and LOCAL cache/road-file writes on `--apply` | preview | ✅ — region + explicit source IDs required; see [local OSM guide](local-osm-roads.md) |
 | `prune-corpus.ts` | MUTATES DB; `--delete` DELETES ROWS + cascades | dry-run | ✅ (`--restore`; `--delete` needs `--apply`) |
 | `classify-treatments.ts` | SPENDS $ (~$0.8/region) + MUTATES DB | ⚠ preview SPENDS | ⚠ see above — only the WRITE is gated |
 | `backfill-poi-extent.ts` | MUTATES DB (no spend — WDQS) | dry-run | ✅ |

@@ -26,6 +26,7 @@
 //   apply:    dotenvx run -f .env.development -- bun packages/studio/src/snap-speakable-anchors.ts --apply
 //   --region <slug>  scope to a region's bbox (REQUIRED — no default).
 //   --report <path>  save every proposed/flagged anchor for desk review (local JSON; no DB writes).
+//   --roads-file <path>  verified region road file from prepare-local-roads (no Overpass calls).
 //   OVERPASS_URL     optional public interpreter endpoint when the default instance is unavailable.
 //   --force          re-snap POIs that already carry an anchor (OVERWRITES admin corrections too) — a
 //                    clean re-baseline. Default: only POIs with no speakable anchor yet.
@@ -43,47 +44,15 @@ import { announce, parseFlags } from './pipeline/ops'
 import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
 import { resolveRegion, requireRegionBboxes } from './pipeline/region'
+import { DRIVABLE, MAJOR, BBOX_PAD_DEG, RoadIndex, type Way } from './pipeline/road-index'
+import { loadLocalRoads } from './pipeline/local-roads'
 
 const OVERPASS = process.env.OVERPASS_URL ?? 'https://overpass-api.de/api/interpreter'
 const UA = 'Skipper/0.1 (https://github.com/ptshih/skipper; hello@skipper.fm) road-snap'
-// Through-roads only (no `service` — driveways/parking aisles aren't "the road you drive past a POI on").
-const DRIVABLE =
-  '^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link)$'
-// A THROUGH road — one a tour is plausibly driven on. The rest of DRIVABLE (unclassified, residential,
-// living_street) is the neighbourhood layer: real, drivable, and usually NOT where the drive is.
-// Snapping a downtown building to the side street behind it produces a perfectly valid anchor that
-// triggers from a road nobody is on — the failure the road CLASS exists to expose. We still snap to a
-// minor road when that's all there is (a lake road is `unclassified` too); we just record which.
-const MAJOR = /^(motorway|trunk|primary|secondary|tertiary)(_link)?$/
-const TILES = 5 // 5×5 grid over the (padded) region bbox — light enough per `out geom` request
-const BBOX_PAD_DEG = 0.03 // ~3 km > the max kind-bound (2250 m), so an edge POI still sees its road
-const GRID_CELL_DEG = 0.02 // ~2.2 km spatial-index cell; a ±2 scan covers ±4.4 km
-
+const TILES = 5
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
-
 type PoiRow = { id: string; name: string; kind: string | null; lat: number; lng: number }
-type Seg = [number, number, number, number] // aLat, aLng, bLat, bLng
-/** One OSM way reduced to what the snapper needs: its geometry + its `highway=` class. */
-type Way = { geom: { lat: number; lon: number }[]; cls: string }
 type LngLat = [number, number]
-
-/** Closest point on a segment to P (+ its distance), via a local equirectangular projection at P. */
-function nearestOnSeg(plat: number, plng: number, s: Seg): { distM: number; lat: number; lng: number } {
-  const kx = Math.cos((plat * Math.PI) / 180) * 111_320
-  const ky = 111_320
-  const ax = (s[1] - plng) * kx,
-    ay = (s[0] - plat) * ky
-  const bx = (s[3] - plng) * kx,
-    by = (s[2] - plat) * ky
-  const dx = bx - ax,
-    dy = by - ay
-  const len2 = dx * dx + dy * dy
-  let t = len2 > 0 ? (-(ax * dx) - ay * dy) / len2 : 0
-  t = Math.max(0, Math.min(1, t))
-  const cx = ax + t * dx,
-    cy = ay + t * dy
-  return { distM: Math.hypot(cx, cy), lat: plat + cy / ky, lng: plng + cx / kx }
-}
 
 /** Fetch drivable-road geometry for one tile, with a CLIENT-side timeout + retry (Overpass throttles). */
 export async function fetchTile(
@@ -126,57 +95,6 @@ export async function fetchTile(
   throw new Error('Overpass tile unavailable')
 }
 
-/** A road index: all drivable segments in the bbox + a coarse grid for nearest-segment lookup. */
-class RoadIndex {
-  private readonly segs: Seg[] = []
-  /** Parallel to `segs`: the OSM `highway=` class of the way each segment came from. */
-  private readonly cls: string[] = []
-  private readonly grid = new Map<string, number[]>()
-  private key = (lat: number, lng: number) => `${Math.floor(lat / GRID_CELL_DEG)}:${Math.floor(lng / GRID_CELL_DEG)}`
-  private bin(lat: number, lng: number, idx: number) {
-    const k = this.key(lat, lng)
-    const b = this.grid.get(k)
-    if (b) b.push(idx)
-    else this.grid.set(k, [idx])
-  }
-  add(ways: Way[]) {
-    for (const { geom: g, cls } of ways)
-      for (let i = 0; i < g.length - 1; i++) {
-        const a = g[i]!,
-          b = g[i + 1]!
-        const idx = this.segs.length
-        this.segs.push([a.lat, a.lon, b.lat, b.lon])
-        this.cls.push(cls)
-        this.bin(a.lat, a.lon, idx) // bin at both endpoints + midpoint so a long segment is found near its middle
-        this.bin(b.lat, b.lon, idx)
-        this.bin((a.lat + b.lat) / 2, (a.lon + b.lon) / 2, idx)
-      }
-  }
-  get size() {
-    return this.segs.length
-  }
-  /** Nearest road point to P over candidate segments in P's cell ±2; null if no segment indexed nearby.
-   *  `majorOnly` restricts the search to through-roads (MAJOR) so a caller can ask "is there a road
-   *  people actually drive within bound?" separately from "is there any pavement". */
-  nearest(plat: number, plng: number, majorOnly = false): { distM: number; lat: number; lng: number; cls: string } | null {
-    const ci = Math.floor(plat / GRID_CELL_DEG),
-      cj = Math.floor(plng / GRID_CELL_DEG)
-    const seen = new Set<number>()
-    let best: { distM: number; lat: number; lng: number; cls: string } | null = null
-    for (let di = -2; di <= 2; di++)
-      for (let dj = -2; dj <= 2; dj++)
-        for (const idx of this.grid.get(`${ci + di}:${cj + dj}`) ?? []) {
-          if (seen.has(idx)) continue
-          seen.add(idx)
-          const cls = this.cls[idx]!
-          if (majorOnly && !MAJOR.test(cls)) continue
-          const p = nearestOnSeg(plat, plng, this.segs[idx]!)
-          if (!best || p.distM < best.distM) best = { ...p, cls }
-        }
-    return best
-  }
-}
-
 // ⚠ TILES EACH BOX SEPARATELY into ONE shared index, never the boxes' hull. A region may be several
 // rectangles, and their hull also spans the GAP between them — for `reno-carson` that gap is the Tahoe
 // basin, so tiling the hull would fetch the whole lake's road network to snap a handful of POIs in an
@@ -208,7 +126,8 @@ async function buildRoadIndex(
 }
 
 async function main(): Promise<void> {
-  const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region', 'report'] })
+  const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region', 'report', 'roads-file'] })
+  if (flags.has('roads-file') && !flags.value('roads-file')) throw new Error('--roads-file needs a path')
   const apply = flags.has('apply')
   const force = flags.has('force')
   const classOnly = flags.has('class-only')
@@ -244,8 +163,14 @@ async function main(): Promise<void> {
     )
     return
   }
-  console.log(`${rows.length} POI(s) to snap.\n\nFetching drivable roads (OSM/Overpass, ${bbox.length * TILES * TILES} tiles)...`)
-  const roads = await buildRoadIndex(bbox)
+  console.log(`${rows.length} POI(s) to snap.`)
+  const local = flags.value('roads-file')
+    ? await loadLocalRoads(flags.value('roads-file')!, region.slug, bbox) : null
+  const roads = local ? new RoadIndex() : await buildRoadIndex(bbox)
+  if (local) {
+    roads.add(local.ways)
+    console.log(`Local OSM: ${local.provenance.sources.map((s) => `${s.id} ${s.timestamp}`).join(', ')}`)
+  }
   console.log(`\nIndexed ${roads.size} road segments. Snapping...`)
 
   // Snap every POI locally to its nearest road point, validated through the canonical bound.
@@ -302,7 +227,8 @@ async function main(): Promise<void> {
   const reportPath = flags.value('report')
   if (reportPath) {
     await Bun.write(reportPath, JSON.stringify({
-      generatedAt: new Date().toISOString(), region: region.slug, boxes: bbox, overpassUrl: OVERPASS,
+      generatedAt: new Date().toISOString(), region: region.slug, boxes: bbox,
+      roadSource: local?.provenance ?? { kind: 'overpass', url: OVERPASS },
       proposed: toWrite.map((s) => ({ ...s, distanceM: checkSpeakableAnchor(
         [s.row.lng, s.row.lat], [s.lng, s.lat], s.row.kind,
       ).distanceM })), flagged,
