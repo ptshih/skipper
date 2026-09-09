@@ -126,6 +126,7 @@ export function Scrubber({
           widthRef.current = e.nativeEvent.layout.width
           setWidth(e.nativeEvent.layout.width)
         }}
+        accessible
         accessibilityRole="adjustable"
         accessibilityLabel="Playback position"
         accessibilityState={{ disabled: !!disabled }}

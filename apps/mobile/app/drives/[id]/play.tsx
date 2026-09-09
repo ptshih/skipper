@@ -237,7 +237,12 @@ export default function DriveScreen() {
   // THIS screen means twice a second for the whole drive. See the note on `screenOptions`.
   const viewToggle = useCallback(
     () => (
-      <View style={[styles.toggle, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.rule }]}>
+      <View
+        style={[
+          styles.toggle,
+          { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.rule },
+        ]}
+      >
         {(['map', 'list'] as const).map((m) => {
           const on = view === m
           return (
@@ -354,8 +359,7 @@ export default function DriveScreen() {
         message={voice.offline.saveHint}
         action={{
           label: voice.offline.gateBackToDrive,
-          onPress: () =>
-            router.canGoBack() ? router.back() : router.replace(`/drives/${id}`),
+          onPress: () => (router.canGoBack() ? router.back() : router.replace(`/drives/${id}`)),
         }}
       />
     )
@@ -437,9 +441,13 @@ export default function DriveScreen() {
     // waiting with you — the card's body slot is otherwise unused in this state, so the line costs a
     // row of height only while held and none while playing.
     card = {
-      kicker: d.nowPlaying ? voice.player.nowPlaying : voice.player.paused,
+      kicker: d.paused
+        ? voice.player.paused
+        : d.nowPlaying
+          ? voice.player.nowPlaying
+          : voice.player.buffering,
       title: nowTitle,
-      body: d.nowPlaying ? undefined : voice.player.pausedBody,
+      body: d.paused ? voice.player.pausedBody : undefined,
       glow: d.nowPlaying,
       badge: activeStop
         ? { tone: stopTone(activeStop.stopType), label: stopLabel(activeStop.stopType) }
@@ -449,8 +457,13 @@ export default function DriveScreen() {
     // Between stops: transit, not a stop — the amber halo stays OFF (the route track
     // keeps the single between-stops glow). kicker → big destination title → next badge.
     card = {
-      kicker: nextName ? `${voice.player.rolling} · ${voice.drive.nextStop}` : voice.player.rolling,
+      kicker: d.paused
+        ? voice.player.paused
+        : nextName
+          ? `${voice.player.rolling} · ${voice.drive.nextStop}`
+          : voice.player.rolling,
       title: nextName ?? voice.player.rollingOpen,
+      body: d.paused ? voice.player.pausedBody : undefined,
       glow: false,
       badge: nextStop
         ? { tone: stopTone(nextStop.stopType), label: stopLabel(nextStop.stopType) }
@@ -572,7 +585,10 @@ export default function DriveScreen() {
           {d.gpsSearching && !d.paused ? (
             <View style={styles.mapChips} pointerEvents="none">
               <View
-                style={[styles.mapGps, { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.rule }]}
+                style={[
+                  styles.mapGps,
+                  { backgroundColor: theme.colors.surfaceRaised, borderColor: theme.colors.rule },
+                ]}
                 accessibilityLiveRegion="polite"
               >
                 <ActivityIndicator size="small" color={theme.colors.accent} />
@@ -610,7 +626,9 @@ export default function DriveScreen() {
                     borderColor: theme.colors.amberToken,
                     // Cross-platform cast (DESIGN §4) — renders on Android too, not a flat Material
                     // shadow. The negative offsetY lifts the cast UP toward the map above. (M4)
-                    boxShadow: [{ offsetX: 0, offsetY: -4, blurRadius: 14, color: theme.colors.shadowCast }],
+                    boxShadow: [
+                      { offsetX: 0, offsetY: -4, blurRadius: 14, color: theme.colors.shadowCast },
+                    ],
                   },
                 ]}
               >
@@ -630,8 +648,15 @@ export default function DriveScreen() {
                     {card.title}
                   </Text>
                   {d.activeSeq != null ? (
-                    <View style={[styles.peekTrack, { backgroundColor: theme.colors.surfaceSunken }]}>
-                      <View style={[styles.peekFill, { backgroundColor: theme.colors.trackActive, width: `${pct}%` }]} />
+                    <View
+                      style={[styles.peekTrack, { backgroundColor: theme.colors.surfaceSunken }]}
+                    >
+                      <View
+                        style={[
+                          styles.peekFill,
+                          { backgroundColor: theme.colors.trackActive, width: `${pct}%` },
+                        ]}
+                      />
                     </View>
                   ) : null}
                 </View>
@@ -667,7 +692,7 @@ export default function DriveScreen() {
           a clip plays the NOW card does. So the §8 one-amber budget holds in every state. */}
       <RouteTrack
         progress={d.progress}
-        glow={d.activeSeq === null && d.phase === 'driving'}
+        glow={d.activeSeq === null && d.phase === 'driving' && !d.paused}
         style={styles.track}
       />
 
@@ -777,7 +802,14 @@ const styles = StyleSheet.create({
   // ── Map mode: a full-bleed map with the player floating as a peek/expand sheet ──
   mapFill: { flex: 1 },
   // Top-of-map status (the GPS-searching cue) — absolutely positioned, centered.
-  mapChips: { position: 'absolute', top: space.md, left: 0, right: 0, alignItems: 'center', gap: space.sm },
+  mapChips: {
+    position: 'absolute',
+    top: space.md,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    gap: space.sm,
+  },
   mapGps: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -787,7 +819,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     borderWidth: border.hair,
   },
-  sheetWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: space.sm, paddingBottom: space.sm },
+  sheetWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: space.sm,
+    paddingBottom: space.sm,
+  },
   collapseHandle: { alignItems: 'center', paddingTop: space.xs, paddingBottom: space.sm },
   handleBar: { width: 40, height: 4, borderRadius: 2 },
   peekBar: {
@@ -800,12 +839,24 @@ const styles = StyleSheet.create({
     borderWidth: border.keyline,
     // The cast is a cross-platform boxShadow set inline (it needs the theme's shadowCast color). (M4)
   },
-  peekPlay: { width: 50, height: 50, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+  peekPlay: {
+    width: 50,
+    height: 50,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   peekText: { flex: 1, minWidth: 0, gap: 3 },
   peekTrack: { height: 4, borderRadius: 2, overflow: 'hidden', marginTop: 2 },
   peekFill: { height: '100%' },
   // Map ⇄ List header segmented control.
-  toggle: { flexDirection: 'row', padding: 2, gap: 2, borderRadius: radius.pill, borderWidth: border.hair },
+  toggle: {
+    flexDirection: 'row',
+    padding: 2,
+    gap: 2,
+    borderRadius: radius.pill,
+    borderWidth: border.hair,
+  },
   toggleBtn: {
     minWidth: 36,
     height: 30,

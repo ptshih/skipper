@@ -11,6 +11,7 @@ import { DEFAULT_SIM_MODE, SimModeProvider, readStoredSimMode } from '@/lib/sim-
 import { ThemeProvider, readStoredThemeMode, useAppFonts, useTheme, type ThemeMode } from '@/theme'
 import { fonts } from '@/theme/tokens'
 import { HEADER_FLOATS, HeaderIconButton, StateView, VersionGate, voice } from '@/ui'
+import { AppHeader } from '@/ui/AppHeader'
 
 // Anchor the stack at the home route so any COLD deep link keeps `index` underneath it —
 // otherwise the linked screen is the bottom of the stack, the back chevron hides, and the
@@ -137,7 +138,7 @@ export default function RootLayout() {
   )
 }
 
-// Stack chrome reads from the theme so native headers match the paper/dusk surface.
+// Stack chrome reads from the theme; iOS 26 uses React controls for accessibility.
 function ThemedStack() {
   const theme = useTheme()
   const { colors } = theme
@@ -146,6 +147,9 @@ function ThemedStack() {
       <StatusBar style={theme.statusBar} />
       <Stack
         screenOptions={{
+          // UIKit header items were absent from the simulator accessibility tree on iOS 26.5.
+          // Keep the themed controls in React so labeled navigation is reachable.
+          header: HEADER_FLOATS ? (props) => <AppHeader {...props} /> : undefined,
           // THE BAR ITSELF. Transparent where the OS draws its own scroll-edge fade under it (the
           // content dissolves as it passes beneath), our own paper bar everywhere else — the whole
           // rule, and why it is only some platforms, lives in `src/ui/screenInsets.ts`.
@@ -173,18 +177,8 @@ function ThemedStack() {
           contentStyle: { backgroundColor: colors.surface },
           // One left-chevron back button on every pushed screen — no text label.
           // Render nothing on the root (canGoBack === false) so home stays clean.
-          // headerLeft serves Android + iOS<26; on iOS 26 the *Items API below overrides
-          // it so we can strip the Liquid Glass capsule (see the comment there).
+          // AppHeader calls this on iOS 26; the native header calls it elsewhere.
           headerLeft: ({ canGoBack }) => (canGoBack ? <HeaderBack /> : null),
-          // iOS 26 wraps every nav-bar button in a Liquid Glass capsule whose material we
-          // can't de-contrast — on the dark DUSK bar it blows out to a glaring bright disc
-          // with a washed-out glyph. hidesSharedBackground strips that capsule so we can
-          // draw our OWN theme-controlled circle (HeaderIconButton) instead — and it dodges
-          // the "double oval" of a self-drawn ring nested inside the native one. `unstable_`
-          // = iOS-only + experimental (pinned rn-screens 4.25.2 / expo-router 56.2.10 —
-          // re-check names on upgrade); no-op on Android + iOS<26.
-          unstable_headerLeftItems: ({ canGoBack }) =>
-            canGoBack ? [{ type: 'custom', hidesSharedBackground: true, element: <HeaderBack /> }] : [],
           // No global headerRight: the appearance control no longer rides the chrome on
           // every screen. The mood follows the phone by default (Auto); the explicit
           // Auto/Day/Dusk picker lives on Settings, reached from a gear on the home header.
@@ -205,9 +199,8 @@ function AnonymousMint() {
 }
 
 // The global back affordance: our own themed circular chip with a left-chevron
-// (HeaderIconButton). We strip iOS 26's Liquid Glass capsule (hidesSharedBackground,
-// above) and draw this circle ourselves so its contrast is theme-controlled — a subtle
-// placard disc in both day and dusk, no dusk blowout.
+// (HeaderIconButton). The React header avoids UIKit capsules, keeping contrast
+// theme-controlled in both day and dusk.
 function HeaderBack() {
   const router = useRouter()
   return <HeaderIconButton name="back" accessibilityLabel="Back" onPress={() => router.back()} />

@@ -1,8 +1,5 @@
-// A circular header button — OUR OWN themed disc. We strip iOS 26's Liquid Glass
-// capsule (hidesSharedBackground, see app/_layout.tsx) because its material can't be
-// de-contrasted and blows out to a glaring bright disc on the dark DUSK bar. Drawing
-// the circle ourselves means full theme control: a subtle ranger-placard chip that
-// reads the same in day and dusk, with a crisp ink glyph (ink-on-raised clears 4.5:1).
+// A circular header button with a theme-controlled disc and crisp ink glyph.
+// AppHeader keeps these controls in the React accessibility tree on iOS 26.
 // ~40pt + hitSlop keeps the in-car tap target generous.
 import { Pressable, StyleSheet } from 'react-native'
 import { border, radius } from '../theme/tokens'

@@ -16,6 +16,7 @@
 import { Share } from 'react-native'
 import { Directory, File, Paths } from 'expo-file-system'
 import { parseTraceEnvelope, traceFileName, type TraceEnvelope } from '@skipper/engine'
+import { newestTraceFirst } from './trace-order'
 
 /** `Paths.document/traces/` — deliberately NOT under `drives/`, which clip-store.ts owns and prunes. */
 function tracesDir(): Directory {
@@ -57,7 +58,7 @@ export function listTraces(): StoredTrace[] {
       .list()
       .filter((e): e is File => e instanceof File && e.name.endsWith('.json'))
       .map((f) => ({ name: f.name, uri: f.uri, sizeBytes: f.size ?? 0 }))
-      .sort((a, b) => b.name.localeCompare(a.name))
+      .sort(newestTraceFirst)
   } catch {
     return []
   }

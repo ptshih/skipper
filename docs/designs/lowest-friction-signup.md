@@ -6,6 +6,10 @@
 > ⚠ CORRECTION (§8.3 — the server has no freshness gate at all, so the re-auth bar is OURS). §0–§7 are
 > the investigation that produced the founder call and stay as the record.
 >
+> **Update 2026-09-09:** TestFlight 1.1.1 (26) includes the password fallback on the code step as well
+> as the email step, local input validation, and pending-request form guards. Release verification
+> is tracked in [release-batches.md](release-batches.md); App Store 1.1.0 remains unchanged.
+>
 > ⚠ **STILL OWED — the desk passes cannot prove these two.** (1) A real send/receive of a code through
 > Resend, end to end on a device: the mailer is only exercised by the reset flow today, and OTP now
 > sits on the FRONT DOOR, so a deliverability problem is a total signup outage. (2) An on-device pass

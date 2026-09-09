@@ -22,6 +22,7 @@ export default function DeveloperScreen() {
   const { data: session, isPending } = useSession()
   const { simMode, setSimMode } = useSimMode()
   const [traces, setTraces] = useState<StoredTrace[]>([])
+  const [traceError, setTraceError] = useState<string | null>(null)
 
   // Re-read on focus rather than once on mount: the whole point is to come here straight after a
   // drive, and a list that still says "no traces yet" would read as the recorder having failed.
@@ -38,7 +39,7 @@ export default function DeveloperScreen() {
         text: voice.settings.tracesDeleteConfirmOk,
         style: 'destructive',
         onPress: () => {
-          deleteTrace(name)
+          setTraceError(deleteTrace(name) ? null : voice.settings.tracesDeleteFailed)
           setTraces(listTraces())
         },
       },
@@ -46,10 +47,18 @@ export default function DeveloperScreen() {
   }, [])
 
   if (isPending) {
-    return <StateView loading message={voice.settings.developerLoading} title={voice.settings.developerTitle} />
+    return (
+      <StateView
+        loading
+        message={voice.settings.developerLoading}
+        title={voice.settings.developerTitle}
+      />
+    )
   }
   if (!isAdmin(session)) {
-    return <StateView message={voice.settings.developerLocked} title={voice.settings.developerTitle} />
+    return (
+      <StateView message={voice.settings.developerLocked} title={voice.settings.developerTitle} />
+    )
   }
 
   return (
@@ -84,6 +93,11 @@ export default function DeveloperScreen() {
         <Text variant="dim" color="inkFaint">
           {voice.settings.tracesHint}
         </Text>
+        {traceError ? (
+          <Text variant="dim" color="danger">
+            {traceError}
+          </Text>
+        ) : null}
         {traces.length === 0 ? (
           <Text variant="dim" color="inkFaint">
             {voice.settings.tracesEmpty}
@@ -94,21 +108,31 @@ export default function DeveloperScreen() {
               {i > 0 ? <Divider /> : null}
               <View style={styles.traceRow}>
                 <View style={styles.traceMeta}>
-                  <Text numberOfLines={1}>{t.name}</Text>
+                  <Text>{t.name}</Text>
                   <Text variant="dim" color="inkFaint">
                     {formatBytes(t.sizeBytes)}
                   </Text>
                 </View>
-                <Button
-                  title={voice.settings.tracesShare}
-                  variant="secondary"
-                  onPress={() => void shareTrace(t.name)}
-                />
-                <Button
-                  title={voice.settings.tracesDelete}
-                  variant="ghost"
-                  onPress={() => onDelete(t.name)}
-                />
+                <View style={styles.traceActions}>
+                  <Button
+                    title={voice.settings.tracesShare}
+                    accessibilityLabel={`${voice.settings.tracesShare} ${t.name}`}
+                    variant="secondary"
+                    fullWidth={false}
+                    onPress={async () => {
+                      setTraceError(
+                        (await shareTrace(t.name)) ? null : voice.settings.tracesShareFailed,
+                      )
+                    }}
+                  />
+                  <Button
+                    title={voice.settings.tracesDelete}
+                    accessibilityLabel={`${voice.settings.tracesDelete} ${t.name}`}
+                    variant="ghost"
+                    fullWidth={false}
+                    onPress={() => onDelete(t.name)}
+                  />
+                </View>
               </View>
             </View>
           ))
@@ -128,6 +152,7 @@ function formatBytes(n: number): string {
 const styles = StyleSheet.create({
   body: { gap: space.xl },
   section: { gap: space.sm },
-  traceRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.sm },
-  traceMeta: { flex: 1, gap: space.xs },
+  traceRow: { gap: space.sm, paddingVertical: space.sm },
+  traceMeta: { gap: space.xs },
+  traceActions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
 })

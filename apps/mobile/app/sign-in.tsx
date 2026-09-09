@@ -2,12 +2,7 @@ import { useRef, useState } from 'react'
 import { StyleSheet, TextInput, View } from 'react-native'
 import { Stack, useRouter } from 'expo-router'
 import { track } from '@/lib/analytics'
-import {
-  emailOtp,
-  PASSWORD_RESET_URL,
-  requestPasswordReset,
-  signIn,
-} from '@/lib/auth'
+import { emailOtp, PASSWORD_RESET_URL, requestPasswordReset, signIn } from '@/lib/auth'
 import { space } from '@/theme/tokens'
 import { Button, Input, Screen, Text, voice } from '@/ui'
 
@@ -61,6 +56,15 @@ export default function SignInScreen() {
   const [error, setError] = useState<string | null>(null)
   const [resetSent, setResetSent] = useState(false)
   const passwordRef = useRef<TextInput>(null)
+  // Reject incomplete input locally; the server remains authoritative about credentials.
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())
+  const codeValid = /^\d{6}$/.test(code.trim())
+  const passwordValid = emailValid && password.length > 0
+  const usePassword = () => {
+    setError(null)
+    setCode('')
+    setStep('password')
+  }
 
   /** Leave for wherever the rider came from. A DEEP LINK straight here has nothing beneath it, so
    *  back is a no-op — fall back to home so success never strands them on a form they're done with. */
@@ -74,7 +78,7 @@ export default function SignInScreen() {
   // enabled), and this screen must not branch on the result either — it always advances to the code
   // step. Anything else would turn the form into an oracle for who has an account.
   const sendCode = async () => {
-    if (busy || !email.trim()) return
+    if (busy || !emailValid) return
     setBusy(true)
     setError(null)
     try {
@@ -94,7 +98,7 @@ export default function SignInScreen() {
 
   // Redeem the code. This is the call that signs up OR signs in — see the file header.
   const submitCode = async () => {
-    if (busy || !code.trim()) return
+    if (busy || !codeValid) return
     setBusy(true)
     setError(null)
     try {
@@ -119,7 +123,7 @@ export default function SignInScreen() {
 
   // The fallback. Sign-IN only — there is no password sign-up path any more.
   const submitPassword = async () => {
-    if (busy) return
+    if (busy || !passwordValid) return
     setBusy(true)
     setError(null)
     try {
@@ -139,7 +143,7 @@ export default function SignInScreen() {
   }
 
   const sendReset = async () => {
-    if (busy || !email.trim()) return
+    if (busy || !emailValid) return
     setBusy(true)
     setError(null)
     try {
@@ -227,20 +231,33 @@ export default function SignInScreen() {
             returnKeyType="go"
             onSubmitEditing={submitCode}
             value={code}
+            editable={!busy}
             onChangeText={setCode}
           />
           {errorLine}
           <Button
             title={voice.auth.codeCta}
             loading={busy}
-            disabled={!code.trim()}
+            disabled={!codeValid}
             onPress={submitCode}
             style={styles.cta}
           />
-          <Button variant="ghost" title={voice.auth.codeResend} onPress={sendCode} />
+          <Button
+            variant="ghost"
+            title={voice.auth.codeResend}
+            disabled={busy}
+            onPress={sendCode}
+          />
+          <Button
+            variant="ghost"
+            title={voice.auth.usePassword}
+            disabled={busy}
+            onPress={usePassword}
+          />
           <Button
             variant="ghost"
             title={voice.auth.codeChangeEmail}
+            disabled={busy}
             onPress={() => {
               setError(null)
               setCode('')
@@ -268,6 +285,7 @@ export default function SignInScreen() {
                   : sendCode
             }
             value={email}
+            editable={!busy}
             onChangeText={setEmail}
           />
           {step === 'password' ? (
@@ -281,6 +299,7 @@ export default function SignInScreen() {
               returnKeyType="go"
               onSubmitEditing={submitPassword}
               value={password}
+              editable={!busy}
               onChangeText={setPassword}
             />
           ) : null}
@@ -292,23 +311,33 @@ export default function SignInScreen() {
               <Button
                 title={voice.auth.resetSend}
                 loading={busy}
-                disabled={!email.trim()}
+                disabled={!emailValid}
                 onPress={sendReset}
                 style={styles.cta}
               />
-              <Button variant="ghost" title="Back to sign in" onPress={() => setStep('password')} />
+              <Button
+                variant="ghost"
+                title="Back to sign in"
+                disabled={busy}
+                onPress={() => {
+                  setError(null)
+                  setStep('password')
+                }}
+              />
             </>
           ) : step === 'password' ? (
             <>
               <Button
                 title="Sign in"
                 loading={busy}
+                disabled={!passwordValid}
                 onPress={submitPassword}
                 style={styles.cta}
               />
               <Button
                 variant="ghost"
                 title={voice.auth.useCode}
+                disabled={busy}
                 onPress={() => {
                   setError(null)
                   setPassword('')
@@ -318,6 +347,7 @@ export default function SignInScreen() {
               <Button
                 variant="ghost"
                 title={voice.auth.forgot}
+                disabled={busy}
                 onPress={() => {
                   setError(null)
                   setStep('reset')
@@ -329,17 +359,15 @@ export default function SignInScreen() {
               <Button
                 title={voice.auth.sendCode}
                 loading={busy}
-                disabled={!email.trim()}
+                disabled={!emailValid}
                 onPress={sendCode}
                 style={styles.cta}
               />
               <Button
                 variant="ghost"
                 title={voice.auth.usePassword}
-                onPress={() => {
-                  setError(null)
-                  setStep('password')
-                }}
+                disabled={busy}
+                onPress={usePassword}
               />
             </>
           )}

@@ -54,12 +54,13 @@ export function AttributionButton({ items, color = 'inkFaint' }: AttributionButt
         <Pressable
           style={[styles.scrim, { backgroundColor: colors.scrim }]}
           onPress={() => setOpen(false)}
-          accessibilityRole="button"
-          accessibilityLabel={voice.attribution.close}
+          // Keep the source links individually reachable; the visible Done button dismisses.
+          accessible={false}
         >
           <Pressable
             style={[styles.sheet, { backgroundColor: colors.surfaceRaised, borderColor: colors.rule }]}
             onPress={() => {}}
+            accessible={false}
           >
             <Text variant="label" color="accentWarm">
               {voice.attribution.heading}

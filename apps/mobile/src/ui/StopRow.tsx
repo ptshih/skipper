@@ -95,9 +95,10 @@ function StopRowBase({
       disabled={!onPress}
       accessibilityRole={onPress ? 'button' : 'text'}
       // Selection state only on the INTERACTIVE (button) row — a 'text' row announcing "selected" is
-      // semantically odd; the label suffix (", now playing") carries it for read-only rows. (audit #716)
+      // semantically odd; the label suffix carries it for read-only rows. Active means the current
+      // stop, including a held or buffering clip; it does not prove that audio is playing.
       accessibilityState={onPress ? { selected: active } : undefined}
-      accessibilityLabel={`${name}${metaLabel ? `, ${metaLabel}` : ''}${active ? ', now playing' : passed ? ', played' : ''}`}
+      accessibilityLabel={`${name}${metaLabel ? `, ${metaLabel}` : ''}${active ? ', current stop' : passed ? ', played' : ''}`}
       style={({ pressed }) => [styles.row, pressed && onPress && styles.pressed]}
     >
       {/* "YOU ARE HERE" is a TICK IN THE MARGIN, not a filled row.

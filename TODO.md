@@ -24,7 +24,7 @@ the closing paren is the item, unchanged: a headline clause first, then as much 
 ⚠ **A section heading and its preamble are SHARED context for every item under it** — read the preamble
 before acting on an item, and put a new item under the section whose preamble already applies to it.
 
-**next-id: 79.** Ids are never reused, so this counter — not the highest id in the file — is what
+**next-id: 80.** Ids are never reused, so this counter — not the highest id in the file — is what
 survives deleting the newest item. `/todo` takes the max of the two.
 
 > ♻ **Re-baselined 2026-08-03: 2006 → ~700 lines.** Every finished build log was deleted per the rule
@@ -410,17 +410,6 @@ it is what re-opens §9's screenshots and §10's notes, verified against `98a292
       copy from `voice.ts` that nothing tests, which has already forced two full rewrites and six stale
       anchors in a single pass. Needs an allowlist for quotes that are not UI copy (the route the
       reviewer types, Apple's own terms).
-- [ ] #79 (mobile, med) **The password fallback is unreachable from the code step — the miss behind
-      the 2026-08-17 rejection.** App Review tapped the primary "Send me a code" CTA for
-      `review@skipper.fm`, landed on a number-pad field whose only exits are "Send another code" /
-      "Use a different email", failed one code entry and rejected 1.1.0 as "unable to sign in" —
-      while the credentials verified 200 against prod the same day (submission guide §15 has the log
-      trail). ⚠ Downgraded from high: the REVIEWER case is closed server-side by §15d's fixed code
-      (`reviewFixedOtp`); what remains is rider UX — a rider who set a password but tapped the code
-      CTA first has no way over to it. Fix on the next build: render "Use a password instead" on the
-      CODE step too (`app/sign-in.tsx` shows it only while `step === 'email'`). The durable rule §15
-      records: a reviewer follows the primary CTA, never the notes — anything review-critical must
-      be reachable from every step of its flow, not documented around.
 
 ## `apps/api` — the one open item from the 2026-08-02 diligence pass
 
@@ -581,7 +570,7 @@ Phases 1–3 and fused generation are BUILT and RELEASED; the design and every m
 where the build log went. Corpus today: **37 fused tellings, all released** (32 cluster + 5 district).
 
 - [ ] #32 (corpus, med, paid, founder) **Yosemite's 30 clusters** — still un-generatable (zero enriched members); needs a founder-gated
-      `enrich-pois --region yosemite` run first. `generate-cluster-narrations.ts` is complete: narrate →
+      `enrich-pois --region yosemite-national-park` run first. `generate-cluster-narrations.ts` is complete: narrate →
       fail-closed gate with excision retakes → TTS → loudnorm → R2 → upsert on `narrations_cluster_uq` →
       eval record keyed to the cluster. **`--limit 1 --apply` is the cheap path to ONE real clip to listen
       to** (well under $1) before committing all 31 (~$12–16). ⚠ A PREVIEW is not free either — it
@@ -644,41 +633,10 @@ direction; the reverse is what gets rejected.
 Probably NO change needed: the **subtitle** is deliberately geography-free (`Scenic Drives & Local
 History`), which is the entire reason it was written that way — it survives new regions untouched.
 
-- [ ] #75 (api, med, blocked: yosemite release) **Every rider hears an EMERALD BAY clip on onboarding, whatever region they pick.**
-      `GET /sample` resolves ONE global `SAMPLE_NARRATION_QID` (apps/api/src/index.ts) — there is no
-      per-region sample and never has been. That was invisible while Tahoe was the only region, and it
-      was arguably right: the sample's stated job is "hear him regardless of where they are", for a
-      rider OUTSIDE any coverage, and one canonical clip stays canonical.
-      ⚠ **The 2026-08-04 onboarding merge made it far more visible**, which is why this is filed now:
-      the postcard and the region picker are one card and one screen, twelve points apart. A rider who
-      picks Yosemite will look at an Emerald Bay print sitting directly above their own choice.
-      ⚠ **The current copy does NOT claim otherwise, and that is load-bearing** — the caption names the
-      PLACE ("EMERALD BAY STATE PARK") and never the region, precisely so nothing implies the clip
-      belongs to whatever the rider picked. Do not "improve" it to "Emerald Bay, Lake Tahoe" without
-      solving this first; that phrasing is what surfaced the problem.
-      Options, cheapest first: leave it and keep the copy honest (defensible); OR make the sample follow
-      the picked region — which needs a per-region QID or a "top-ranked released narration in region X"
-      query, plus a re-fetch when the chip changes, since the rider has not chosen yet on arrival. Either
-      way it wants a `region` on the `Sample` DTO if the caption is ever to name one.
-
-- [ ] #73 (mobile, med, blocked: yosemite release) **Every rider who onboarded before Yosemite is never told it exists** — onboarding
-      asks "where are we driving?" exactly ONCE per install (`onboarded`, `src/lib/client-flags.ts`), and
-      by definition they answered it when Tahoe was the only answer. Nothing re-asks, so they stay pinned
-      to their cached region by `pickRegionId` and the ONLY way they discover a second one is noticing the
-      chip on home is tappable. That is a discovery problem, not a bug — the app behaves correctly and the
-      rider simply never finds out.
-      ⚠ This section's preamble IS the reason it is worth solving: content is server-side, so the install
-      base does not turn over when a region ships. Waiting for reinstalls means most riders never see it.
-      ⚠ **Do NOT solve it by re-running onboarding** — clearing `onboarded` server-side or on a version
-      check walks a rider who is mid-conversation back through a postcard they have already heard, and the
-      flag is deliberately one-directional for exactly that reason (its own header, and `resetOnboarding`
-      is developer-only). The shape that fits is a ONE-TIME, dismissible nudge on home the first launch
-      after the region list GROWS — the client already caches the last region list (`region-cache.ts`), so
-      "grew since last launch" is computable on device with no new endpoint. It would need a second field
-      in that cache (the known region ids), which is the one design question here.
-      ⚠ Whatever lands must not make the chip conditional or the composer gateable on it — see §18 of
-      [home-cold-open-declutter](docs/designs/home-cold-open-declutter.md) for the kill switch that shape
-      already produced once.
+The obsolete global onboarding-sample item (#75) is retired: `GET /sample` is gone and the
+anonymous preview comes from the proposed route. The new-region nudge (#73) is outside this launch:
+the installed app stays unchanged. Rationale and launch evidence live in
+[the Yosemite launch design](docs/designs/yosemite-region-launch.md).
 
 ## LLM answer-discovery (GEO/AEO) — the one remaining half
 
@@ -961,6 +919,16 @@ Owed, in dependency order — **nothing below is started**:
       retake counts drive it, and the `--max-cost` tally has historically under-counted because synthesis
       re-rolls retakes. ⚠ Do the prompt tweak and the source widening FIRST; regenerating into a known
       defect buys the same defect at full price.
+
+## Guest signup — deferred beyond this release
+
+Keep the existing account and credit boundary while the mobile release is verified.
+
+- [ ] #80 (mobile, low) **Simplify the guest signup shortcut — deferred beyond this release batch.**
+      Revisit the path from anonymous planning to account creation without losing the client-held
+      proposal. Keep the ownership/credit wall at “Make this drive”; an anonymous session is not a
+      signed-in account. This batch keeps the existing signup flow and adds no OTA infrastructure.
+      Context: [release batches](docs/designs/release-batches.md).
 
 ## Unfiled — five open questions with no section of their own
 

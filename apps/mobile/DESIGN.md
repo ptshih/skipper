@@ -271,7 +271,8 @@ All token-driven and theme-aware. Compose these; don't restyle from scratch.
 - **`Scrubber`** — the in-clip position bar (sunken bed, pine fill, amber car-token thumb).
 - **`FilterChip`** — the home region chip (rendered only if a second region ever ships), and the
   pill `ExampleAsks` builds on. **`HeaderIconButton`** — the self-drawn circular nav-bar chip
-  (strips the iOS-26 Liquid Glass capsule).
+  (rendered in **`AppHeader`** on iOS 26 so labeled controls remain in the React
+  accessibility tree; earlier iOS and Android retain native headers).
 - **`Input`** — themed field, ≥48pt, pine focus ring.
 - **`ThemeModePicker`** — Auto / Day / Dusk segmented control (lives on Settings).
 - **`StateView`** — the shared loading / error / empty centered state (`loading`,

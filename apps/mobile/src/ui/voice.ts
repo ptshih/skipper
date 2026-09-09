@@ -689,6 +689,8 @@ export const voice = {
     tracesEmpty: 'No traces yet. Take a live drive and one lands here.',
     tracesShare: 'Share',
     tracesDelete: 'Delete',
+    tracesShareFailed: 'Couldn’t share that recording. Try again.',
+    tracesDeleteFailed: 'Couldn’t delete that recording. Try again.',
     tracesDeleteConfirmTitle: 'Delete this trace?',
     tracesDeleteConfirmBody: 'It’s the only copy, and the drive it came from can’t be re-recorded.',
     tracesDeleteConfirmCancel: 'Keep it',

@@ -1,163 +1,49 @@
 # App Store Connect — the submission cheat-sheet
 
-> **Status:** 🚀 **1.1.0 IS LIVE ON THE APP STORE — released 2026-08-20** (founder click; version
-> reads `READY_FOR_SALE`, build 25). The canonical listing is
-> `https://apps.apple.com/us/app/skipper-road-trip-audio-tours/id6778946770` (curl 200; the bare id
-> form 301s there). **§13's go-live shipped the same day:** `APP_STORE_URL` set to the canonical URL
-> and Apple's official badge artwork swapped in (`apps/site/public/app-store-badge.svg`, from their
-> marketing-tools badge API) — one constant flips the button, the JSON-LD `installUrl`, and every
-> conditional "coming soon" line from the 08-20 sweep. Remaining §13 item: the `/version` floor
-> stays a deliberate no-op. ⚠ The ASC **My Apps tile may still show a pre-build-20 icon** — chrome
-> cache, not release state (see the §13 warning). RISK-1's real Tahoe drive is not yet RECORDED as
-> done anywhere in the repo — with the store live it's a post-launch errand now, not a gate.
->
-> Prior status: ✅ **1.1.0 was APPROVED (2026-08-19)** — submission `445ea909` read `COMPLETE` / item
-> `APPROVED`; the version sits at **`PENDING_DEVELOPER_RELEASE`** with build 25 attached (read back
-> via `bun run asc:state`). Release type is MANUAL, so **nothing is live**:
-> `apps.apple.com/app/id6778946770` still 404s (curl-verified 2026-08-19) until the founder clicks
-> "Release This Version" in ASC. §15e closes the round; the fixed demo code (§15d) is what changed
-> between the two verdicts. **§13 runs AT THE RELEASE CLICK, not now** — its site edits
-> (`APP_STORE_URL`, the badge) would point a live download button at that 404. RISK-1's real Tahoe
-> drive is still owed, and the pending-release window is exactly the slot for it.
->
-> Prior status (kept for the diff): ⚠ **1.1.0 was `REJECTED` again (2026-08-17) — Guideline 2.1, round TWO: "unable to sign
-> in" with the demo account.** The credentials are **VALID** — the exact pair Apple quoted signs in
-> against production, re-verified the same day — and the server logs show the reviewer **never
-> reached the password screen**: they tapped the primary "Send me a code" CTA, landed on the
-> number-pad code step (which has no password option), failed one code attempt and stopped, ~90
-> seconds into the review. **§15 is the record; §15d is the FIX (founder go, 2026-08-17): the
-> emailed code is now FIXED for the demo account** (`reviewFixedOtp`, server-only, works with build
-> 25 — the reviewer's natural "Send me a code" tap now succeeds with a code held in ASC and env,
-> never git). ✅ **RESUBMITTED — `WAITING_FOR_REVIEW` since 2026-08-17T19:41:34Z** (captured
-> because the resubmit overwrites `submittedDate`; §14c). Same submission `445ea909` so the thread
-> survives; **build 25 still attached, `VALID`** — both read back via `bun run asc:state`. The
-> round's full fix, all verified: the fixed code deployed on prod; the reply (§15b, OTP-only) SENT
-> with the code-step screenshot; §10's notes REWRITTEN (terse, code-first, `{{REVIEW_OTP_CODE}}`
-> substitution) and PUSHED with read-back; ASC's demo "password" field shows the CODE; the
-> account's password row REMOVED (§15d) so deletion keys on the same code. Nothing is owed until
-> Apple answers; on approval, do §13.
->
-> Prior status (kept for the diff): ✅ 1.1.0 was back in review — `WAITING_FOR_REVIEW` since
-> 2026-08-14T07:16:27Z — after
-> a Guideline 2.1 "Information Needed" round. Nothing in the app failed: Apple's new-app
-> questionnaire asks for seven things, and only item 1 — **a screen recording on a physical device** —
-> was real work. Both are done and **§14 is the record**: the recording (captured, verified, 4.5 MB)
-> and the reply (3901/4000, sent).
->
-> ⚠ **A Resolution Center reply did not requeue the app by itself — "Resubmit to App Review" did.**
-> Observed: the reply went in, and both states sat unchanged at submission `UNRESOLVED_ISSUES` /
-> version `READY_FOR_REVIEW`; one click later, both read `WAITING_FOR_REVIEW`. ⚠ **Do not read that as
-> "a reply can never get you reviewed"** — the re-read was minutes after the reply, not a review
-> cycle, so a reviewer picking the thread up unprompted was never ruled out. What it does establish is
-> the ASYMMETRY, and that is the part to act on: resubmitting costs at most queue position, while not
-> resubmitting risks the app sitting OUT of the queue looking answered, with nothing in ASC saying so.
-> A `READY_FOR_REVIEW` version is *submittable*, not *submitted*. ✅ **Resubmitting reused submission
-> `445ea909` rather than opening a new one**, so the Resolution Center thread stays attached, and
-> **build 25 rode through untouched** with release type still MANUAL — which is what makes the click
-> cheap enough to be the default.
->
-> ⚠ **The VERSION-level state is the one that drifts** — it read `REJECTED`, then
-> `READY_FOR_REVIEW`, on two read-only passes twelve minutes apart (the founder was clicking around
-> ASC). The SUBMISSION state is the honest signal every time.
->
-> ⚠ **Reply, don't resubmit.** Build 25 stays attached and `apps/mobile` has not moved since
-> `98a292db` (verified: zero commits touch it), so every string §10 and §14 quote is still the app
-> under review. A new build would re-open §9's screenshots and §10's notes for nothing.
->
-> Prior status: submitted `WAITING_FOR_REVIEW` 2026-08-06T20:11:36Z.
-> Review submission `445ea909`, build **25** (`98a292db`). Release type stays **MANUAL**, so approval
-> lands in *Pending Developer Release* and the real Tahoe drive can still happen before launch — that
-> asymmetry is what made [1-1-submission-sweep.md](1-1-submission-sweep.md) §0's trade affordable.
->
-> **What went in:** build 25 · App Review notes 3935/4000 · six recaptured screenshots · a re-shot
-> 28 s App Preview · description 2565 · promo 168 · keywords 99 · US-only · 12+ · copyright set.
-> Every one read back from the API after writing, never trusted from a 200.
->
-> ⚠ **The App Privacy label went in UNCHANGED from 1.0, on an explicit founder call (2026-08-06):
-> the planner's free text is TRANSMITTED, not COLLECTED.** The reasoning: nothing persists it — there
-> is no `conversations` table and request bodies are never logged — so Anthropic receives it as a
-> processor. It is a judgement on Apple's definition and the founder made it knowingly. ⚠ **There is
-> no public API for this label** (`appPrivacyDetails`, `appDataUsages` and `appDataUsagesPublishState`
-> all 404 with "relationship does not exist"), so it can be neither verified nor changed from here —
-> if review comes back on it, that is the field to look at, by hand.
->
-> **Still open, and neither blocks review:** the accessibility declaration is `DRAFT` and publishing is
-> a UI action; and the demo account's password could not be tested from here — since 08-05 a reviewer
-> reaches it only via **"Use a password instead"**.
->
-> **On approval, do §13** — it is the only remaining checklist and it is what makes the store link work.
->
-> ---
->
-> **Prior status (kept for the diff):** ✅ **1.1 TEXT METADATA IS ENTERED AND LIVE (2026-08-03).** Pushed with
-> `bun run asc:metadata -- --apply --version=1.1.0` and verified by an independent read-back:
-> promotional text, description and App Review notes are all the 1.1 copy from §§3/4/10, and the
-> version record is now **`1.1.0`, state `PREPARE_FOR_SUBMISSION`**, release type MANUAL.
-> ⚠ The §§3/4/10 code blocks are the SOURCE the script extracts (`<!-- asc:… -->` markers) — edit the
-> block, re-run the script; never hand-paste, and never delete a marker.
->
-> ⚠ **The em-dash sweep re-punctuated §3 and §4, and that IS pushed (2026-08-03, founder go).** No
-> em-dashes in anything a rider reads; wording otherwise unchanged. Applied with
-> `bun run asc:metadata -- --apply` — no `--version`, because the record was already `1.1.0` and a
-> rename flag is scope nobody needed on a live listing. The script's own read-back confirmed both
-> fields, and the preview beforehand showed a diff on exactly those two and nothing else.
-> Promotional text sits at **168/170**; §10 review notes needed no change (`already matches`).
->
-> **What is still owed before submitting** (see [1-1-submission-sweep.md](1-1-submission-sweep.md) for
-> the order): §9's screenshots, §8's App Privacy label (no public API — hand entry, and the free-text
-> question is a founder call), the two builds, and the on-device passes.
->
-> ✅ **BUILD `25` IS ATTACHED (2026-08-06)** — id `9ece8ba8`, `processingState=VALID`, not expired,
-> `usesNonExemptEncryption=false` (so §11's export-compliance question is already answered and ASC will
-> not ask). Read back from the relationship after the PATCH rather than trusting the 204.
-> ⚠ **25 is the commit `98a292db` that §9's screenshots and §10's notes were BOTH verified against.**
-> That three-way coupling is the thing this listing keeps losing: swapping in a later build silently
-> re-opens every quoted UI string and every captured screen.
-> ⚠ The history, because it cost real time: renaming the record to 1.1.0 left build 15 — short version
-> `1.0.0`, the pre-1.1 roam client that 404s against the deployed API — still sitting on it, because
-> Apple does not detach a build when the record is renamed underneath it and warns about it nowhere.
-> It was detached on 2026-08-03; `asc:metadata` checks for this every run.
->
-> ⚠ **Newest build as of 2026-08-06 is `25`, BUILDING off `98a292db` (HEAD); `24` finished 08-05.**
-> ⚠ **Do not treat that number as stable, and never predict one:** `autoIncrement` burns a number at
-> QUEUE time, so a failure, a cancellation or a rebuild each consume one. This release has already
-> spent 17 (failed on a PostHog dSYM `content_hash_mismatch`, fixed in `e529dd3`), 18 (cancelled),
-> 19, 20, and 21–25 across three more days of client work. Read the number back from EAS
-> (`npx eas-cli build:list --platform ios --limit 3`, from `apps/mobile`). Until one clears processing
-> and is ATTACHED, TestFlight still serves build 16 (`1.0.1`, 2026-07-30), pre-1.1 code calling the
-> deleted `/roam/*`.
->
-> ✅ **THE 2026-08-06 PASS FIXED §10's REVIEWER NOTES (six defects, three of them dead ends) AND THE
-> SCREENSHOTS, AND BOTH ARE NOW LIVE.** The notes' sample step pointed at a deleted screen, "tap a stop
-> to hear it" returned an error line unless the drive was downloaded first, and sign-in had become an
-> emailed code a reviewer cannot receive. All six are corrected, pushed, and verified against
-> `appStoreReviewDetail` directly (3978/4000) — §10 carries the list. The six screenshots showing
-> deleted product were replaced the same day (§9).
-> ⚠ **Both were pushed against build `25` (`98a292db`)**, the commit their quoted strings and captured
-> screens were verified on. **Attaching a later build re-opens both** — that coupling is the thing this
-> listing keeps losing.
->
-> **Prior submission state (as of 2026-07-30), kept for the diff.** `1.0.0` was `WAITING_FOR_REVIEW`
-> (submitted 2026-07-28T21:42:22Z) with **build 15** attached; **build 16 (`1.0.1`)** is `VALID` in
-> TestFlight,
-> deliberately NOT attached — swapping the build under a submission in review restarts the queue, so
-> 16 ships as the first post-approval update. Everything through §11b is a RECORD of what is on the
-> live listing, not a to-do — read it as "what a reviewer sees today", which is no longer what the
-> app does. Open work: the 1.1 metadata paste, §9's recapture, and **§13 (after approval)**. Re-read values back
-> from ASC rather than trusting this file — it has drifted before (this pass, 2026-07-30, corrected
-> the age rating and the §10 notes, both of which were stale enough to do damage if re-pasted).
-> §8's privacy label was re-derived from the bundled SDKs'
-> own manifests on 2026-07-24 and grew from 9 data types to 12 — paste that table, not an older copy.
-> Every field App Store Connect asks for, ready to paste,
-> for `fm.skipper.app` (ASC app id `6778946770`, team `L24UJYJ5DK`, Manoa, Inc.). Character-limited
-> fields are pre-counted against Apple's caps. ⚠ Screenshots were DONE for 1.0 and are uploaded, but
-> **1.1 invalidates half the set** — see §9 before assuming they are reusable.
-> ⚠ Do NOT paste the review demo password into this file or
-> any committed file; it lives only in App Store Connect.
+**Status:** 1.1.0 went LIVE on 2026-08-20, build 25 (`READY_FOR_SALE`, recorded at release).
+TestFlight 1.1.1 (26) was verified `VALID` / `IN_BETA_TESTING` on 2026-09-09; it has not been
+submitted for App Store review or publicly released. [Release evidence](../designs/release-batches.md).
+Canonical listing: `https://apps.apple.com/us/app/skipper-road-trip-audio-tours/id6778946770`.
+§13's site URL and official Apple badge shipped at release. The `/version` floor remains a deliberate
+no-op. RISK-1's real Tahoe drive is still not recorded as done; it is a post-launch obligation.
+The accessibility declaration was last recorded as `DRAFT`; publishing it requires the ASC UI (§11b).
 
-Why this doc exists: the listing is the one launch surface with no test to fail, so it drifts
-silently. Keep it in step with what's actually true — especially the coverage claim, which is the
-single most rejection-prone sentence in the whole listing.
+## Using this record
+
+This file holds listing copy and the release/review history for `fm.skipper.app`
+(ASC app `6778946770`, team `L24UJYJ5DK`, Manoa, Inc.). Dated review states below are history,
+not instructions to re-submit the released version. Read fresh state with `bun run asc:state`
+before release work; the submission/item state distinguishes queued work from a merely
+submittable version (§14c). The My Apps tile can retain a stale icon (§13).
+
+The marked code blocks in §§3, 4, and 10 are the source for `scripts/asc-metadata.ts`.
+Preserve their markers, fences, and the review-code placeholder. Never commit the demo code or
+password. Metadata writes and review actions are separate from editing this document.
+A different attached binary requires rechecking the screenshots and quoted reviewer instructions;
+renaming a version does not detach an incompatible old build.
+
+**Privacy decision, 2026-08-06 (founder):** the App Privacy label remained unchanged from 1.0.
+The founder treated planner free text as transmitted to a processor, not collected, because no
+transcript is persisted and request bodies are not logged. This records the decision made for
+that submission, not a new assessment. §8 contains the declaration and its rationale; the label
+could not be read or changed through the public ASC API and required the UI.
+
+## Release timeline
+
+| Date (2026) | Recorded outcome |
+| --- | --- |
+| July 28 | 1.0.0 submitted with build 15; build 16 later remained separate in TestFlight. |
+| August 3 | Version changed to 1.1.0; text metadata updated and the incompatible old build detached. |
+| August 6 | Build 25 (`98a292db`) attached and submitted with refreshed screenshots, preview video, and notes. Submission `445ea909`; manual release retained. |
+| August 13–14 | Guideline 2.1 information request answered with a physical-device recording and reply. Explicit resubmission returned it to `WAITING_FOR_REVIEW` (§14). |
+| August 17 | Sign-in rejection: the reviewer followed the primary email-code flow. A demo-account fixed code and code-first notes resolved that path; the same build was resubmitted (§15). |
+| August 19 | Approved; manual release left it in `PENDING_DEVELOPER_RELEASE` (§15e). |
+| August 20 | Founder released 1.1.0; the public listing and site's App Store link went live (§13). |
+| September 9 | 1.1.1 (26) reached internal TestFlight (`VALID` / `IN_BETA_TESTING`); public 1.1.0 unchanged. [Build and upload record](../designs/release-batches.md). |
+
+The detailed review rounds retain the evidence and operational lessons. Earlier stacked status
+banners remain recoverable from git history at this path. Keep listing copy aligned with the
+attached build and coverage: there is no automated test that proves what a reviewer sees in ASC.
 
 ---
 
@@ -1652,6 +1538,8 @@ but is one more reason none of these belong in git.
   change, rides the next build. ⚠ Downgraded from review-critical to rider UX by §15d: the reviewer
   no longer needs the password path at all, so this now serves the rare rider who set a password
   and tapped the code CTA first.
+  **Update 2026-09-09:** implemented in TestFlight 1.1.1 (26); #79 is closed in the backlog.
+  Sign-in runtime verification remains pending; see [release batches](../designs/release-batches.md).
 - **#77's demo mode got stronger.** Apple's letter names a demonstration mode as a standing
   alternative to credentials — and simultaneously rules the demo VIDEO out as a review substitute
   ("we cannot use a demo video … to continue the review"). That reweights §14a's video posture: the
