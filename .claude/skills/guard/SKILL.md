@@ -6,11 +6,14 @@ description: Use to see what the STOP-list guard blocks and why, or when a comma
 # Guard
 
 `scripts/guard-hook.ts` runs as a `PreToolUse` hook on every Bash call (wired in
-`.claude/settings.json`). It turns the CLAUDE.md STOP list from prose an agent
+`.claude/settings.json`; Codex uses `.codex/hooks.json` with `--codex`). It turns the CLAUDE.md STOP list from prose an agent
 can skim past into a mechanical gate.
 
-It is **always on** — there is nothing to activate. This skill is the
-cheat-sheet for what it does and how to change it.
+Claude runs it automatically. Codex requires hook trust first (see the coding-agent
+setup in `README.md`). Codex does not support the hook's `ask` decision yet, so its
+mode returns authorization reminders for that tier; only `deny` is mechanically
+enforced there. The founder-go rules still apply. This skill is the cheat-sheet
+for what it does and how to change it.
 
 ## Two tiers
 

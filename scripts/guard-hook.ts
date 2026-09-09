@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// PreToolUse hook (matcher: Bash) — wired in .claude/settings.json.
+// PreToolUse hook (matcher: Bash) — wired in .claude/settings.json and .codex/hooks.json.
 // Turns the CLAUDE.md STOP list from prose an agent can skim past into a
 // mechanical gate. Two tiers, per the founder call (2026-08-03):
 //
@@ -39,7 +39,7 @@ const RULES: Rule[] = [
   {
     re: /\bgit\s+stash\b(?!\s+(?:list|show)\b)/,
     tier: 'deny',
-    why: 'One `git stash` pockets every agent\'s uncommitted work in the shared tree.',
+    why: "One `git stash` pockets every agent's uncommitted work in the shared tree.",
   },
   {
     re: /\bgit\s+reset\b[^\n]*?--hard\b/,
@@ -73,12 +73,12 @@ const RULES: Rule[] = [
   {
     re: /\bgit\s+add\s+(?:-A\b|--all\b|\.(?:\s|$))/,
     tier: 'deny',
-    why: 'Stage by explicit path. `git add -A` sweeps up other agents\' files.',
+    why: "Stage by explicit path. `git add -A` sweeps up other agents' files.",
   },
   {
     re: /\bgit\s+commit\b[^\n]*?(?<![\w-])(?:--all|-[A-Za-z]*a[A-Za-z]*)(?![\w-])/,
     tier: 'deny',
-    why: 'Commit atomically by explicit path. `git commit -a` commits other agents\' work.',
+    why: "Commit atomically by explicit path. `git commit -a` commits other agents' work.",
   },
   {
     re: /\bprettier\b[^\n]*?--write\s+\.(?:\s|$)/,
@@ -129,7 +129,7 @@ const RULES: Rule[] = [
     // reason. `git checkout -- .` is denied outright by a rule above.
     re: /\bgit\s+checkout\s+(?:--\s+)?\S*\.\w{1,5}(?:\s|$)/,
     tier: 'ask',
-    why: 'This reverts that file\'s uncommitted changes — make sure they are yours.',
+    why: "This reverts that file's uncommitted changes — make sure they are yours.",
   },
   {
     re: /\bgit\s+(?:switch|checkout)\s+(?:-c\b|-b\b|-{0,2}[A-Za-z][\w./-]*)/,
@@ -206,16 +206,25 @@ export function decide(command: string, permissive = false): Tier | 'allow' {
   return classify(command, permissive)?.tier ?? 'allow'
 }
 
+// Codex currently rejects the `ask` decision and continues the call. Preserve
+// the founder-go reminder as context instead; only the deny tier is mechanically
+// enforced there. Do not turn this into an unconditional deny: session approval
+// must still let an authorized operation proceed. Claude retains its native ask.
+export function hookOutput(decision: Tier, reason: string, codex = false) {
+  return {
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      ...(codex && decision === 'ask'
+        ? {
+            additionalContext: `${reason}\nProceed only if the required founder authorization is already present; otherwise ask first.`,
+          }
+        : { permissionDecision: decision, permissionDecisionReason: reason }),
+    },
+  }
+}
+
 function emit(decision: Tier, reason: string): never {
-  console.log(
-    JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: 'PreToolUse',
-        permissionDecision: decision,
-        permissionDecisionReason: reason,
-      },
-    }),
-  )
+  console.log(JSON.stringify(hookOutput(decision, reason, process.argv.includes('--codex'))))
   process.exit(0)
 }
 

@@ -1,0 +1,8 @@
+# Model choices are explicit so project behavior does not depend on personal defaults.
+# See docs/guides/agent-delegation.md for task routing and validation.
+model = "gpt-6-astra"
+model_reasoning_effort = "medium"
+
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 2

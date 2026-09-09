@@ -66,8 +66,8 @@ runs `.ts`, and `tsc --noEmit` type-checks. There is no `tsx`, no
 
 ```bash
 bun install
-bun run dev          # the API on http://localhost:8787 (dotenvx decrypts .env.development, bun --watch)
-bun run check        # lint:docs + lint:types + lint:enums + typecheck + test — run before committing
+bun run dev:api      # the API on http://localhost:8787 (dotenvx decrypts .env.development, bun --watch)
+bun run check        # all repository lints, typechecks, and tests — run before committing
 ```
 
 Other dev surfaces (the human keeps these running — use them, don't restart a live one):
@@ -77,6 +77,45 @@ Other dev surfaces (the human keeps these running — use them, don't restart a 
 - `bun --filter @skipper/mobile start` — the Expo phone player
 - `bun run sim` — the DB-backed drive simulator (`packages/sim`)
 
+### Coding agents
+
+Claude and Codex share this checkout. `CLAUDE.md` remains the operating truth;
+Codex enters through `AGENTS.md`, with an additional entry point in `apps/mobile`.
+No application provider or model changes are needed to develop with either agent.
+
+Project workflows live in `.claude/skills`; `.agents/skills` links to that directory
+for [Codex skill discovery](https://learn.chatgpt.com/docs/build-skills).
+Use `/ship`, `/investigate`, `/sim-qa`, etc. in Claude or `$ship`, `$investigate`,
+`$sim-qa` in Codex. New workflows added to the canonical directory are shared
+automatically. Start a fresh Codex session if they are absent from the skill list.
+
+Project-scoped Codex model defaults and helper limits live in `.codex/config.toml`;
+the scout and reviewer definitions live in `.codex/agents/`. Follow the shared
+[delegation guide](docs/guides/agent-delegation.md) for when to delegate, model
+selection, and a read-only smoke test. Project configuration enables helpers for
+this checkout without changing personal defaults for other projects.
+
+The tracked `.codex/hooks.json` runs the same STOP-list guard and documentation
+lints as Claude, including multi-file Codex patches. Hook commands find the repo
+root, so they also work from nested workspaces. Open `/hooks` in the Codex CLI to
+review and trust these definitions: Codex skips untrusted project hooks. See the
+[official hook documentation](https://learn.chatgpt.com/docs/hooks).
+
+Codex supports hard denials but currently does not support Claude's hook `ask`
+decision. The guard's Codex mode therefore blocks the NEVER list and supplies
+the other rules as authorization reminders. Those reminders are **not a mechanical
+approval gate**: the agent must check for the founder's explicit go before paid
+operator runs or other actions requiring approval. Trusting hooks is not that go.
+The written rules apply in clients without hook support as well.
+
+Use the existing Bun installation and dependencies; run `bun install` if missing.
+Root `bun run check` provides local validation without loading dotenvx secrets or
+running paid operator jobs. Mobile changes also need `bun run check` from
+`apps/mobile`. Leave the human's dev servers running and preserve other agents'
+uncommitted changes. Environment access is described below; development and
+production currently share the same database and storage, so the label is not
+a safety boundary.
+
 ### Environment & secrets
 
 Secrets are managed with [dotenvx](https://dotenvx.com). `.env.development` and
@@ -84,7 +123,7 @@ Secrets are managed with [dotenvx](https://dotenvx.com). `.env.development` and
 keys live only in `.env.keys`, which is gitignored — **never commit it**.
 
 - **Onboarding:** get `.env.keys` from a teammate (1Password / Signal / AirDrop),
-  then `bun run dev`. No `.env` copying.
+  then `bun run dev:api`. No `.env` copying.
 - **Set a value:** `dotenvx set DATABASE_URL "postgres://…" -f .env.development`
   (repeat with `-f .env.production` for prod), then commit the encrypted file.
 - `.env.example` is the plaintext catalog of which vars exist.
@@ -98,4 +137,3 @@ bun run db:push      # apply schema to Neon (dev)
 bun run db:studio    # browse
 bun run db:migrate   # run migrations (db:migrate:prod targets .env.production)
 ```
-

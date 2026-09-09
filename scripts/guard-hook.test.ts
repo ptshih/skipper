@@ -15,7 +15,30 @@
 // not a workspace, so `bun --filter '*' test` does not reach it.
 
 import { describe, expect, test } from 'bun:test'
-import { decide } from './guard-hook'
+import { decide, hookOutput } from './guard-hook'
+
+describe('Codex hook compatibility', () => {
+  test('keeps hard denials and Claude approval decisions intact', () => {
+    expect(hookOutput('deny', 'blocked', true).hookSpecificOutput).toHaveProperty(
+      'permissionDecision',
+      'deny',
+    )
+    expect(hookOutput('ask', 'approval needed').hookSpecificOutput).toHaveProperty(
+      'permissionDecision',
+      'ask',
+    )
+  })
+
+  test("uses supported context instead of Codex's unsupported ask decision", () => {
+    const output = hookOutput('ask', 'paid run', true).hookSpecificOutput
+    expect(output).not.toHaveProperty('permissionDecision')
+    expect(output).toHaveProperty('additionalContext', expect.stringContaining('paid run'))
+    expect(output).toHaveProperty(
+      'additionalContext',
+      expect.stringContaining('founder authorization'),
+    )
+  })
+})
 
 describe('deny — the CLAUDE.md NEVER list', () => {
   const cases = [

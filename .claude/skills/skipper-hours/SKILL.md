@@ -29,7 +29,7 @@ idea's nouns. Three outcomes worth catching before spending a single question:
 
 ## Phase 2: The Questions
 
-Ask **ONE at a time** via AskUserQuestion — recommendation first, honest
+Ask **ONE at a time** via the available question tool (or directly if unavailable) — recommendation first, honest
 downside on each option. Never batch them as prose. Push until the answer is
 specific and slightly uncomfortable; comfort means it wasn't pushed far enough.
 

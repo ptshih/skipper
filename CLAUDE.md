@@ -54,10 +54,9 @@ block has the canonical listing URL; §13's go-live (site `APP_STORE_URL` + Appl
 
 ## Git workflow
 
-- **Never create or switch branches without confirming first.** No `git switch -c` / `checkout -b` /
-  moving onto another branch on your own — the repo default is to **commit directly to `main`** (multiple
-  agents share one tree; unannounced switches are disruptive). 1.1 ships on `main` too — that was decided
-  once, up front. (Commit hygiene + the shared-tree rules live in STOP above.)
+- **Never create or switch branches without confirming first.** No `git switch -c` / `checkout -b` / moving branches on your own. Commit directly to `main` (1.1 too): agents share one tree; unannounced switches disrupt others. Commit hygiene lives in STOP above.
+- **Delegate independent read-only exploration/review when it materially helps; keep small or dependent work local.** At most two helpers, no recursive delegation; the parent owns edits, integration, checks, and commits. Helpers inherit STOP rules, never authority to spend or mutate prod.
+  Give each helper a bounded question, paths, constraints, and required evidence; verify its findings before acting. Use matching skills on demand, not every workflow on every task. Read [the delegation guide](docs/guides/agent-delegation.md) for roles, model configuration, and the trial. If spawning is unavailable, say so and proceed locally.
 - **Docs ride along with the change.** If your work ships / supersedes / invalidates anything in `docs/`
   (or this file), flip that doc's status line in the SAME commit — **statuses change in place; a doc file
   NEVER moves.** `bun run lint:docs` (a hook + first in `bun run check`) fails on a missing `**Status**`

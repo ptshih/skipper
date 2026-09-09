@@ -89,11 +89,12 @@ Atomically, by explicit path, at the very end:
 ```bash
 git commit path/a path/b -m "$(cat <<'EOF'
 <type>(<scope>): <what changed, and why if it isn't obvious>
-
-Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 EOF
 )"
 ```
+
+If adding a co-author trailer, use the actual assisting agent's identity; do
+not attribute Codex work to Claude or invent a model/version.
 
 - Re-check ownership immediately before committing — the tree may have moved
   under you while `check` ran.

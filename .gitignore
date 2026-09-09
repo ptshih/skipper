@@ -43,6 +43,8 @@ key/
 .scratch-audio/
 # Design-review agent output (local report artifacts, not committed)
 .design-review/
+# Personal document exports, unrelated to application source.
+/Claude outputs/
 # Playwright MCP output (screenshots / traces dumped during verification)
 .playwright-mcp/
 # TestFlight feedback dumps (tester PII — screenshots + comments; `bun run tf:feedback`)
@@ -58,6 +60,11 @@ testflight-feedback/
 
 # Codex
 .codex/*
+!.codex/hooks.json
+!.codex/config.toml
+!.codex/agents/
+.codex/agents/*
+!.codex/agents/*.toml
 
 # OS / editor
 .DS_Store
