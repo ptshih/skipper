@@ -229,6 +229,40 @@ story membership. The separate Sentinel Dome/Separate Reality group and the Half
 the whole Yosemite National Park subject are outside this initial enrichment selection and require
 particular review before generation. Group existence alone is not editorial approval.
 
+## Group and remaining-corridor desk audit — 2026-09-09
+
+Fresh corpus reads still show no Yosemite fact sheets or narrations. All 30 groups currently have
+zero tellable members under the shared runtime eligibility predicate. The scratch audit in
+`packages/studio/.scratch/osm/yosemite-group-audit.json` also computes **prospective** geometry from
+all current members, using existing anchors where present. Its radii are 250–323 m; none exceeds the
+engine's wide-group threshold. This is not evidence that the groups are correct: nearby erroneous
+source pins can produce a compact but misleading group. Recompute real geometry after enrichment;
+only then does the eligible member set exist.
+
+A complete tag pass over the 397 saved proposals found 21 with matched OSM ways tagged private/no
+motor-vehicle access, private/no general access, or tunnel. They include Half Dome, Yosemite National
+Park, Vernal Fall, Emerald Pool, Mirror Lake, Sierra Point and Inspiration Point. Keep these proposals
+unapplied. A story may still use those subjects as context, but the restricted road is not an ordinary
+rider route. Half Dome's proposed way `w292254779` explicitly limits private-vehicle access to disability
+placards. The current raw pins of Sentinel Dome and Separate Reality are only a few hundred metres
+apart, explaining their compact grouping; that does not verify the climb's true location. Preserve
+the hold until a reliable location source settles it instead of trusting nearest-road distance.
+
+| Remaining access review | Desk evidence and action |
+| --- | --- |
+| Hetch Hetchy | NPS identifies a parking area followed by a walk to the dam. Resolve the vehicle endpoint at parking, never on the dam. Existing subject proposals land about 592/610 m away on Hetch Hetchy Road (`w363422391`, sunrise–sunset). Check actual roadside vantage before applying these narration anchors. |
+| Big Oak Flat / Crane Flat | NPS puts Merced Grove trailhead access on Big Oak Flat Road and Tuolumne Grove trailhead access on Tioga Road near Crane Flat. Curate those access points separately from the grove interiors. The Big Oak Flat Road POI itself has a near-zero-offset proposal but is incorrectly typed mountain; resolve the kind before generation. |
+| Evergreen approach | Mather and Camp Mather have 48/196 m proposals on Evergreen Road. They can fill approach context after checking that scripts describe the settlement/camp, without directing riders into private camp facilities. |
+| Grove stories | Mariposa Grove and Merced Grove groups have no within-bound proposals. Preserve their contextual members; investigate narration placement on the approach after actual parking endpoints are resolved. Do not force-snap trees to distant roads merely to populate counts. |
+| High-country groups | Dana, Conness, Lyell and Maclure mountain/glacier groups also have no within-bound proposals. They are optional context, not substitutes for missing roadside content or mandatory parking stops. |
+
+Sources checked for this audit: [NPS Hetch Hetchy parking and dam access](https://www.nps.gov/places/000/hetch-hetchy-reservoir-oshaughnessy-dam.htm),
+[NPS Crane Flat area](https://www.nps.gov/yose/planyourvisit/cf.htm), and
+[NPS trailhead parking](https://www.nps.gov/yose/planyourvisit/thparking.htm). These establish the
+access pattern, not verified endpoint coordinates or a successful route-provider result. No paid
+calls, corpus corrections or publication occurred during this audit; the two prepared paid runs
+above remain awaiting explicit founder approval.
+
 ## Corpus preparation and approval sequence
 
 1. Snapshot the corpus before preparation. Preserve the `yosemite-national-park` identity. Expand its
