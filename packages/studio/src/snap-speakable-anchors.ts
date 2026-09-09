@@ -25,6 +25,8 @@
 //   preview:  dotenvx run -f .env.development -- bun packages/studio/src/snap-speakable-anchors.ts
 //   apply:    dotenvx run -f .env.development -- bun packages/studio/src/snap-speakable-anchors.ts --apply
 //   --region <slug>  scope to a region's bbox (REQUIRED — no default).
+//   --report <path>  save every proposed/flagged anchor for desk review (local JSON; no DB writes).
+//   OVERPASS_URL     optional public interpreter endpoint when the default instance is unavailable.
 //   --force          re-snap POIs that already carry an anchor (OVERWRITES admin corrections too) — a
 //                    clean re-baseline. Default: only POIs with no speakable anchor yet.
 //   --class-only     BACKFILL `speakable_road_class` for POIs that already have an anchor, WITHOUT
@@ -42,7 +44,7 @@ import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
 import { resolveRegion, requireRegionBboxes } from './pipeline/region'
 
-const OVERPASS = 'https://overpass-api.de/api/interpreter'
+const OVERPASS = process.env.OVERPASS_URL ?? 'https://overpass-api.de/api/interpreter'
 const UA = 'Skipper/0.1 (https://github.com/ptshih/skipper; hello@skipper.fm) road-snap'
 // Through-roads only (no `service` — driveways/parking aisles aren't "the road you drive past a POI on").
 const DRIVABLE =
@@ -57,7 +59,7 @@ const TILES = 5 // 5×5 grid over the (padded) region bbox — light enough per 
 const BBOX_PAD_DEG = 0.03 // ~3 km > the max kind-bound (2250 m), so an edge POI still sees its road
 const GRID_CELL_DEG = 0.02 // ~2.2 km spatial-index cell; a ±2 scan covers ±4.4 km
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
 type PoiRow = { id: string; name: string; kind: string | null; lat: number; lng: number }
 type Seg = [number, number, number, number] // aLat, aLng, bLat, bLng
@@ -84,35 +86,44 @@ function nearestOnSeg(plat: number, plng: number, s: Seg): { distM: number; lat:
 }
 
 /** Fetch drivable-road geometry for one tile, with a CLIENT-side timeout + retry (Overpass throttles). */
-async function fetchTile(s: number, w: number, n: number, e: number): Promise<Way[]> {
+export async function fetchTile(
+  s: number, w: number, n: number, e: number,
+  request: (url: string, init: RequestInit) => Promise<Response> = fetch,
+  pause: (ms: number) => Promise<void> = sleep,
+): Promise<Way[]> {
   // `out tags geom` (not bare `out geom`) so each way carries its `highway=` class — the tag was
   // always in the response envelope's reach; we simply never asked for or kept it.
   const q = `[out:json][timeout:90];way[highway~"${DRIVABLE}"](${s},${w},${n},${e});out tags geom;`
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const res = await fetch(OVERPASS, {
+      const res = await request(OVERPASS, {
         method: 'POST',
         body: 'data=' + encodeURIComponent(q),
         headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': UA },
         signal: AbortSignal.timeout(90_000),
       })
       if (res.status === 429 || res.status >= 500) {
-        await sleep(3000 * 2 ** attempt)
+        if (attempt === 3) throw new Error(`Overpass ${res.status}: road tile unavailable after retries`)
+        await pause(3000 * 2 ** attempt)
         continue
       }
       if (!res.ok) throw new Error(`Overpass ${res.status}`)
       const data = (await res.json()) as {
         elements?: { geometry?: { lat: number; lon: number }[]; tags?: { highway?: string } }[]
+        remark?: string
       }
+      // Overpass can return HTTP 200 with partial data and a runtime-error remark. Treating
+      // that as empty terrain would incorrectly certify missing roads as backcountry.
+      if (data.remark || !Array.isArray(data.elements)) throw new Error(`Incomplete Overpass tile: ${data.remark ?? 'missing elements'}`)
       return (data.elements ?? [])
         .map((el) => ({ geom: el.geometry ?? [], cls: el.tags?.highway ?? 'unclassified' }))
         .filter((w) => w.geom.length >= 2)
     } catch (err) {
       if (attempt === 3) throw err
-      await sleep(3000 * 2 ** attempt)
+      await pause(3000 * 2 ** attempt)
     }
   }
-  return []
+  throw new Error('Overpass tile unavailable')
 }
 
 /** A road index: all drivable segments in the bbox + a coarse grid for nearest-segment lookup. */
@@ -197,7 +208,7 @@ async function buildRoadIndex(
 }
 
 async function main(): Promise<void> {
-  const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region'] })
+  const flags = parseFlags(process.argv.slice(2), { valueFlags: ['region', 'report'] })
   const apply = flags.has('apply')
   const force = flags.has('force')
   const classOnly = flags.has('class-only')
@@ -286,6 +297,19 @@ async function main(): Promise<void> {
     return
   }
 
+  // Freeze the inputs alongside proposals so an operator can inspect individual moves and
+  // detect intervening pin edits before applying a selected subset. This is not access certification.
+  const reportPath = flags.value('report')
+  if (reportPath) {
+    await Bun.write(reportPath, JSON.stringify({
+      generatedAt: new Date().toISOString(), region: region.slug, boxes: bbox, overpassUrl: OVERPASS,
+      proposed: toWrite.map((s) => ({ ...s, distanceM: checkSpeakableAnchor(
+        [s.row.lng, s.row.lat], [s.lng, s.lat], s.row.kind,
+      ).distanceM })), flagged,
+    }, null, 2))
+    console.log(`Anchor report saved: ${reportPath}`)
+  }
+
   const verb = apply ? 'writing' : 'would write'
   console.log(`\n${toWrite.length} within bound (${verb}); ${flagged.length} flagged off-road (no anchor).`)
   const byCls = new Map<string, number>()
@@ -324,7 +348,7 @@ async function main(): Promise<void> {
   }
 }
 
-main()
+if (import.meta.main) main()
   .then(() => process.exit(0))
   .catch((e) => {
     console.error(e)

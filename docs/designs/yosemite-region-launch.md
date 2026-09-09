@@ -1,7 +1,8 @@
 # Yosemite launch and admin listening review
 
-**Status:** Operator tools implemented and locally verified 2026-09-09; corpus snapshot complete. Corpus preparation,
-paid runs, listening approval, deployment and public release remain pending. Yosemite is not announced.
+**Status:** Operator tools deployed and free discovery refreshed 2026-09-09; corpus snapshot complete.
+Road-anchor preparation is blocked by Overpass connection failures/timeouts. Paid runs, listening approval and public release remain pending.
+Yosemite is not announced.
 
 The launch covers Yosemite's major driving corridors and the approaches from Groveland, Mariposa,
 Oakhurst and Lee Vining, using the existing Skipper persona and voice. The installed mobile app stays
@@ -79,7 +80,7 @@ Point have seasonal closures; Hetch Hetchy and Glacier Point also have vehicle-s
 Before each paid route audit, check NPS again and compare actual route-provider results. Record
 closed/restricted-route rejection and implausible-detour cases. No live closure service is being built.
 
-## Preparation snapshot and first run awaiting go
+## Preparation snapshot and approved free run
 
 The read-only snapshot completed 2026-09-09 under
 `packages/studio/.scratch/yosemite-preparation-2026-09-09/`: 16 tables, 9,116 rows,
@@ -87,7 +88,7 @@ The read-only snapshot completed 2026-09-09 under
 private account data and remains gitignored. No database or R2 content was mutated by that backup.
 
 The snapshot confirms Yosemite's starting 825 POIs, 30 groups, zero sheets, zero road anchors and zero
-narrations. The region remains draft. The proposed expansion preserves the original park rectangle and
+narrations. The region remains draft. The approved expansion preserves the original park rectangle and
 adds four approach rectangles:
 
 ```text
@@ -99,17 +100,42 @@ adds four approach rectangles:
 ```
 
 The added boxes cover the Groveland/Evergreen approach, Mariposa/El Portal approach, Oakhurst/Wawona
-approach and Lee Vining/Tioga approach, respectively. These are proposed broad discovery bounds;
+approach and Lee Vining/Tioga approach, respectively. These are broad discovery bounds;
 precise vehicle access points still need curation. Their northern extent is south of the other two
 regions' southern boundary, so the proposed region boxes do not overlap Tahoe or Reno/Carson in the
 snapshot. Store as one semicolon-separated value, without the presentation line breaks.
 
-First operator run to present for go: apply this region-only geometry update; refresh discovery with
+The founder approved deployment and the first free preparation batch on 2026-09-09: apply the geometry update;
+refresh discovery with
 `discover-pois --region yosemite-national-park --apply`; inspect resulting coordinates and groups;
 preview `snap-speakable-anchors --region yosemite-national-park`, then apply only if the preview is
 suitable, without `--force`. Discovery and OSM snapping make no model/TTS/Routes calls. No deletion,
 classification, enrichment, narration generation, route-provider audit or release is included.
-The plan requires each operator run to be presented concretely for go, so this run has not started.
+The geometry update and discovery refresh completed. All 175 discovery cells succeeded; 961 subjects
+were upserted (316 story candidates, 645 scenic), with no full-article fallback reported. Yosemite now
+contains 963 POIs and the same 30 groups, including 138 newly discovered POIs. Existing POI coordinates
+and road anchors were unchanged. One additional new POI, Gibbs Canyon, falls just outside the boxes;
+it remains outside the region's geometric publication set. No POIs were deleted.
+
+The discovery report lists 12 exact coordinate collisions, including named climbing routes sharing
+their landmark's pin. Desk triage also found Wawona Hotel overlapping the separate Wawona Hotel and
+Studio subject, and mountain classifications on Parsons Memorial Lodge, Big Oak Flat Road and Hetch
+Hetchy Road. Resolve these before generation; do not turn contextual off-road members into automatic
+exclusions. The snapper's optional `--report <path>` saves all proposals and flagged pins as local JSON
+for selective review without database writes.
+
+The primary Overpass instance refused connections during the preview, which stopped without anchor
+writes. A direct status request reproduced that failure; the OSM-listed Private.coffee instance
+responded. The CLI now accepts `OVERPASS_URL` for an explicit alternative and fails closed on exhausted
+server errors or HTTP-success runtime-error responses. Regression tests cover those cases, valid empty
+tiles and recovery from a transient error. Public instance documentation was checked through Context7
+and the [OSM instance list](https://wiki.openstreetmap.org/wiki/Overpass_API#Public_Overpass_API_instances).
+The alternative also exhausted its retries with a timeout on the second tile. Both previews exited 1;
+no anchor proposals were applied and Yosemite still has zero road anchors, fact sheets and narrations.
+Resume the same approved free preview when a public instance is responsive, inspect the JSON report,
+and apply only suitable proposals while preserving any intervening operator corrections. The previous
+connection failure is not evidence that a POI is off-road. Discovery and deployment are complete;
+the first free preparation batch remains incomplete at road snapping.
 
 ## Corpus preparation and approval sequence
 
@@ -135,6 +161,17 @@ The plan requires each operator run to be presented concretely for go, so this r
 
 ## Deployment and validation record
 
+Commit `64f9d746` was pushed after applying the three additive migrations on 2026-09-09. All four
+Cloud Build triggers succeeded. API revision `skipper-api-00162-fjr` replaced `skipper-api-00161-5mj`;
+Admin revision `skipper-admin-00094-2qz` replaced `skipper-admin-00093-rzz`, each at 100% traffic.
+The Studio job image was updated but no job execution was launched. Root `bun run check` passed again.
+Public health/version probes succeeded, `/regions` still returned only Tahoe and Reno/Carson, and
+the recent API/Admin error-log window contained no error-level entries. Unauthenticated Admin access
+redirected to IAP. Authenticated production Admin loaded Yosemite readiness, persisted an empty review,
+resumed it after refresh, and disabled approval/publication for its missing content/endpoints/evidence.
+Production listening playback and clip verdict checks await staged audio; fixture verification below
+does not substitute for that integrated check. No App Store submission was made.
+
 Additive migrations introduce listening reviews, items and corridor evidence. Apply before deploying
 admin; the production admin image now includes ffmpeg/ffprobe and the shared simulator read path.
 Review creation, playback, verdicts, audio checks and saved-route replays invoke no model/TTS/Routes.
@@ -153,8 +190,8 @@ schema, including concurrent audio edits waiting on the release lock and invalid
 An isolated browser fixture exercised individual/combined navigation, private audio loading,
 verdict saving, refresh/resume, rejected premature approval, explicit approval, and stale-review
 blocking. The saved note and verdict survived refresh. This verifies the UI against fixtures, not
-production R2/IAP. No development admin/API server was listening when checked, so integrated browser
-and iOS checks remain pending.
+production R2/IAP. No development admin/API server was listening during that initial pass. Production
+readiness and empty-session checks are recorded above; integrated audio and iOS checks remain pending.
 Do not start shared development services without the founder's instruction. No public release or paid
 operator run has been performed in this implementation pass.
 
