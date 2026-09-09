@@ -30,3 +30,12 @@ describe('evaluateLaterality', () => {
     expect(lateralityHit('There is the lighthouse, straight ahead.')).toBe(false)
   })
 })
+
+
+test('choice idioms do not falsely withhold a clip, but cannot hide a real direction', () => {
+  expect(lateralityHit('Of the three names, I think they landed on the right one.')).toBe(false)
+  expect(lateralityHit('They settled on the right name for the hotel.')).toBe(false)
+  expect(lateralityHit('They landed on the right one. The hotel is on your left.')).toBe(true)
+  expect(lateralityHit('They landed on the right bank of the river.')).toBe(true)
+  expect(lateralityHit('The hotel is on the right.')).toBe(true)
+})

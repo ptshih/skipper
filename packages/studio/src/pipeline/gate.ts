@@ -29,7 +29,7 @@ import { narrateStop, type NarrationRequest } from './narrate'
 import { evaluateGrounding } from '../eval/grounding'
 import { evaluateTts } from '../eval/tts'
 import { evaluateDiversityAgainst } from '../eval/diversity'
-import { evaluateLaterality } from '../eval/laterality'
+import { evaluateLaterality, LATERALITY_AVOID } from '../eval/laterality'
 import { evaluatePacing } from '../eval/pacing'
 import { optimize } from '../eval/optimize'
 import { exciseUngrounded, makeExciseCall } from '../eval/excise'
@@ -139,7 +139,11 @@ export async function gateNarration(
 
   const exciseCall = makeExciseCall(() => getAnthropic('grounding excision'))
   const regenerate = async (avoid: string[], prev: string): Promise<string> => {
-    const ungrounded = avoid.filter((a) => a.startsWith(UNGROUNDED_PREFIX))
+    // collectAvoid prefers a finding's detail. Laterality supplies an instruction there,
+    // not the prefix used by the paid claim judge. Include it in the SAME repair or an
+    // excision for factual errors silently ignores a simultaneously failing direction gate.
+    const ungrounded = avoid.flatMap((a) => a.startsWith(UNGROUNDED_PREFIX)
+      ? [a] : a === LATERALITY_AVOID ? [`${UNGROUNDED_PREFIX}: ${a}`] : [])
     if (ungrounded.length > 0) {
       console.log(`  ✂ ${name}: excising ${ungrounded.length} ungrounded claim(s)`)
       return excise(prev, ungrounded, well, exciseCall)

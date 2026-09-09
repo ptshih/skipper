@@ -177,3 +177,30 @@ describe('gateNarration', () => {
     expect(narrateCalls).toBeGreaterThan(1)
   })
 })
+
+
+test.each([false, true])('direction repair reaches excision even alongside a factual error: %p', async (alsoFactual) => {
+  let narrationCalls = 0
+  const repairs: string[][] = []
+  const r = await gateNarration(input(), {
+    narrate: async () => { narrationCalls++; return {script:'The stone house is on your right.'} as never },
+    groundingEnabled: () => true,
+    judgeGrounding: async ({script}) => alsoFactual && script.includes('right')
+      ? grounding(false,['ungrounded place-claim: unsupported stone house']) : grounding(true),
+    excise: async (_script, flagged) => { repairs.push(flagged); return REPAIRED },
+  })
+  expect(repairs).toHaveLength(1)
+  expect(repairs[0]!.some(s=>s.includes('Do NOT name a side of the road'))).toBe(true)
+  expect(repairs[0]!.some(s=>s.includes('unsupported stone house'))).toBe(alsoFactual)
+  expect(narrationCalls).toBe(1)
+  expect(r.shipped).toBe(true)
+})
+
+test('an ineffective direction repair is still withheld', async () => {
+  const r = await gateNarration(input(), {
+    narrate: async () => ({script:'The stone house is on your right.'}) as never,
+    groundingEnabled: () => false,
+    excise: async script => script,
+  })
+  expect(r.shipped).toBe(false)
+})

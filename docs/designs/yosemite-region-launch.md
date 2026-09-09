@@ -2,8 +2,8 @@
 
 **Status:** Operator tools deployed and free discovery refreshed 2026-09-09; corpus snapshot complete.
 Local California/Nevada extracts are verified; the first 24 reviewed Yosemite anchors are applied.
-Further anchor review continues; endpoint curation and initial enrichment are running under founder
-approval. Listening approval and public release remain pending.
+Further anchor review continues; paid preparation has produced 159 fact sheets and 72 curated places.
+Calibration and endpoint-access validation are in progress under founder approval. Listening approval and public release remain pending.
 Yosemite is not announced.
 
 The launch covers Yosemite's major driving corridors and the approaches from Groveland, Mariposa,
@@ -358,3 +358,64 @@ A fresh local Yosemite preview after the first 24 anchors returned 352 proposals
 is `packages/studio/.scratch/osm/yosemite-anchor-preview-access-review.json`. Regression checks cover
 Overpass evidence retention, nearest-segment/through-road evidence identity and restricted/tunnel
 holds. This preview performed no corpus writes.
+
+## Paid preparation and calibration progress — 2026-09-09
+
+The founder explicitly authorized paid work while away. Endpoint curation returned 72 unique places
+from 150-target drafting ($0.25 model spend plus Places charges). The 37-subject enrichment completed
+without deferrals ($0.78), followed by 122 additional eligible subjects near road proposals and their
+contextual group members ($2.22, zero deferrals). Yosemite now has 159 sheets. The second exact-ID set
+is saved in `packages/studio/.scratch/osm/yosemite-expansion-enrichment.json`; suspect Sentinel Dome /
+Separate Reality and Half Dome / whole-park groupings remain held from this preparation set.
+
+Calibration has staged six clips: El Portal and the Yosemite Railroad, Tuolumne Meadows, Olmsted
+Point, Groveland Hotel, Tunnel View and the scenic El Capitan Meadow. Groveland's first
+TTS retake returned a provider 400; a later generation synthesized successfully. Its second text
+attempt exposed a false positive: “landed on the right one” matched the directional-road regex. The
+checker now excludes only bounded choice idioms, while still rejecting actual roadside directions,
+including another direction elsewhere in the same script.
+
+A second repair bug affected Tunnel View: `collectAvoid` prefers detail over findings, so the
+laterality instruction lost the prefix used to select targeted excision. When factual claims also
+failed, the editor received only those claims and never the direction correction. The gate now sends
+both corrections through the same repair and re-evaluates the result; ineffective edits still fail
+closed. The correction instruction also explicitly covers viewpoint descriptions. Tests exercise
+combined factual/directional failures, direction-only repair, and ineffective repair withholding.
+These changes apply to the shared individual/combined/scenic gate without changing persona or voice.
+
+An El Capitan Meadow scenic calibration passed text gates but initially could not synthesize: the
+production environment expects workload identity, unavailable to a direct local process. The local
+development environment has the configured service-account credentials (same shared DB/R2); use it
+for subsequent local synthesis. Do not mistake this for a content failure or silently publish silence.
+The scenic retry and corrected Tunnel View repair both succeeded; Tunnel View passed all gates
+after the shared excision fix (eval run `c280b797-f55f-4db4-a22b-6537d74c675d`).
+
+The first complete endpoint audit billed 77 Routes calls (~$0.39), with three confirmed warnings and
+one no-route error (Mariposa Grove). Five frozen, reviewed parking corrections were applied with a
+fresh snapshot and atomic comparison: Mariposa Grove → Welcome Plaza parking; Happy Isles → Yosemite
+Valley Trailhead Parking; Ansel Adams Gallery, Yosemite Museum and Valley Welcome Center → Yosemite
+Village Parking. Only access-coordinate pairs changed; original identity, pin and rank stayed intact.
+Artifacts use `packages/studio/.scratch/osm/yosemite-access-1788997160329` as their prefix.
+The repeat audit billed 78 calls (~$0.39), returned routes for all 72 endpoints, and left only Happy
+Isles with a confirmed warning. NPS explicitly identifies that trailhead parking as vehicle access
+near Happy Isles; investigate the actual approach rather than treating Google's warning as proof
+of prohibition. [NPS trailhead information](https://www.nps.gov/yose/planyourvisit/trailheads.htm).
+Other feature centroids still need endpoint-position review even when the route audit passes.
+
+Raw paid-run logs are local under `/tmp/yosemite-{curate-150,enrich-37,enrich-122,calibration-*,endpoint-audit-*}.log`.
+No content has been publicly released. No review verdict has been supplied on the founder's behalf.
+
+A second reviewed anchor batch applied 66 exact proposals, bringing Yosemite to 90 anchors. It covers
+additional Valley/Tioga/Glacier approaches, El Portal history, Wawona context, Big Oak Flat's Wildcat
+Falls and the Hetch Hetchy approach. Hetch Hetchy and its dam use within-bound narration approach
+anchors, not parking endpoints. The selection and matched-way evidence are in
+`packages/studio/.scratch/osm/yosemite-anchor-selected-second.json`. Fresh snapshot, exact-plan
+comparison and full read-back confirmed only those anchor triples changed; no source pins, kinds,
+other POIs or regions changed. Receipt prefix: `yosemite-anchor-second-apply-2026-09-09T23-46-44.465Z`.
+
+All six calibration clips passed complete decode and duration checks using the same checker as Admin.
+Loudness checks passed for all; Olmsted Point's AAC true peak was +0.1 dB and was flagged for exact-script
+re-synthesis. The other five passed peak checks. Measured story tails were clean; the short scenic clip
+is below the tail meter's measurement window. The six-clip report and private local audio are saved
+under `packages/studio/.scratch/osm/yosemite-calibration-audio-checks.json` and `calibration-audio/`.
+This is technical and script review, not the founder's listening approval.

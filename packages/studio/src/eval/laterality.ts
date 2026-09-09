@@ -21,13 +21,11 @@ export const LATERALITY_RE =
 export const LATERALITY_FINDING =
   'ungrounded place-claim: names a side of the road (the direction of travel is unknown on a shared clip)'
 
-/** The directive regen note fed into the next take (the StopEval.detail the optimizer prefers).
- *  ⚠ This string REACHES A MODEL — it is the literal instruction the retake is given. Its "free-roam
- *  drive" clause is roam-era wording left verbatim through the 1.1 sweep on purpose: re-wording a
- *  generation instruction changes what gets baked and costs a paid re-validation, so it is a founder
- *  call, not a rename. The RULE itself is unchanged and still correct (see the header). */
+/** The correction reaches the next generated take. Vista descriptions need the same direction-
+ * independent wording as road scenes: the Yosemite calibration kept repeating left/right landmark
+ * layouts despite the old road-only instruction. Do not replace them with invented compass bearings. */
 export const LATERALITY_AVOID =
-  'Do NOT name a side of the road (no "on your left/right", no "the left/right-hand side") — the direction of travel is unknown on a free-roam drive; say "just out there" or "right about here" instead.'
+  'Do NOT name a side of the road (no "on your left/right", no "the left/right-hand side") — the direction of travel is unknown on a shared drive; say "just out there" or "right about here" instead. For a vista, name its landmarks without left/right positions. Do not assume the rider just emerged from a tunnel or arrived from a particular direction; do not invent compass bearings.'
 
 export interface LateralityInput {
   seq: number
@@ -36,7 +34,10 @@ export interface LateralityInput {
 
 /** True when the script names a side of the road. */
 export function lateralityHit(script: string): boolean {
-  return LATERALITY_RE.test(script)
+  // "Landed on the right one" is a choice idiom, not a roadside assertion. Remove only
+  // this bounded phrase; another directional claim in the same script must still fail.
+  const spatialText = script.replace(/\b(?:landed|settled|decided) on the right (?:one|choice|name)\b/gi, '')
+  return LATERALITY_RE.test(spatialText)
 }
 
 /**
