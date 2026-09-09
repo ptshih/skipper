@@ -1,8 +1,8 @@
 # Yosemite launch and admin listening review
 
 **Status:** Operator tools deployed and free discovery refreshed 2026-09-09; corpus snapshot complete.
-Local California/Nevada road extracts and snapping previews are verified. Selective anchor review,
-paid runs, listening approval and public release remain pending.
+Local California/Nevada extracts are verified; the first 24 reviewed Yosemite anchors are applied.
+Further anchor review, endpoint curation, paid runs, listening approval and public release remain pending.
 Yosemite is not announced.
 
 The launch covers Yosemite's major driving corridors and the approaches from Groveland, Mariposa,
@@ -136,11 +136,50 @@ exhausted HTTP 504 responses. No anchors were written from those incomplete resu
 path then removed this dependency: verified California/Nevada extracts from the same September 8
 snapshot produced 3,655 Yosemite road ways and a complete preview (397 proposed anchors, 566 beyond
 bounds). The preview is saved at `packages/studio/.scratch/osm/yosemite-anchor-preview.json` and includes
-the source road file's fingerprint. Review suitable proposals before applying, preserving intervening
-operator corrections and retaining contextual off-road members. Yosemite still has zero applied road
-anchors, fact sheets and narrations. See the [local OSM guide](../guides/local-osm-roads.md) for reusable
-state caches, multi-state coverage checks and the Tahoe verification. Discovery and tools are complete;
-the first free preparation batch remains incomplete at selective anchor review/application.
+the source road file's fingerprint. See the [local OSM guide](../guides/local-osm-roads.md) for reusable
+state caches, multi-state coverage checks and the Tahoe verification.
+
+### First selective anchor application — 2026-09-09
+
+Applied 24 reviewed proposals from the local extract. These are narration trigger coordinates on
+roads, **not curated parking endpoints** or a certification of current access. OSM road tags were
+inspected, including one-way and seasonal restrictions. NPS corroborates the roadside locations of
+[Tunnel View, Olmsted Point and Washburn Point](https://www.nps.gov/yose/planyourvisit/viewpoints.htm).
+Seasonal access still requires the checks above; no route-provider audit was run.
+
+| Road / approach | Applied subjects |
+| --- | --- |
+| El Portal / CA 140 | Arch Rock; Arch Rock Entrance Station; El Portal; Midpines; Briceburg |
+| Valley | El Capitan Meadow; Fern Spring; Stoneman Meadow |
+| Groveland / CA 120 | Groveland Hotel; Buck Meadows |
+| Wawona / CA 41 | Fish Camp; South Entrance Office; Wawona; Tunnel View |
+| Glacier Point Road | Washburn Point; Peregoy Meadow; Pothole Meadows; Summit Meadow |
+| Tioga / Lee Vining | Olmsted Point; Tenaya Lake Viewpoint; Tioga Lake Overlook; Tioga Pass Entrance Station; Siesta Lake; Lee Vining |
+
+Offsets range from 4 to 211 metres. Briceburg's trigger lies on the highway bridge; it does not
+instruct a stop. The remaining 373 proposed snaps are deferred, and 566 subjects were beyond bounds.
+This first subset does not establish full corridor coverage: Big Oak Flat and Hetch Hetchy still
+need further anchor review. Explicit holds include Medial Moraine (private Happy Isles Loop Road),
+Inspiration Point (nearest match inside Wawona Tunnel), misleading kinds on roads/visitor centers,
+and overlapping Wawona historic subjects. Off-road contextual members remain intact for enrichment
+and combined stories. The road index filters highway classes, not legal access: retain manual road-tag
+review when using local previews in other states.
+
+The exact selected IDs, coordinates and matched OSM way tags are saved locally in
+`packages/studio/.scratch/osm/yosemite-anchor-selected.json`; the complete desk evidence is
+`yosemite-anchor-desk-review.json` in that directory. The dated application artifacts use prefix
+`yosemite-anchor-apply-2026-09-09T23-23-17.031Z`, with `-before.json`, `-receipt.json` and `-after.json`.
+A narrow scratch application used the frozen proposals, verified the road-file hash and region boxes,
+and compared every selected POI against a fresh snapshot. A short transaction locked POIs/regions
+and required the whole reviewed set to remain identical before writing any anchor. It changed only
+`speakable_lat`, `speakable_lng` and `speakable_road_class`. An initial SQL column-name error rolled
+back without writes; the corrected application returned all 24 IDs. Full before/after comparison
+confirmed all other POI fields, all unselected POIs and every region were unchanged.
+
+Yosemite now has 963 POIs, 30 groups and 24 anchors, with zero fact sheets or narrations. No Tahoe
+anchors, source pins, cluster membership, endpoints or release flags were changed. The first free
+preparation batch is complete at this conservative subset; broader preparation remains open.
+
 
 ## Corpus preparation and approval sequence
 
