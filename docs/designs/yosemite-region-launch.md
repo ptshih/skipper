@@ -3,8 +3,9 @@
 **Status:** Staged preparation and saved listening package complete 2026-09-09 PDT: 78 clips,
 67 curated endpoints, 173 fact sheets, and 23 saved QA drives. California/Nevada local OSM extracts
 are verified. All staged audio passes decode/duration checks; all 253 selected route occurrences
-played with zero missing subjects. Follow-up operator fixes deployed successfully 2026-09-09 PDT; the final approval-button UI correction is being verified.
-Founder listening approval, remaining device verification, and public release are pending.
+played with zero missing subjects. Follow-up operator fixes deployed successfully 2026-09-09 PDT; the final approval-button UI correction is also deployed and verified.
+The existing app completed the five-stop Valley simulation. Founder listening approval and public
+release remain pending; real GPS, device offline/audio behavior and a field drive remain follow-up checks.
 Yosemite remains unpublished and unannounced; no mobile build or App Store submission is required.
 
 The launch covers Yosemite's major driving corridors and the approaches from Groveland, Mariposa,
@@ -691,3 +692,28 @@ required verdicts, advisory reasons or technical checks, with an explicit remain
 This is presentation guidance; the unchanged atomic server query remains the authority. Regression
 checks cover required versus optional items, Needs work, technical failures, and advisory acceptance.
 The Reference page and canary skill also reflect the actual workflow and path-filtered deployments.
+
+
+### Final deployed UI and existing-app pass (2026-09-09 PDT)
+
+Commit `d118ab3e` deployed the approval-button correction through successful Admin build
+`3a686fd6-121e-4a20-84df-fac541c53626`. Admin revision `skipper-admin-00096-2gs` serves 100%.
+The authenticated production page shows “39 clips still need listening verdicts, advisory reasons,
+or technical checks before approval”; both Approve release review and Publish approved set are
+disabled. The current saved session and all 78 technical results remain intact. Root `bun run check`
+and the admin production build passed before deployment. No API/Admin error-level logs appeared in
+the final 15-minute observation window. No human verdict, approval, release or store update was sent.
+
+Simulator access resumed after the founder returned. On the unchanged iPhone 17 Pro Max / iOS 26.5
+development build, the saved Valley legal circuit ran to Drive Complete with **5 of 5 stops played**.
+The UI showed each automatic transition in order: Fern Spring; Yosemite Valley and Bridalveil Fall;
+Ahwahnee and Royal Arches; Camp 4; El Capitan and the Nose. Playback progress advanced through each
+clip. Switching to the route map and back preserved playback. The fast simulator compresses quiet
+road time and plays clips in real time; this is simulated GPS evidence, not a physical drive.
+The drive remained Saved Offline after completion. Settings → Developer was restored to Real GPS,
+with Real checked and Simulated unchecked. Actions used accessibility handles, not coordinate taps.
+
+This closes the previously incomplete in-app simulation check. The simulator still does not prove
+real GPS accuracy/heading, device airplane-mode operation, exclusive audio focus, interruptions, or
+lock-screen behavior. No native build, splash/icon verification, mobile source edit or App Store
+submission occurred. The operator review is ready for the founder's listening judgment.

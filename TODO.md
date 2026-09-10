@@ -594,8 +594,8 @@ and its staged listening evidence are recorded in [the launch design](docs/desig
 - [ ] #80 (corpus, high, paid, founder, doing) **Finish Yosemite review and launch.** Corpus enrichment,
       staged individual/combined generation, reusable local OSM roads, simulator fixes and saved listening
       tools are built. The 78 staged clips pass technical checks; 23 saved QA drives and corridor evidence
-      are recorded. Deploy the committed operator fixes, finish the remaining in-app drive check, then
-      obtain founder listening approval and the separate public-release
+      are recorded. Operator fixes are deployed and the existing app completed the five-stop Valley
+      simulation. Obtain founder listening approval and the separate public-release
       instruction. Publish website/store coverage only after content serves. Evidence and exact remaining
       obligations: [Yosemite launch design](docs/designs/yosemite-region-launch.md).
 
