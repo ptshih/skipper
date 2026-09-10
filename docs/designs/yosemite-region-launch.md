@@ -1,12 +1,13 @@
 # Yosemite launch and admin listening review
 
-**Status:** Staged preparation and saved listening package complete 2026-09-09 PDT: 78 clips,
-67 curated endpoints, 173 fact sheets, and 23 saved QA drives. California/Nevada local OSM extracts
-are verified. All staged audio passes decode/duration checks; all 253 selected route occurrences
-played with zero missing subjects. Follow-up operator fixes deployed successfully 2026-09-09 PDT; the final approval-button UI correction is also deployed and verified.
-The existing app completed the five-stop Valley simulation. Exception-driven automated audio assessment is deployed and verified; public
-focused one-at-a-time review UX is deployed; regional-context remediation is complete and the final review has 78 Good verdicts with zero blockers; public release remains pending; real GPS, device offline/audio behavior and a field drive remain follow-up checks.
-Yosemite remains unpublished and unannounced; no mobile build or App Store submission is required.
+**Status:** Public corpus released and verified 2026-09-10 PDT: all 78 reviewed clips are published,
+and the public region list reports Yosemite ready. The launch has 67 curated endpoints, 173 fact
+sheets, and 23 saved QA drives; all 253 selected route occurrences played with zero missing subjects
+or queue conflicts after the final repairs. California/Nevada local OSM extracts, automated audio
+assessment, focused review UX, and regional-context safeguards are deployed and verified.
+The existing app completed the five-stop Valley simulation. Post-release rider planning/preview/
+playback, website/store coverage updates, real-device offline/audio behavior, and a field drive
+remain follow-up validation or rollout work. No mobile build or App Store submission was required.
 
 The launch covers Yosemite's major driving corridors and the approaches from Groveland, Mariposa,
 Oakhurst and Lee Vining, using the existing Skipper persona and voice. The installed mobile app stays
@@ -818,3 +819,13 @@ preserved unless their content changes; new audio requires a replacement release
 Final replacement review **76382d75-fe0a-4194-886c-61249a49d85d** is current, with all 78 clips Good
 and no structural blockers. All 23 routes were replayed after the final audio changes: 253/253 clips
 played, zero missing subjects or queue conflicts. No public-release approval was supplied or recorded.
+
+
+### Founder publication (2026-09-10)
+
+The founder approved review 76382d75-fe0a-4194-886c-61249a49d85d at 00:12:39 PDT and published
+its set at 00:13:13 PDT. Read-back confirmed both timestamps and all 78 frozen narration IDs with
+non-null released_at. GET /regions lists yosemite-national-park as ready with the four gateway
+examples; GET /health returns ok. This verifies publication and public discovery, not a new
+end-to-end rider planning/download/playback pass. Earlier “unpublished” entries above describe
+their dated preparation checkpoints.

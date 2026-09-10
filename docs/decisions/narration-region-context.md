@@ -1,6 +1,6 @@
 # Narration context follows region geometry
 
-**Status:** Deployed and verified 2026-09-10. Five staged recordings repaired; final Yosemite review has 78 Good verdicts, zero blockers, and current route evidence. Public release remains gated.
+**Status:** Deployed and verified 2026-09-10. Five staged recordings repaired; final Yosemite review has 78 Good verdicts, zero blockers, and current route evidence. The founder published the reviewed Yosemite corpus on 2026-09-10; all 78 clips and public discovery were verified.
 
 The old studio helper classified every coordinate west of one longitude as Lake Tahoe, and every
 other coordinate as Reno or Carson Valley. That assumption reached enrichment, story and scenic
@@ -79,3 +79,6 @@ charge is not included because its usage tally was lost. These are not claimed a
 
 No release approval or publication was performed. Public region discovery still lists Tahoe and
 Reno/Carson only. The operator can now approve the final review and explicitly publish its set.
+
+Publication follow-up: the founder approved and published the final review on 2026-09-10 PDT.
+Read-back confirms all 78 clips released and Yosemite ready in the public region list.
