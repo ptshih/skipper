@@ -18,6 +18,7 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
   if (!response.ok) throw new Error(data.message ?? data.error ?? 'Request failed')
   return data as T
 }
+const scoreColumns = [['sourceSupport', 'Source support'], ['roadContext', 'Road context'], ['writing', 'Writing'], ['delivery', 'Delivery'], ['audioFidelity', 'Audio fidelity']] as const
 const minutes = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')}`
 
 export function ListeningView() {
@@ -98,6 +99,7 @@ export function ListeningView() {
     </section>}
     {data && <div className="flex flex-wrap gap-3">
       <p>{data.assessmentJob ? `Assessment ${data.assessmentJob.status}: ${data.assessmentJob.phase ?? ''}` : 'No automated assessment yet'}</p>
+      {data.assessmentJob?.error && <p role="alert">{data.assessmentJob.error}</p>}
       <Button disabled={busy || data.stale || ['queued', 'running'].includes(data.assessmentJob?.status ?? '')} onClick={() => void act(() => request(`listening-reviews/${reviewId}/assess`, 'POST'))}>Assess remaining clips</Button>
       <Button variant="outline" onClick={() => { setShowAll(!showAll); setIndex(0); setAudio(null) }}>{showAll ? 'Show only exceptions' : 'Browse all clips'}</Button>
       <Button disabled={busy || data.stale} onClick={() => void act(async () => {
@@ -110,11 +112,11 @@ export function ListeningView() {
       })}>Publish approved set</Button>
       {data.review.approvedAt && <p>Explicitly approved {new Date(data.review.approvedAt).toLocaleString()}</p>}
     </div>}
-    {data && <div className="overflow-auto"><table className="w-full text-sm"><thead><tr><th className="text-left">Clip</th><th>Status</th><th>Scores / 10</th></tr></thead><tbody>
+    {data && <div className="overflow-auto"><table className="w-full text-sm"><thead><tr><th className="text-left">Clip</th><th>Status</th>{scoreColumns.map(([key, label]) => <th key={key}>{label} / 10</th>)}</tr></thead><tbody>
       {items.map((i, n) => { const c = data.snapshot.clips.find(c => c.narration.id === i.narrationId); const result = i.assessment?.result
         return <tr key={i.id}><td><button className="p-2 text-left underline" onClick={() => { setIndex(n); setAudio(null) }}>{c?.cluster?.title ?? c?.members[0]?.name}</button></td>
           <td>{i.verdict === 'good' ? (i.reviewer?.startsWith('model:') ? 'AI accepted' : 'Accepted') : i.verdict === 'needs_work' ? 'Flagged by you' : i.assessment?.status === 'complete' ? 'Needs attention' : i.assessment?.status ?? 'Awaiting assessment'}</td>
-          <td>{result ? Object.entries(result.judgment.scores).map(([k, v]) => `${k}: ${v}`).join(' · ') : i.assessment?.error ?? '—'}</td></tr> })}
+          {scoreColumns.map(([key]) => <td key={key} className="text-center">{result?.judgment.scores[key] ?? '—'}</td>)}</tr> })}
     </tbody></table>{!items.length && <p>No clips need attention. Browse all clips to inspect scores or listen.</p>}</div>}
     {item && clip && <section className="space-y-4 rounded border p-4">
       <div className="flex items-center gap-3">

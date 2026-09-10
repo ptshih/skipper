@@ -52,7 +52,7 @@ export async function judgeReleaseAudio(input: { clip: unknown; notes: string; b
     body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM }] },
       contents: [{ role: 'user', parts: [{ text: context },
         { inlineData: { mimeType: 'audio/mp4', data: Buffer.from(input.bytes).toString('base64') } }] }],
-      generationConfig: { maxOutputTokens: 8192, responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: 'MEDIUM' } } }),
+      generationConfig: { maxOutputTokens: 16384, responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: 'MEDIUM' } } }),
     signal: AbortSignal.timeout(180000),
   })
   const body = await response.json() as any

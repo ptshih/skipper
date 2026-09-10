@@ -766,3 +766,11 @@ Root checks pass. Disposable local Postgres tests cover unchanged cache acceptan
 changed context notes, stale content, concurrent edits and idempotent release. The additive assessment
 migration is applied. The worker is deployed before automatic admin dispatch. No release is authorized
 by a model verdict alone; Yosemite remains staged.
+
+
+The first full audio pass completed all 78 items: 52 accepted, 22 substantive/advisory exceptions,
+three temporary capacity refusals and one truncated judgment; known Gemini cost $2.87742. Capacity
+refusals now back off automatically, and the output cap was increased for longer combined stories.
+The judge correctly found a misplaced lake reference in Savage Trading Post. Non-clipping headroom
+flags are being reassessed with the actual technical policy supplied as context, without weakening
+technical failures or changing human verdicts.
