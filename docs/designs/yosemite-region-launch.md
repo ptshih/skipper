@@ -5,7 +5,7 @@
 are verified. All staged audio passes decode/duration checks; all 253 selected route occurrences
 played with zero missing subjects. Follow-up operator fixes deployed successfully 2026-09-09 PDT; the final approval-button UI correction is also deployed and verified.
 The existing app completed the five-stop Valley simulation. Exception-driven automated audio assessment is deployed and verified; public
-release remains pending; real GPS, device offline/audio behavior and a field drive remain follow-up checks.
+focused one-at-a-time review UX is built; public release remains pending; real GPS, device offline/audio behavior and a field drive remain follow-up checks.
 Yosemite remains unpublished and unannounced; no mobile build or App Store submission is required.
 
 The launch covers Yosemite's major driving corridors and the approaches from Groveland, Mariposa,
@@ -792,3 +792,17 @@ The page displays five separate score columns, optional private playback, and on
 default. Approve and Publish remain disabled with outstanding issues. Refresh/resume preserves notes
 and scores. Root `bun run check` and the disposable Postgres gate tests pass. Public health and region
 discovery remain healthy; Yosemite is still absent from the public region list. No mobile files changed.
+
+
+### Focused review UX (2026-09-10)
+
+A design-agent review identified the large score table and multi-field verdict form as friction.
+The decision now appears first in a focused card beside a compact queue. Accept & next saves Good
+with an explicit, editable acknowledgement of displayed findings, preserving notes and advancing only
+after success. Needs work & next moves the clip into a separate queue so deliberate flags do not cycle
+back into initial triage. Skip changes no verdict. A saved notice links back to the previous decision.
+Technical failures, stale/published reviews and active assessments disable acceptance. Publication
+still uses its existing explicit approval and release actions; this UX change releases no content.
+Navigation locks during saves; assessment progress and acceptance blockers remain visible. Failed
+audio loading has an inline retry. Audio loads privately without autoplay, stops when changing clips, and the script/scores/sources and
+operator tools are expandable. Navigation without a review ID resumes the latest saved review.
