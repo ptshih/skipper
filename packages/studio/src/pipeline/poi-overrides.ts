@@ -6,12 +6,11 @@
 // the Pope Estate's builder/decade). Corrections live in the `poi_overrides` TABLE (the
 // founder-decided source of truth — workflow state like upstream_status lives there too;
 // rows are curated through the admin console) and are applied here at the fetch
-// seam every Wikipedia fact flows through, so the corrected text reaches the narration
+// seams Wikipedia and Wikidata facts flow through, so the corrected text reaches the narration
 // sheet, mergedFeatures, pois.facts, and facts_hash identically.
 //
-// Scope honesty (review-confirmed): fact edits apply ONLY to Wikipedia-fetched prose —
-// geology (Macrostrat) and Wikidata enrichment lines enter the well through their own
-// fetchers and do NOT pass this seam. (The place's speakable COORDINATE — a corrected
+// Scope: Wikipedia prose and rendered Wikidata lines support literal corrections.
+// Geology (Macrostrat) does not pass either correction seam. (The place's speakable COORDINATE — a corrected
 // vantage for side-of-road content — lives on pois.speakable_lat/lng, admin-set via the
 // /admin/pois/:id/corrections surface; select.ts resolves the side heading-aware.)
 //
@@ -20,7 +19,7 @@
 // process per edit), never silent. The eval CLI's --veracity dimension is the CATCH side of
 // this loop; adjudicated findings become table rows.
 //
-// Loading: once per process (ensurePoiOverridesLoaded), awaited inside the Wikipedia
+// Loading: once per process (ensurePoiOverridesLoaded), awaited inside the Wikipedia and Wikidata
 // fetchers (so the facts path can never forget) and at the top of each corpus CLI
 // (discover-pois / enrich-pois / generate-narrations). Unloaded == no overrides — only
 // unit tests and the sim take that path.
@@ -197,6 +196,38 @@ export function overrideStaleFor(
   if (!correctedAt) return false
   if (!factsFetchedAt) return true
   return factsFetchedAt < correctedAt
+}
+
+/** Source-aware diagnostic: Wikipedia is cached at fetch; Wikidata enters at enrichment.
+ * A Wikipedia-origin POI can contain both sources, including older sheet QIDs. Retired
+ * edits still stamp freshness through overrideStaleFor. This remains advisory, not a lock.
+ */
+export function stalePoiOverrideSources(poi: {
+  source: string
+  sourceId: string
+  qid: string | null
+  factSheet: readonly { source: string; sourceId: string }[] | null
+  factsFetchedAt: Date | null
+  enrichedAt: Date | null
+}): { source: string; sourceId: string; cachedAt: Date | null; correctedAt: Date }[] {
+  const identities = new Map<string, { source: string; sourceId: string; cachedAt: Date | null }>()
+  if (poi.source === 'wikipedia') {
+    identities.set(key(poi.source, poi.sourceId), { source: poi.source, sourceId: poi.sourceId, cachedAt: poi.factsFetchedAt })
+  }
+  const qids = new Set([
+    ...(poi.qid ? [poi.qid] : []),
+    ...(poi.source === 'wikidata' ? [poi.sourceId] : []),
+    ...(poi.factSheet ?? []).filter((entry) => entry.source === 'wikidata').map((entry) => entry.sourceId),
+  ])
+  for (const sourceId of qids) {
+    identities.set(key('wikidata', sourceId), { source: 'wikidata', sourceId, cachedAt: poi.enrichedAt })
+  }
+  return [...identities.values()].flatMap((identity) => {
+    const correctedAt = poiOverrideFor(identity.source, identity.sourceId)?.latestOverrideAt
+    return correctedAt && overrideStaleFor(identity.source, identity.sourceId, identity.cachedAt)
+      ? [{ ...identity, correctedAt }]
+      : []
+  })
 }
 
 export interface FactEditOutcome {

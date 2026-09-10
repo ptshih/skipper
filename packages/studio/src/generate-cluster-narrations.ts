@@ -41,8 +41,7 @@ import { runJob } from './pipeline/job-progress'
 import {
   ensurePoiOverridesLoaded,
   OVERRIDE_STALE_LIST_CAP,
-  overrideStaleFor,
-  poiOverrideFor,
+  stalePoiOverrideSources,
 } from './pipeline/poi-overrides'
 import { personaFromKey } from './persona'
 import { lengthForRegister, ttsStyleFor } from './models'
@@ -250,28 +249,27 @@ async function main(): Promise<void> {
   // first when the run is capped.
   generatable.sort((a, b) => b.tellable.length - a.tellable.length)
   const picked = includeIds.length > 0 ? generatable : generatable.slice(0, Math.max(0, limit))
-  if (picked.length === 0) return console.log('\nNothing to narrate.')
 
-  // ⚠ OVERRIDE-STALE members. Corrections apply at the Wikipedia FETCH seam only, so a member whose
+  // ⚠ OVERRIDE-STALE members. Wikipedia corrections need refetching and Wikidata corrections need re-enrichment; a member whose
   // facts predate its newest correction still holds the SUPERSEDED text — and a fused telling reads
   // that text out under the group's name. Checked over `tellable`, the set the telling is actually
   // written over. ADVISORY: it warns and does not block, matching the solo generator — halting a
   // legitimate paid run on a stamp comparison is the worse failure, and re-fetching inside a
   // generator is a mutation nobody asked for.
-  const staleMembers = picked.flatMap((f) =>
+  const staleMembers = queue.flatMap((f) =>
     f.tellable
-      .filter((m) => overrideStaleFor(m.source, m.sourceId, m.factsFetchedAt))
+      .filter((m) => stalePoiOverrideSources(m).length > 0)
       .map((m) => ({ group: f.title, m })),
   )
   if (staleMembers.length > 0) {
     console.warn(
-      `\n⚠ OVERRIDE-STALE: ${staleMembers.length} member(s) of the picked group(s) carry a curated fact ` +
+      `\n⚠ OVERRIDE-STALE: ${staleMembers.length} member(s) of the eligible group(s) carry a curated fact ` +
         `CORRECTION newer than their cached facts — narrating now bakes the superseded sentence into a paid clip:`,
     )
     for (const { group, m } of staleMembers.slice(0, OVERRIDE_STALE_LIST_CAP)) {
       console.warn(
         `  • [${group}] ${m.name} (${m.id}) — facts fetched ${day(m.factsFetchedAt)}, ` +
-          `corrected ${day(poiOverrideFor(m.source, m.sourceId)?.latestOverrideAt)}`,
+          `stale sources: ${stalePoiOverrideSources(m).map((s) => `${s.source}:${s.sourceId} cached ${day(s.cachedAt)}, corrected ${day(s.correctedAt)}`).join('; ')}`,
       )
     }
     if (staleMembers.length > OVERRIDE_STALE_LIST_CAP) {
@@ -279,10 +277,11 @@ async function main(): Promise<void> {
     }
     console.warn(
       `  Fix: refetch-poi.ts <poiId> --apply (FREE), then enrich-pois.ts --include-ids <poiId> --force --apply ` +
-        `(SPENDS — narration grounds on the preserved sheet, so a re-fetch alone does not reach the clip).\n` +
+        `(SPENDS — Wikidata-only corrections need re-enrichment; Wikipedia needs both).\n` +
         `  Advisory only — this run is NOT blocked.`,
     )
   }
+  if (picked.length === 0) return console.log('\nNothing to narrate.')
   console.log(`\nNarrating + gating ${picked.length} of them (${includeIds.length > 0 ? 'explicit ids' : `--limit ${limit}`}).\n`)
 
   const persona = personaFromKey('skipper')

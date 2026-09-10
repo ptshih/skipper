@@ -542,3 +542,43 @@ Wainwright's misspelled name. The restoration partner's
 is the correction source. Receipt: `ackerson-fact-corrections-1789000565037`. The existing refetch,
 forced enrichment and generation workflows then rebuilt the clip (80 seconds, one tail retake,
 eval run `2a3e9c40-0e34-466e-90fa-603aad5bd209`). The set is now 76 staged clips; nothing was released.
+
+### Source correction support and additional endpoint checks (2026-09-09 PDT)
+
+The Wikidata fetcher now applies persistent QID-keyed fact corrections to its rendered bundle.
+Individual and combined generation diagnostics check Wikipedia's fetch clock and Wikidata's
+separate enrichment clock, including QIDs preserved in older sheets. Retired edits still invalidate
+older caches. These are advisory diagnostics; existing sheets need explicit forced enrichment.
+The admin correction editor currently addresses the POI's main source only; a secondary Wikidata
+correction is operator-managed through the existing table until that editor gains source selection.
+No migration, rider contract, mobile build, or App Store submission is involved.
+
+The external-source audit completed 55 staged stories, including all 22 combined stories:
+`offline_audit` run `0f5c871c-d6a3-41e3-a40a-720f88556e3c`, $23.35 model tokens plus
+search fees. Fifteen stories received advisory findings. Findings were adjudicated against source
+material; they are not automatic proof of falsehood. For example, Tunnel View's cited NPS planning
+document itself includes the disputed 1932 construction date; waterfall tier counts differ across
+sources; Ferguson's construction estimate and funding allocation are different measures.
+Supported corrections and removal of volatile business/construction status are recorded in the
+local `yosemite-veracity-correction-plan.json`; regenerated clips need fresh checks and listening.
+
+The staged corpus now contains 78 clips after adding Dana Meadows and Second Garrotte at verified
+road junctions. Neither anchor claims vehicle access to the named feature itself. Seven destinations
+received verified parking access coordinates: Tenaya Lake, Tuolumne Meadows, Lembert Dome, Ellery Lake,
+Tioga Lake, Saddlebag Lake, and Lundy Lake. Fourteen paid Routes calls (both directions from Lee Vining)
+returned plausible routes without restrictions or warnings; frozen responses live in
+`yosemite-lake-route-audit/`. This is dated routing evidence, not a promise of seasonal opening.
+
+Before removing three invalid/duplicate endpoints, a full corpus/R2 snapshot completed at
+`packages/studio/.scratch/yosemite-pre-endpoint-cleanup-20260910/`: 1,174 objects, all 845 referenced
+clips present. Scoped cleanup removed the mid-tunnel Wawona Tunnel pin, duplicate Tuolumne Meadows
+lake pin, and unverified Lake Eleanor endpoint. Tunnel View and the canonical Tuolumne Meadows
+endpoint remain; the latter inherits the duplicate's priority. There are 69 curated endpoints,
+16 with vehicle access coordinates. No narration, rider drive, or published region was removed.
+
+The same audit found an enrichment formatter error: a mixed “sedimentary and volcanic” map-unit
+name caused the formatter to append a lava-origin claim to mudstone/carbonate/sandstone/conglomerate.
+The formatter now preserves source lithology and age without inferring a shared formation process.
+Three Yosemite sheets contain the old line (Ferguson, Briceburg, Greeley Hill); their refresh is
+included in correction preparation. The existing Ferguson and Briceburg clips do not speak that
+incorrect clause, and Greeley Hill has no clip. Mocked fetch tests cover mixed and ordinary units.

@@ -29,6 +29,7 @@
 import { WIKIDATA_USER_AGENT } from '../config'
 import type { AttributionSnapshot } from '@skipper/db/schema'
 import { fetchWithRetry } from './http'
+import { ensurePoiOverridesLoaded, applyFactEditsChecked, reportMissedEdits } from './poi-overrides'
 
 const API = 'https://www.wikidata.org/w/api.php'
 /** Cap a hung request so a flaky Wikidata lookup can't stall a whole tour run. */
@@ -273,7 +274,13 @@ export async function wikidataFacts(qid: string): Promise<WikidataResult | null>
     }
   }
 
-  const facts = buildWikidataFacts(entity, labels)
+  // Loading corrections must fail loudly; unlike an unavailable optional source, silently
+  // narrating a known source error is unsafe. Apply once to the complete rendered bundle.
+  await ensurePoiOverridesLoaded()
+  const rendered = buildWikidataFacts(entity, labels)
+  const edited = applyFactEditsChecked('wikidata', qid, rendered.join('\n'))
+  reportMissedEdits('wikidata', qid, edited.missed, 'Wikidata bundle')
+  const facts = edited.text.split('\n').map((line) => line.trim()).filter(Boolean)
   if (facts.length === 0) return null
 
   return {

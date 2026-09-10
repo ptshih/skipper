@@ -8,9 +8,8 @@
 //
 // Grounding (the cardinal invariant): the lines this builds ARE the well of facts —
 // the narrator may say what is on them and nothing more. So they state only what the
-// data gives (the unit's lithology + age band) plus standard, definitional glosses
-// of the rock category (an "intrusive" rock crystallized underground — a definition,
-// not a guess). Ages are spoken as ROUGH RANGES, never an invented precise figure.
+// data gives (the unit's lithology + age band). Mixed map units cannot establish one
+// formation process for every constituent. Ages are ROUGH RANGES, never exact dates.
 //
 // License: Macrostrat data is CC BY 4.0 (the API echoes "CC-BY 4.0"); the underlying
 // USGS maps are US public domain. A Macrostrat AttributionSnapshot is frozen onto the
@@ -81,25 +80,6 @@ function readLith(u: MapUnit): string {
   return cleaned || raw
 }
 
-/**
- * A standard, definitional gloss of how the rock formed — a textbook definition of the
- * category named on the sheet, not a guess. Returned as a bare explanatory clause (no
- * leading rock noun) so it reads cleanly appended after any lithology, with no stutter
- * when the lithology already names its category ("intrusive igneous rocks — it cooled…").
- */
-function categoryGloss(u: MapUnit): string {
-  const hay = `${u.lith} ${u.name}`.toLowerCase()
-  if (/(plutonic|intrusive|granit|granodiorit|diorit|gabbro|tonalit|monzonit)/.test(hay))
-    return 'it cooled from molten magma deep underground, not at the surface'
-  if (/(volcanic|extrusive|basalt|andesite|rhyolite|tuff|lava)/.test(hay))
-    return 'it cooled from lava erupted at the surface'
-  if (/(sandstone|mudstone|shale|limestone|conglomerate|sedimentary|siltstone|dolomite)/.test(hay))
-    return 'it was laid down in layers and pressed hard over ages'
-  if (/(gneiss|schist|marble|quartzite|metamorphic|slate)/.test(hay))
-    return 'it was reforged deep in the crust by heat and pressure'
-  return ''
-}
-
 /** A rough, range-safe spoken age — never an invented precise figure. */
 function agePhrase(u: MapUnit): string | null {
   const young = u.t_age
@@ -116,12 +96,9 @@ function agePhrase(u: MapUnit): string | null {
 function buildFacts(u: MapUnit): string[] {
   const facts: string[] = []
   const rock = readLith(u) || u.name
-  const gloss = categoryGloss(u)
-  facts.push(
-    gloss
-      ? `The bedrock at this spot is ${rock} — ${gloss}.`
-      : `The bedrock at this spot is ${rock}.`,
-  )
+  // A broad unit name may mix sedimentary and volcanic rocks. Appending a single
+  // inferred formation process here once turned Ferguson's mudstone into cooled lava.
+  facts.push(`The bedrock at this spot is ${rock}.`)
   const age = agePhrase(u)
   if (u.best_int_name && age) facts.push(`This rock unit dates to the ${u.best_int_name} — ${age}.`)
   else if (u.best_int_name) facts.push(`This rock unit dates to the ${u.best_int_name}.`)

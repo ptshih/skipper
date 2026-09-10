@@ -12,6 +12,7 @@ import {
   applyFactEditsChecked,
   clearPoiOverridesForTest,
   overrideStaleFor,
+  stalePoiOverrideSources,
   poiOverrideFor,
   setPoiOverridesForTest,
   type OverrideRowLike,
@@ -177,4 +178,22 @@ test('staleness follows the NEWEST row, not the first one read', () => {
     row({ find: 'b', updatedAt: new Date('2026-07-20T00:00:00Z') }),
   ])
   expect(overrideStaleFor('wikipedia', '4242', new Date('2026-06-15T00:00:00Z'))).toBe(true)
+})
+
+test('mixed-source freshness uses fetch for Wikipedia and enrichment for Wikidata', () => {
+  const old = new Date('2026-06-08'), now = new Date('2026-06-09'), fresh = new Date('2026-06-10')
+  setPoiOverridesForTest([row(), row({ source: 'wikidata', sourceId: 'Q1' })])
+  const poi = { source: 'wikipedia', sourceId: '4242', qid: 'Q1', factSheet: null, factsFetchedAt: fresh, enrichedAt: old }
+  expect(stalePoiOverrideSources(poi).map((s) => s.source)).toEqual(['wikidata'])
+  expect(stalePoiOverrideSources({ ...poi, factsFetchedAt: old, enrichedAt: fresh }).map((s) => s.source)).toEqual(['wikipedia'])
+  expect(stalePoiOverrideSources({ ...poi, enrichedAt: now })).toEqual([])
+  expect(stalePoiOverrideSources({ ...poi, enrichedAt: null })).toHaveLength(1)
+})
+
+test('retired Wikidata corrections and sheet QIDs invalidate older enrichment once per identity', () => {
+  setPoiOverridesForTest([row({ source: 'wikidata', sourceId: 'Q1', active: false })])
+  const poi = { source: 'wikipedia', sourceId: '4242', qid: 'Q2', factSheet: [{ source: 'wikidata', sourceId: 'Q1' }, { source: 'wikidata', sourceId: 'Q1' }], factsFetchedAt: new Date(), enrichedAt: null }
+  expect(stalePoiOverrideSources(poi).map((s) => s.sourceId)).toEqual(['Q1'])
+  expect(stalePoiOverrideSources({ ...poi, qid: 'Q1' })).toHaveLength(1)
+  expect(stalePoiOverrideSources({ ...poi, enrichedAt: new Date('2026-06-10') })).toEqual([])
 })

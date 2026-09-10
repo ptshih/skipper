@@ -1,11 +1,10 @@
 # TODO — engineering backlog
 
-> ⚠ **1.1 IS DEPLOYED TO PROD (2026-08-02) BUT NOT RELEASED TO RIDERS, AND IT DELETED ROAM.** The push
-> already happened ([docs/guides/1-1-cutover-runbook.md](docs/guides/1-1-cutover-runbook.md)) and the
-> sweep is **EXECUTED**: 1.1.0 is `WAITING_FOR_REVIEW` with build **25** attached, resubmitted
-> 2026-08-14 after a Guideline 2.1 "information needed" round —
-> [docs/guides/app-store-submission.md](docs/guides/app-store-submission.md) §14 is the live record and
-> owns what the next update owes. RISK-1's real drive is OFF the critical path (founder, 2026-08-03).
+> **1.1.0 is live on the App Store** (2026-08-20, build 25). The current release and TestFlight
+> record is [docs/guides/app-store-submission.md](docs/guides/app-store-submission.md);
+> dated pre-release states below are history, not instructions to resubmit the installed app.
+> Yosemite content and admin preparation do not require an App Store submission.
+> RISK-1's real drive remains a post-launch obligation.
 > The build truth is [docs/designs/drives-first-1-1.md](docs/designs/drives-first-1-1.md) (D1–D42,
 > INV-1–INV-16) with verified file:line coordinates in
 > [docs/designs/drives-first-1-1-build-notes.md](docs/designs/drives-first-1-1-build-notes.md).
@@ -24,7 +23,7 @@ the closing paren is the item, unchanged: a headline clause first, then as much 
 ⚠ **A section heading and its preamble are SHARED context for every item under it** — read the preamble
 before acting on an item, and put a new item under the section whose preamble already applies to it.
 
-**next-id: 80.** Ids are never reused, so this counter — not the highest id in the file — is what
+**next-id: 81.** Ids are never reused, so this counter — not the highest id in the file — is what
 survives deleting the newest item. `/todo` takes the max of the two.
 
 > ♻ **Re-baselined 2026-08-03: 2006 → ~700 lines.** Every finished build log was deleted per the rule
@@ -567,15 +566,9 @@ only fixable forward.**
 Phases 1–3 and fused generation are BUILT and RELEASED; the design and every measurement live in
 [docs/designs/poi-legibility-layer.md](docs/designs/poi-legibility-layer.md) and
 [docs/designs/fused-cluster-generation-spec.md](docs/designs/fused-cluster-generation-spec.md), which is
-where the build log went. Corpus today: **37 fused tellings, all released** (32 cluster + 5 district).
+where the build log went. Tahoe and Reno have released combined stories; Yosemite preparation
+and its staged listening evidence are recorded in [the launch design](docs/designs/yosemite-region-launch.md).
 
-- [ ] #32 (corpus, med, paid, founder) **Yosemite's 30 clusters** — still un-generatable (zero enriched members); needs a founder-gated
-      `enrich-pois --region yosemite-national-park` run first. `generate-cluster-narrations.ts` is complete: narrate →
-      fail-closed gate with excision retakes → TTS → loudnorm → R2 → upsert on `narrations_cluster_uq` →
-      eval record keyed to the cluster. **`--limit 1 --apply` is the cheap path to ONE real clip to listen
-      to** (well under $1) before committing all 31 (~$12–16). ⚠ A PREVIEW is not free either — it
-      narrates and scores; only persistence is gated. ⚠ Per-clip cost RISES for fused (a fused well is 9
-      sheets and the script runs to the 180 s ceiling, not the 90 s story aim).
 - [ ] #33 (corpus, low) **Diversity advisory failed 16 of 31 fused clips (52%).** Naming five places pulls toward
       enumeration — the NAME-DENSITY tension §3.3 predicted. It never withheld a clip, but half a run is a
       signal. ⚠ Read the number correctly: **fused-vs-fused repetition is 0 of 31** (measured), so they are
@@ -597,6 +590,13 @@ where the build log went. Corpus today: **37 fused tellings, all released** (32 
       when containment is next touched.
 
 ## When YOSEMITE ships: the metadata that goes stale (founder ask 2026-07-28)
+
+- [ ] #80 (corpus, high, paid, founder, doing) **Finish Yosemite review and launch.** Corpus enrichment,
+      staged individual/combined generation, reusable local OSM roads, simulator fixes and saved listening
+      tools are built. Resolve source/access findings, save the operator QA drives and corridor evidence,
+      finish technical/UI checks, then obtain founder listening approval and the separate public-release
+      instruction. Publish website/store coverage only after content serves. Evidence and exact remaining
+      obligations: [Yosemite launch design](docs/designs/yosemite-region-launch.md).
 
 Content is SERVER-SIDE, so a second region goes live with no app release. That is the whole problem: the
 corpus changes underneath a listing that still says Tahoe-only, and nothing forces the two back into
