@@ -21,7 +21,7 @@ export interface PublicationSnapshot {
   region: { slug: string; bbox: string; released_at: string | null }
   clips: PublicationClip[]
   evidence: { corridor: string; corpus_fingerprint: string; notes: string; route?: { selection: { seq: number; subjectId: string; subjectKind: string; poiId?: string }[] }; report: { stops: { seq?: number; fired: boolean }[]; missing: unknown[] } }[]
-  endpoints: { id: string; lat: number; lng: number }[]
+  endpoints: { id: string; lat: number; lng: number; access_lat?: number | null; access_lng?: number | null }[]
 }
 export const corpusFingerprint = (clips: PublicationClip[]) => createHash('sha256').update(JSON.stringify(clips)).digest('hex')
 export const clipFingerprint = (clip: PublicationClip) => createHash('sha256').update(JSON.stringify(clip)).digest('hex')
@@ -71,17 +71,32 @@ export async function loadPublication(slug: string, narrationId: string | null =
   return { ...row, query, blockers: structuralBlockers(row.value) }
 }
 
+const validPoint = (lat: unknown, lng: unknown): lat is number =>
+  typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng)
+  && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+const invalidOptionalPoint = (lat: unknown, lng: unknown) =>
+  !(lat == null && lng == null) && !validPoint(lat, lng)
+
 export function structuralBlockers(snapshot: PublicationSnapshot) {
   const blockers: string[] = []
-  if (!snapshot.region.released_at && new Set(snapshot.endpoints.filter(p =>
-    Number.isFinite(p.lat) && Number.isFinite(p.lng) && Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180,
-  ).map(p => `${p.lat}:${p.lng}`)).size < 2) blockers.push('Initial launch needs two usable, distinct endpoints')
+  const endpoints = snapshot.endpoints.filter(p => {
+    if (!validPoint(p.lat, p.lng) || invalidOptionalPoint(p.access_lat, p.access_lng)) {
+      blockers.push(`${p.id}: invalid endpoint geometry`)
+      return false
+    }
+    return true
+  })
+  // Distinct feature pins can route to the same parking lot. Count the vehicle access points
+  // that routeWaypoints actually uses, while keeping feature pins as region membership truth.
+  if (!snapshot.region.released_at && new Set(endpoints.map(p =>
+    `${p.access_lat ?? p.lat}:${p.access_lng ?? p.lng}`,
+  )).size < 2) blockers.push('Initial launch needs two usable, distinct endpoints')
   if (!snapshot.clips.length) blockers.push('No staged playable content')
   for (const c of snapshot.clips) {
     if (!c.narration.script?.trim() || !c.narration.audio_url || c.narration.audio_duration_ms <= 0)
       blockers.push(`${c.narration.id}: missing script or playable audio metadata`)
-    if (!c.members.length || c.members.some(p => !Number.isFinite(p.lat) || !Number.isFinite(p.lng)
-      || Math.abs(p.lat) > 90 || Math.abs(p.lng) > 180)) blockers.push(`${c.narration.id}: invalid subject geometry`)
+    if (!c.members.length || c.members.some(p => !validPoint(p.lat, p.lng)
+      || invalidOptionalPoint(p.speakable_lat, p.speakable_lng))) blockers.push(`${c.narration.id}: invalid subject geometry`)
     const tellable = c.members.filter(p => isNarratableStoryPoi({ source: p.source ?? '', name: p.name,
       excludedReason: p.excluded_reason, hasFacts: p.facts != null, sheetLength: p.fact_sheet?.length ?? 0 }))
     if (c.narration.poi_id && c.members.some(p => p.excluded_reason != null)) blockers.push(`${c.narration.id}: subject is excluded`)

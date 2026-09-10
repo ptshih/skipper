@@ -522,3 +522,23 @@ sparse coverage, not proof that no worthwhile subject exists. Ackerson Meadow ha
 restoration story and an NPS-documented Evergreen Road walking approach. Hodgdon Meadow lacks an
 enriched sheet; Crocker Meadow's proximity alone does not justify filler. These are desk findings,
 not founder listening acceptance or current road-opening guarantees.
+
+
+The geography readiness check now validates both raw feature coordinates and optional road-trigger/
+vehicle-access pairs. Partial pairs and non-finite or out-of-range coordinates block publication.
+For an initial launch, two feature pins sharing one parking access point count as one usable endpoint,
+matching the API's existing route-waypoint behavior. Region membership still uses original feature
+pins. Tests cover individual and combined narration anchors, legacy endpoints without access
+corrections, invalid pairs, and shared parking locations. No rider API or mobile change is involved.
+
+Ackerson Meadow received a reviewed Evergreen Road context anchor at 37.834407, -119.847963
+(OSM w399774488 / w10712870 junction; anchor receipt
+`yosemite-anchor-ackerson-apply-2026-09-10T00-32-24.007Z`). NPS's restoration planning Q28/Q32
+identifies the turnout and walking approach; the narration does not promise a view from the car.
+The first generated clip exposed a Wikipedia river-name error. Three persistent fact overrides
+correct Ackerson Creek, remove a related unsupported rock-apron location sentence, and fix Nancy
+Wainwright's misspelled name. The restoration partner's
+[account of the acquisition](https://www.americanrivers.org/2016/09/yosemite-national-park-grows-by-400-acres/)
+is the correction source. Receipt: `ackerson-fact-corrections-1789000565037`. The existing refetch,
+forced enrichment and generation workflows then rebuilt the clip (80 seconds, one tail retake,
+eval run `2a3e9c40-0e34-466e-90fa-603aad5bd209`). The set is now 76 staged clips; nothing was released.
