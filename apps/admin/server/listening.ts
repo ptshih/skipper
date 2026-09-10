@@ -13,6 +13,7 @@ import { pointInAnyBbox, parseBboxes } from './bbox'
 import { runDrive, type LngLat } from '@skipper/engine'
 import { requiredCorridors } from './corridors'
 import { checkReviewAudio } from './audio-check'
+import { assertEvidenceOwner } from './evidence-owner'
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const routes = new Hono<AdminEnv>()
@@ -145,9 +146,11 @@ routes.post('/regions/:slug/listening-evidence', async c => {
   if (!uuid.test(body.driveId) || !requiredCorridors(c.req.param('slug')).includes(body.corridor)
     || typeof body.notes !== 'string' || !body.notes.trim() || body.notes.length > 10000
     || !Number.isFinite(body.mph) || body.mph < 5 || body.mph > 80) throw new Error('Supply a saved operator drive, corridor, speed, and access/quiet-window notes')
-  const [owned] = await db.select({ id: drives.id }).from(drives).innerJoin(user, eq(user.id, drives.userId))
-    .where(and(eq(drives.id, body.driveId), eq(user.email, c.get('adminEmail')))).limit(1)
-  if (!owned) throw new Error('QA evidence requires a drive owned by the reviewing operator')
+  const [owned] = await db.select({ deletedAt: drives.deletedAt,
+    owner: { email: user.email, role: user.role, isAnonymous: user.isAnonymous },
+  }).from(drives).innerJoin(user, eq(user.id, drives.userId))
+    .where(eq(drives.id, body.driveId)).limit(1)
+  assertEvidenceOwner(owned, c.get('adminEmail'))
   const p = await loadPublication(c.req.param('slug'))
   const resolved = await loadStops(body.driveId)
   const boxes = parseBboxes(p.value.region.bbox)

@@ -506,3 +506,19 @@ The review now recognizes only known, structured tail/loudness/non-clipping-head
 They stay in the required listening queue and still need an explicit reason and Good verdict.
 Withheld content, unsafe markup, failed grounding, actual clipping, missing measurement evidence and
 unknown technical failures remain non-waivable. Regression checks cover mixed hard/advisory rows.
+
+
+Saved route evidence now accepts an active drive owned by the IAP reviewer or by a real app
+administrator. This addresses different app/IAP login identities without changing drive ownership,
+credits, reviewer attribution, or public access. Missing owners, deleted drives, anonymous accounts
+(including an erroneous admin role), and unrelated ordinary riders remain ineligible. The ownership
+guard runs before loading staged selection/audio metadata. Predicate tests cover those boundaries;
+a read-only review also verified handler ordering and unchanged attribution.
+
+Quiet-window investigation locates the longest gaps on the western Big Oak Flat/Evergreen approaches
+and western Tioga forest segment. The frozen selections have no missing subjects. The current inventory
+has no convincing omitted roadside landmark in the longest western Tioga window; this is evidence of
+sparse coverage, not proof that no worthwhile subject exists. Ackerson Meadow has a useful enriched
+restoration story and an NPS-documented Evergreen Road walking approach. Hodgdon Meadow lacks an
+enriched sheet; Crocker Meadow's proximity alone does not justify filler. These are desk findings,
+not founder listening acceptance or current road-opening guarantees.
