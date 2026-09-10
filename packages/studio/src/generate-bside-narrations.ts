@@ -93,7 +93,7 @@ for (const row of rows) {
   })
   const band = lengthForRegister(row.deliveryRegister ?? 'story')
   const req: NarrationRequest = {
-    region: regionLabel(row.lat, row.lng),
+    region: await regionLabel(row.lat, row.lng),
     stopType: 'story',
     place: { name: row.name, ...(row.kind ? { kind: row.kind } : {}) },
     facts: grounding.facts,

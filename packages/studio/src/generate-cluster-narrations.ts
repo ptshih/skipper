@@ -301,7 +301,7 @@ async function main(): Promise<void> {
   console.log(`Diversity context: ${diversityContext.length} existing tellings ${region ? 'in this region' : 'across the corpus'}.\n`)
 
   /** The nameable/background split (§3.2), plus the well BOTH the narrator and the judge see. */
-  function inputsFor(f: Fused) {
+  async function inputsFor(f: Fused) {
     // ⚠ Keyed off `dropped`, NOT `highlights`. Both lists are the model's free text, but measured live
     // `dropped` matches `pois.name` 68 of 69 while `highlights` manages 165 of 186 — so the fuzzy match
     // goes on the near-exact list, and a miss fails SAFE (an unmatched member stays NAMEABLE, which is
@@ -318,7 +318,7 @@ async function main(): Promise<void> {
       .filter((m) => m.facts.length > 0)
     const unmatched = f.dropped.filter((d) => !matched.has(nameKey(d)))
     const base = {
-      region: regionLabel(f.lat, f.lng),
+      region: await regionLabel(f.lat, f.lng),
       stopType: 'story' as const,
       place: { name: f.title },
       mergedFeatures,
@@ -333,7 +333,7 @@ async function main(): Promise<void> {
   }
 
   async function gateOne(f: Fused, seq: number): Promise<GatedFused> {
-    const { base, well, mergedFeatures, unmatched } = inputsFor(f)
+    const { base, well, mergedFeatures, unmatched } = await inputsFor(f)
     if (unmatched.length) {
       console.warn(`  ⚠ ${f.title}: ${unmatched.length} drop entr(ies) matched no member — they stay NAMEABLE: ${unmatched.join(' · ')}`)
     }

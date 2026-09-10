@@ -247,7 +247,7 @@ async function main(): Promise<FinishOutcome> {
       evals.push(
         await evaluateGrounding({
           seq: i, stopType: 'story', placeName: c.name, script: c.script, well,
-          region: regionLabel(c.lat, c.lng), corridor: ROUTE_AGNOSTIC_CORRIDOR,
+          region: await regionLabel(c.lat, c.lng), corridor: ROUTE_AGNOSTIC_CORRIDOR,
         }),
       )
     } catch (e) {

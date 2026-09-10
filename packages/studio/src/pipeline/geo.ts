@@ -5,23 +5,31 @@
 // signatures use it and studio call sites already import the type from this module.
 // [lng, lat] axis order throughout, matching drives.polyline.
 
-import type { LngLat } from '@skipper/engine'
+import { parseRegionBboxes, type LngLat } from '@skipper/engine'
+import { db } from '@skipper/db'
+import { regions } from '@skipper/db/schema'
+import { withRetry } from './http'
 
 export { type LngLat } from '@skipper/engine'
 
-/**
- * The NARRATION region — the BROAD area the Skipper may name as "where you are" without the fact
- * sheet. Deliberately coarse and ALWAYS-TRUE for its zone: from lat/lng we can place a POI in a
- * broad area, never a precise town, so we never return a city — "Reno, Nevada" would be a false
- * pinpoint for a foothills POI, and the grounding gate can't catch it (naming the region is the one
- * thing it's allowed to do without a sheet fact). The Carson Range crest (~-119.88 lng) splits the
- * greater Lake Tahoe basin (the lake + its high country: Desolation, Fallen Leaf, Squaw, Truckee,
- * the west shore — all west of the crest) from the eastern Reno/Carson valleys. A geometry-first
- * point-in-bbox lookup against real sub-regions can replace this when more regions exist.
+type NarrationRegion = { displayName: string; bbox: string | null }
+
+/** Region boundaries include gateway approaches, so membership never proves park entry,
+ * a lake view, or proximity to water. Unknown/overlapping areas must not inherit Tahoe.
  */
-export function regionLabel(lat: number, lng: number): string {
-  if (lng <= -119.88) return 'Lake Tahoe'
-  return lat >= 39.4 ? 'the Reno area' : 'the Carson Valley'
+export function regionLabelFromRegions(lat: number, lng: number, catalog: NarrationRegion[]): string {
+  const matches = catalog.filter(r => parseRegionBboxes(r.bbox).some(b =>
+    lng >= b.swLng && lng <= b.neLng && lat >= b.swLat && lat <= b.neLat))
+  return matches.length === 1 ? `the wider ${matches[0]!.displayName} area` : 'the surrounding area'
+}
+
+// Freeze the catalog for one operator process; failures stop generation rather than supplying
+// invented geography. The DB client stays lazy, so importing geometry does not require secrets.
+let regionCatalog: Promise<NarrationRegion[]> | undefined
+export async function regionLabel(lat: number, lng: number): Promise<string> {
+  regionCatalog ??= withRetry(() => db.select({ displayName: regions.displayName, bbox: regions.bbox }).from(regions),
+    { label: 'narration region catalog' })
+  return regionLabelFromRegions(lat, lng, await regionCatalog)
 }
 
 /**

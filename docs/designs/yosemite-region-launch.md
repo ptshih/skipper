@@ -5,7 +5,7 @@
 are verified. All staged audio passes decode/duration checks; all 253 selected route occurrences
 played with zero missing subjects. Follow-up operator fixes deployed successfully 2026-09-09 PDT; the final approval-button UI correction is also deployed and verified.
 The existing app completed the five-stop Valley simulation. Exception-driven automated audio assessment is deployed and verified; public
-focused one-at-a-time review UX is built; public release remains pending; real GPS, device offline/audio behavior and a field drive remain follow-up checks.
+focused one-at-a-time review UX is deployed; regional-context remediation is in progress; public release remains pending; real GPS, device offline/audio behavior and a field drive remain follow-up checks.
 Yosemite remains unpublished and unannounced; no mobile build or App Store submission is required.
 
 The launch covers Yosemite's major driving corridors and the approaches from Groveland, Mariposa,
@@ -806,3 +806,11 @@ still uses its existing explicit approval and release actions; this UX change re
 Navigation locks during saves; assessment progress and acceptance blockers remain visible. Failed
 audio loading has an inline retry. Audio loads privately without autoplay, stops when changing clips, and the script/scores/sources and
 operator tools are expandable. Navigation without a review ID resumes the latest saved review.
+
+### Regional-context repair (2026-09-10)
+
+The founder completed triage with Savage Trading Post, Ferguson landslide, and Tioga Pass flagged.
+Repairs also remove inherited valley framing from Siesta Lake and Pothole Meadows. The full 78-script
+regional audit and permanent cross-region safeguards are recorded in
+[narration region context](../decisions/narration-region-context.md). Existing accepted clips are
+preserved unless their content changes; new audio requires a replacement release review.

@@ -211,9 +211,9 @@ async function main(): Promise<void> {
   // The narrator's sheet and the judge's well, from ONE description of the place. ⚠ They must not
   // drift: the well is what the clip is scored against, so a well RICHER than the sheet blesses claims
   // the narrator was never licensed to make, and a poorer one flags honest lines.
-  const inputsFor = (s: Scenic, seq: number) => {
+  const inputsFor = async (s: Scenic, seq: number) => {
     const base: NarrationRequest = {
-      region: regionLabel(s.lat, s.lng),
+      region: await regionLabel(s.lat, s.lng),
       stopType: 'scenic',
       place: { name: s.name, kind: s.kind },
       facts: [], // by definition — this tier IS the places that have none
@@ -264,7 +264,7 @@ async function main(): Promise<void> {
 
   const gated = await mapLimit(picked, NARRATION_CONCURRENCY(), async (s, i): Promise<GatedScenic> => {
     try {
-      const { base, well } = inputsFor(s, i)
+      const { base, well } = await inputsFor(s, i)
       const { script, evals, shipped } = await gateNarration({
         seq: i,
         name: s.name,

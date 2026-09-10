@@ -29,9 +29,9 @@
 //   ... --region <slug>          generate a region's narration corpus (REQUIRED unless --include-ids; → its bbox)
 //   ... --include-ids a,b,c      regenerate EXACTLY these poi ids (implies --force)
 
-import { and, eq, inArray, isNotNull } from 'drizzle-orm'
+import { eq, isNotNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { inAnyBbox } from '@skipper/db/bbox'
+import { narrationScope } from './pipeline/narration-scope'
 import { narrations, pois } from '@skipper/db/schema'
 import type { FactSheetEntry, PoiFacts } from '@skipper/db/schema'
 import { announce, assertReady, day, maxCostFlag, numericFlag, parseFlags } from './pipeline/ops'
@@ -107,7 +107,7 @@ const isExplicit = includeIds.length > 0 && !regionRaw && !query
 // wrong-corpus charge that settles green. An EXPLICIT run names its pois and needs no region.
 if (!isExplicit) requireRegionKey(regionRaw)
 // `--include-ids` IMPLIES regeneration — you asked for those exact pois, so don't freshness-skip them.
-const force = flags.has('force') || isExplicit
+const force = flags.has('force') || includeIds.length > 0
 
 announce({
   tool: 'generate-narrations',
@@ -158,14 +158,7 @@ async function main(): Promise<FinishOutcome | void> {
         })
         .from(pois)
         .leftJoin(narrations, eq(narrations.poiId, pois.id))
-        .where(
-          isExplicit
-            ? inArray(pois.id, includeIds)
-            : and(
-                eq(pois.source, 'wikipedia'),
-                inAnyBbox(pois.lat, pois.lng, bbox!),
-              ),
-        ),
+        .where(narrationScope(includeIds, bbox)),
     { label: 'load narration corpus' },
   )
 
@@ -459,7 +452,7 @@ async function main(): Promise<FinishOutcome | void> {
     const register: DeliveryRegister = c.deliveryRegister ?? 'story'
     const band = lengthForRegister(register)
     const base = {
-      region: regionLabel(c.lat, c.lng),
+      region: await regionLabel(c.lat, c.lng),
       // No corridor: the shared atom plays on ANY route that reaches the place, so it names only the
       // stable REGION, never a specific stretch.
       stopType: 'story' as const,

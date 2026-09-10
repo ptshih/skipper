@@ -258,7 +258,7 @@ async function main(): Promise<void> {
         {
           name: c.name,
           kind: c.kind,
-          region: regionLabel(c.lat, c.lng),
+          region: await regionLabel(c.lat, c.lng),
           spans,
           wiki: { sourceId: String(c.pageId), url: c.url, license: 'CC BY-SA 4.0' },
           targetSeconds: ENRICH_TARGET_SECONDS,

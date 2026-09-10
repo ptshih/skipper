@@ -23,9 +23,15 @@
 export const PRONUNCIATIONS: Record<string, string> = {
   // Local-pronunciation TRAPS — the obvious reading is WRONG; the TTS will almost certainly miss these.
   Nevada: 'nuh-VAD-uh', // the flat "a" (rhymes with "had") — locals are particular; NOT "nuh-VAH-duh"
+  'Genoa, Italy': 'JEN-oh-uh', // an explicit foreign referent must outrank the Nevada hint
   Genoa: 'juh-NOH-uh', // the Nevada town — NOT the Italian "JEN-oh-ah"
   Verdi: 'VER-dye', // the Nevada town — NOT the composer "VAIR-dee"
   // Indigenous / regional names a TTS voice tends to mangle (verify + extend by ear).
+  // Yosemite review caught Merced read as "mer-SAY"; retain the final d.
+  // https://www.dictionary.com/browse/merced
+  Merced: 'mer-SED',
+  // https://documents.law.yale.edu/pronouncing-dictionary (Tioga)
+  Tioga: 'tie-OH-guh',
   Washoe: 'WAH-show',
   Wabuska: 'wuh-BUS-kuh',
   Carnelian: 'car-NEEL-yun',
@@ -44,10 +50,13 @@ export function pronunciationClause(
   text: string,
   lexicon: Record<string, string> = PRONUNCIATIONS,
 ): string {
-  const hits: string[] = []
-  for (const [name, say] of Object.entries(lexicon)) {
-    if (new RegExp(`\\b${escapeRe(name)}\\b`, 'i').test(text)) hits.push(`"${name}" as "${say}"`)
-  }
+  const matching = Object.entries(lexicon).filter(([name]) =>
+    new RegExp(`\\b${escapeRe(name)}\\b`, 'i').test(text))
+  // A qualified name is stronger evidence than a bare regional homonym. Do not send
+  // contradictory hints for "Genoa, Italy" and "Genoa" in the same synthesis prompt.
+  const hits = matching.filter(([name]) => !matching.some(([other]) =>
+    other !== name && new RegExp(`\\b${escapeRe(name)}\\b`, 'i').test(other)))
+    .map(([name, say]) => `"${name}" as "${say}"`)
   if (hits.length === 0) return ''
   return ` Pronounce these place names exactly as written: ${hits.join('; ')}.`
 }

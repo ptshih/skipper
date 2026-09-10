@@ -50,3 +50,9 @@ describe('buildSynthesisRequest — the clause rides input.prompt at synth', () 
     expect(body.input.prompt).toBe(SKIPPER_TTS_STYLE_PROMPT)
   })
 })
+
+test('an explicit Italian birthplace cannot inherit the Nevada Genoa hint', () => {
+  const clause = pronunciationClause('She was born in Genoa, Italy, in eighteen eighty-one.')
+  expect(clause).toContain('"Genoa, Italy" as "JEN-oh-uh"')
+  expect(clause).not.toContain('juh-NOH-uh')
+})
