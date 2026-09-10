@@ -28,7 +28,7 @@ test('fingerprints change for audio, membership, and corrected geography', () =>
   const d = structuredClone(a); d.members[0]!.speakable_lat = 38
   expect(clipFingerprint(a)).not.toBe(clipFingerprint(d))
 })
-test('initial readiness needs endpoints and evidence; failed TTS is never advisory', () => {
+test('initial readiness needs endpoints and evidence; unknown TTS failures stay hard', () => {
   const a = clip('a'); a.findings = [{ pass: false, withheld: false, dimension: 'tts', findings: ['tail failure'] }]
   const blockers = structuralBlockers({ region: { slug: 'test', bbox: '-121,36,-119,38', released_at: null },
     clips: [a], endpoints: [], evidence: [] })

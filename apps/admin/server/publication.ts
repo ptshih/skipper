@@ -7,6 +7,7 @@ import { groundingHash, clusterFactsHash } from '@skipper/db/hash'
 import { isNarratableStoryPoi } from '@skipper/shared'
 import { parseBboxes } from './bbox'
 import { requiredCorridors } from './corridors'
+import { isHardReviewFinding, type ReviewFinding } from './review-findings'
 
 export interface PublicationClip {
   narration: { id: string; poi_id: string | null; cluster_id: string | null; script: string | null;
@@ -14,7 +15,7 @@ export interface PublicationClip {
   members: { id: string; name: string; lat: number; lng: number; speakable_lat: number | null;
     speakable_lng: number | null; excluded_reason: string | null; facts_hash: string | null; sheet_hash?: string | null; source?: string; facts?: unknown; fact_sheet?: unknown[] }[]
   cluster: { title: string; highlights?: string[]; dropped?: string[] } | null
-  findings: { pass: boolean; withheld: boolean; dimension: string; findings: string[] }[]
+  findings: ReviewFinding[]
 }
 export interface PublicationSnapshot {
   region: { slug: string; bbox: string; released_at: string | null }
@@ -94,7 +95,7 @@ export function structuralBlockers(snapshot: PublicationSnapshot) {
       if (!currentHash || c.narration.facts_hash !== currentHash) blockers.push(`${c.narration.id}: narration facts are stale`)
       if (!Array.isArray(c.narration.attribution) || !c.narration.attribution.length) blockers.push(`${c.narration.id}: missing source attribution`)
     }
-    if (c.findings.some(f => f.withheld || (!f.pass && ['grounding', 'tts'].includes(f.dimension)))) blockers.push(`${c.narration.id}: failed generation gate`)
+    if (c.findings.some(isHardReviewFinding)) blockers.push(`${c.narration.id}: failed generation gate`)
   }
   if (!snapshot.region.released_at) {
     const fingerprint = corpusFingerprint(snapshot.clips)

@@ -1519,8 +1519,11 @@ export async function readJsonBody<T>(
  *  screen is produced by the SAME call that builds the drive they pay for. Two copies of this is how a
  *  preview starts promising a different number of stops than it delivers.
  *
- *  `admin` widens the corpus to staged clips as well as released ones (region-release-gate). */
-async function selectStopsForRoute(route: { polyline: LngLat[]; durationSeconds: number }, admin: boolean) {
+ *  `admin` widens the corpus to staged clips as well as released ones (region-release-gate).
+ *  Exported for operator replay of frozen QA routes: audits must use this same selection policy,
+ *  including combined stories and scenic fill, rather than reconstructing a second candidate set.
+ *  This is an internal helper; HTTP callers still derive admin authority from their session. */
+export async function selectStopsForRoute(route: { polyline: LngLat[]; durationSeconds: number }, admin: boolean) {
   const corpus = await loadCorpusForRoute(route.polyline, route.durationSeconds, admin)
   const stops = buildDrive({
     polyline: route.polyline,

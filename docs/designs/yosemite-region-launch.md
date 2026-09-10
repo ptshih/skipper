@@ -1,9 +1,9 @@
 # Yosemite launch and admin listening review
 
 **Status:** Operator tools deployed and free discovery refreshed 2026-09-09; corpus snapshot complete.
-Local California/Nevada extracts are verified; the first 24 reviewed Yosemite anchors are applied.
-Further anchor review continues; paid preparation has produced 159 fact sheets and 72 curated places.
-Calibration and endpoint-access validation are in progress under founder approval. Listening approval and public release remain pending.
+Local California/Nevada extracts are verified; reviewed anchors and parking access are being applied.
+Paid preparation has produced 173 fact sheets and 72 curated places. All six calibration clips pass
+technical audio checks; broader staged generation and endpoint validation continue under founder approval. Listening approval and public release remain pending.
 Yosemite is not announced.
 
 The launch covers Yosemite's major driving corridors and the approaches from Groveland, Mariposa,
@@ -414,8 +414,95 @@ comparison and full read-back confirmed only those anchor triples changed; no so
 other POIs or regions changed. Receipt prefix: `yosemite-anchor-second-apply-2026-09-09T23-46-44.465Z`.
 
 All six calibration clips passed complete decode and duration checks using the same checker as Admin.
-Loudness checks passed for all; Olmsted Point's AAC true peak was +0.1 dB and was flagged for exact-script
-re-synthesis. The other five passed peak checks. Measured story tails were clean; the short scenic clip
+Olmsted Point initially had a +0.1 dB AAC true peak; exact-script re-synthesis corrected it to −2.1 dB.
+The repeated six-clip check passed loudness and peak checks for every clip. Measured story tails were clean; the short scenic clip
 is below the tail meter's measurement window. The six-clip report and private local audio are saved
 under `packages/studio/.scratch/osm/yosemite-calibration-audio-checks.json` and `calibration-audio/`.
 This is technical and script review, not the founder's listening approval.
+
+
+## Expanded staged preparation — 2026-09-09
+
+Twenty further group-approach anchors were applied with complete before/after comparison, bringing
+Yosemite to 110 anchors. Only those 20 coordinate/class triples changed; source pins and other corpus
+fields were preserved. Receipt: `yosemite-anchor-groups-apply-2026-09-09T23-52-53.597Z` in the local OSM
+scratch directory. Nine misleading kinds were corrected separately: Tioga Pass became `pass`;
+Wawona Covered Bridge, Parsons Memorial Lodge, Soda Springs Cabin, Big Oak Flat Road, Hetch Hetchy Road,
+Glacier Point Ski Hut and the two visitor centers had incorrect landform kinds cleared. Receipt:
+`yosemite-kind-corrections-1788997946968`. These corrections need preserving on future discovery.
+
+Thirteen additional sheets for the groves, Half Dome, Sentinel Dome and Mist Trail context were
+successfully enriched ($0.29; no deferrals), bringing the total to 172. Their exact IDs are frozen in
+`yosemite-iconic-context-enrichment.json`. The 15-group batch produced 14 staged clips (23.8 minutes, approximately $10.26) and withheld Wawona
+over unsupported date arithmetic. The 25 ungrouped, reviewed-road stories produced 24 staged clips
+(30.4 minutes, $8.50 model plus approximately $0.96 TTS), withholding Housekeeping Camp over an
+unsupported comparison. These exact sets excluded existing clips and questionable groupings.
+The subsequent four-group batch produced Half Dome, Sentinel Dome, Mariposa Grove and Merced Grove
+(5.7 minutes, approximately $1.54); all four passed the text gates. Tail advisories remain for listening.
+
+Separate Reality was unlinked from Sentinel Dome and placed on an explicit geography hold.
+[The climber-contributed route account](https://www.mountainproject.com/route/105874590/separate-reality)
+places it near Big Oak Flat Road's tunnels, roughly 12 km west of the source pin;
+[NPS places Sentinel Dome's approach on Glacier Point Road](https://www.nps.gov/places/000/sentinel-dome-and-taft-point-trailhead.htm).
+No replacement coordinate was invented. The remaining group is titled Sentinel Dome. The whole-park
+article was also unlinked from the Half Dome group, leaving Half Dome and its climbing-face context.
+Both corrections used a fresh snapshot, exact-row atomic comparison and a no-existing-narration guard;
+receipt `yosemite-group-corrections-1788998501863`. No subjects were deleted.
+
+
+Ten explicit context anchors then brought the total to 120: Half Dome and its face share the
+NPS-documented Sentinel Bridge view; grove members share their public trailhead or Welcome Plaza
+approach. These deliberate context locations can exceed automatic snap bounds and do not move the
+actual subject pins. Scripts must not imply the car reaches the trees. Receipt:
+`yosemite-anchor-context-apply-2026-09-10T00-02-48.553Z`. Five more reviewed anchors cover Oakhurst on
+CA 41, Badger Pass's Glacier Point Road approach, Tenaya Lake beside Tioga Road, and El Capitan/The Nose
+at the Northside Drive meadow view, bringing the total to 125. Receipt:
+`yosemite-anchor-landmarks-apply-2026-09-10T00-08-30.624Z`.
+
+El Capitan received a fact sheet ($0.03) and an additive two-member group with The Nose. This does not
+rebuild or delete any existing group. The snapshot and receipt use prefix
+`yosemite-el-capitan-group-1788998960334`; the new group is `9a4311de-f654-4f7a-a487-846221c3de9f`.
+
+Four access-only corrections now direct Hetch Hetchy, Glacier Point, Tuolumne Grove and Crane Flat to
+actual parking/service-road nodes verified in the cached California extract. Original place identity,
+rank and geographic pin remain intact. Evidence: `yosemite-reviewed-parking.opl`; atomic-write receipt:
+`yosemite-parking-access-1788998727464`. Together with the earlier five corrections, nine places now
+have explicit vehicle-access coordinates. NPS confirms the walking/vehicle distinction for these
+attractions; the source coordinates are OSM measurements, not NPS-published coordinates.
+
+The first 23 paid QA route requests all returned geometry without restricted-road warnings. Frozen
+waypoints, polylines, durations and warnings are in `yosemite-qa-routes/` under the OSM scratch directory.
+They are route-provider evidence only so far, not completed saved-drive playback audits. The Mariposa
+journeys detour via Oakhurst (roughly 121 km, two hours) and cannot count as the intended Highway 140
+approach. Caltrans's 2026-09-09 report lists traffic control on SR 140, while CAL FIRE's September 5
+update describes a lane reopening after the Colorado Fire. Preserve the discrepancy and test the
+intended via-El-Portal route before accepting corridor coverage.
+[Caltrans SR 140](https://roads.dot.ca.gov/?roadnumber=140),
+[CAL FIRE reopening update](https://www.fire.ca.gov/incidents/2026/9/1/colorado-fire/updates/1e755e34-46bb-4a37-8934-a223ed31316d).
+
+
+The explicit Mariposa → Briceburg → El Portal → Valley probe returned 70.7 km / 71 minutes, and its
+reverse returned 68.7 km / 67 minutes without warnings. The isolated El Portal → Briceburg request
+still produced a 112.2 km detour, while Briceburg → El Portal was 26.9 km. These contradictory provider
+choices are saved in `yosemite-qa-mariposa-detour-probes/`; they do not establish a closure. Use the
+explicit via routes for corridor replay and retain the detours as rejected audit evidence.
+
+The staged set now contains 75 clips (53 individual/scenic, 22 combined), totalling 85.3 minutes.
+All 75 passed full decode and duration checks; none clipped above 0 dBTP. Ten clips miss the stricter
+mastering target/headroom checks and three show tail-volume drop in the independent mastered-audio
+measurement. These are listening findings, not a claim that every clip sounds right. Full report:
+`yosemite-staged-audio-checks.json`; exact publication snapshot: `yosemite-staged-publication-snapshot.json`.
+
+All 23 frozen routes played every selected clip in an initial constant-speed replay, with zero missing
+subjects. This uses the API's exported internal `selectStopsForRoute` helper and the simulator's shared
+selection resolver; no rider API field changed. Counts range from four clips on the Hetch Hetchy
+approach to twenty from Lee Vining to the Valley. Quiet windows range up to about 36 minutes at the
+chosen speeds; investigate those intervals before recording corridor attestations. Local replay files
+are `yosemite-qa-routes/replay-*.json`. They are not yet operator-owned saved drives or approved evidence.
+
+Audio review exposed a gate classification bug: studio's TTS row mixes script-safety failures with
+post-synthesis advisory measurements, but Listening Review treated every failed TTS row as hard.
+The review now recognizes only known, structured tail/loudness/non-clipping-headroom advisories.
+They stay in the required listening queue and still need an explicit reason and Good verdict.
+Withheld content, unsafe markup, failed grounding, actual clipping, missing measurement evidence and
+unknown technical failures remain non-waivable. Regression checks cover mixed hard/advisory rows.
