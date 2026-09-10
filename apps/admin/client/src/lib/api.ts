@@ -168,7 +168,10 @@ export interface PoiRow {
 }
 
 // One fact-edit override row on a POI (a literal find→replace on the fetched extract).
+export type CorrectionSource = 'wikipedia' | 'wikidata'
 export interface CorrectionOverride {
+  source: CorrectionSource
+  sourceId: string
   find: string | null
   replace: string | null
   reason: string
@@ -179,6 +182,7 @@ export interface CorrectionOverride {
 }
 // A POI's curation surface: its fact-edit overrides + speakable anchor + legibility state.
 export interface PoiCorrections {
+  sources: { source: CorrectionSource; sourceId: string }[]
   overrides: CorrectionOverride[]
   speakable: { lat: number; lng: number } | null
   /** The OSM `highway=` class the anchor sits on (`primary`, `residential`…), or null when the anchor
@@ -203,8 +207,8 @@ export interface PoiCorrections {
 }
 // The discriminated POST body for /admin/pois/:id/corrections.
 export type CorrectionBody =
-  | { kind: 'fact_edit'; find: string; replace: string; reason: string; sourceUrl?: string }
-  | { kind: 'retire'; find: string }
+  | { kind: 'fact_edit'; source?: CorrectionSource; find: string; replace: string; reason: string; sourceUrl?: string }
+  | { kind: 'retire'; source?: CorrectionSource; find: string }
   // `force` overrides the pin-vs-anchor sanity guard (the server rejects a too-far anchor with 422
   // `speakable_too_far` unless force is set) — for the rare genuinely-distant vantage.
   | { kind: 'speakable'; lat: number; lng: number; force?: boolean }

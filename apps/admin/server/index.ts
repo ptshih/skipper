@@ -1,3 +1,4 @@
+import { correctionSourcesFor, resolveCorrectionSource, type CorrectionIdentity } from './correction-sources'
 // @skipper/admin — the founder-only ops console (Hono, served natively by bun).
 //
 // v1 BACKEND. Behind Google IAP (requireAdmin asserts the founder's identity); a separate
@@ -41,7 +42,7 @@ import { listeningRoutes } from './listening'
 import { loadPublication, releaseReviewed } from './publication'
 import { serveStatic } from 'hono/bun'
 import { csrf } from 'hono/csrf'
-import { and, asc, count, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, isNotNull, or, sql } from 'drizzle-orm'
 import { inAnyBbox } from '@skipper/db/bbox'
 import { db } from '@skipper/db'
 import {
@@ -1655,11 +1656,11 @@ app.post('/admin/pois/:poiId/narration/release', async (c) => {
 /*  POI corrections — operator-editable upstream-fact corrections + speakable    */
 /*  anchor, replacing the seed-edit + reseed CLI loop. These MUTATE the curation  */
 /*  layer (poi_overrides + pois.speakable_lat/lng) but spend nothing — corrections */
-/*  take effect on the NEXT generate/regeneration (the studio pipeline loads overrides + */
-/*  reads pois.speakable fresh per run); they never rewrite existing audio.        */
+/*  Fact edits require refetch/enrichment before regeneration; source choice is   */
+/*  resolved from the POI. Saving a correction never rewrites existing audio.     */
 /* -------------------------------------------------------------------------- */
 
-interface CorrectionOverride {
+interface CorrectionOverride extends CorrectionIdentity {
   find: string | null
   replace: string | null
   reason: string
@@ -1669,6 +1670,7 @@ interface CorrectionOverride {
   updatedAt: string
 }
 interface CorrectionsPayload {
+  sources: CorrectionIdentity[]
   overrides: CorrectionOverride[]
   speakable: { lat: number; lng: number } | null
   /** OSM `highway=` class the anchor snapped to; null when hand-placed or un-snapped. */
@@ -1696,6 +1698,7 @@ async function correctionsForPoi(poi: {
   id?: string
   source: 'wikipedia' | 'wikidata'
   sourceId: string
+  qid?: string | null
   speakableLat: number | null
   speakableLng: number | null
   speakableRoadClass: string | null
@@ -1709,6 +1712,7 @@ async function correctionsForPoi(poi: {
   // scores` already documents: the rare branch pays a little so the common one is fast.
   // ⚠ The one cost, deliberately accepted: a poi whose `cluster_id` dangles issues a members query whose
   // result is then discarded. That is a broken FK, not a normal read.
+  const sources = correctionSourcesFor(poi)
   const clusterId = poi.clusterId ?? null
   const [clusterRows, members, rows] = await Promise.all([
     clusterId
@@ -1728,6 +1732,8 @@ async function correctionsForPoi(poi: {
       : [],
     db
       .select({
+        source: poiOverrides.source,
+        sourceId: poiOverrides.sourceId,
         find: poiOverrides.find,
         replace: poiOverrides.replace,
         reason: poiOverrides.reason,
@@ -1737,7 +1743,7 @@ async function correctionsForPoi(poi: {
         updatedAt: poiOverrides.updatedAt,
       })
       .from(poiOverrides)
-      .where(and(eq(poiOverrides.source, poi.source), eq(poiOverrides.sourceId, poi.sourceId)))
+      .where(or(...sources.map((s) => and(eq(poiOverrides.source, s.source), eq(poiOverrides.sourceId, s.sourceId)))))
       .orderBy(desc(poiOverrides.updatedAt)),
   ])
 
@@ -1760,7 +1766,10 @@ async function correctionsForPoi(poi: {
       : null
 
   return {
+    sources,
     overrides: rows.map((r) => ({
+      source: r.source,
+      sourceId: r.sourceId,
       find: r.find,
       replace: r.replace,
       reason: r.reason,
@@ -1824,6 +1833,7 @@ app.get('/admin/pois/:id/corrections', async (c) => {
         id: pois.id,
         source: pois.source,
         sourceId: pois.sourceId,
+        qid: pois.qid,
         speakableLat: pois.speakableLat,
         speakableLng: pois.speakableLng,
         speakableRoadClass: pois.speakableRoadClass,
@@ -1857,6 +1867,7 @@ app.post('/admin/pois/:id/corrections', async (c) => {
         name: pois.name,
         source: pois.source,
         sourceId: pois.sourceId,
+        qid: pois.qid,
         // pin + kind: the speakable-anchor sanity guard compares the anchor to the pin against the
         // kind-aware bound (a vantage is "roughly here," not km away).
         kind: pois.kind,
@@ -1883,6 +1894,11 @@ app.post('/admin/pois/:id/corrections', async (c) => {
   // on purpose: they touch `poi_overrides` only, so the row loaded above is still current for them.
   let updated: PoiFreshCols | undefined
 
+  const identity = resolveCorrectionSource(poi, body.source)
+  if ((kind === 'fact_edit' || kind === 'retire') && !identity) {
+    return c.json({ error: 'bad_request', message: 'Choose an available fact source for this POI.' }, 400)
+  }
+
   if (kind === 'fact_edit') {
     const find = typeof body.find === 'string' ? body.find : ''
     const replace = typeof body.replace === 'string' ? body.replace : null
@@ -1903,12 +1919,12 @@ app.post('/admin/pois/:id/corrections', async (c) => {
       return c.json({ error: 'bad_request', message: '`sourceUrl` must be a valid http(s) URL.' }, 400)
     }
 
-    console.log(`[admin] ${operator} fact_edit override on ${poi.source}:${poi.sourceId} (${poi.name}) find=${JSON.stringify(find)}`)
+    console.log(`[admin] ${operator} fact_edit override on ${identity!.source}:${identity!.sourceId} (${poi.name}) find=${JSON.stringify(find)}`)
     await db
       .insert(poiOverrides)
       .values({
-        source: poi.source,
-        sourceId: poi.sourceId,
+        source: identity!.source,
+        sourceId: identity!.sourceId,
         name: poi.name,
         find,
         replace,
@@ -1923,14 +1939,14 @@ app.post('/admin/pois/:id/corrections', async (c) => {
   } else if (kind === 'retire') {
     const find = typeof body.find === 'string' ? body.find : ''
     if (!find) return c.json({ error: 'bad_request', message: '`find` must be a non-empty string.' }, 400)
-    console.log(`[admin] ${operator} retired override on ${poi.source}:${poi.sourceId} find=${JSON.stringify(find)}`)
+    console.log(`[admin] ${operator} retired override on ${identity!.source}:${identity!.sourceId} find=${JSON.stringify(find)}`)
     await db
       .update(poiOverrides)
       .set({ active: false, updatedAt: new Date() })
       .where(
         and(
-          eq(poiOverrides.source, poi.source),
-          eq(poiOverrides.sourceId, poi.sourceId),
+          eq(poiOverrides.source, identity!.source),
+          eq(poiOverrides.sourceId, identity!.sourceId),
           eq(poiOverrides.find, find),
         ),
       )
@@ -2025,6 +2041,7 @@ app.post('/admin/pois/:id/corrections', async (c) => {
     await correctionsForPoi({
       source: poi.source,
       sourceId: poi.sourceId,
+      qid: poi.qid,
       speakableLat: fresh?.speakableLat ?? null,
       speakableLng: fresh?.speakableLng ?? null,
       speakableRoadClass: fresh?.speakableRoadClass ?? null,

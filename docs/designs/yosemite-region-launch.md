@@ -549,8 +549,9 @@ The Wikidata fetcher now applies persistent QID-keyed fact corrections to its re
 Individual and combined generation diagnostics check Wikipedia's fetch clock and Wikidata's
 separate enrichment clock, including QIDs preserved in older sheets. Retired edits still invalidate
 older caches. These are advisory diagnostics; existing sheets need explicit forced enrichment.
-The admin correction editor currently addresses the POI's main source only; a secondary Wikidata
-correction is operator-managed through the existing table until that editor gains source selection.
+The admin correction editor exposes the POI's primary source and its Wikidata QID, with
+source-labelled edits and source-specific retirement. The server resolves identities; clients cannot
+choose an arbitrary QID. Existing source-omitted requests retain their primary-source behavior.
 No migration, rider contract, mobile build, or App Store submission is involved.
 
 The external-source audit completed 55 staged stories, including all 22 combined stories:

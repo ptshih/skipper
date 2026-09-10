@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Plus, Trash2, Wrench } from 'lucide-react'
-import { type CorrectionOverride } from '@/lib/api'
+import { Pencil, Plus, Trash2, Wrench } from 'lucide-react'
+import { type CorrectionOverride, type CorrectionSource } from '@/lib/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -11,9 +11,11 @@ import { cn } from '@/lib/utils'
 import { usePoiCorrections } from './usePoiCorrections'
 
 // Operator surface for a POI's upstream-fact corrections. Corrections take effect on the NEXT
-// generate/regeneration — they don't rewrite audio. (The speakable anchor moved to the Location tab.)
+// source refresh and enrichment, then regeneration — they do not rewrite audio. (The speakable anchor moved to the Location tab.)
 export function Corrections({ poiId }: { poiId: string }) {
   // Add-correction form
+  const [editing, setEditing] = useState(false)
+  const [source, setSource] = useState<CorrectionSource | undefined>()
   const [find, setFind] = useState('')
   const [replace, setReplace] = useState('')
   const [reason, setReason] = useState('')
@@ -34,13 +36,22 @@ export function Corrections({ poiId }: { poiId: string }) {
       return
     }
     save(
-      { kind: 'fact_edit', find, replace, reason: reason.trim(), ...(sourceUrl.trim() ? { sourceUrl: sourceUrl.trim() } : {}) },
-      { onSuccess: () => { setFind(''); setReplace(''); setReason(''); setSourceUrl('') } },
+      { kind: 'fact_edit', source, find, replace, reason: reason.trim(), ...(sourceUrl.trim() ? { sourceUrl: sourceUrl.trim() } : {}) },
+      { onSuccess: () => { setFind(''); setReplace(''); setReason(''); setSourceUrl(''); setEditing(false) } },
     )
   }
 
-  function retire(f: string) {
-    save({ kind: 'retire', find: f })
+  function edit(o: CorrectionOverride) {
+    setSource(o.source); setFind(o.find ?? ''); setReplace(o.replace ?? '')
+    setReason(o.reason); setSourceUrl(o.sourceUrl ?? ''); setEditing(true)
+  }
+
+  function retire(o: CorrectionOverride) {
+    save({ kind: 'retire', source: o.source, find: o.find! }, { onSuccess: () => {
+      if (editing && source === o.source && find === o.find) {
+        setEditing(false); setFind(''); setReplace(''); setReason(''); setSourceUrl('')
+      }
+    } })
   }
 
   if (loading) {
@@ -63,9 +74,8 @@ export function Corrections({ poiId }: { poiId: string }) {
         <Wrench className="h-3.5 w-3.5" /> Corrections
       </div>
       <div className="rounded-md border bg-background px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-        Corrections apply on the <strong className="text-foreground">next generate / regeneration</strong> of a
-        narration (the studio job loads these overrides fresh per run). They do{' '}
-        <strong className="text-foreground">not</strong> rewrite existing audio.
+        Wikipedia corrections need a fact refetch, then forced enrichment. Wikidata corrections need
+        forced enrichment. Regenerate the narration afterward to produce corrected audio.
       </div>
 
       {err && <ErrorCallout error={err} className="rounded-lg px-3 py-2 text-xs" />}
@@ -85,6 +95,7 @@ export function Corrections({ poiId }: { poiId: string }) {
             )}
           >
             <div className="min-w-0 flex-1">
+              <div className="mb-1 text-xs text-muted-foreground">{o.source} · {o.sourceId}</div>
               <div className="break-words text-xs">
                 <code className="font-mono">{o.find ?? '∅'}</code>
                 <span className="mx-1.5 text-muted-foreground">→</span>
@@ -99,8 +110,9 @@ export function Corrections({ poiId }: { poiId: string }) {
                 </a>
               )}
             </div>
+            {o.active && o.find && <Button variant="ghost" size="sm" disabled={saving} onClick={() => edit(o)}><Pencil className="h-3 w-3" /> Edit</Button>}
             {o.active && o.find && (
-              <Button variant="ghost" size="sm" disabled={saving} onClick={() => retire(o.find!)} className="shrink-0">
+              <Button variant="ghost" size="sm" disabled={saving} onClick={() => retire(o)} className="shrink-0">
                 <Trash2 className="h-3 w-3" /> Retire
               </Button>
             )}
@@ -110,11 +122,19 @@ export function Corrections({ poiId }: { poiId: string }) {
 
       {/* Add correction */}
       <div className="flex flex-col gap-3 rounded-md border border-dashed px-3 py-3">
-        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Add correction</div>
+        <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{editing ? 'Edit correction' : 'Add correction'}</div>
+        <div className="space-y-1.5">
+          <Label htmlFor="corr-channel" className="text-xs">Fact source</Label>
+          <select disabled={editing || saving} id="corr-channel" className="w-full rounded-md border bg-background px-3 py-2 text-xs"
+            value={source ?? data?.sources[0]?.source ?? ''}
+            onChange={(e) => setSource(e.target.value as CorrectionSource)}>
+            {data?.sources.map((s) => <option key={s.source} value={s.source}>{s.source} · {s.sourceId}</option>)}
+          </select>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
             <Label htmlFor="corr-find" className="text-xs">Find (exact substring)</Label>
-            <Input id="corr-find" value={find} onChange={(e) => setFind(e.target.value)} placeholder="Leonard Palme" />
+            <Input disabled={editing || saving} id="corr-find" value={find} onChange={(e) => setFind(e.target.value)} placeholder="Leonard Palme" />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="corr-replace" className="text-xs">Replace (blank = delete)</Label>
@@ -131,8 +151,9 @@ export function Corrections({ poiId }: { poiId: string }) {
         </div>
         <div>
           <Button variant="outline" size="sm" disabled={saving} onClick={addCorrection}>
-            <Plus className="h-3 w-3" /> {saving ? 'Saving…' : 'Add correction'}
+            <Plus className="h-3 w-3" /> {saving ? 'Saving…' : editing ? 'Save correction' : 'Add correction'}
           </Button>
+          {editing && <Button variant="ghost" size="sm" disabled={saving} onClick={() => { setEditing(false); setFind(''); setReplace(''); setReason(''); setSourceUrl('') }}>Cancel edit</Button>}
         </div>
       </div>
     </div>
