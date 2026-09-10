@@ -1,10 +1,11 @@
 # Yosemite launch and admin listening review
 
-**Status:** Operator tools deployed and free discovery refreshed 2026-09-09; corpus snapshot complete.
-Local California/Nevada extracts are verified; reviewed anchors and parking access are being applied.
-Paid preparation has produced 173 fact sheets and 72 curated places. All six calibration clips pass
-technical audio checks; broader staged generation and endpoint validation continue under founder approval. Listening approval and public release remain pending.
-Yosemite is not announced.
+**Status:** Staged preparation and saved listening package complete 2026-09-09 PDT: 78 clips,
+67 curated endpoints, 173 fact sheets, and 23 saved QA drives. California/Nevada local OSM extracts
+are verified. All staged audio passes decode/duration checks; all 253 selected route occurrences
+played with zero missing subjects. Follow-up operator fixes are committed locally but not deployed.
+Founder listening approval, remaining device verification, and public release are pending.
+Yosemite remains unpublished and unannounced; no mobile build or App Store submission is required.
 
 The launch covers Yosemite's major driving corridors and the approaches from Groveland, Mariposa,
 Oakhurst and Lee Vining, using the existing Skipper persona and voice. The installed mobile app stays
@@ -594,3 +595,57 @@ individual TTS. The individual eval run is `f160b241-f8b2-4981-819b-ca99695297ae
 A fresh external-source audit and all-clip technical pass are in progress; these production gates
 are not listening approval. Admin source-channel readback showed both Olmsted identities and
 rejected an invalid source with HTTP400 without writes or starting a dev server.
+
+
+### Saved launch review and final preparation (2026-09-09 PDT)
+
+The follow-up external-source audit checked 18 clips (16 regenerated plus Dana Meadows and Second
+Garrotte), eval `fdfae3d8-70e7-4f88-9456-bbbfb1482ea3`, $8.49 model spend plus search fees.
+Three advisory disputes remain. Building-specific NPS material supports Mather's $39,380 Rangers'
+Club payment; archival catalogues support John Amos Chaffee; Sierra's headquarters relocation does
+not contradict continuing Oakhurst operations. These adjudications and the earlier Tunnel View date
+conflict are saved as agent notes, without Good verdicts or advisory acceptance reasons.
+
+All 78 current audio files pass full decoding and duration validation, with no measured true peak
+above 0 dBTP. Nine mastering measurements and one larger tail drop remain listening advisories;
+these checks do not establish a good performance. Evidence: `yosemite-staged-audio-checks.json`.
+
+The final 23 frozen-route replays selected and played 253 clip occurrences with zero missing subjects.
+All 23 are now saved drives owned by the existing app administrator, using 23 ordinary drive credits
+(balance 91 to 68); retries are designed to avoid additional debits. Corridor evidence includes exact
+speeds, dated access sources, investigated quiet windows, and intentional silence. Long forest gaps
+remain pacing questions for listening. Receipts and geometry live in `yosemite-qa-routes/`.
+
+Three further vehicle-access corrections cover Lower Yosemite Falls (Village parking), Lundy Canyon
+Trailhead (road-end loop), and Mono Lake Tufa State Natural Reserve (Old Marina). Six paid Routes
+checks, both directions, returned plausible routes without restrictions or warnings. Following a full
+snapshot of 1,190 R2 objects with all 845 referenced clips present, scoped cleanup removed closed
+White Wolf Lodge and the private Pine Mountain Lake Association entry. No other place fields changed.
+Final inventory: 67 endpoints, 19 access-coordinate pairs. Snapshot:
+`packages/studio/.scratch/yosemite-final-endpoint-review-20260910/`.
+
+Saved review [`50d4208c-4897-42ca-84cc-c3b5c58c9b8e`](https://skipper-admin-csslmysz7q-uk.a.run.app/listening?region=yosemite-national-park&review=50d4208c-4897-42ca-84cc-c3b5c58c9b8e)
+contains the exact 78-clip staged set: 12 reel clips and 27 additional flagged clips require 49:33 of
+listening. The other 39 clips remain available. All 78 technical results are saved, all verdicts remain
+Unreviewed, and all 23 corridor evidence records are attached. The current local implementation reports
+no structural blockers and a current fingerprint. The deployed admin still misclassifies 17 known
+post-synthesis advisory rows as failed generation gates; the already-committed advisory classification
+fix must be deployed before approval. The live UI correctly shows the new counts, saved session, route
+evidence, and disabled approval/publication controls. Private audio loaded with a 69.1-second duration,
+readyState 4 and no media error; Next/Previous navigation changed the selected clip correctly.
+No release or approval was submitted.
+
+On the unchanged iOS development build (iPhone 17 Pro Max, iOS 26.5), a cold reload refreshed the old
+region bootstrap: Yosemite suggestions and all 23 saved QA drives appeared. The Valley legal circuit
+showed five stops and its route map; loading downloaded all five clips and displayed Saved Offline.
+A combined-story preview showed advancing playback progress and source attribution. The player reached
+Ready to Roll with simulated GPS; automated UI access then lost the Simulator window, so completion of
+the in-app simulated drive was not observed. The simulator remains set to simulated GPS and should be
+restored to Real after that check. CLI route replay success is separate evidence. Real GPS in motion,
+airplane-mode offline use, audio focus, interruptions and lock-screen behavior still require a device;
+no fresh native splash/icon verification was attempted. No mobile source was changed.
+
+A repeated release-filtered selection check found zero staged leaks on the Valley circuit and all four
+gateway routes. Yosemite still has zero published narrations. Website and store announcements remain
+pending the explicit public-release instruction. Root `bun run check` passed after preparation. The remaining review/deployment steps must accompany
+the final rollout; counts alone do not establish Tahoe-equivalent driving quality.
