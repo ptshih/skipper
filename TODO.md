@@ -595,7 +595,8 @@ and its staged listening evidence are recorded in [the launch design](docs/desig
       staged individual/combined generation, reusable local OSM roads, simulator fixes and saved listening
       tools are built. The 78 staged clips pass technical checks; 23 saved QA drives and corridor evidence
       are recorded. Operator fixes are deployed and the existing app completed the five-stop Valley
-      simulation. Obtain founder listening approval and the separate public-release
+      simulation. All 78 audio judgments are complete: 57 automatically accepted and 21 findings remain.
+      Resolve those exceptions; passing clips require no human listening. Obtain the separate public-release
       instruction. Publish website/store coverage only after content serves. Evidence and exact remaining
       obligations: [Yosemite launch design](docs/designs/yosemite-region-launch.md).
 

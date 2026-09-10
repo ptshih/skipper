@@ -1,6 +1,6 @@
 # Region release gate — staged content + a one-way release latch
 
-> **Status:** Release latch built; saved-review enforcement implemented 2026-09-09, deployment pending. Original gate BUILT 2026-06-20 (migration `0029`, applied to the shared DB). Founder-approved model:
+> **Status:** Release latch built; saved-review enforcement and exception-driven audio assessment deployed and verified 2026-09-09. Original gate BUILT 2026-06-20 (migration `0029`, applied to the shared DB). Founder-approved model:
 > auto-release every clip in a region on release. **Preview gate UPDATED 2026-06-20:** the per-user
 > preview flag moved from a bespoke `user.tester` boolean → the **Better Auth `admin` plugin role**
 > (`role === 'admin'`), so "preview staged content" is now one facet of being an admin (migration `0030`
@@ -32,6 +32,16 @@ publication receipts for idempotent retries. The review tables are additive; dep
 before the admin code. See [Yosemite launch](../designs/yosemite-region-launch.md) for workflow,
 limitations, and outstanding operator approvals. The historical direct-release instructions below
 are superseded by this workflow.
+
+## Automated editorial acceptance amendment — 2026-09-09
+
+The founder replaced mandatory human listening with audio-and-script model judgments. Creating a
+review automatically assesses its full staged set; clear passes become Good without a listening
+checkbox. Low, uncertain, incomplete and human-flagged clips remain exceptions. Human verdicts win,
+and hard technical failures remain nonwaivable. Exact clip/context/model/policy results are cached;
+changed inputs require a current judgment. Both approval and release revalidate current model-policy
+acceptance, including for an individual clip. Explicit release approval/publication remain separate
+from model verdicts. Historical references below to the founder's ear are superseded by this policy.
 
 ## The problem
 
@@ -155,8 +165,8 @@ Two gates, in series, with clean responsibilities:
 2. **Release gate** (this doc) — *"ready for the public?"* A persisted clip is **staged** until a human
    releases it (or its region is released).
 
-Pipeline: **auto-gate → staged → (founder/admin ear) → released.** The eval gate is automatic and
-per-clip; the release gate is human and region-first.
+Pipeline: **auto-gate → staged → automated editorial assessment → exception resolution → explicit release.**
+The model accepts clear passes by default; an operator resolves remaining concerns and controls publication.
 
 ## Deferred (not in v1)
 
