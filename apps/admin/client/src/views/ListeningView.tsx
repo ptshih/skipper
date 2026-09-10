@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { pendingListeningItems } from '@/lib/listening-readiness'
 import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/PageHeader'
 import type { PublicationSnapshot } from '../../../server/publication'
 
 type Item = { id: string; narrationId: string; queue: string; verdict: string; notes: string; advisoryReason: string;
-  technical: { ok: boolean; message: string } | null }
+  technical: { ok: boolean; advisory?: boolean; message: string } | null }
 type Review = { review: { id: string; approvedAt: string | null; narrationId: string | null }; items: Item[];
   snapshot: PublicationSnapshot; stale: boolean; blockers: string[]; totalListeningMs: number }
 async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
@@ -44,6 +45,7 @@ export function ListeningView() {
     const order: Record<string, number> = { reel: 0, flagged: 1, additional: 2 }
     return (order[a.queue] ?? 2) - (order[b.queue] ?? 2) || a.narrationId.localeCompare(b.narrationId)
   })
+  const pending = pendingListeningItems(items, data?.snapshot.clips ?? [])
   const item = items[index]
   const clip = data?.snapshot.clips.find(c => c.narration.id === item?.narrationId)
   const open = (id: string) => {
@@ -82,12 +84,13 @@ export function ListeningView() {
       {(data?.blockers ?? readiness.data?.blockers ?? []).map(b => <p key={b} className="text-destructive">{b}</p>)}
       {data?.stale && <p role="alert" className="font-semibold text-destructive">This review is stale. Create a replacement; unchanged clip verdicts carry forward.</p>}
       {data && <p>Required listening: {minutes(data.totalListeningMs)} · {items.filter(i => i.queue === 'reel').length} full reel clips · {items.filter(i => i.queue === 'flagged').length} additional flagged clips</p>}
+      {data && pending > 0 && <p>{pending} clips still need listening verdicts, advisory reasons, or technical checks before approval.</p>}
     </section>}
     {data && <div className="flex flex-wrap gap-3">
       <Button disabled={busy || data.stale} onClick={() => void act(async () => {
         for (const i of items) await request(`listening-reviews/${reviewId}/technical/${i.id}`, 'POST')
       })}>Check all audio (free)</Button>
-      <Button disabled={busy || data.stale || data.blockers.length > 0} onClick={() => void act(() => request(`listening-reviews/${reviewId}/approve`, 'POST'))}>Approve release review</Button>
+      <Button disabled={busy || data.stale || data.blockers.length > 0 || pending > 0 || items.length === 0} onClick={() => void act(() => request(`listening-reviews/${reviewId}/approve`, 'POST'))}>Approve release review</Button>
       <Button disabled={busy || data.stale || !data.review.approvedAt} onClick={() => void act(async () => {
         if (!window.confirm(`Publish exactly these ${data.snapshot.clips.length} approved clips permanently?`)) return
         await request(`listening-reviews/${reviewId}/release`, 'POST')

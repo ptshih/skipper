@@ -56,9 +56,16 @@ nothing", reached on 2026-08-05 and only caught by re-checking against the deplo
 gcloud builds list --region=us-east4 --limit 4 --format='table(id,status,createTime)'
 ```
 
-⚠ Expect **FOUR** builds per push, not one: `skipper-api-deploy`, `skipper-admin-deploy`,
-`skipper-site-deploy` and `skipper-studio-deploy` all fire on the same commit. A push that touches only
-the API still rebuilds the others, so "3 of 4 green" is normal-in-progress, not a partial failure.
+There are four configured triggers, but they have **path filters**. Inspect the current filters and
+match them against the pushed diff before deciding how many builds are expected:
+
+```bash
+gcloud builds triggers list --region=us-east4 --format='json(name,includedFiles,ignoredFiles,disabled)'
+```
+
+A service whose paths did not change may correctly have no build. For every expected trigger, track
+the build matching the pushed commit to a terminal status; never count an older successful build.
+The 2026-09-09 Yosemite operator push triggered API, Admin and Studio; Site correctly did not run.
 
 If it is `WORKING` or `QUEUED`, wait and re-check. If it is `FAILURE`, stop —
 there is nothing to canary, and the previous revision is still serving. Report

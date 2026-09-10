@@ -3,7 +3,7 @@
 **Status:** Staged preparation and saved listening package complete 2026-09-09 PDT: 78 clips,
 67 curated endpoints, 173 fact sheets, and 23 saved QA drives. California/Nevada local OSM extracts
 are verified. All staged audio passes decode/duration checks; all 253 selected route occurrences
-played with zero missing subjects. Follow-up operator fixes are committed locally but not deployed.
+played with zero missing subjects. Follow-up operator fixes deployed successfully 2026-09-09 PDT; the final approval-button UI correction is being verified.
 Founder listening approval, remaining device verification, and public release are pending.
 Yosemite remains unpublished and unannounced; no mobile build or App Store submission is required.
 
@@ -667,3 +667,27 @@ state. This makes the no-App-Store-submission launch path operational; next-vers
 The saved-drive retry was also exercised against current data: all 23 existing drives recognized,
 zero additional credit debits. The remaining simulator UI attempt still found no controllable window;
 no further in-app triggering result is claimed.
+
+
+### Operator deployment verification (2026-09-09 PDT)
+
+Founder authorized pushing the prepared commits. Commit `da7a4a40` deployed successfully through
+API build `1491b7d1-1a06-4598-b69d-193712d676a8`, Admin build
+`be50f1af-a2f0-4843-9b65-e73ede59c2b6`, and Studio build
+`e046bbf7-749b-46fb-967c-e20802a06f48`. Current trigger path filters correctly skipped Site.
+API moved from `skipper-api-00162-fjr` to `skipper-api-00163-59p`; Admin moved from
+`skipper-admin-00094-2qz` to `skipper-admin-00095-rs9`, both at 100% traffic. Studio job
+configuration generation 76 was observed; deployment did not execute the job.
+
+Public health returned HTTP200 in 230ms (baseline 255ms), version policies were unchanged, and
+`/regions` continued to expose only Tahoe and Reno/Carson. Health proves process liveness; the region
+response additionally exercises DB-backed discovery. No error-level API/Admin logs appeared in either
+the pre-push or post-push 15-minute windows. Authenticated production Admin resumed the exact saved
+78-clip review, with 67 endpoints, all corridor evidence, and the former 17 false hard blockers gone.
+
+The live UI exposed one remaining usability gap: approval was clickable while listening verdicts
+were missing, although the server still rejected it. The button now stays disabled while clips need
+required verdicts, advisory reasons or technical checks, with an explicit remaining-item count.
+This is presentation guidance; the unchanged atomic server query remains the authority. Regression
+checks cover required versus optional items, Needs work, technical failures, and advisory acceptance.
+The Reference page and canary skill also reflect the actual workflow and path-filtered deployments.
