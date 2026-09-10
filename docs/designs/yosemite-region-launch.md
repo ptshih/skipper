@@ -4,7 +4,7 @@
 67 curated endpoints, 173 fact sheets, and 23 saved QA drives. California/Nevada local OSM extracts
 are verified. All staged audio passes decode/duration checks; all 253 selected route occurrences
 played with zero missing subjects. Follow-up operator fixes deployed successfully 2026-09-09 PDT; the final approval-button UI correction is also deployed and verified.
-The existing app completed the five-stop Valley simulation. Exception-driven automated audio assessment is implemented and being deployed; public
+The existing app completed the five-stop Valley simulation. Exception-driven automated audio assessment is deployed and verified; public
 release remains pending; real GPS, device offline/audio behavior and a field drive remain follow-up checks.
 Yosemite remains unpublished and unannounced; no mobile build or App Store submission is required.
 
@@ -774,3 +774,21 @@ refusals now back off automatically, and the output cap was increased for longer
 The judge correctly found a misplaced lake reference in Savage Trading Post. Non-clipping headroom
 flags are being reassessed with the actual technical policy supplied as context, without weakening
 technical failures or changing human verdicts.
+
+
+### Deployed exception review and cache proof (2026-09-09 PDT)
+
+All 78 recordings now have complete judgments: **57 automatically accepted, 21 editorial/audio
+exceptions**, zero unfinished technical/model assessments. Full pass plus targeted retry cost $3.14836
+in known audio-judge usage; this excludes separate capability calibration and job-summary calls.
+The current saved review is `51bc9914-3d45-45a7-a2b2-aa9d5a8fac24`.
+
+Production UI creation dispatched Cloud Run execution `skipper-studio-657pg`, completed using all
+78 cached judgments and $0 new audio-model usage. Adding the concrete Savage Trading Post geography
+note in Admin and retrying dispatched `skipper-studio-f8wdb`: 77 cached, one new judgment, $0.041,
+zero failures. That verifies actual production model access and exact-context invalidation. The
+geography concern remains blocked; no human Good verdict or publication approval was fabricated.
+The page displays five separate score columns, optional private playback, and only exceptions by
+default. Approve and Publish remain disabled with outstanding issues. Refresh/resume preserves notes
+and scores. Root `bun run check` and the disposable Postgres gate tests pass. Public health and region
+discovery remain healthy; Yosemite is still absent from the public region list. No mobile files changed.

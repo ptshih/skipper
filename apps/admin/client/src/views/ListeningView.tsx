@@ -98,7 +98,7 @@ export function ListeningView() {
       {data && pending > 0 && <p>{pending} clips await assessment or resolution before approval.</p>}
     </section>}
     {data && <div className="flex flex-wrap gap-3">
-      <p>{data.assessmentJob ? `Assessment ${data.assessmentJob.status}: ${data.assessmentJob.phase ?? ''}` : 'No automated assessment yet'}</p>
+      <p>{data.assessmentJob ? data.assessmentJob.status === 'succeeded' ? 'Assessment complete' : `Assessment ${data.assessmentJob.status}: ${data.assessmentJob.phase ?? ''}` : 'No automated assessment yet'}</p>
       {data.assessmentJob?.error && <p role="alert">{data.assessmentJob.error}</p>}
       <Button disabled={busy || data.stale || ['queued', 'running'].includes(data.assessmentJob?.status ?? '')} onClick={() => void act(() => request(`listening-reviews/${reviewId}/assess`, 'POST'))}>Assess remaining clips</Button>
       <Button variant="outline" onClick={() => { setShowAll(!showAll); setIndex(0); setAudio(null) }}>{showAll ? 'Show only exceptions' : 'Browse all clips'}</Button>
