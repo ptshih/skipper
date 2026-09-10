@@ -106,7 +106,7 @@ block has the canonical listing URL; §13's go-live (site `APP_STORE_URL` + Appl
   path behind an unauthenticated route — the anonymous preview clip comes from the release-filtered BUILD
   path (`loadCorpusForRoute`), exactly one clip, server-chosen. `docs/decisions/region-release-gate.md`.
 - **Curated endpoints are an ALLOWLIST enforced at the WIRE, not in a prompt.** The planner emits **anchor
-  ids**, never coordinates; the server re-asserts `endpoint_eligible` per row, and an unknown/ineligible id
+  ids**, never coordinates; membership in `places` is eligibility, and an unknown id
   is a 400 **before** any billed Routes call. An off-list ask gets the in-persona "don't know that one" —
   never a geocode. This is what makes "grounded by construction" true, and why `curate-places` is product
   surface, not a leftover CLI.
@@ -116,8 +116,8 @@ block has the canonical listing URL; §13's go-live (site `APP_STORE_URL` + Appl
   {wikipedia, wikidata}); `(source, source_id)` is a secondary guard, not the arbiter (it survives a
   scenic↔story tier flip). Keep `source`/`source_id` for attribution — Wikipedia is **CC BY-SA**, so the
   studio pipeline MUST freeze credit in `narrations.attribution` for every wikipedia-sourced clip (legal,
-  not optional). Google break anchors AND curated drive endpoints are NOT pois — they're the role-tagged
-  `places` table (`endpoint_eligible`/`break_eligible`; `google_places` = attribution-only).
+  not optional). Curated drive endpoints are NOT pois — they live in
+  `places` (`google_places` is attribution-only; break destinations are deferred).
 - **Persona lives in DELIVERY, never in FACTS.** "Make it funny" never loosens accuracy; a POI with thin/no
   Wikipedia is downgraded to scenic — **silence beats a hallucinated battle**. Persona, voice, and the one
   corny delivery are GENERATION parameters baked into the audio — never live playback toggles (changing any

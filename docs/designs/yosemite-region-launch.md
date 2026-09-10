@@ -583,3 +583,14 @@ The formatter now preserves source lithology and age without inferring a shared 
 Three Yosemite sheets contain the old line (Ferguson, Briceburg, Greeley Hill); their refresh is
 included in correction preparation. The existing Ferguson and Briceburg clips do not speak that
 incorrect clause, and Greeley Hill has no clip. Mocked fetch tests cover mixed and ordinary units.
+
+Twenty persistent corrections across 17 POIs were applied with compare-and-swap checks and a
+scoped before/receipt snapshot (`yosemite-veracity-corrections-1789002485774`). All 19 requested
+sheets rebuilt successfully for approximately $0.35 model spend, including the three geology
+repairs. Readback confirmed every superseded find-string absent from refreshed sources/sheets.
+Five combined and eleven individual stories regenerated successfully, with zero withheld:
+approximately $2.67 combined production and $4.30 individual model spend plus $0.47 estimated
+individual TTS. The individual eval run is `f160b241-f8b2-4981-819b-ca99695297ae`.
+A fresh external-source audit and all-clip technical pass are in progress; these production gates
+are not listening approval. Admin source-channel readback showed both Olmsted identities and
+rejected an invalid source with HTTP400 without writes or starting a dev server.
