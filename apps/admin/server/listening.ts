@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
+import { and, eq, isNotNull, isNull } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { listeningReviews, listeningReviewItems, listeningEvidence, drives } from '@skipper/db/schema'
 import type { AdminEnv } from './auth'
@@ -14,6 +14,7 @@ import { runDrive, type LngLat } from '@skipper/engine'
 import { requiredCorridors } from './corridors'
 import { checkReviewAudio } from './audio-check'
 import { assertEvidenceOwner } from './evidence-owner'
+import { previousListeningItems, listeningReviewSummaries } from './listening-history'
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const routes = new Hono<AdminEnv>()
@@ -42,13 +43,11 @@ routes.post('/regions/:slug/listening-reviews', async c => {
   if (body.narrationId && !uuid.test(body.narrationId)) throw new Error('Invalid narration ID')
   const p = await loadPublication(c.req.param('slug'), body.narrationId ?? null)
   const id = crypto.randomUUID()
-  const previous = await db.select().from(listeningReviewItems)
-    .innerJoin(listeningReviews, eq(listeningReviews.id, listeningReviewItems.reviewId))
-    .where(eq(listeningReviews.regionSlug, c.req.param('slug'))).orderBy(desc(listeningReviewItems.updatedAt))
+  const previous = await previousListeningItems(db, c.req.param('slug'))
   const values = reviewQueues(p.value.clips, 12, p.value.evidence).map(({ clip, queue }) => {
     const fingerprint = clipFingerprint(clip)
-    const prior = previous.find(r => r.listening_review_items.narrationId === clip.narration.id
-      && r.listening_review_items.fingerprint === fingerprint)?.listening_review_items
+    const prior = previous.find(r => r.item.narrationId === clip.narration.id
+      && r.item.fingerprint === fingerprint)?.item
     return { reviewId: id, narrationId: clip.narration.id, fingerprint, queue,
       verdict: prior?.verdict ?? 'unreviewed', notes: prior?.notes ?? '',
       advisoryReason: prior?.advisoryReason ?? '', technical: prior?.technical ?? null,
@@ -63,8 +62,7 @@ routes.post('/regions/:slug/listening-reviews', async c => {
 })
 
 routes.get('/regions/:slug/listening-reviews', async c => {
-  const reviews = await db.select().from(listeningReviews).where(eq(listeningReviews.regionSlug, c.req.param('slug')))
-    .orderBy(desc(listeningReviews.createdAt)).limit(30)
+  const reviews = await listeningReviewSummaries(db, c.req.param('slug'))
   return c.json({ reviews })
 })
 

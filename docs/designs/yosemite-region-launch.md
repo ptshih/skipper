@@ -717,3 +717,23 @@ This closes the previously incomplete in-app simulation check. The simulator sti
 real GPS accuracy/heading, device airplane-mode operation, exclusive audio focus, interruptions, or
 lock-screen behavior. No native build, splash/icon verification, mobile source edit or App Store
 submission occurred. The operator review is ready for the founder's listening judgment.
+
+
+### Review recreation response-limit repair (2026-09-09 PDT)
+
+Creating a replacement review failed after the first populated session existed. Reproduction exposed
+Neon HTTP507: the result exceeded 67,108,864 bytes. The history join selected the 4,491,832-byte parent
+snapshot once per each of 78 items, multiplying it to roughly 350 MB. Carry-forward now projects only
+item fields and selects the latest verdict per narration/fingerprint. The review picker projects only
+its three metadata fields; snapshots load only when opening an individual review.
+
+The corrected real-data history response was 41,662 bytes. An in-process request through the actual
+admin handler created review `3d43c980-b27e-4453-ad4b-8a789227c09f`, with all 78 items and prior
+verdicts, notes, advisory reasons, technical results and reviewer identities preserved. The picker
+response was 310 bytes. Regression tests compile the real queries and reject snapshot projection.
+No release or approval was created. This repair needs deployment before the founder retries in Admin.
+
+Founder subsequently requested model-led review: passing LLM judgments should count as accepted by
+default, with low/uncertain scores presented for optional listening and flagging. This supersedes the
+mandatory human reel-listening requirement above. Implementation is pending; retain explicit release
+approval/publication, non-waivable technical failures, visible score provenance, and version freshness.
