@@ -3,10 +3,33 @@
 **Status:** 1.1.0 went LIVE on 2026-08-20, build 25 (`READY_FOR_SALE`, recorded at release).
 TestFlight 1.1.1 (26) was verified `VALID` / `IN_BETA_TESTING` on 2026-09-09; it has not been
 submitted for App Store review or publicly released. [Release evidence](../designs/release-batches.md).
+Promotional-text-only operator updates are implemented and preview-verified 2026-09-09; Yosemite copy
+remains held until its public release.
 Canonical listing: `https://apps.apple.com/us/app/skipper-road-trip-audio-tours/id6778946770`.
 §13's site URL and official Apple badge shipped at release. The `/version` floor remains a deliberate
 no-op. RISK-1's real Tahoe drive is still not recorded as done; it is a post-launch obligation.
 The accessibility declaration was last recorded as `DRAFT`; publishing it requires the ASC UI (§11b).
+
+## Update promotional text after a server-side region launch
+
+Apple permits [promotional text updates without a new app version](https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information).
+The other listing fields retain their version/review requirements. Once new coverage is actually
+public, edit only the marked `asc:promotionalText` block below, then preview:
+
+```sh
+bun run asc:metadata -- --promotional-text-only
+```
+
+After explicit authorization to publish the reviewed copy, append `--apply`. This mode selects the
+unique live iOS version, even if a newer draft exists, and requires its exact en-US localization.
+It sends only `promotionalText`, verifies the result, and never patches the description, review notes,
+version number, build, or submission. It rejects `--version` and refuses ambiguous targets. A pre-write
+read catches intervening copy changes; Apple's API offers no atomic compare-and-swap here.
+The normal command without this flag retains the full version-metadata workflow.
+
+Preview against ASC on 2026-09-09 found live iOS 1.1.0, en-US, with the existing 168-character copy
+already matching. Nothing was written. Keep Yosemite's copy in the launch design until release;
+this command does not itself establish that regional coverage is available.
 
 ## Using this record
 
@@ -848,9 +871,9 @@ from the script's own report: the live `appStoreReviewDetail.notes` is **3978 ch
 becomes a list icon"* and *"Two things will help you"*, while *"Well now"*, *"Not near Tahoe"*,
 *"Hear a quick sample"*, *"Three things will help you"*, *"Under the heading THE ROUTE"*,
 *"Under MY DRIVES"* and *"a text box reading"* are all gone.
-⚠ **The apply script reads back only promotionalText and description** — it prints `✓ App Review
-notes` without re-reading them, so its success line is not evidence for the field that matters most
-here. Read `appStoreReviewDetail` directly, as this pass did.
+The full metadata apply script now reads back promotional text, description, and App Review notes
+from their respective resources. The separate promotional-text-only mode reads back only the field
+it writes and never loads review credentials.
 ⚠ **They were pushed against build `25` (`98a292db`)**, which is the commit every quoted string was
 verified on. Attaching a LATER build re-opens the question.
 

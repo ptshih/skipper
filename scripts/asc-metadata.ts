@@ -16,6 +16,7 @@
 // nobody remembers. If you find yourself pasting listing prose into this file, stop — edit the doc.
 //
 // ── RUN ──────────────────────────────────────────────────────────────────────────────────────────
+//   bun run asc:metadata -- --promotional-text-only  # live iOS promo only; preview unless --apply
 //   bun run asc:metadata                 # preview: live vs intended, per field, with char counts
 //   bun run asc:metadata -- --apply      # WRITE (asks nothing; be sure)
 //   bun run asc:metadata -- --version=1.1.0   # also rename the version record (default: leave alone)
@@ -23,6 +24,7 @@
 // Auth reuses the ASC API key already set up for `tf:feedback` (ASC_KEY_ID / ASC_ISSUER_ID /
 // ASC_APP_ID + keys/AuthKey_<ID>.p8). That key has WRITE scope — §11b set most of this listing with it.
 import { readFileSync, existsSync } from 'node:fs'
+import { PROMOTIONAL_TEXT_MAX_LENGTH, updatePromotionalText } from './asc-promotional-text'
 
 const BASE = 'https://api.appstoreconnect.apple.com'
 const DOC = 'docs/guides/app-store-submission.md'
@@ -31,7 +33,7 @@ const DOC = 'docs/guides/app-store-submission.md'
 // character of the description below is ASCII-or-punctuation, so there is no surrogate-pair trap here.
 // A field that exceeds its cap is REJECTED by the API, not truncated — so this fails before writing.
 const CAPS: Record<string, number> = {
-  promotionalText: 170,
+  promotionalText: PROMOTIONAL_TEXT_MAX_LENGTH,
   description: 4000,
   reviewNotes: 4000,
 }
@@ -42,6 +44,8 @@ const flag = (n: string) => argv.find((a) => a.startsWith(`--${n}=`))?.split('='
 
 const APPLY = has('apply')
 const versionString = flag('version')
+const promotionalOnly = has('promotional-text-only')
+if (promotionalOnly && versionString !== undefined) die('--promotional-text-only cannot rename a version')
 
 const keyId = process.env.ASC_KEY_ID
 const issuerId = process.env.ASC_ISSUER_ID
@@ -149,6 +153,10 @@ function report(field: string, live: string, next: string): boolean {
 
 async function main() {
   const doc = readFileSync(DOC, 'utf8')
+  if (promotionalOnly) {
+    await updatePromotionalText({ asc, appId: appId!, text: blockFromDoc(doc, 'promotionalText'), apply: APPLY, report })
+    return
+  }
   const intended = {
     promotionalText: blockFromDoc(doc, 'promotionalText'),
     description: blockFromDoc(doc, 'description'),

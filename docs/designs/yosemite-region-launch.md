@@ -649,3 +649,21 @@ A repeated release-filtered selection check found zero staged leaks on the Valle
 gateway routes. Yosemite still has zero published narrations. Website and store announcements remain
 pending the explicit public-release instruction. Root `bun run check` passed after preparation. The remaining review/deployment steps must accompany
 the final rollout; counts alone do not establish Tahoe-equivalent driving quality.
+
+
+### Same-day store update tooling (2026-09-09 PDT)
+
+`bun run asc:metadata -- --promotional-text-only` now previews only the live iOS promotional text.
+After the explicit coverage-release and copy-publication instructions, its `--apply` path sends only
+that field and reads it back. It never requires review-note credentials or touches version-scoped
+metadata. The unique live version and exact en-US localization are selected independently of draft
+ordering; ambiguous or incomplete inventories and intervening copy changes fail closed. Mocked API
+checks prove write scope, no-op/preview behavior, target rejection and readback failure. A real ASC
+preview found the existing live 1.1.0 copy already matched (168/170 characters); no listing was edited.
+Apple's [field documentation](https://developer.apple.com/documentation/appstoreconnectapi/app-store-version-localizations)
+confirms promotional text can change at any time while other localization fields need an editable
+state. This makes the no-App-Store-submission launch path operational; next-version copy still waits.
+
+The saved-drive retry was also exercised against current data: all 23 existing drives recognized,
+zero additional credit debits. The remaining simulator UI attempt still found no controllable window;
+no further in-app triggering result is claimed.

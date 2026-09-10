@@ -593,8 +593,9 @@ and its staged listening evidence are recorded in [the launch design](docs/desig
 
 - [ ] #80 (corpus, high, paid, founder, doing) **Finish Yosemite review and launch.** Corpus enrichment,
       staged individual/combined generation, reusable local OSM roads, simulator fixes and saved listening
-      tools are built. Resolve source/access findings, save the operator QA drives and corridor evidence,
-      finish technical/UI checks, then obtain founder listening approval and the separate public-release
+      tools are built. The 78 staged clips pass technical checks; 23 saved QA drives and corridor evidence
+      are recorded. Deploy the committed operator fixes, finish the remaining in-app drive check, then
+      obtain founder listening approval and the separate public-release
       instruction. Publish website/store coverage only after content serves. Evidence and exact remaining
       obligations: [Yosemite launch design](docs/designs/yosemite-region-launch.md).
 
@@ -610,7 +611,8 @@ direction; the reverse is what gets rejected.
 
 **Instantly, no review (the only same-day lever):**
 - [ ] #37 (store, med, blocked: yosemite release) **Promotional text.** Currently closes "Starting in Lake Tahoe." This is the one field editable
-      without a version submission, which is exactly why geography lives here.
+      without a version submission, which is exactly why geography lives here. Use the preview-first
+      `bun run asc:metadata -- --promotional-text-only` mode after updating the marked copy block.
 
 **Next version submission (all version-scoped, so they ride one build):**
 - [ ] #38 (store, high, blocked: yosemite release) ⚠ **Description — this becomes FACTUALLY FALSE, not merely dated.** `RIGHT NOW: LAKE TAHOE ONLY` and
