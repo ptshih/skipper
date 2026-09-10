@@ -9,8 +9,7 @@ type ClipFindings = { narration: { id: string }; findings: { pass: boolean }[] }
  */
 export function pendingListeningItems(items: ListeningItem[], clips: ClipFindings[]): number {
   const flagged = new Set(clips.filter(c => c.findings.some(f => !f.pass)).map(c => c.narration.id))
-  return items.filter(i => i.verdict === 'needs_work'
-    || (i.queue !== 'additional' && i.verdict !== 'good')
+  return items.filter(i => i.verdict !== 'good'
     || !i.technical?.ok
     || (i.technical.advisory && i.verdict !== 'good')
     || ((i.technical.advisory || flagged.has(i.narrationId)) && !i.advisoryReason.trim())).length

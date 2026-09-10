@@ -1,7 +1,9 @@
+import { releaseAssessmentResult } from '@skipper/shared'
+import { listeningAssessmentFingerprint } from '@skipper/db/hash'
 import { Hono } from 'hono'
-import { and, eq, isNotNull, isNull } from 'drizzle-orm'
+import { and, eq, isNotNull, isNull, desc, inArray } from 'drizzle-orm'
 import { db } from '@skipper/db'
-import { listeningReviews, listeningReviewItems, listeningEvidence, drives } from '@skipper/db/schema'
+import { listeningReviews, listeningReviewItems, listeningEvidence, drives, releaseAssessments, studioJobs } from '@skipper/db/schema'
 import type { AdminEnv } from './auth'
 import { presignGet } from './storage'
 import { clipFingerprint, corpusFingerprint, loadPublication, publicationLock, buildApprovalQuery, releaseReviewed, reviewQueues, structuralBlockers,
@@ -14,6 +16,8 @@ import { runDrive, type LngLat } from '@skipper/engine'
 import { requiredCorridors } from './corridors'
 import { checkReviewAudio } from './audio-check'
 import { assertEvidenceOwner } from './evidence-owner'
+import { dispatchStudioJob } from './dispatch-job'
+import { buildJobArgs } from './jobs'
 import { previousListeningItems, listeningReviewSummaries } from './listening-history'
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -25,7 +29,21 @@ async function session(id: string) {
   const [review] = await db.select().from(listeningReviews).where(eq(listeningReviews.id, id)).limit(1)
   if (!review) throw new Error('Review not found')
   const items = await db.select().from(listeningReviewItems).where(eq(listeningReviewItems.reviewId, id))
-  return { review, items, snapshot: review.snapshot as PublicationSnapshot }
+  const assessments = items.length ? await db.select().from(releaseAssessments).where(
+    inArray(releaseAssessments.id, items.flatMap(i => i.assessmentId ? [i.assessmentId] : []))) : []
+  const [assessmentJob] = await db.select({ id: studioJobs.id, status: studioJobs.status, phase: studioJobs.phase, error: studioJobs.error })
+    .from(studioJobs).where(and(eq(studioJobs.kind, 'assess_listening_review'), eq(studioJobs.targetId, id))).orderBy(desc(studioJobs.createdAt)).limit(1)
+  const currentItems = items.map(item => {
+    const assessment = assessments.find(a => a.id === item.assessmentId) ?? null
+    const result = releaseAssessmentResult.safeParse(assessment?.result)
+    const current = assessment?.status === 'complete' && result.success
+      && result.data.inputFingerprint === listeningAssessmentFingerprint(item.fingerprint, item.notes)
+    // Historical model acceptance is not current approval after the model/policy/context changes.
+    return { ...item, verdict: item.reviewer?.startsWith('model:') && !current ? 'unreviewed' : item.verdict,
+      assessment: assessment && assessment.status === 'complete' && !current
+        ? { ...assessment, result: null, error: 'Assessment changed or policy is outdated; reassessment required' } : assessment }
+  })
+  return { review, items: currentItems, assessmentJob, snapshot: review.snapshot as PublicationSnapshot }
 }
 
 routes.get('/regions/:slug/readiness', async c => {
@@ -35,7 +53,7 @@ routes.get('/regions/:slug/readiness', async c => {
     isNotNull(listeningReviews.approvedAt), isNull(listeningReviews.narrationId), isNull(listeningReviews.publishedAt),
   )).limit(1)
   return c.json({ snapshot: p.value, fingerprint: p.fingerprint, blockers: p.blockers,
-    requiredCorridors: requiredCorridors(c.req.param('slug')), structuralReady: p.blockers.length === 0, editorialApproved: approved != null })
+    requiredCorridors: requiredCorridors(c.req.param('slug')), structuralReady: p.blockers.length === 0, editorialApproved: approved != null && (await session(approved.id)).items.every(i => i.verdict === 'good' && i.technical != null && (i.technical as { ok?: boolean }).ok) })
 })
 
 routes.post('/regions/:slug/listening-reviews', async c => {
@@ -48,8 +66,8 @@ routes.post('/regions/:slug/listening-reviews', async c => {
     const fingerprint = clipFingerprint(clip)
     const prior = previous.find(r => r.item.narrationId === clip.narration.id
       && r.item.fingerprint === fingerprint)?.item
-    return { reviewId: id, narrationId: clip.narration.id, fingerprint, queue,
-      verdict: prior?.verdict ?? 'unreviewed', notes: prior?.notes ?? '',
+    return { reviewId: id, narrationId: clip.narration.id, fingerprint, queue: queue === 'additional' ? 'flagged' : queue,
+      assessmentId: prior?.assessmentId ?? null, verdict: prior?.verdict ?? 'unreviewed', notes: prior?.notes ?? '',
       advisoryReason: prior?.advisoryReason ?? '', technical: prior?.technical ?? null,
       reviewer: prior?.reviewer ?? null }
   })
@@ -58,7 +76,18 @@ routes.post('/regions/:slug/listening-reviews', async c => {
       fingerprint: p.fingerprint, snapshot: p.value, reviewer: c.get('adminEmail') }),
     ...(values.length ? [db.insert(listeningReviewItems).values(values)] : []),
   ])
-  return c.json({ id })
+  const assessment = values.length ? await dispatchStudioJob('assess_listening_review',
+    buildJobArgs({ kind: 'assess_listening_review', reviewId: id, apply: true }), c.get('adminEmail')) : null
+  return c.json({ id, assessment })
+})
+
+routes.post('/listening-reviews/:id/assess', async c => {
+  const s = await session(c.req.param('id'))
+  if (s.review.publishedAt) throw new Error('Published reviews cannot be reassessed')
+  const result = await dispatchStudioJob('assess_listening_review', buildJobArgs({
+    kind: 'assess_listening_review', reviewId: s.review.id, apply: true,
+  }), c.get('adminEmail'))
+  return c.json(result.body, result.status)
 })
 
 routes.get('/regions/:slug/listening-reviews', async c => {
@@ -71,7 +100,7 @@ routes.get('/listening-reviews/:id', async c => {
   const current = await loadPublication(s.review.regionSlug, s.review.narrationId)
   return c.json({ ...s, stale: current.fingerprint !== s.review.fingerprint,
     blockers: current.blockers,
-    totalListeningMs: s.items.filter(i => i.queue !== 'additional').reduce((total, i) =>
+    totalListeningMs: s.items.filter(i => i.verdict !== 'good').reduce((total, i) =>
       total + (s.snapshot.clips.find(clip => clip.narration.id === i.narrationId)?.narration.audio_duration_ms ?? 0), 0) })
 })
 

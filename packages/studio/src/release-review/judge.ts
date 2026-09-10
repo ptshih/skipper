@@ -1,3 +1,4 @@
+import { requestAudioJudge } from './request'
 import { createHash } from 'node:crypto'
 import { GoogleAuth } from 'google-auth-library'
 import { RELEASE_ASSESSMENT_MODEL, RELEASE_ASSESSMENT_POLICY, releaseJudgment, releaseAssessmentCost,
@@ -45,9 +46,8 @@ export async function judgeReleaseAudio(input: { clip: unknown; notes: string; b
   auth ??= new GoogleAuth({ scopes: 'https://www.googleapis.com/auth/cloud-platform' })
   const token = await auth.getAccessToken()
   if (!token) throw new Error('Google credentials unavailable for audio assessment')
-  // One attempt: a timeout may already have billed. The job records it as an exception instead
-  // of silently multiplying paid calls. Exact-input cache reuse handles successful repeats.
-  const response = await fetch(`https://aiplatform.googleapis.com/v1/projects/${project}/locations/global/publishers/google/models/${RELEASE_ASSESSMENT_MODEL}:generateContent`, {
+  // Only explicit capacity refusals retry. Ambiguous outcomes remain visible and reserve budget.
+  const response = await requestAudioJudge(`https://aiplatform.googleapis.com/v1/projects/${project}/locations/global/publishers/google/models/${RELEASE_ASSESSMENT_MODEL}:generateContent`, {
     method: 'POST', headers: { Authorization: `Bearer ${token}`, 'x-goog-user-project': project, 'Content-Type': 'application/json' },
     body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM }] },
       contents: [{ role: 'user', parts: [{ text: context },

@@ -2,10 +2,10 @@ import { expect, test } from 'bun:test'
 import { pendingListeningItems } from '../client/src/lib/listening-readiness'
 const item = { narrationId: 'one', queue: 'reel', verdict: 'unreviewed', advisoryReason: '', technical: { ok: true } }
 const clip = { narration: { id: 'one' }, findings: [] }
-test('required listening blocks approval; untouched optional clips do not', () => {
+test('all clips need acceptance, including legacy additional items', () => {
   expect(pendingListeningItems([item], [clip])).toBe(1)
   expect(pendingListeningItems([{ ...item, verdict: 'good' }], [clip])).toBe(0)
-  expect(pendingListeningItems([{ ...item, queue: 'additional' }], [clip])).toBe(0)
+  expect(pendingListeningItems([{ ...item, queue: 'additional' }], [clip])).toBe(1)
 })
 test('technical failures and Needs work block even optional clips', () => {
   expect(pendingListeningItems([{ ...item, queue: 'additional', technical: null }], [clip])).toBe(1)

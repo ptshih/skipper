@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import type { ReleaseAssessmentResult } from '@skipper/shared'
+import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { pendingListeningItems } from '@/lib/listening-readiness'
@@ -6,9 +7,9 @@ import { Button } from '@/components/ui/button'
 import { PageHeader } from '@/components/PageHeader'
 import type { PublicationSnapshot } from '../../../server/publication'
 
-type Item = { id: string; narrationId: string; queue: string; verdict: string; notes: string; advisoryReason: string;
+type Item = { reviewer: string | null; assessment: { status: string; result: ReleaseAssessmentResult | null; error: string | null } | null; id: string; narrationId: string; queue: string; verdict: string; notes: string; advisoryReason: string;
   technical: { ok: boolean; advisory?: boolean; message: string } | null }
-type Review = { review: { id: string; approvedAt: string | null; narrationId: string | null }; items: Item[];
+type Review = { assessmentJob?: { id: string; status: string; phase: string | null; error: string | null }; review: { id: string; approvedAt: string | null; narrationId: string | null }; items: Item[];
   snapshot: PublicationSnapshot; stale: boolean; blockers: string[]; totalListeningMs: number }
 async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const response = await fetch(`/admin/${path}`, { method, headers: { 'Content-Type': 'application/json' },
@@ -23,8 +24,9 @@ export function ListeningView() {
   const params = new URLSearchParams(location.search)
   const [region, setRegion] = useState(params.get('region') ?? 'yosemite-national-park')
   const [reviewId, setReviewId] = useState(params.get('review') ?? '')
-  const [index, setIndex] = useState(0)
-  const [audio, setAudio] = useState('')
+  const [selectedId, setSelectedId] = useState('')
+  const [showAll, setShowAll] = useState(false)
+  const [audio, setAudio] = useState<{ id: string; url: string } | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [driveId, setDriveId] = useState('')
@@ -39,17 +41,25 @@ export function ListeningView() {
     reviews: { id: string; createdAt: string; approvedAt: string | null }[];
   }>(`regions/${region}/listening-reviews`) })
   const review = useQuery({ queryKey: ['listening-review', reviewId], enabled: !!reviewId,
-    queryFn: () => request<Review>(`listening-reviews/${reviewId}`) })
+    queryFn: () => request<Review>(`listening-reviews/${reviewId}`),
+    refetchInterval: q => ['queued', 'running'].includes(q.state.data?.assessmentJob?.status ?? '') ? 5000 : false })
   const data = review.data
-  const items = [...(data?.items ?? [])].sort((a, b) => {
+  const allItems = [...(data?.items ?? [])]
+  const items = allItems.filter(i => showAll || pendingListeningItems([i], data?.snapshot.clips ?? []) > 0).sort((a, b) => {
     const order: Record<string, number> = { reel: 0, flagged: 1, additional: 2 }
     return (order[a.queue] ?? 2) - (order[b.queue] ?? 2) || a.narrationId.localeCompare(b.narrationId)
   })
-  const pending = pendingListeningItems(items, data?.snapshot.clips ?? [])
-  const item = items[index]
+  const pending = pendingListeningItems(allItems, data?.snapshot.clips ?? [])
+  const item = allItems.find(i => i.id === selectedId) ?? items[0]
+  const index = items.findIndex(i => i.id === item?.id)
+  const setIndex = (n: number) => { setSelectedId(items[n]?.id ?? ''); setAudio(null) }
+  useEffect(() => {
+    if (item && !selectedId) setSelectedId(item.id)
+  }, [item, selectedId])
+  useEffect(() => { setAudio(null) }, [item?.id])
   const clip = data?.snapshot.clips.find(c => c.narration.id === item?.narrationId)
   const open = (id: string) => {
-    setReviewId(id); setIndex(0); setAudio('')
+    setReviewId(id); setSelectedId(''); setAudio(null)
     history.replaceState(null, '', `/listening?region=${encodeURIComponent(region)}&review=${id}`)
   }
   const act = async (fn: () => Promise<unknown>) => {
@@ -64,10 +74,10 @@ export function ListeningView() {
   })
   const snapshot = data?.snapshot ?? readiness.data?.snapshot
   return <div className="space-y-6">
-    <PageHeader title="Listening Review" description="Review staged audio, save your judgment, then explicitly approve the exact release set. No model or TTS calls." />
+    <PageHeader title="Listening Review" description="Audio and scripts are scored automatically. Clear passes are accepted; only exceptions need your attention. Creating or retrying a review runs a paid assessment with a $25 cap; unchanged results are reused." />
     <div className="flex flex-wrap gap-3">
       <select aria-label="Region" className="rounded border bg-background p-2" value={region} onChange={e => {
-        setRegion(e.target.value); setReviewId(''); setAudio(''); setIndex(0)
+        setRegion(e.target.value); setReviewId(''); setAudio(null); setSelectedId('')
         history.replaceState(null, '', `/listening?region=${encodeURIComponent(e.target.value)}`)
       }}>{regions.data?.regions.map(r => <option key={r.slug} value={r.slug}>{r.displayName}</option>)}</select>
       <Button disabled={busy} onClick={() => void create()}>Create release review</Button>
@@ -83,31 +93,45 @@ export function ListeningView() {
       <p>Structural readiness and listening approval are separate. Counts alone do not prove a good drive.</p>
       {(data?.blockers ?? readiness.data?.blockers ?? []).map(b => <p key={b} className="text-destructive">{b}</p>)}
       {data?.stale && <p role="alert" className="font-semibold text-destructive">This review is stale. Create a replacement; unchanged clip verdicts carry forward.</p>}
-      {data && <p>Required listening: {minutes(data.totalListeningMs)} · {items.filter(i => i.queue === 'reel').length} full reel clips · {items.filter(i => i.queue === 'flagged').length} additional flagged clips</p>}
-      {data && pending > 0 && <p>{pending} clips still need listening verdicts, advisory reasons, or technical checks before approval.</p>}
+      {data && <p>{allItems.length - pending} accepted · {pending} needing attention · {minutes(data.totalListeningMs)} unresolved audio</p>}
+      {data && pending > 0 && <p>{pending} clips await assessment or resolution before approval.</p>}
     </section>}
     {data && <div className="flex flex-wrap gap-3">
+      <p>{data.assessmentJob ? `Assessment ${data.assessmentJob.status}: ${data.assessmentJob.phase ?? ''}` : 'No automated assessment yet'}</p>
+      <Button disabled={busy || data.stale || ['queued', 'running'].includes(data.assessmentJob?.status ?? '')} onClick={() => void act(() => request(`listening-reviews/${reviewId}/assess`, 'POST'))}>Assess remaining clips</Button>
+      <Button variant="outline" onClick={() => { setShowAll(!showAll); setIndex(0); setAudio(null) }}>{showAll ? 'Show only exceptions' : 'Browse all clips'}</Button>
       <Button disabled={busy || data.stale} onClick={() => void act(async () => {
-        for (const i of items) await request(`listening-reviews/${reviewId}/technical/${i.id}`, 'POST')
+        for (const i of allItems) await request(`listening-reviews/${reviewId}/technical/${i.id}`, 'POST')
       })}>Check all audio (free)</Button>
-      <Button disabled={busy || data.stale || data.blockers.length > 0 || pending > 0 || items.length === 0} onClick={() => void act(() => request(`listening-reviews/${reviewId}/approve`, 'POST'))}>Approve release review</Button>
+      <Button disabled={busy || data.stale || data.blockers.length > 0 || pending > 0 || allItems.length === 0} onClick={() => void act(() => request(`listening-reviews/${reviewId}/approve`, 'POST'))}>Approve release review</Button>
       <Button disabled={busy || data.stale || !data.review.approvedAt} onClick={() => void act(async () => {
         if (!window.confirm(`Publish exactly these ${data.snapshot.clips.length} approved clips permanently?`)) return
         await request(`listening-reviews/${reviewId}/release`, 'POST')
       })}>Publish approved set</Button>
       {data.review.approvedAt && <p>Explicitly approved {new Date(data.review.approvedAt).toLocaleString()}</p>}
     </div>}
+    {data && <div className="overflow-auto"><table className="w-full text-sm"><thead><tr><th className="text-left">Clip</th><th>Status</th><th>Scores / 10</th></tr></thead><tbody>
+      {items.map((i, n) => { const c = data.snapshot.clips.find(c => c.narration.id === i.narrationId); const result = i.assessment?.result
+        return <tr key={i.id}><td><button className="p-2 text-left underline" onClick={() => { setIndex(n); setAudio(null) }}>{c?.cluster?.title ?? c?.members[0]?.name}</button></td>
+          <td>{i.verdict === 'good' ? (i.reviewer?.startsWith('model:') ? 'AI accepted' : 'Accepted') : i.verdict === 'needs_work' ? 'Flagged by you' : i.assessment?.status === 'complete' ? 'Needs attention' : i.assessment?.status ?? 'Awaiting assessment'}</td>
+          <td>{result ? Object.entries(result.judgment.scores).map(([k, v]) => `${k}: ${v}`).join(' · ') : i.assessment?.error ?? '—'}</td></tr> })}
+    </tbody></table>{!items.length && <p>No clips need attention. Browse all clips to inspect scores or listen.</p>}</div>}
     {item && clip && <section className="space-y-4 rounded border p-4">
       <div className="flex items-center gap-3">
-        <Button disabled={index === 0} onClick={() => { setIndex(index - 1); setAudio('') }}>Previous</Button>
-        <span>{index + 1} / {items.length} · {item.queue}</span>
-        <Button disabled={index >= items.length - 1} onClick={() => { setIndex(index + 1); setAudio('') }}>Next</Button>
+        <Button disabled={index <= 0} onClick={() => { setIndex(index - 1); setAudio(null) }}>Previous</Button>
+        <span>{index < 0 ? 'Selected accepted clip' : `${index + 1} / ${items.length}`} · {item.queue}</span>
+        <Button disabled={index >= items.length - 1} onClick={() => { setIndex(index + 1); setAudio(null) }}>Next</Button>
       </div>
       <h2 className="text-lg font-semibold">{clip.cluster?.title ?? clip.members[0]?.name} · {minutes(clip.narration.audio_duration_ms)}</h2>
       <Button disabled={busy} onClick={() => void act(async () => {
-        const r = await request<{ url: string }>(`listening-reviews/${reviewId}/audio/${item.narrationId}`); setAudio(r.url)
+        const r = await request<{ url: string }>(`listening-reviews/${reviewId}/audio/${item.narrationId}`); setAudio({ id: item.id, url: r.url })
       })}>Load private audio</Button>
-      {audio && <audio key={audio} controls src={audio} className="w-full" />}
+      {audio?.id === item.id && <audio key={audio.url} controls src={audio.url} className="w-full" />}
+      {item.assessment?.result && <div className="space-y-2"><p>{item.assessment.result.judgment.summary}</p>
+        <p className="text-sm">{item.assessment.result.model} · {item.assessment.result.policyVersion} · {new Date(item.assessment.result.judgedAt).toLocaleString()}</p>
+        {item.assessment.result.judgment.issues.map((issue, n) => <p key={n}>{issue.severity}: {issue.detail}{issue.atSeconds != null ? ` (${issue.atSeconds}s)` : ''}</p>)}
+        <p>{item.assessment.result.judgment.advisoryExplanation}</p></div>}
+      {item.assessment?.error && <p role="alert">{item.assessment.error}</p>}
       <p>{item.technical?.message ?? 'Technical audio check pending'}</p>
       <p className="whitespace-pre-wrap">{clip.narration.script}</p>
       <details><summary>Source attribution and automated findings</summary><pre className="overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify({ attribution: clip.narration.attribution, findings: clip.findings }, null, 2)}</pre></details>

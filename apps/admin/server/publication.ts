@@ -4,7 +4,7 @@ import { db } from '@skipper/db'
 import { inAnyBbox } from '@skipper/db/bbox'
 import { regions, pois, places } from '@skipper/db/schema'
 import { groundingHash, clusterFactsHash } from '@skipper/db/hash'
-import { isNarratableStoryPoi } from '@skipper/shared'
+import { RELEASE_ASSESSMENT_MODEL, RELEASE_ASSESSMENT_POLICY, isNarratableStoryPoi } from '@skipper/shared'
 import { parseBboxes } from './bbox'
 import { requiredCorridors } from './corridors'
 import { isHardReviewFinding, type ReviewFinding } from './review-findings'
@@ -192,6 +192,7 @@ export function buildReleaseQuery(query: ReturnType<typeof buildPublicationQuery
       select p.value from publication p join listening_reviews r on r.fingerprint = p.fingerprint
       where r.id = ${reviewId}::uuid and r.region_slug = ${slug}
       and r.narration_id is not distinct from ${narrationId}::uuid and r.approved_at is not null and r.published_at is null
+      ${reviewAcceptancePredicate()}
     ), stamped as (
       update narrations set released_at = now() where released_at is null and id in
       (select (c->'narration'->>'id')::uuid from approved, jsonb_array_elements(value->'clips') c)
@@ -213,13 +214,22 @@ export function buildReleaseQuery(query: ReturnType<typeof buildPublicationQuery
 export function buildApprovalQuery(query: ReturnType<typeof buildPublicationQuery>, reviewId: string, reviewer: string) {
   return sql`${query} update listening_reviews r set approved_at = now(), approved_by = ${reviewer}
       from publication p where r.id = ${reviewId}::uuid and r.fingerprint = p.fingerprint
-      and jsonb_array_length(p.value->'clips') > 0
+      ${reviewAcceptancePredicate()} returning r.id`
+}
+
+/** Shared by approval and release so policy changes cannot publish through an old approval. */
+function reviewAcceptancePredicate() {
+  return sql`      and jsonb_array_length(p.value->'clips') > 0
       and (select count(*) from listening_review_items i where i.review_id = r.id) = jsonb_array_length(p.value->'clips')
       and not exists (select 1 from listening_review_items i where i.review_id = r.id and (
-        i.verdict = 'needs_work' or (i.queue <> 'additional' and i.verdict <> 'good')
+        i.verdict <> 'good'
+        or (i.reviewer like 'model:%' and not exists(select 1 from release_assessments a
+          where a.id = i.assessment_id and a.status = 'complete' and a.model = ${RELEASE_ASSESSMENT_MODEL}
+          and a.policy_version = ${RELEASE_ASSESSMENT_POLICY}
+          and a.input_fingerprint = encode(sha256(convert_to(i.fingerprint || chr(10) || i.notes, 'UTF8')), 'hex')))
         or coalesce((i.technical->>'ok')::boolean, false) = false
         or (coalesce((i.technical->>'advisory')::boolean, false) and (trim(i.advisory_reason) = '' or i.verdict <> 'good'))
         or (trim(i.advisory_reason) = '' and exists(select 1 from jsonb_array_elements(p.value->'clips') c,
           jsonb_array_elements(c->'findings') f where c->'narration'->>'id' = i.narration_id::text and f->>'pass' = 'false'))
-      )) returning r.id`
+      ))`
 }

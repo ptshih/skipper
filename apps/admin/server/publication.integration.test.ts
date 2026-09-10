@@ -1,3 +1,5 @@
+import { RELEASE_ASSESSMENT_MODEL, RELEASE_ASSESSMENT_POLICY } from '@skipper/shared'
+import { listeningAssessmentFingerprint } from '@skipper/db/hash'
 import { expect, test } from 'bun:test'
 import { SQL as BunSQL } from 'bun'
 import { sql, type SQL } from 'drizzle-orm'
@@ -40,8 +42,26 @@ integration('Postgres: multi-box set, overlapping cluster, stale additions and m
     await db`update listening_review_items set verdict='needs_work' where review_id=${review} and narration_id=${n2}`
     expect(await execute(buildApprovalQuery(query, review, 'test'))).toHaveLength(0)
     await db`update listening_review_items set verdict='unreviewed' where review_id=${review} and narration_id=${n2}`
+    expect(await execute(buildApprovalQuery(query, review, 'test'))).toHaveLength(0)
+    await db`update listening_review_items set verdict='good' where review_id=${review} and narration_id=${n2}`
     expect(await execute(buildApprovalQuery(query, review, 'test'))).toHaveLength(1)
     expect((await db`select notes from listening_review_items where review_id=${review} limit 1`)[0].notes).toBe('Heard the full clip')
+    // Model acceptance is version-bound even after approval: policy changes and note edits
+    // must block publication, while the same exact assessment remains reusable.
+    const assessment = crypto.randomUUID()
+    await db`insert into release_assessments (id,input_fingerprint,model,policy_version,status) values
+      (${assessment},${listeningAssessmentFingerprint('test', 'Heard the full clip')},${RELEASE_ASSESSMENT_MODEL},${RELEASE_ASSESSMENT_POLICY},'complete')`
+    await db`update listening_review_items set reviewer=${`model:${RELEASE_ASSESSMENT_MODEL}`},assessment_id=${assessment} where review_id=${review} and narration_id=${n2}`
+    expect(await execute(buildApprovalQuery(query, review, 'test'))).toHaveLength(1)
+    await db`update release_assessments set policy_version='obsolete-policy' where id=${assessment}`
+    expect(await execute(buildApprovalQuery(query, review, 'test'))).toHaveLength(0)
+    expect((await execute(buildReleaseQuery(query, region.slug, review)))[0]).toMatchObject({ count: 0, approved: false })
+    await db`update release_assessments set policy_version=${RELEASE_ASSESSMENT_POLICY} where id=${assessment}`
+    await db`update listening_review_items set notes='Changed context' where review_id=${review} and narration_id=${n2}`
+    expect(await execute(buildApprovalQuery(query, review, 'test'))).toHaveLength(0)
+    await db`update listening_review_items set reviewer='test',notes='Heard the full clip',assessment_id=null where review_id=${review}`
+    await db`delete from release_assessments where id=${assessment}`
+
     await db`insert into narrations (id,poi_id,form,script,audio_url,audio_duration_ms) values (${n3},${p2},'scenic','new','new.m4a',1000)`
     const [stale] = await execute(buildReleaseQuery(query, region.slug, review))
     expect(stale.approved).toBe(false); expect(stale.count).toBe(0)

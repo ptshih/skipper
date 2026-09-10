@@ -14,7 +14,7 @@ numeric-flag parsers now fail closed instead of degrading to "no limit".
 `--apply --max-cost=25` spends on audio judgments and updates review/cache/job rows only.
 It never modifies narration audio or publishes content. Admin review creation automatically requests
 this scoped run under the founder's exception-driven review policy. Complete exact-input results are
-reused; failures remain visible and may be retried. Unknown billed outcomes reserve budget rather than
+reused; explicit capacity refusals retry with capped exponential backoff; other failures remain visible and may be retried. Unknown billed outcomes reserve budget rather than
 being reported as free. The existing explicit publication action remains separate.
 
 ## What this covers

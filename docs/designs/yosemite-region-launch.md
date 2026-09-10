@@ -4,7 +4,7 @@
 67 curated endpoints, 173 fact sheets, and 23 saved QA drives. California/Nevada local OSM extracts
 are verified. All staged audio passes decode/duration checks; all 253 selected route occurrences
 played with zero missing subjects. Follow-up operator fixes deployed successfully 2026-09-09 PDT; the final approval-button UI correction is also deployed and verified.
-The existing app completed the five-stop Valley simulation. Automated audio assessment is being integrated; public
+The existing app completed the five-stop Valley simulation. Exception-driven automated audio assessment is implemented and being deployed; public
 release remains pending; real GPS, device offline/audio behavior and a field drive remain follow-up checks.
 Yosemite remains unpublished and unannounced; no mobile build or App Store submission is required.
 
@@ -755,3 +755,14 @@ Founder subsequently requested model-led review: passing LLM judgments should co
 default, with low/uncertain scores presented for optional listening and flagging. This supersedes the
 mandatory human reel-listening requirement above. Implementation is pending; retain explicit release
 approval/publication, non-waivable technical failures, visible score provenance, and version freshness.
+
+
+### Automated acceptance validation (2026-09-09 PDT)
+
+The audio model accepted a valid Tuolumne Grove recording and rejected a deliberately mismatched
+script (audio fidelity 1/10, major issue). An initial calibration incorrectly dismissed mismatched
+metadata; policy v2 explicitly requires script/audio agreement and was retested successfully.
+Root checks pass. Disposable local Postgres tests cover unchanged cache acceptance, changed policy,
+changed context notes, stale content, concurrent edits and idempotent release. The additive assessment
+migration is applied. The worker is deployed before automatic admin dispatch. No release is authorized
+by a model verdict alone; Yosemite remains staged.
