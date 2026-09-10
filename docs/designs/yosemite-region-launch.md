@@ -5,7 +5,7 @@
 are verified. All staged audio passes decode/duration checks; all 253 selected route occurrences
 played with zero missing subjects. Follow-up operator fixes deployed successfully 2026-09-09 PDT; the final approval-button UI correction is also deployed and verified.
 The existing app completed the five-stop Valley simulation. Exception-driven automated audio assessment is deployed and verified; public
-focused one-at-a-time review UX is deployed; regional-context remediation is in progress; public release remains pending; real GPS, device offline/audio behavior and a field drive remain follow-up checks.
+focused one-at-a-time review UX is deployed; regional-context remediation is complete and the final review has 78 Good verdicts with zero blockers; public release remains pending; real GPS, device offline/audio behavior and a field drive remain follow-up checks.
 Yosemite remains unpublished and unannounced; no mobile build or App Store submission is required.
 
 The launch covers Yosemite's major driving corridors and the approaches from Groveland, Mariposa,
@@ -814,3 +814,7 @@ Repairs also remove inherited valley framing from Siesta Lake and Pothole Meadow
 regional audit and permanent cross-region safeguards are recorded in
 [narration region context](../decisions/narration-region-context.md). Existing accepted clips are
 preserved unless their content changes; new audio requires a replacement release review.
+
+Final replacement review **76382d75-fe0a-4194-886c-61249a49d85d** is current, with all 78 clips Good
+and no structural blockers. All 23 routes were replayed after the final audio changes: 253/253 clips
+played, zero missing subjects or queue conflicts. No public-release approval was supplied or recorded.

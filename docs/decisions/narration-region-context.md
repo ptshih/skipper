@@ -1,6 +1,6 @@
 # Narration context follows region geometry
 
-**Status:** Built 2026-09-10; Yosemite remediation and release assessment in progress. Public release remains gated.
+**Status:** Deployed and verified 2026-09-10. Five staged recordings repaired; final Yosemite review has 78 Good verdicts, zero blockers, and current route evidence. Public release remains gated.
 
 The old studio helper classified every coordinate west of one longitude as Lake Tahoe, and every
 other coordinate as Reno or Carson Valley. That assumption reached enrichment, story and scenic
@@ -50,3 +50,32 @@ Post before its paid retry. Future operator runs should still inspect the previe
 
 Tests cover Yosemite, multi-box gateway approaches, Tahoe, unknown/invalid/overlapping regions,
 a newly configured Moab region, qualified pronunciation, and combined region/ID selection.
+
+
+## Completion evidence
+
+Commit ea431418 deployed via Studio build 9a992602-000f-4fbf-8d48-779d27b40399 (SUCCESS).
+The updated job executed successfully as skipper-studio-f25vh. Root checks passed; no mobile or API
+contract changes. All 121 member subjects in the staged Yosemite publication set now resolve to
+“the wider Yosemite National Park area,” with no Tahoe/Reno/Carson labels.
+
+Savage was regenerated through the normal grounding gate. Ferguson and Tioga received fresh
+pronunciation-guided recordings; Tioga required a further take after the judge caught an omitted
+“made.” The final candidate scored source support/road context/fidelity 10 and writing/delivery 9.
+Siesta and Pothole received minimal phrase removals, fresh grounding judgments, and new audio.
+The 73 other narration versions were retained. Superseded audio remains backed up.
+
+All 23 saved drives were replayed with the final recordings: 253 selected, 253 played, zero missing,
+zero queue conflicts. The largest increase in a route's longest quiet window was 9.32 seconds,
+explained by shorter audio; existing access/intentional-silence notes remain dated evidence.
+
+Final review: 76382d75-fe0a-4194-886c-61249a49d85d. Assessment job
+7c6a3cfb-7cf9-4a1a-bcf3-0f74afa0ece1 succeeded: 78 Good, no pending items, no structural blockers,
+not stale. The final pass reused 77 judgments and cost $0.03174; the preceding five-change assessment
+cost $0.1372. Focused regional audio checks cost $0.097326, and Tioga's pre-save candidate check
+cost $0.031678. Savage's generation log reports ~$0.46 LLM plus ~$0.05 TTS; the two scenic grounding
+checks report $0.111835 LLM. TTS repair costs are estimates, and the interrupted mis-scoped attempt's
+charge is not included because its usage tally was lost. These are not claimed as a complete bill.
+
+No release approval or publication was performed. Public region discovery still lists Tahoe and
+Reno/Carson only. The operator can now approve the final review and explicitly publish its set.
