@@ -73,6 +73,8 @@ import {
   type BboxCorners,
 } from './bbox'
 import { mapWithConcurrency } from './concurrency'
+import { dispatchStudioJob } from './dispatch-job'
+import { isUniqueViolation } from './database-errors'
 import { draftCuratedPlaces, isAddressLike, isBusinessLike, isParkingLike, nameDisagrees, resolvePlaceInBboxes, type PlaceDraft, type ResolvedPlace } from './places'
 import { contentTypeForKey, presignGet } from './storage'
 import {
@@ -81,8 +83,6 @@ import {
   executionState,
   HttpError,
   jobExecutionLogsUrl,
-  runJob,
-  TriggerRejected,
   type BuildResult,
   type ExecState,
   type JobKind,
@@ -97,13 +97,6 @@ app.onError((err, c) => {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/** True for a Postgres unique_violation (SQLSTATE 23505) — how neon-http surfaces a partial-unique-index
- *  conflict. Lets the spend trigger turn a lost idempotency race into a clean 409 instead of a 500. (audit #1) */
-function isUniqueViolation(e: unknown): boolean {
-  const code = (e as { code?: unknown } | null)?.code
-  if (code === '23505') return true
-  return /duplicate key value|unique constraint|\b23505\b/i.test(String((e as { message?: unknown } | null)?.message ?? ''))
-}
 
 // Bounds on a fact_edit override (audit #10): its find/replace rides EVERY future extract fetch into the
 // grounded facts of every regeneration, so an unbounded/garbage write silently corrupts the corpus. A
@@ -1276,81 +1269,8 @@ app.post('/admin/jobs', async (c) => {
 
   const kind = body.kind as JobKind // buildJobArgs validated it against the same vocabulary
 
-  // Idempotency: one in-flight run per target (a lost-response retry / double-click can't double-spend).
-  // This SELECT is the fast-path 409; the DB partial-unique index `studio_jobs_active_target_uq`
-  // (migration 0026) is the ATOMIC backstop for a concurrent submit that races PAST this check — caught
-  // at the insert below. (audit #1)
-  const targetCond = build.targetSlug
-    ? eq(studioJobs.targetSlug, build.targetSlug)
-    : build.targetId
-      ? eq(studioJobs.targetId, build.targetId)
-      : undefined
-  const active = await db
-    .select({ id: studioJobs.id })
-    .from(studioJobs)
-    .where(and(eq(studioJobs.kind, kind), inArray(studioJobs.status, ['queued', 'running']), targetCond))
-    .limit(1)
-  if (active.length) {
-    return c.json({ error: 'conflict', message: 'A run for this target is already in progress.' }, 409)
-  }
-
-  const id = crypto.randomUUID()
-  const triggeredBy = c.get('adminEmail')
-  try {
-    await db.insert(studioJobs).values({
-      id,
-      kind,
-      status: 'queued',
-      dryRun: build.dryRun,
-      targetSlug: build.targetSlug ?? null,
-      targetId: build.targetId ?? null,
-      args: build.args,
-      triggeredBy,
-    })
-  } catch (e) {
-    // A concurrent submit that slipped past the SELECT above loses the unique-index race here → the
-    // same 409, no double-spend. (Before migration 0026 is APPLIED the index doesn't exist, so this
-    // branch never fires and the SELECT-409 stays the sole guard — deploy-safe either way.) (audit #1)
-    if (isUniqueViolation(e)) {
-      return c.json({ error: 'conflict', message: 'A run for this target is already in progress.' }, 409)
-    }
-    throw e
-  }
-
-  let execShortName = ''
-  try {
-    execShortName = await runJob(build.args, { STUDIO_JOB_ID: id, STUDIO_JOB_TRIGGERED_BY: triggeredBy })
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    if (e instanceof TriggerRejected) {
-      // Cloud Run definitively refused — nothing was created, so settle the row and free the target.
-      await db
-        .update(studioJobs)
-        .set({ status: 'failed', error: msg, endedAt: new Date() })
-        .where(and(eq(studioJobs.id, id), inArray(studioJobs.status, ['queued', 'running'])))
-      return c.json({ error: 'trigger_failed', message: msg }, 502)
-    }
-    // ⚠ AMBIGUOUS — leave it QUEUED. A network reset or an unreadable body means we never learned
-    // whether the execution was created; marking it 'failed' with a NULL execution name released the
-    // in-flight lock and told the operator nothing had started, so the natural retry ran the same PAID
-    // work again, alongside the first. Queued is the honest state: `beginJob` flips it to 'running'
-    // and backfills the execution name if it really did start, and `expireStuckJob` settles it if it
-    // did not. The target stays locked meanwhile, which is the safe direction.
-    console.error('[admin] jobs:run outcome unknown — leaving the row queued', id, e)
-    return c.json(
-      {
-        error: 'trigger_unknown',
-        message: `${msg} — the run may have started. It is left queued; the Jobs page will settle it either way.`,
-      },
-      502,
-    )
-  }
-  if (execShortName) {
-    await db.update(studioJobs).set({ cloudRunExecution: execShortName }).where(eq(studioJobs.id, id))
-  }
-
-  const row = (await db.select().from(studioJobs).where(eq(studioJobs.id, id)).limit(1))[0]
-  return c.json({ job: row }, 201)
+  const dispatched = await dispatchStudioJob(kind, build, c.get('adminEmail'))
+  return c.json(dispatched.body, dispatched.status)
 })
 
 // POI corpus — sources, narration usage, attribution, and region coverage.

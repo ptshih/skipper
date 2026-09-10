@@ -8,6 +8,15 @@ The 2026-08-02 pass audited every CLI in `packages/studio/src` rather than the s
 `generate-cluster-narrations`'s preview also SPENDS (this doc had claimed only one CLI's did), and the
 numeric-flag parsers now fail closed instead of degrading to "no limit".
 
+## Release audio assessment
+
+`packages/studio/src/assess-listening-review.ts --review=<uuid>` is a free preview;
+`--apply --max-cost=25` spends on audio judgments and updates review/cache/job rows only.
+It never modifies narration audio or publishes content. Admin review creation automatically requests
+this scoped run under the founder's exception-driven review policy. Complete exact-input results are
+reused; failures remain visible and may be retried. Unknown billed outcomes reserve budget rather than
+being reported as free. The existing explicit publication action remains separate.
+
 ## What this covers
 
 The studio pipeline's **one-off ops CLIs** — `packages/studio/src/*.ts` you run by hand via

@@ -205,3 +205,8 @@ export function clusterFactsHash(input: ClusterHashInput): string | null {
     dropped: [...input.dropped],
   })
 }
+
+/** Review evidence is bound to the exact clip version and the context notes supplied to the judge. */
+export function listeningAssessmentFingerprint(clipFingerprint: string, notes: string): string {
+  return createHash('sha256').update(`${clipFingerprint}\n${notes}`).digest('hex')
+}

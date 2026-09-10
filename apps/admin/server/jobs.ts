@@ -68,6 +68,7 @@ export class HttpError extends Error {
 // type says. `Partial` keeps `SCRIPTS[kind]` honestly `string | undefined` and keeps the "unknown
 // kind" 400 below a real check rather than one TypeScript believes is dead.
 export const SCRIPTS: Partial<Record<JobKind, string>> = {
+  assess_listening_review: 'packages/studio/src/assess-listening-review.ts',
   resynth_narration: 'packages/studio/src/resynth-narration.ts',
   sweep_orphans: 'packages/studio/src/sweep-orphans.ts',
   discover_pois: 'packages/studio/src/discover-pois.ts',
@@ -232,6 +233,15 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
   const kind = body.kind as JobKind
   const script = SCRIPTS[kind]
   if (!script) throw new HttpError(400, `unknown kind: ${String(body.kind)}`)
+
+  if (kind === 'assess_listening_review') {
+    const id = str(body.reviewId)
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new HttpError(400, 'A saved review ID is required')
+    const cap = Number(body.maxCostUsd ?? 25)
+    if (!Number.isFinite(cap) || cap <= 0 || cap > 100) throw new HttpError(400, 'Assessment cap must be between 0 and 100')
+    const apply = body.apply === true
+    return { args: [script, `--review=${id}`, `--max-cost=${cap}`, ...(apply ? ['--apply'] : [])], dryRun: !apply, spends: apply, targetId: id }
+  }
 
   if (kind === 'resynth_narration') {
     const poiId = str(body.poiId)

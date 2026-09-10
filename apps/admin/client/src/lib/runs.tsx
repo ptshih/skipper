@@ -24,6 +24,7 @@ type KindMeta = { label: string; icon: ElementType }
 // fallback icon while its neighbours read as English. A hand-kept parallel copy of a closed vocabulary
 // is the repo's most-repeated bug shape; this makes the copy answer to its source.
 const CURRENT_KIND_META: Record<JobKind, KindMeta> = {
+  assess_listening_review: { label: 'Assess release audio', icon: Activity },
   resynth_narration: { label: 'Re-synth narration', icon: RefreshCw },
   refetch_facts:   { label: 'Re-fetch facts',    icon: RefreshCw },
   sweep_orphans:   { label: 'Sweep orphans',     icon: Trash2 },

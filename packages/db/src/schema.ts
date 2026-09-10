@@ -1063,6 +1063,22 @@ export const listeningReviews = pgTable('listening_reviews', {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
+// Exact-input cache shared by replacement reviews. A pending row owns the paid call;
+// another session reuses the result instead of paying to judge the same recording again.
+export const releaseAssessments = pgTable('release_assessments', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  inputFingerprint: text('input_fingerprint').notNull(),
+  model: text('model').notNull(),
+  policyVersion: text('policy_version').notNull(),
+  status: text('status').notNull().default('pending'),
+  jobId: uuid('job_id'),
+  result: jsonb('result'),
+  error: text('error'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, t => [uniqueIndex('release_assessment_input_uq').on(t.inputFingerprint, t.model, t.policyVersion),
+  check('release_assessment_status_valid', sql`${t.status} in ('pending', 'complete', 'failed')`)])
+
 export const listeningReviewItems = pgTable('listening_review_items', {
   id: uuid('id').defaultRandom().primaryKey(),
   reviewId: uuid('review_id').notNull().references(() => listeningReviews.id, { onDelete: 'cascade' }),
@@ -1073,6 +1089,7 @@ export const listeningReviewItems = pgTable('listening_review_items', {
   notes: text('notes').notNull().default(''),
   advisoryReason: text('advisory_reason').notNull().default(''),
   technical: jsonb('technical'),
+  assessmentId: uuid('assessment_id').references(() => releaseAssessments.id, { onDelete: 'set null' }),
   reviewer: text('reviewer'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, t => [uniqueIndex('listening_review_item_uq').on(t.reviewId, t.narrationId),

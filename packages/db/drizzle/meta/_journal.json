@@ -351,6 +351,13 @@
       "when": 1788988249025,
       "tag": "0049_quick_landau",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1789018028428,
+      "tag": "0050_magical_the_anarchist",
+      "breakpoints": true
     }
   ]
 }

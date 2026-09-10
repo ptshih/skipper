@@ -199,7 +199,7 @@ describe('buildJobArgs — numeric flag validation (the server is the trust boun
 
 describe('a trigger whose outcome is UNKNOWN must not free the target', () => {
   const jobsSrc = readFileSync(join(import.meta.dir, 'jobs.ts'), 'utf8')
-  const indexSrc = readFileSync(join(import.meta.dir, 'index.ts'), 'utf8')
+  const indexSrc = readFileSync(join(import.meta.dir, 'dispatch-job.ts'), 'utf8')
 
   // runJob threw the same Error for "Cloud Run refused" and "we never read the response", and the
   // route settled the row 'failed' either way — releasing the in-flight lock with a NULL execution
@@ -336,4 +336,12 @@ describe('buildJobArgs — targetId is per-region, aligned with the studio begin
     expect(r.args).toContain('--max-cost=2')
     expect(r.args).toContain('--apply')
   })
+})
+
+test('release assessment requires an exact review and bounded spend, preview by default', () => {
+  const reviewId = '11111111-1111-4111-8111-111111111111'
+  expect(buildJobArgs({ kind: 'assess_listening_review', reviewId }).dryRun).toBe(true)
+  expect(buildJobArgs({ kind: 'assess_listening_review', reviewId, apply: true }).args).toContain('--apply')
+  expect(() => buildJobArgs({ kind: 'assess_listening_review', reviewId, maxCostUsd: 101 })).toThrow()
+  expect(() => buildJobArgs({ kind: 'assess_listening_review', reviewId: '--apply' })).toThrow()
 })

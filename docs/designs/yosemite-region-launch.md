@@ -4,14 +4,32 @@
 67 curated endpoints, 173 fact sheets, and 23 saved QA drives. California/Nevada local OSM extracts
 are verified. All staged audio passes decode/duration checks; all 253 selected route occurrences
 played with zero missing subjects. Follow-up operator fixes deployed successfully 2026-09-09 PDT; the final approval-button UI correction is also deployed and verified.
-The existing app completed the five-stop Valley simulation. Founder listening approval and public
-release remain pending; real GPS, device offline/audio behavior and a field drive remain follow-up checks.
+The existing app completed the five-stop Valley simulation. Automated audio assessment is being integrated; public
+release remains pending; real GPS, device offline/audio behavior and a field drive remain follow-up checks.
 Yosemite remains unpublished and unannounced; no mobile build or App Store submission is required.
 
 The launch covers Yosemite's major driving corridors and the approaches from Groveland, Mariposa,
 Oakhurst and Lee Vining, using the existing Skipper persona and voice. The installed mobile app stays
-unchanged. Desk review, saved route simulations, audio checks and founder listening approval establish
+unchanged. Desk review, saved route simulations, audio checks and automated editorial acceptance establish
 release readiness; a real drive remains follow-up validation. Documented silence is acceptable.
+
+## Exception-driven acceptance (2026-09-09)
+
+The founder superseded mandatory human listening: judge every staged recording and its script,
+accept clear model passes automatically, and request attention only for low, uncertain or failed
+assessments or human flags. The sampled reel remains optional browsing. Every clip now requires
+acceptance, including legacy additional items. Human Good/Needs work takes precedence over automation.
+
+`assess-listening-review --review=<id>` previews; `--apply` performs private audio decode/duration
+checks and Gemini audio-input assessment. Review creation dispatches it automatically, with a $25
+per-run cap. Cached exact clip/context/model/policy judgments are reused across sessions. Scores cover
+supplied-source support, road context, writing, delivery and fidelity; source support is not a fresh
+web fact-check. Hard technical findings cannot be waived. Unknown provider charges retain a conservative
+budget reservation, and known usage includes reasoning tokens. No audio regeneration occurs here.
+
+The UI defaults to exceptions and exposes scores, reasons, optional audio, human overrides and job
+progress. Review approval and public publication remain explicit actions. No mobile change is needed.
+Historical listening requirements below record earlier stages and are superseded by this section.
 
 ## Implemented operator workflow
 
