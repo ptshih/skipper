@@ -5,7 +5,7 @@ import Foundation
 /// storage actor, feature models, navigation, and views.
 @MainActor
 enum DebugDependencies {
-    static let scenarios: Set<String> = ["offline-library", "offline-empty", "signed-out", "migration-deferred", "planner-account-retry", "planner-account-lost-ack", "planner-reset-during-stream", "planner-map-landmark", "offline-no-playable-clips", "corrupt-credentials-recovery", "version-force", "version-recommended", "version-force-delayed-sheet", "version-recommended-delayed-planner", "driving-qa-two-stops", "settings-account-lifecycle"]
+    static let scenarios: Set<String> = ["offline-library", "offline-empty", "signed-out", "migration-deferred", "planner-account-retry", "planner-account-lost-ack", "planner-reset-during-stream", "planner-map-landmark", "offline-no-playable-clips", "corrupt-credentials-recovery", "version-force", "version-recommended", "version-force-delayed-sheet", "version-recommended-delayed-planner", "driving-qa-two-stops", "settings-account-lifecycle", "driving-qa-live", "cold-link-signed-in", "cold-link-signed-out"]
 
     /// Shared fixture/diagnostic destination; unavailable for production or invalid launches.
     static func runDirectory(for launch: AppLaunchConfiguration) -> URL? {
@@ -29,7 +29,7 @@ enum DebugDependencies {
         let marker = documents.appendingPathComponent("fixture-seeded")
         if !FileManager.default.fileExists(atPath: marker.path) {
             if !scenario.hasPrefix("planner-"), scenario != "offline-empty" {
-                let manifestCase = scenario == "driving-qa-two-stops" ? "v5-driving-qa-two-stops" : "v5-partial-shared"
+                let manifestCase = (scenario == "driving-qa-two-stops" || scenario == "driving-qa-live") ? "v5-driving-qa-two-stops" : "v5-partial-shared"
                 let input = try fixture(manifestCase, file: "manifests", resources: resources)
                 guard let files = input["files"] as? [String: [String: Any]] else { throw ContractError() }
                 for (path, contents) in files {
@@ -46,7 +46,7 @@ enum DebugDependencies {
                     else { throw ContractError() }
                     try data.write(to: destination, options: .atomic)
                 }
-                if scenario == "driving-qa-two-stops" {
+                if scenario == "driving-qa-two-stops" || scenario == "driving-qa-live" {
                     let clip0Dest = documents.appendingPathComponent("drives/00000002-0000-4000-8000-000000000003/0.m4a")
                     try FileManager.default.createDirectory(at: clip0Dest.deletingLastPathComponent(), withIntermediateDirectories: true)
                     let aacSource = resources.appendingPathComponent("audio/create-continuity.m4a")
@@ -65,6 +65,24 @@ enum DebugDependencies {
             }
             try Data(scenario.utf8).write(to: marker, options: .atomic)
         } else if try String(contentsOf: marker, encoding: .utf8) != scenario { throw ContractError() }
+
+        var scriptedPolyline: [LngLat] = []
+        if scenario == "driving-qa-live" {
+            let manifestFixture = try fixture("v5-driving-qa-two-stops", file: "manifests", resources: resources)
+            guard let manifestObj = manifestFixture["manifest"] as? [String: Any],
+                  let detailObj = manifestObj["detail"] as? [String: Any],
+                  let rawCoords = detailObj["polyline"] as? [[Double]],
+                  !rawCoords.isEmpty else {
+                throw ContractError()
+            }
+            scriptedPolyline = rawCoords.compactMap { pair in
+                guard pair.count >= 2 else { return nil }
+                return LngLat(longitude: pair[0], latitude: pair[1])
+            }
+            guard scriptedPolyline.count == rawCoords.count, !scriptedPolyline.isEmpty else {
+                throw ContractError()
+            }
+        }
 
         let input = try fixture("unchunked-fresh-offline", file: "credentials", resources: resources)
         guard let rows = input["rows"] as? [[String: Any]], let now = input["now"] as? String,
@@ -85,7 +103,10 @@ enum DebugDependencies {
             values[.init(service: "app:no-auth", key: "skipper_session_data")] = Data(adminSessionJson.utf8)
             defaults.set("1", forKey: "skipper.simMode")
         }
-        if scenario == "signed-out" { values[.init(service: "app:no-auth", key: "skipper_cookie")] = Data("{}".utf8) }
+        if scenario == "signed-out" || scenario == "cold-link-signed-out" || flow?["signedOut"] as? Bool == true {
+            values[.init(service: "app:no-auth", key: "skipper_cookie")] = Data("{}".utf8)
+            values.removeValue(forKey: .init(service: "app:no-auth", key: "skipper_session_data"))
+        }
         let keychain = try DebugKeychain(rows: values, unavailable: scenario == "migration-deferred", file: documents.appendingPathComponent("mock-keychain.json"))
         let clock = DebugClock(date: date)
         let vault = CredentialVault(keychain: keychain, clock: clock)
@@ -100,15 +121,25 @@ enum DebugDependencies {
                 _ = await storage.deleteAllDriveDownloads()
             })
         let initialTab: MainTab?
-        if scenario == "driving-qa-two-stops" {
+        if scenario == "driving-qa-two-stops" || scenario == "driving-qa-live" {
             initialTab = .library
         } else if let rawTab = flow?["initialTab"] as? String {
             guard let tab = MainTab(rawValue: rawTab) else { throw ContractError() }
             initialTab = tab
         } else { initialTab = nil }
+
+        let coldOpenURL: URL?
+        if let raw = flow?["coldOpenURL"] as? String {
+            guard let url = URL(string: raw), url.scheme?.lowercased() == "skipper" else { throw ContractError() }
+            coldOpenURL = url
+        } else {
+            coldOpenURL = nil
+        }
+
         return AppDependencies(api: api, planner: PlannerClient(baseURL: URL(string: "https://api.invalid")!, transport: transport, network: network),
             documentsURL: documents, launch: launch, session: session, storage: storage, network: network, defaults: defaults, preview: nil, analytics: nil,
-            makePlayback: { DebugPlaybackServices.make(scenario: scenario, session: session, date: date, root: documents) }, initialTab: initialTab)
+            makePlayback: { DebugPlaybackServices.make(scenario: scenario, session: session, date: date, root: documents, polyline: scriptedPolyline) },
+            initialTab: initialTab, coldOpenURL: coldOpenURL)
     }
     static func downloader(for launch: AppLaunchConfiguration, resources: URL) throws -> any StorageFileDownloader {
         guard case .uiTest(let scenario, _, _) = launch.mode,

@@ -80,6 +80,11 @@ final class DriveDetailViewModel {
         defer { if current == generation { isLoading = false } }
         errorMessage = nil; needsAccount = false; freshDetail = nil; isUpdatable = false
         topUpTask?.cancel()
+        if let session, AccountEntryPolicy.canOfferSignIn(in: session.state) {
+            showWall(source: "drive_detail")
+            manifest = nil
+            return
+        }
         do {
             let loaded = try await api.drive(id: driveId)
             guard current == generation, !Task.isCancelled, account == session?.user?.id else { return }

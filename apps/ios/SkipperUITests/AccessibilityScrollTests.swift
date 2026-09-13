@@ -74,13 +74,181 @@ final class AccessibilityScrollTests: XCTestCase {
         }
     }
 
+    // MARK: - Gap E: iPhone SE AX5
+
+    func testSEAX5DrivingDepartureTransportAndWrapRemainReachable() {
+        let fixture = FixtureApp(scenario: .drivingQATwoStops)
+        fixture.launch()
+        defer { fixture.application.terminate() }
+
+        // Open drive detail -> tap start
+        XCTAssertTrue(fixture.element("screen.library").waitForExistence(timeout: 10))
+        let drive = fixture.element("library.drive.00000002-0000-4000-8000-000000000003")
+        XCTAssertTrue(drive.waitForExistence(timeout: 5))
+        drive.tap()
+        XCTAssertTrue(fixture.element("screen.drive-detail").waitForExistence(timeout: 5))
+        let startButton = fixture.element("drive.start")
+        XCTAssertTrue(startButton.waitForExistence(timeout: 5))
+        startButton.tap()
+
+        // Scoped scroll inside driving-screen
+        let scroll = fixture.application.scrollViews.matching(identifier: "driving-screen").firstMatch
+        XCTAssertTrue(scroll.waitForExistence(timeout: 5))
+        let simulateButton = fixture.element("start-drive")
+        reveal(in: scroll, fixture: fixture, description: "departure gate start-drive under AX5",
+               targetFrame: { simulateButton.exists ? simulateButton.frame : nil }) {
+            simulateButton.exists && simulateButton.isHittable && self.isFullyVisible(simulateButton, in: scroll, app: fixture.application)
+        }
+        capture(fixture, "se-ax5-gate-start-hittable")
+        simulateButton.tap()
+
+        // Wait for Stop 0 to complete and Stop 1 to become active (1 / 2 stops)
+        let stop1State = fixture.application.staticTexts.matching(
+            NSPredicate(format: "label == %@ OR identifier == %@", "1 / 2 stops", "1 / 2 stops")
+        ).firstMatch
+        XCTAssertTrue(stop1State.waitForExistence(timeout: 20))
+
+        let nowPlayingText = fixture.application.staticTexts.matching(
+            NSPredicate(format: "label == %@ OR identifier == %@", "NOW PLAYING", "NOW PLAYING")
+        ).firstMatch
+        XCTAssertTrue(nowPlayingText.waitForExistence(timeout: 10))
+
+        // Transport Pause and Resume under AX5
+        let pauseButton = fixture.application.buttons["Pause"]
+        reveal(in: scroll, fixture: fixture, description: "transport Pause button under AX5",
+               targetFrame: { pauseButton.exists ? pauseButton.frame : nil }) {
+            pauseButton.exists && pauseButton.isHittable && self.isFullyVisible(pauseButton, in: scroll, app: fixture.application)
+        }
+        capture(fixture, "se-ax5-transport-pause-hittable")
+        pauseButton.tap()
+
+        let pausedText = fixture.application.staticTexts.matching(
+            NSPredicate(format: "label == %@ OR identifier == %@", "PAUSED", "PAUSED")
+        ).firstMatch
+        XCTAssertTrue(pausedText.waitForExistence(timeout: 5))
+
+        let resumeButton = fixture.application.buttons["Resume"]
+        reveal(in: scroll, fixture: fixture, description: "transport Resume button under AX5",
+               targetFrame: { resumeButton.exists ? resumeButton.frame : nil }) {
+            resumeButton.exists && resumeButton.isHittable && self.isFullyVisible(resumeButton, in: scroll, app: fixture.application)
+        }
+        capture(fixture, "se-ax5-transport-resume-hittable")
+        resumeButton.tap()
+
+        XCTAssertTrue(nowPlayingText.waitForExistence(timeout: 5))
+
+        // Pull over button hittability under AX5: reveal in scroll before asserting hittable
+        let pullOverButton = fixture.application.buttons["Pull over"]
+        reveal(in: scroll, fixture: fixture, description: "transport Pull over button under AX5",
+               targetFrame: { pullOverButton.exists ? pullOverButton.frame : nil }) {
+            pullOverButton.exists && pullOverButton.isHittable && self.isFullyVisible(pullOverButton, in: scroll, app: fixture.application)
+        }
+        capture(fixture, "se-ax5-transport-pullover-hittable")
+
+        // Forward 15 seconds: reveal in scroll before hittability/tap, then tap x3
+        let forwardButton = fixture.application.buttons["Forward 15 seconds"]
+        reveal(in: scroll, fixture: fixture, description: "transport Forward 15 seconds under AX5",
+               targetFrame: { forwardButton.exists ? forwardButton.frame : nil }) {
+            forwardButton.exists && forwardButton.isHittable && self.isFullyVisible(forwardButton, in: scroll, app: fixture.application)
+        }
+        capture(fixture, "se-ax5-transport-forward-hittable")
+        forwardButton.tap()
+        forwardButton.tap()
+        forwardButton.tap()
+
+        // Bounded wait for wrap completion (~45s)
+        let wrapText = fixture.application.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS[c] %@", "That's a wrap")
+        ).firstMatch
+        XCTAssertTrue(wrapText.waitForExistence(timeout: 45))
+
+        // Verify Ride again and Back to your drive controls: reveal both in scroll
+        let rideAgainButton = fixture.application.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@ OR identifier == %@", "Ride again", "ride-again")
+        ).firstMatch
+        reveal(in: scroll, fixture: fixture, description: "wrap completion Ride again button under AX5",
+               targetFrame: { rideAgainButton.exists ? rideAgainButton.frame : nil }) {
+            rideAgainButton.exists && rideAgainButton.isHittable && self.isFullyVisible(rideAgainButton, in: scroll, app: fixture.application)
+        }
+        capture(fixture, "se-ax5-wrap-rideagain-hittable")
+
+        let backButton = fixture.application.buttons.matching(
+            NSPredicate(format: "label CONTAINS[c] %@ OR identifier == %@", "Back to your drive", "back-to-drive")
+        ).firstMatch
+        reveal(in: scroll, fixture: fixture, description: "wrap completion back button under AX5",
+               targetFrame: { backButton.exists ? backButton.frame : nil }) {
+            backButton.exists && backButton.isHittable && self.isFullyVisible(backButton, in: scroll, app: fixture.application)
+        }
+        capture(fixture, "se-ax5-wrap-back-hittable")
+        backButton.tap()
+
+        XCTAssertTrue(fixture.element("screen.library").waitForExistence(timeout: 5))
+    }
+
+    func testSEAX5PlannerComposerAndProposalCardRemainReachable() {
+        let fixture = FixtureApp(scenario: .plannerAccountRetry)
+        fixture.launch()
+        defer { fixture.application.terminate() }
+
+        // Planner composer bar: verify input field and send button are visible and hittable
+        let inputField = fixture.element("planner.input")
+        XCTAssertTrue(inputField.waitForExistence(timeout: 10))
+        XCTAssertTrue(inputField.isHittable)
+
+        let sendButton = fixture.element("planner.send")
+        XCTAssertTrue(sendButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(sendButton.isHittable)
+        capture(fixture, "se-ax5-planner-composer-hittable")
+
+        // Tap input, type prompt, and send
+        inputField.tap()
+        inputField.typeText("A quiet fixture drive")
+        sendButton.tap()
+
+        // Proposal card appears inside scroll container
+        let proposal = fixture.element("planner.proposal")
+        XCTAssertTrue(proposal.waitForExistence(timeout: 10))
+        let scroll = fixture.application.scrollViews.firstMatch
+
+        // Make drive button: reveal in scroll before asserting hittable / tapping
+        let makeButton = fixture.element("proposal.make")
+        reveal(in: scroll, fixture: fixture, description: "planner proposal make button under AX5",
+               targetFrame: { makeButton.exists ? makeButton.frame : nil }) {
+            makeButton.exists && makeButton.isHittable && self.isFullyVisible(makeButton, in: scroll, app: fixture.application)
+        }
+        capture(fixture, "se-ax5-planner-proposal-card-hittable")
+        makeButton.tap()
+
+        // Sign in button: reveal in scroll before asserting hittable / tapping
+        let signInButton = fixture.element("proposal.sign-in")
+        reveal(in: scroll, fixture: fixture, description: "planner proposal sign in button under AX5",
+               targetFrame: { signInButton.exists ? signInButton.frame : nil }) {
+            signInButton.exists && signInButton.isHittable && self.isFullyVisible(signInButton, in: scroll, app: fixture.application)
+        }
+        capture(fixture, "se-ax5-planner-proposal-signin-hittable")
+        signInButton.tap()
+
+        // Auth sheet appears with hittable fields
+        let emailField = fixture.element("auth.email")
+        XCTAssertTrue(emailField.waitForExistence(timeout: 5))
+        XCTAssertTrue(emailField.isHittable)
+        capture(fixture, "se-ax5-planner-auth-sheet-hittable")
+    }
+
     private func reveal(in scrollContainer: XCUIElement, fixture: FixtureApp, description: String,
                         targetFrame: () -> CGRect?,
                         file: StaticString = #filePath, line: UInt = #line,
                         isRevealed: () -> Bool) {
-        XCTAssertTrue(scrollContainer.waitForExistence(timeout: 5), file: file, line: line)
-        for _ in 0..<12 {
+        var lastDirection: CGFloat?
+        for attempt in 0..<12 {
             if isRevealed() { return }
+            if attempt == 0 {
+                guard scrollContainer.waitForExistence(timeout: 5) else {
+                    capture(fixture, "unreachable-\(description)")
+                    XCTFail("Required content/control is offscreen and no scroll view exists to reveal it: \(description)", file: file, line: line)
+                    return
+                }
+            }
             let viewport = visibleViewport(scrollContainer, app: fixture.application)
             guard viewport.height > 40, viewport.width > 0 else {
                 XCTFail("No unobscured scroll viewport for \(description)", file: file, line: line)
@@ -90,11 +258,20 @@ final class AccessibilityScrollTests: XCTestCase {
             // swipe can start on that bar; derive this gesture from the unobscured frame.
             // Align a known target rather than jumping past a tall AX5 paragraph.
             let desiredDelta = targetFrame().map { $0.midY - viewport.midY } ?? viewport.height * 0.4
-            let delta = max(-viewport.height * 0.4, min(viewport.height * 0.4, desiredDelta))
+            let direction: CGFloat = desiredDelta >= 0 ? 1 : -1
+            let inset: CGFloat = 20
+            var travel = min(abs(desiredDelta), viewport.height * 0.4)
+            if let lastDirection, lastDirection != direction {
+                travel /= 2
+            }
+            lastDirection = direction
+            let startY = desiredDelta >= 0 ? viewport.maxY - inset : viewport.minY + inset
+            let endY = desiredDelta >= 0 ? startY - travel : startY + travel
+            let x = viewport.midX
             let origin = fixture.application.coordinate(withNormalizedOffset: .zero)
-            let start = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.midY + delta / 2))
-            let end = origin.withOffset(CGVector(dx: viewport.midX, dy: viewport.midY - delta / 2))
-            start.press(forDuration: 0.05, thenDragTo: end)
+            let start = origin.withOffset(CGVector(dx: x, dy: startY))
+            let end = origin.withOffset(CGVector(dx: x, dy: endY))
+            start.press(forDuration: 0.1, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.3)
         }
         if isRevealed() { return }
         capture(fixture, "unreachable-\(description)")
@@ -102,7 +279,8 @@ final class AccessibilityScrollTests: XCTestCase {
     }
 
     private func visibleViewport(_ container: XCUIElement, app: XCUIApplication) -> CGRect {
-        var viewport = container.frame.intersection(app.frame)
+        let base = container.exists ? container.frame : app.frame
+        var viewport = base.intersection(app.frame)
         let tabBar = app.tabBars.firstMatch
         if tabBar.exists && tabBar.isHittable && viewport.intersects(tabBar.frame) {
             viewport.size.height = max(0, tabBar.frame.minY - viewport.minY)

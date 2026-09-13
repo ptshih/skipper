@@ -308,6 +308,96 @@ import XCTest
         XCTAssertFalse(model.needsAccount, "Deferred state must preserve deferred policy without forcing signIn wall")
     }
 
+    func testLoadWhileSignedOutWithLocalContentPresentsAccountWallWithoutNetworkCall() async throws {
+        let rig = try DetailRig(driveID: driveID)
+        defer { rig.removeFiles() }
+        try await rig.seed([0, 1])
+        await rig.network.setOffline(true)
+        await rig.api.fail(status: 500)
+
+        let clock = FixedAuthClock(date: authDate("2026-09-01T00:00:00Z")!)
+        let value = syntheticSession(anonymous: false)
+        let vault = CredentialVault(keychain: try syntheticKeychain(session: value), clock: clock)
+        let auth = AuthTestService(session: value)
+        let session = SessionStore(auth: auth, vault: vault, clock: clock, purgeDownloads: {})
+        await session.start()
+        try await session.signOut()
+        XCTAssertEqual(session.state, .signedOut)
+
+        let events = DetailEvents()
+        let model = rig.model(session: session, analytics: { events.record($0, $1) })
+
+        // First load
+        await model.load()
+        XCTAssertTrue(model.needsAccount)
+        XCTAssertNil(model.manifest)
+        XCTAssertNil(model.errorMessage)
+        XCTAssertFalse(model.isLoading)
+        XCTAssertTrue(model.localAudioURLs.isEmpty)
+        XCTAssertEqual(model.gate, .nothingSaved)
+        let apiCalls = await rig.api.calls
+        XCTAssertEqual(apiCalls, 0)
+
+        // Second load: wall event recorded exactly once across 2 loads
+        await model.load()
+        XCTAssertTrue(model.needsAccount)
+        let apiCalls2 = await rig.api.calls
+        XCTAssertEqual(apiCalls2, 0)
+        XCTAssertEqual(events.sources, ["drive_detail"])
+    }
+
+    func testLoadWhileAnonymousWithLocalContentPresentsAccountWallWithoutNetworkCall() async throws {
+        let rig = try DetailRig(driveID: driveID)
+        defer { rig.removeFiles() }
+        try await rig.seed([0, 1])
+        await rig.network.setOffline(true)
+        await rig.api.fail(status: 500)
+
+        let clock = FixedAuthClock(date: authDate("2026-09-01T00:00:00Z")!)
+        let value = syntheticSession(anonymous: true)
+        let vault = CredentialVault(keychain: try syntheticKeychain(session: value), clock: clock)
+        let auth = AuthTestService(session: value)
+        let session = SessionStore(auth: auth, vault: vault, clock: clock, purgeDownloads: {})
+        await session.start()
+        XCTAssertEqual(session.state, .anonymous(value))
+
+        let model = rig.model(session: session)
+        await model.load()
+
+        XCTAssertTrue(model.needsAccount)
+        XCTAssertNil(model.manifest)
+        XCTAssertNil(model.errorMessage)
+        XCTAssertFalse(model.isLoading)
+        XCTAssertTrue(model.localAudioURLs.isEmpty)
+        XCTAssertEqual(model.gate, .nothingSaved)
+        let apiCalls = await rig.api.calls
+        XCTAssertEqual(apiCalls, 0)
+    }
+
+    func testLoadInDeferredStatePreservesDeferredPolicyAndAttemptsExistingRequestPath() async throws {
+        let rig = try DetailRig(driveID: driveID)
+        defer { rig.removeFiles() }
+        try await rig.seed([0, 1])
+        await rig.network.setOffline(true)
+        await rig.api.fail(status: nil)
+
+        let clock = FixedAuthClock(date: authDate("2026-09-01T00:00:00Z")!)
+        let keychain = AuthTestKeychain()
+        let auth = AuthTestService()
+        let vault = CredentialVault(keychain: keychain, clock: clock)
+        let network = AuthTestNetwork(offline: true)
+        let session = SessionStore(auth: auth, vault: vault, network: network, clock: clock, purgeDownloads: {})
+        await session.start()
+        XCTAssertEqual(session.state, .deferred)
+
+        let model = rig.model(session: session)
+        await model.load()
+
+        XCTAssertFalse(model.needsAccount, "Deferred state must preserve deferred recovery policy without forcing sign-in wall")
+        let apiCalls = await rig.api.calls
+        XCTAssertEqual(apiCalls, 1, "Deferred state must attempt existing request path")
+    }
+
     func testCancelDuringFreshManifestFetchCannotStartALateDownload() async throws {
         let rig = try DetailRig(driveID: driveID)
         defer { rig.removeFiles() }

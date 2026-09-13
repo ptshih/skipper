@@ -15,6 +15,7 @@ struct AppDependencies {
     let analytics: AnalyticsTracker?
     let makePlayback: @MainActor () -> DrivePlaybackController
     var initialTab: MainTab? = nil
+    var coldOpenURL: URL? = nil
 
     @MainActor static func live(configuration: AppConfiguration, documentsURL: URL,
                                defaults: UserDefaults = .standard, keychain: any KeychainStore = SystemKeychainStore()) -> Self {

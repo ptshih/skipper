@@ -1887,6 +1887,83 @@
         "detailTitle": null,
         "streamingText": null
       }
+    },
+    {
+      "id": "driving-qa-live",
+      "input": {
+        "initialTab": "library",
+        "offline": true,
+        "initialSession": {
+          "user": {
+            "id": "00000008-0000-4000-8000-000000000001",
+            "name": "Fixture Rider",
+            "email": "rider@example.invalid",
+            "emailVerified": true,
+            "isAnonymous": false,
+            "role": "user",
+            "createdAt": "2026-09-12T12:00:00.000Z",
+            "updatedAt": "2026-09-12T12:00:00.000Z"
+          },
+          "session": {
+            "id": "00000009-0000-4000-8000-000000000001",
+            "userId": "00000008-0000-4000-8000-000000000001",
+            "token": "SYNTHETIC-NOT-A-VALID-TOKEN",
+            "expiresAt": "2026-10-01T00:00:00.000Z",
+            "createdAt": "2026-09-12T12:00:00.000Z",
+            "updatedAt": "2026-09-12T12:00:00.000Z"
+          }
+        }
+      },
+      "expected": {
+        "canonicalDriveId": null,
+        "detailTitle": null,
+        "streamingText": null
+      }
+    },
+    {
+      "id": "cold-link-signed-in",
+      "input": {
+        "coldOpenURL": "skipper://drives/00000002-0000-4000-8000-000000000001",
+        "offline": true,
+        "initialSession": {
+          "user": {
+            "id": "00000008-0000-4000-8000-000000000001",
+            "name": "Fixture Rider",
+            "email": "rider@example.invalid",
+            "emailVerified": true,
+            "isAnonymous": false,
+            "role": "user",
+            "createdAt": "2026-09-12T12:00:00.000Z",
+            "updatedAt": "2026-09-12T12:00:00.000Z"
+          },
+          "session": {
+            "id": "00000009-0000-4000-8000-000000000001",
+            "userId": "00000008-0000-4000-8000-000000000001",
+            "token": "SYNTHETIC-NOT-A-VALID-TOKEN",
+            "expiresAt": "2026-10-01T00:00:00.000Z",
+            "createdAt": "2026-09-12T12:00:00.000Z",
+            "updatedAt": "2026-09-12T12:00:00.000Z"
+          }
+        }
+      },
+      "expected": {
+        "canonicalDriveId": null,
+        "detailTitle": null,
+        "streamingText": null
+      }
+    },
+    {
+      "id": "cold-link-signed-out",
+      "input": {
+        "coldOpenURL": "skipper://drives/00000002-0000-4000-8000-000000000001",
+        "offline": true,
+        "signedOut": true
+      },
+      "expected": {
+        "canonicalDriveId": null,
+        "detailTitle": null,
+        "streamingText": null
+      }
     }
   ]
 }

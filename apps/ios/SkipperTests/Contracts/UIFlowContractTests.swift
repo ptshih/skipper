@@ -3,11 +3,43 @@ import XCTest
 @testable import Skipper
 
 private struct UIFlowContract: Decodable {
-    struct Responses: Decodable {
-        let bootstrap: Bootstrap
-        let proposal: DriveProposal
-        let createdManifest: DriveManifest
-        let ownedDrives: DriveList
+    enum Responses: Decodable {
+        struct Planner: Decodable {
+            let bootstrap: Bootstrap
+            let proposal: DriveProposal
+            let createdManifest: DriveManifest
+            let ownedDrives: DriveList
+        }
+        struct Account: Decodable {
+            let bootstrap: Bootstrap
+            let version: VersionResponse
+        }
+        case planner(Planner)
+        case account(Account)
+
+        private enum DiscriminationKeys: String, CodingKey {
+            case version
+            case proposal
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: DiscriminationKeys.self)
+            if container.contains(.version) && !container.contains(.proposal) {
+                self = .account(try Account(from: decoder))
+            } else {
+                self = .planner(try Planner(from: decoder))
+            }
+        }
+
+        var planner: Planner? {
+            if case .planner(let p) = self { return p }
+            return nil
+        }
+
+        var account: Account? {
+            if case .account(let a) = self { return a }
+            return nil
+        }
     }
     struct Stream: Decodable {
         let chunks: [[UInt8]]
@@ -19,6 +51,7 @@ private struct UIFlowContract: Decodable {
         let responses: Responses?
         let stream: Stream?
         let ownedDrives: DriveList?
+        let coldOpenURL: String?
     }
     struct Expected: Decodable {
         let canonicalDriveId: String?
@@ -34,7 +67,7 @@ final class UIFlowContractTests: XCTestCase {
     func testLandmarkCoordinatesDecodeOnTheIntendedLandReference() throws {
         let cases = try contractFixtures("ui-flows", as: UIFlowContract.self)
         let fixture = try XCTUnwrap(cases.first { $0.id == "planner-map-landmark" })
-        let responses = try XCTUnwrap(fixture.input.responses)
+        let responses = try XCTUnwrap(fixture.input.responses?.planner)
         // Decoded by production Coordinate, not a test-only interpretation of the tuple.
         let points = responses.proposal.polyline
         XCTAssertEqual(points.count, 4)
@@ -64,13 +97,16 @@ final class UIFlowContractTests: XCTestCase {
             "planner-account-retry", "planner-account-lost-ack", "planner-reset-during-stream",
             "planner-map-landmark",
             "offline-no-playable-clips", "corrupt-credentials-recovery",
+            "settings-account-lifecycle", "driving-qa-live",
+            "cold-link-signed-in", "cold-link-signed-out",
         ]))
         var plannerCases = 0
         for c in cases {
             switch c.id {
             case "planner-account-retry", "planner-account-lost-ack", "planner-reset-during-stream", "planner-map-landmark":
                 plannerCases += 1
-                let responses = try XCTUnwrap(c.input.responses, c.id)
+                let responsesWrapper = try XCTUnwrap(c.input.responses, c.id)
+                let responses = try XCTUnwrap(responsesWrapper.planner, c.id)
                 let stream = try XCTUnwrap(c.input.stream, c.id)
                 XCTAssertEqual(stream.chunks.count, stream.delayBeforeChunkMs.count, c.id)
                 let region = try XCTUnwrap(responses.bootstrap.regions.first, c.id)
@@ -88,6 +124,19 @@ final class UIFlowContractTests: XCTestCase {
                     XCTAssertEqual(responses.createdManifest.driveId, try XCTUnwrap(c.expected.canonicalDriveId), c.id)
                     XCTAssertEqual(responses.createdManifest.label, try XCTUnwrap(c.expected.detailTitle), c.id)
                 }
+            case "settings-account-lifecycle":
+                let responsesWrapper = try XCTUnwrap(c.input.responses, c.id)
+                let account = try XCTUnwrap(responsesWrapper.account, c.id)
+                XCTAssertNil(c.input.stream, c.id)
+                XCTAssertNotNil(account.version.policies)
+            case "cold-link-signed-in", "cold-link-signed-out":
+                XCTAssertNil(c.input.responses, c.id)
+                let urlString = try XCTUnwrap(c.input.coldOpenURL, c.id)
+                let url = try XCTUnwrap(URL(string: urlString), c.id)
+                XCTAssertEqual(url.scheme, "skipper", c.id)
+            case "driving-qa-live":
+                XCTAssertNil(c.input.responses, c.id)
+                XCTAssertNil(c.input.stream, c.id)
             case "corrupt-credentials-recovery":
                 XCTAssertTrue(try XCTUnwrap(c.input.ownedDrives, c.id).drives.isEmpty)
             case "offline-no-playable-clips": break // Native storage/UI tests execute this filesystem recipe.

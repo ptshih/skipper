@@ -34,6 +34,9 @@ final class AppModel {
         if case .uiTest(let scenario, _, _) = dependencies?.launch.mode,
            ["offline-library", "offline-empty", "signed-out", "offline-no-playable-clips", "corrupt-credentials-recovery"].contains(scenario) { selectedTab = .library }
         if let initial = dependencies?.initialTab { selectedTab = initial }
+        if let coldURL = dependencies?.coldOpenURL {
+            open(coldURL)
+        }
     }
 
     func start() async {

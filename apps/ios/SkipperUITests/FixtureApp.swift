@@ -21,6 +21,9 @@ struct FixtureApp {
         case versionRecommendedDelayedPlanner = "version-recommended-delayed-planner"
         case drivingQATwoStops = "driving-qa-two-stops"
         case settingsAccountLifecycle = "settings-account-lifecycle"
+        case drivingQALive = "driving-qa-live"
+        case coldLinkSignedIn = "cold-link-signed-in"
+        case coldLinkSignedOut = "cold-link-signed-out"
     }
 
     enum Theme: String, CaseIterable {
