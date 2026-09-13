@@ -1,5 +1,6 @@
 """Bounded ZIP validation before any extraction; standard library only, also shipped to EAS."""
 import hashlib
+from datetime import datetime, timezone
 import gzip
 import io
 import json
@@ -12,6 +13,14 @@ import tarfile
 import zipfile
 
 MAX_TOTAL = 2 * 1024**3
+
+
+def plist_json_default(value):
+    if isinstance(value, datetime):
+        # plistlib's default dates are naive UTC. Keep dates distinct from identity strings.
+        utc = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+        return {'$plistDate': utc.isoformat().replace('+00:00', 'Z')}
+    raise TypeError('unsupported plist JSON type')
 
 
 def entries(archive):
@@ -127,7 +136,7 @@ if __name__ == '__main__':
             expected = json.loads(Path(args[2]).read_text())['files'] if len(args) == 3 else None
             print(json.dumps(unpack(args[0], args[1], expected)))
         elif command == 'plist':
-            print(json.dumps(plistlib.loads(Path(args[0]).read_bytes())))
+            print(json.dumps(plistlib.loads(Path(args[0]).read_bytes()), default=plist_json_default))
         elif command == 'receipt':
             receipt(args[0])
         else:

@@ -117,7 +117,7 @@ async function fixture(native?: { binaryPath: string; bundlePath: string }): Pro
   await file(join(app, 'Skipper'), native ? readFileSync(native.binaryPath) : fatBytes)
   await file(
     join(archive, 'Info.plist'),
-    `<plist version="1.0"><dict><key>ApplicationProperties</key><dict>${plist(info).split('<dict>')[1]!.split('</plist>')[0]}</dict></plist>`,
+    `<plist version="1.0"><dict><key>CreationDate</key><date>2026-09-12T23:00:00Z</date><key>ArchiveVersion</key><integer>2</integer><key>ApplicationProperties</key><dict>${plist(info).split('<dict>')[1]!.split('</plist>')[0]}</dict></plist>`,
   )
   if (native) {
     await mkdir(join(archive, 'dSYMs'), { recursive: true })
@@ -205,6 +205,74 @@ function runView(m: SymbolsManifest) {
 }
 
 describe('archive and minimal upload boundary', () => {
+  for (const format of ['XML', 'BINARY']) {
+    test(`real Python ${format} plist dates retain their type and JSON identity primitives`, async () => {
+      const root = await temporary()
+      const path = join(root, 'Info.plist')
+      await python(
+        `import datetime,plistlib,sys
+value={'CreationDate':datetime.datetime(2026,9,12,23), 'ApplicationProperties':{'CFBundleIdentifier':'fm.skipper.app','CFBundleShortVersionString':'1.2.0','CFBundleVersion':27}, 'Nested':[datetime.datetime(2026,9,12,23),True,2.5,'2026-09-12T23:00:00Z']}
+with open(sys.argv[1],'wb') as f: plistlib.dump(value,f,fmt=getattr(plistlib,'FMT_'+sys.argv[2]))`,
+        [path, format],
+      )
+      const result = await defaultRunner(['python3', archiveScript, 'plist', path])
+      expect(result.exitCode, result.stderr).toBe(0)
+      expect(JSON.parse(result.stdout)).toEqual({
+        CreationDate: { $plistDate: '2026-09-12T23:00:00Z' },
+        ApplicationProperties: {
+          CFBundleIdentifier: 'fm.skipper.app',
+          CFBundleShortVersionString: '1.2.0',
+          CFBundleVersion: 27,
+        },
+        Nested: [{ $plistDate: '2026-09-12T23:00:00Z' }, true, 2.5, '2026-09-12T23:00:00Z'],
+      })
+    })
+    test(`rejects ${format} date identity even when expected version is its ISO string`, async () => {
+      // fixture() performs full preparation through real Python with Xcode's CreationDate.
+      const { archive, ipa, root } = await fixture()
+      await python(
+        `import datetime,plistlib,sys
+with open(sys.argv[1],'rb') as f: value=plistlib.load(f)
+value['ApplicationProperties']['CFBundleShortVersionString']=datetime.datetime(2026,9,12,23)
+with open(sys.argv[1],'wb') as f: plistlib.dump(value,f,fmt=getattr(plistlib,'FMT_'+sys.argv[2]))`,
+        [join(archive, 'Info.plist'), format],
+      )
+      const stage = join(root, 'date-identity-stage')
+      await expect(
+        prepareEasSymbols({
+          sourceCommit: 'a'.repeat(40),
+          version: '2026-09-12T23:00:00Z',
+          buildNumber: 27,
+          bundleId: 'fm.skipper.app',
+          archivePath: archive,
+          ipaPath: ipa,
+          expectedArchiveSha256: await hashArchive(archive),
+          expectedIpaSha256: await hashFile(ipa),
+          easProjectId: projectId,
+          posthogProjectId: '1234',
+          stagingDirectory: stage,
+          runner: localRunner,
+        }),
+      ).rejects.toThrow('Archive identity mismatch')
+      expect(existsSync(stage)).toBe(false)
+    }, 15000)
+  }
+  for (const kind of ['data', 'uid']) {
+    test(`does not stringify unsupported plist ${kind}; errors stay sanitized`, async () => {
+      const root = await temporary()
+      const path = join(root, 'Info.plist')
+      await python(
+        `import plistlib,sys
+value=b'synthetic-private-value' if sys.argv[2]=='data' else plistlib.UID(7)
+with open(sys.argv[1],'wb') as f: plistlib.dump({'CFBundleIdentifier':value},f,fmt=plistlib.FMT_BINARY)`,
+        [path, kind],
+      )
+      const result = await defaultRunner(['python3', archiveScript, 'plist', path])
+      expect(result.exitCode).toBe(1)
+      expect(result.stdout).toBe('')
+      expect(result.stderr).toBe('Archive validation/operation failed\n')
+    })
+  }
   test('deterministic content hash ignores dates/root names, binds permissions and link targets', async () => {
     const root = await temporary()
     await file(join(root, 'a', 'file'), 'content')

@@ -1,9 +1,10 @@
 # Native iOS symbols through EAS
 
-**Status** — 2026-09-12: independent Astra adapter/integration review cleared; local checks and exact
-Node 22.19.0 compatibility passed. No real EAS workflow or PostHog upload/readback has run; the
-production secret's read permission remains unverified. Operational standby: await full native QA,
-the immutable source commit and final release archive before explicitly authorized cloud execution.
+**Status** — 2026-09-12: the original adapter/integration passed independent Astra review and exact
+Node 22.19.0 compatibility. Release `843d8d6c` exposed a local plist-date serialization failure before
+cloud execution. The narrow date fix now prepares unchanged copies of its real archive/IPA locally;
+this delta awaits independent review. No real EAS workflow or PostHog upload/readback has run, and
+the production secret's read permission remains unverified. The release owner controls the next run.
 
 The native release pipeline can use an isolated macOS EAS job to upload dSYMs without bringing the
 PostHog secret onto this computer. `scripts/ios-symbols-eas.ts` prepares the job locally, executes it
@@ -182,8 +183,27 @@ unreproduced and retained. See the [local compatibility report](../../.scratch/i
 for exact commands, hashes, and receipts. This involved no EAS/PostHog/token operations;
 real cloud workflow execution and readback remain unverified.
 
+Release `843d8d6c986d6f3fd41b3557a447dc248e03a5ae` reached local symbols preparation with a valid
+archive/export, then failed because Xcode's `CreationDate` becomes a Python `datetime`, which the
+default JSON encoder cannot serialize. The helper now represents only dates as
+`{ "$plistDate": "2026-09-12T23:00:00Z" }`; dates remain distinct from identity strings. Other
+unsupported types still fail with sanitized errors. XML and binary plist regressions verify this
+boundary, including rejection when an expected version equals a date's ISO text. Full preparation
+fixtures now include Xcode's actual date shape. This follows Python's documented
+[plist date types](https://docs.python.org/3/library/plistlib.html) and
+[explicit JSON conversion hook](https://docs.python.org/3/library/json.html).
+
+The [local repair report](../../.scratch/ios-upgrade/plist-date-fix-843d8d6c/report.md) retains the
+initial failure, corrected preparation commands, manifest, and original/copied artifact hashes
+before and after. Preparation passed on fresh copies of the actual `1.2.0 (27)` artifacts with
+the exact public production targets, no host override, and the committed US default. It produced
+nine allowlisted files and measured the actual arm64 DWARF slice. This proves local preparation
+compatibility with those old-source artifacts only; it establishes no upload, readback, token
+scope, or delivery eligibility for a new source commit. TypeScript APIs, archive hashing, ZIP
+validation, and cloud execution logic are unchanged by this repair.
+
 Context7 was unavailable in this session; implementation used the official vendor documents and
-exact tagged source linked above. Independent code review and local checks are complete. The next
-action, after full native QA, the immutable source commit and final archive are ready, is explicitly
-authorized real EAS execution with actual PostHog readback and fresh EAS verification. No local test
-proves the EAS token's read scope or a successful production symbol upload.
+exact tagged source linked above. After independent review of the date repair, the release owner
+must bind any new delivery run to its accepted immutable source and artifacts. Real EAS execution
+still requires actual PostHog readback and fresh EAS verification; no local test proves the token's
+read scope or a successful production symbol upload.
