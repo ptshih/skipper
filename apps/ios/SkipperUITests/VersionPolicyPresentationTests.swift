@@ -110,7 +110,11 @@ final class VersionPolicyPresentationTests: XCTestCase {
 
     private func assertForcedWall(_ fixture: FixtureApp, timeout: TimeInterval = 10) {
         XCTAssertTrue(fixture.application.staticTexts["Update required"].waitForExistence(timeout: timeout))
-        XCTAssertTrue(fixture.element("version.update").isHittable)
+        let update = fixture.element("version.update")
+        // The title can enter accessibility before the outgoing sheet releases hit testing.
+        let updateReady = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: update)
+        wait(for: [updateReady], timeout: 5)
+        XCTAssertTrue(update.isHittable)
         XCTAssertFalse(fixture.element("version.later").exists)
         XCTAssertFalse(fixture.application.buttons["Later"].exists)
         for identifier in ["planner.input", "planner.send", "drive.start", "account.sign-in", "auth.email"] {

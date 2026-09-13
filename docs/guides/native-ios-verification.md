@@ -4,6 +4,40 @@
 
 ## Recorded simulator evidence
 
+### Exact-source delivery failure: forced-wall readiness
+
+The `f1ee2eb3` release preflight ran **338/339** tests (321/321 unit, 17/18 UI), zero
+skipped. `VersionPolicyPresentationTests` observed the required-update title at 13.64 seconds
+then immediately failed Update hittability at 13.65 seconds. The original result remains
+`.scratch/releases/native-delivery-f1ee2eb3-01/native-test-results/Test-1789263619390.xcresult`;
+no archive or cloud action followed. Its later video frame shows the unobscured wall, but
+that image alone does not prove eventual hittability.
+
+`.scratch/ios-qa/release-force-f1ee2eb3/` retains the failed installed app/fixture evidence,
+source comparisons and bounded scratch trace. Relevant code/fixtures match the earlier
+`d22363e0` full 339/339 and counter 4/4 candidates. The exact-source, exact-configuration
+three-run diagnostic finished **1 passed, 2 failed**: one deliberately retained immediate
+Update failure and one trace-only error querying the outgoing email field during dismissal.
+In the reproduced failure, actual Update hittability was false initially, then true in the
+next sample (began 63 ms, completed 111 ms after title observation); email was absent and
+readiness persisted through three seconds (confirmed hittable within 111 ms, not exactly at
+the sample start). All three receipts contain one version request
+and zero unexpected calls. Diagnostic failures are preserved, not counted as acceptance.
+
+The authorized test-only correction waits at most five seconds for actual Update
+`isHittable == true`, then retains the explicit assertion and every title, sign-in, absent
+Later, blocked-action/tab and swipe-resistance check. No product/fixture change or fixed sleep.
+The fresh focused run passed **4/4**, zero failures/skips, in
+`.scratch/ios-qa/release-force-f1ee2eb3/acceptance/VersionUI.xcresult`. Frozen receipts match
+force/recommended/delayed-force/delayed-planner request counts **1/2/1/1**, with zero
+unexpected/create/mint/purge calls. Four inspected final screenshots show exclusive force
+walls, preserved planner draft/card after Later, and dismissal retained across relaunch.
+All 1,130 product hashes remained unchanged; root check passed 287 tests. Test SHA256 is
+`8d787d363e09522cb5d1a8318b2bce23b61003950e8458109cbfd2e5abe294da`.
+This focused correction does not convert the original failed release preflight into a pass
+or replace exact-source full release acceptance.
+
+
 ### Reviewed replacement snapshot: full runtime, SE, and counter follow-up
 
 `.scratch/ios-qa/combined-20260912-171409/` retains the matching source/build receipt,
