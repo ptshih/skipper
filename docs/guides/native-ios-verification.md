@@ -91,6 +91,27 @@ A simulated driving UI verification flow exercises the complete two-stop playbac
 - **Target and limits:** Prior full native suite (349 tests) and TestFlight delivery (1.2.0 (27) / `977cd1c5`) remain historical; no new full-suite count is recorded for this focused addition. Physical device verification remains blocked pending device unlock (`kAMDMobileImageMounterDeviceLocked`).
 
 
+### Library offline-to-online connectivity reconnect parity and fallback verification (2026-09-13)
+
+Shipped React Native client self-healed on an offline-to-online transition, whereas native Library previously remained on a stale "You are offline" state until manual pull-to-refresh or tab reentry. This fix establishes parity:
+- **Reconnect edge detection:** Injected `NetworkAvailability` observation into `LibraryViewModel`. On a visible offline-to-online transition (`wasOffline && !isOffline`), triggers an automatic single reload (`loadDrives()`). Direct `tickConnectivity(isOffline:)` seam provides zero-latency deterministic unit testing without wall-clock polling.
+- **First-tick launch race prevention:** `seedConnectivityState()` seeds `wasOffline = (await network.isOffline()) || (isOfflineFallback && errorMessage == nil)`. This ensures an initial online entry or 5xx server error starts with `wasOffline == false`, preventing spurious duplicate reloads, while an initial confirmed offline fallback correctly seeds `wasOffline == true` to re-arm the edge.
+- **Sequential task coordination:** In `LibraryView`, `observeConnectivity()` is appended directly after `loadDrives()` inside `.task(id: viewModel.session.user?.id)`, eliminating any uncoordinated second `.task` race and guaranteeing the initial load completes before observation begins. The keyed task automatically cancels observation on user/owner switch.
+- **Offline fallback & saved download reachability:** Maintained `if !verifiedDisplays.isEmpty || error is OfflineError` fallback condition in `LibraryViewModel`. If network errors occur (timeout, 5xx, or offline) while saved downloads exist on disk, verified local rows are presented, `isOfflineFallback = true`, and actual error messages remain visible. If non-offline errors occur with zero saved downloads, cached online rows/facets/selection are preserved and `isOfflineFallback = false`.
+- **Evidence and test coverage (headless simulator `69401A43-2D6D-4155-BD4F-E688777CB43A`):**
+  - Focused `LibraryFilterTests` (17/17 passed, 0 failures; xcresult `.scratch/ios/Test-lib-filter-1789284245.xcresult`).
+  - Unit tests verify:
+    1. Exact 1 edge reload on offline-to-online edge (`testConnectivityEdgeTriggersExactOneReloadAndClearsFallback`).
+    2. Zero requests on steady online or steady offline ticks (`testConnectivityStableStatesMakeZeroRequests`).
+    3. Zero requests on edge for signed-out, anonymous, and deferred sessions (`testConnectivityEdgeInSignedOutAnonymousDeferredMakesZeroRequests`).
+    4. In-flight load blocks duplicate edge launch and commits cleanly (`testConnectivityHeldInFlightNoExtraAndResultCommits`).
+    5. Non-offline reconnect failure preserves rows/facets/selection, sets `isOfflineFallback = false`, and surfaces actual error (`testConnectivityReconnectFailureNonOfflinePreservesRowsFacetsSelectionAndSurfacesActualError`).
+    6. Owner switch discards stale in-flight response (`testConnectivityOwnerSwitchDiscardsStaleResult`).
+    7. Cold load failure with saved downloads shows local row, sets `isOfflineFallback = true`, and surfaces error (`testColdLoadFailureWithSavedDownloadsShowsLocalRowFallbackTrueAndErrorVisible`).
+- **Preserved failure boundary:** Retained `.scratch/ios/Test-lib-filter-1789283775.xcresult` preserves initial test diagnostic where custom error type fell back to generic message before using production `APIError`.
+
+
+
 ### Exact-source delivery failure: forced-wall readiness
 
 The `f1ee2eb3` release preflight ran **338/339** tests (321/321 unit, 17/18 UI), zero

@@ -341,6 +341,255 @@ import XCTest
             XCTAssertFalse(model.isLoading)
         }
     }
+
+    private func makeDeferredSession() async throws -> SessionStore {
+        let clock = FixedAuthClock(date: authDate("2026-09-12T12:00:00Z")!)
+        let vault = CredentialVault(keychain: AuthTestKeychain(), clock: clock)
+        let session = SessionStore(auth: AuthTestService(failure: AuthFailure.sessionUnavailable),
+                                   vault: vault,
+                                   network: AuthTestNetwork(offline: true),
+                                   clock: clock, purgeDownloads: {})
+        await session.start()
+        XCTAssertEqual(session.state, .deferred)
+        XCTAssertFalse(session.isSignedIn)
+        return session
+    }
+
+    private func makeAnonymousSession() async throws -> SessionStore {
+        let clock = FixedAuthClock(date: authDate("2026-09-12T12:00:00Z")!)
+        let anonValue = syntheticSession(anonymous: true)
+        let vault = CredentialVault(keychain: try syntheticKeychain(session: anonValue), clock: clock)
+        let session = SessionStore(auth: AuthTestService(session: anonValue),
+                                   vault: vault,
+                                   network: AuthTestNetwork(offline: false),
+                                   clock: clock, purgeDownloads: {})
+        await session.start()
+        XCTAssertFalse(session.isSignedIn)
+        return session
+    }
+
+    private func makeSignedOutSession() async throws -> SessionStore {
+        let session = try await makeSession()
+        try await session.signOut()
+        XCTAssertFalse(session.isSignedIn)
+        return session
+    }
+
+    func testConnectivityEdgeTriggersExactOneReloadAndClearsFallback() async throws {
+        let network = MutableTestNetwork(offline: true)
+        let api = MockLibraryAPI(driveList: try fixtureList())
+        await api.setFailure(OfflineError())
+        let session = try await makeSession()
+        let model = LibraryViewModel(api: api, session: session, network: network)
+
+        await model.loadDrives()
+        XCTAssertTrue(model.isOfflineFallback)
+        let initialCalls = await api.listDrivesCalls
+        XCTAssertEqual(initialCalls, 1)
+
+        await model.seedConnectivityState()
+        await network.setOffline(false)
+        await api.setList(try fixtureList())
+
+        await model.tickConnectivity()
+        let edgeCalls = await api.listDrivesCalls
+        XCTAssertEqual(edgeCalls, 2, "Exact one edge reload must be triggered")
+        XCTAssertFalse(model.isOfflineFallback, "isOfflineFallback must be cleared after reconnect reload")
+        XCTAssertEqual(model.drives.count, 4)
+    }
+
+    func testConnectivityStableStatesMakeZeroRequests() async throws {
+        let network = MutableTestNetwork(offline: false)
+        let api = MockLibraryAPI(driveList: try fixtureList())
+        let session = try await makeSession()
+        let model = LibraryViewModel(api: api, session: session, network: network)
+
+        // Seed while online
+        await model.seedConnectivityState()
+        let seedCalls = await api.listDrivesCalls
+        XCTAssertEqual(seedCalls, 0)
+
+        // Steady online ticks make 0 requests
+        await model.tickConnectivity(isOffline: false)
+        await model.tickConnectivity(isOffline: false)
+        await model.tickConnectivity(isOffline: false)
+        let onlineCalls = await api.listDrivesCalls
+        XCTAssertEqual(onlineCalls, 0, "Steady online ticks must make 0 requests")
+
+        // Transition to offline (online -> offline edge does not reload)
+        await model.tickConnectivity(isOffline: true)
+        let offlineEdgeCalls = await api.listDrivesCalls
+        XCTAssertEqual(offlineEdgeCalls, 0, "Online to offline transition must not trigger reload")
+
+        // Steady offline ticks make 0 requests
+        await model.tickConnectivity(isOffline: true)
+        await model.tickConnectivity(isOffline: true)
+        let steadyOfflineCalls = await api.listDrivesCalls
+        XCTAssertEqual(steadyOfflineCalls, 0, "Steady offline ticks must make 0 requests")
+    }
+
+    func testConnectivityEdgeInSignedOutAnonymousDeferredMakesZeroRequests() async throws {
+        let network = MutableTestNetwork(offline: true)
+
+        // Signed out
+        let signedOutSession = try await makeSignedOutSession()
+        let apiSignedOut = MockLibraryAPI(driveList: try fixtureList())
+        let modelSignedOut = LibraryViewModel(api: apiSignedOut, session: signedOutSession, network: network)
+        await modelSignedOut.seedConnectivityState()
+        await modelSignedOut.tickConnectivity(isOffline: false)
+        let signedOutCalls = await apiSignedOut.listDrivesCalls
+        XCTAssertEqual(signedOutCalls, 0, "Signed-out edge must make 0 requests")
+
+        // Anonymous
+        let anonSession = try await makeAnonymousSession()
+        let apiAnon = MockLibraryAPI(driveList: try fixtureList())
+        let modelAnon = LibraryViewModel(api: apiAnon, session: anonSession, network: network)
+        await modelAnon.seedConnectivityState()
+        await modelAnon.tickConnectivity(isOffline: false)
+        let anonCalls = await apiAnon.listDrivesCalls
+        XCTAssertEqual(anonCalls, 0, "Anonymous edge must make 0 requests")
+
+        // Deferred
+        let deferredSession = try await makeDeferredSession()
+        let apiDeferred = MockLibraryAPI(driveList: try fixtureList())
+        let modelDeferred = LibraryViewModel(api: apiDeferred, session: deferredSession, network: network)
+        await modelDeferred.seedConnectivityState()
+        await modelDeferred.tickConnectivity(isOffline: false)
+        let deferredCalls = await apiDeferred.listDrivesCalls
+        XCTAssertEqual(deferredCalls, 0, "Deferred edge must make 0 requests")
+    }
+
+    func testConnectivityHeldInFlightNoExtraAndResultCommits() async throws {
+        let network = MutableTestNetwork(offline: true)
+        let api = MockLibraryAPI(driveList: try fixtureList())
+        let session = try await makeSession()
+        let model = LibraryViewModel(api: api, session: session, network: network)
+
+        let entered = expectation(description: "entered loadDrives")
+        await api.hold(entered)
+
+        let loadTask = Task { await model.loadDrives() }
+        await fulfillment(of: [entered], timeout: 2.0)
+        XCTAssertTrue(model.isLoading)
+        let initialCalls = await api.listDrivesCalls
+        XCTAssertEqual(initialCalls, 1)
+
+        // Edge tick while load is held in flight
+        await model.tickConnectivity(isOffline: false)
+        let inFlightCalls = await api.listDrivesCalls
+        XCTAssertEqual(inFlightCalls, 1, "In-flight load must block duplicate launch on edge")
+
+        // Release the held request
+        await api.release(try fixtureList())
+        await loadTask.value
+
+        XCTAssertFalse(model.isLoading)
+        XCTAssertEqual(model.drives.count, 4, "Result of in-flight load must commit cleanly")
+    }
+
+    func testConnectivityReconnectFailureNonOfflinePreservesRowsFacetsSelectionAndSurfacesActualError() async throws {
+        let network = MutableTestNetwork(offline: false)
+        let api = MockLibraryAPI(driveList: try fixtureList())
+        let session = try await makeSession()
+        let model = LibraryViewModel(api: api, session: session, network: network)
+
+        // Initial online load succeeds
+        await model.loadDrives()
+        XCTAssertEqual(model.drives.count, 4)
+        XCTAssertEqual(model.facets.count, 2)
+
+        // Select a region filter
+        model.selectRegion(yosemite)
+        XCTAssertEqual(model.selectedRegion, yosemite)
+        XCTAssertEqual(model.filteredDrives.count, 1)
+
+        // Simulate offline transition
+        await model.tickConnectivity(isOffline: true)
+
+        // Reconnect fails with non-offline server error (500)
+        await api.setFailure(APIError(status: 500, code: "INTERNAL_ERROR", message: "Internal Server Error (500)"))
+
+        await model.tickConnectivity(isOffline: false)
+
+        XCTAssertFalse(model.isOfflineFallback, "Non-offline failure must not set isOfflineFallback")
+        XCTAssertEqual(model.errorMessage, "Internal Server Error (500)", "Actual error must be surfaced")
+        XCTAssertEqual(model.drives.count, 4, "Rows must be preserved on non-offline failure")
+        XCTAssertEqual(model.facets.count, 2, "Facets must be preserved on non-offline failure")
+        XCTAssertEqual(model.selectedRegion, yosemite, "Selected region must be preserved on non-offline failure")
+        XCTAssertEqual(model.filteredDrives.count, 1, "Filtered drives must reflect preserved selection")
+    }
+
+    func testConnectivityOwnerSwitchDiscardsStaleResult() async throws {
+        let api = MockLibraryAPI(driveList: try fixtureList())
+        let clock = FixedAuthClock(date: authDate("2026-09-12T12:00:00Z")!)
+        let userA = syntheticSession(anonymous: false)
+        let vault = CredentialVault(keychain: try syntheticKeychain(session: userA), clock: clock)
+        let auth = AuthTestService(session: userA)
+        let session = SessionStore(auth: auth, vault: vault, clock: clock, purgeDownloads: {})
+        await session.start()
+        let model = LibraryViewModel(api: api, session: session)
+
+        let entered = expectation(description: "entered loadDrives")
+        await api.hold(entered)
+
+        let loadTask = Task { await model.loadDrives() }
+        await fulfillment(of: [entered], timeout: 2.0)
+        XCTAssertTrue(model.isLoading)
+
+        // User signs out or switches owner while load is held
+        try await session.signOut()
+        model.reconcileSession()
+
+        // Release the held request
+        await api.release(try fixtureList())
+        await loadTask.value
+
+        XCTAssertTrue(model.drives.isEmpty, "Stale result from departed owner must be discarded")
+        XCTAssertNil(model.errorMessage)
+    }
+
+    func testColdLoadFailureWithSavedDownloadsShowsLocalRowFallbackTrueAndErrorVisible() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let storage = StorageService(rootURL: root, downloader: LibraryFixtureDownloader())
+        let detail = StorageSavedDriveDetail(
+            driveId: secondDrive,
+            label: "Cold Saved Yosemite",
+            polyline: [[-119.6, 37.7], [-119.5, 37.8]],
+            clips: [
+                StorageSavedDriveClip(
+                    seq: 0,
+                    alongSec: 1,
+                    subjectId: "00000004-0000-4000-8000-000000000001",
+                    subjectKind: .poi,
+                    contentType: "audio/mp4",
+                    url: "https://audio.invalid/clip.m4a"
+                )
+            ]
+        )
+        _ = try await storage.downloadDrive(driveId: secondDrive, detail: detail)
+
+        let api = MockLibraryAPI(driveList: try fixtureList())
+        await api.setFailure(APIError(status: 500, code: "INTERNAL_ERROR", message: "Internal Server Error (500)"))
+
+        let session = try await makeSession()
+        let model = LibraryViewModel(api: api, session: session, storage: storage)
+
+        // Verify cold state: no previous online rows
+        XCTAssertTrue(model.drives.isEmpty)
+        XCTAssertFalse(model.isOfflineFallback)
+        XCTAssertNil(model.errorMessage)
+
+        // Perform cold load with API 500 failure
+        await model.loadDrives()
+
+        // Assert local row shown, fallback true, error visible
+        XCTAssertEqual(model.drives.count, 1, "Local downloaded row must be shown")
+        XCTAssertEqual(model.drives.first?.driveId, secondDrive)
+        XCTAssertEqual(model.drives.first?.title, "Cold Saved Yosemite")
+        XCTAssertTrue(model.isOfflineFallback, "isOfflineFallback must be true because saved downloads satisfied path")
+        XCTAssertEqual(model.errorMessage, "Internal Server Error (500)", "Server error message must be visible")
+    }
 }
 
 private actor MockLibraryAPI: SkipperAPI {
@@ -377,3 +626,11 @@ private struct LibraryFixtureDownloader: StorageFileDownloader {
         try Data("synthetic saved audio bytes".utf8).write(to: destURL)
     }
 }
+
+private actor MutableTestNetwork: NetworkAvailability {
+    var offline: Bool
+    init(offline: Bool) { self.offline = offline }
+    func setOffline(_ value: Bool) { offline = value }
+    func isOffline() async -> Bool { offline }
+}
+

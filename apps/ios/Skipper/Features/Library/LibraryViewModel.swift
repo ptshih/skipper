@@ -78,17 +78,21 @@ final class LibraryViewModel {
     let storage: StorageService?
     let session: SessionStore
     let analytics: AnalyticsTracker?
+    let network: (any NetworkAvailability)?
+    private var wasOffline: Bool = false
 
     init(
         api: any SkipperAPI,
         session: SessionStore,
         storage: StorageService? = nil,
-        analytics: AnalyticsTracker? = nil
+        analytics: AnalyticsTracker? = nil,
+        network: (any NetworkAvailability)? = nil
     ) {
         self.api = api
         self.session = session
         self.storage = storage
         self.analytics = analytics
+        self.network = network
         self.ownerID = session.isSignedIn ? session.user?.id : nil
     }
 
@@ -233,9 +237,9 @@ final class LibraryViewModel {
             guard acceptsResponse(generation: generation) else { return }
             let message = userMessage(for: error, fallback: "Could not load drives. Please check your connection.")
             // Offline fallback: load from local storage only items verified for this account
+            var verifiedDisplays: [DriveItemDisplay] = []
             if let storage {
                 let localDrives = await storage.listDownloadedDrives()
-                var verifiedDisplays: [DriveItemDisplay] = []
                 for item in localDrives {
                     if await session.canAccessLocalDrive(item.driveId) {
                         let status = await storage.offlineStatus(driveId: item.driveId)
@@ -264,24 +268,59 @@ final class LibraryViewModel {
                         ))
                     }
                 }
+            }
 
-                guard !Task.isCancelled, acceptsResponse(generation: generation) else { return }
-                verifiedDisplays.removeAll { deletedDuringLoad.contains($0.driveId) }
-                // Confirmed offline + an empty verified local list is a valid offline state,
-                // not evidence that the rider's cloud library is empty.
-                if !verifiedDisplays.isEmpty || error is OfflineError {
-                    self.rawSummaries = []
-                    self.credits = nil
-                    self.drives = verifiedDisplays
-                    self.isOfflineFallback = true
-                    reconcileRegionFilter()
-                }
+            guard !Task.isCancelled, acceptsResponse(generation: generation) else { return }
+            verifiedDisplays.removeAll { deletedDuringLoad.contains($0.driveId) }
+            // Confirmed offline + an empty verified local list is a valid offline state,
+            // not evidence that the rider's cloud library is empty.
+            if !verifiedDisplays.isEmpty || error is OfflineError {
+                self.rawSummaries = []
+                self.credits = nil
+                self.drives = verifiedDisplays
+                self.isOfflineFallback = true
+                reconcileRegionFilter()
+            } else {
+                self.isOfflineFallback = false
             }
             guard !Task.isCancelled, acceptsResponse(generation: generation) else { return }
             // With no usable local replacement, keep rows, facets, and selection together.
             // A confirmed offline fallback already explains its state in the banner/list.
             // Other failures still need their guidance, even when saved rows are available.
             self.errorMessage = error is OfflineError && isOfflineFallback ? nil : message
+        }
+    }
+
+    /// Seeds connectivity state at observation start to prevent race with initial load
+    /// and avoid spurious refresh after non-offline (e.g. 5xx) errors.
+    func seedConnectivityState() async {
+        guard let network else { return }
+        wasOffline = (await network.isOffline()) || (isOfflineFallback && errorMessage == nil)
+    }
+
+    /// Evaluates a single connectivity tick. When transitioning offline -> online,
+    /// triggers a single reload. Direct invocation avoids test flakiness and wall-clock sleeps.
+    func tickConnectivity(isOffline overrideOffline: Bool? = nil) async {
+        guard let network else { return }
+        let isOffline: Bool
+        if let overrideOffline {
+            isOffline = overrideOffline
+        } else {
+            isOffline = await network.isOffline()
+        }
+        if wasOffline && !isOffline {
+            await loadDrives()
+        }
+        wasOffline = isOffline
+    }
+
+    /// Runs periodic observation while Library is visible.
+    func observeConnectivity() async {
+        guard network != nil else { return }
+        await seedConnectivityState()
+        while !Task.isCancelled {
+            do { try await Task.sleep(for: .milliseconds(500)) } catch { break }
+            await tickConnectivity()
         }
     }
 }

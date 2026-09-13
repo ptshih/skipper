@@ -57,7 +57,7 @@ struct MainTabView: View {
         self.analytics = analytics
         self.network = network
         self._libraryModel = State(initialValue: LibraryViewModel(api: api, session: session,
-            storage: storage, analytics: analytics))
+            storage: storage, analytics: analytics, network: network))
         self._themeMode = themeMode
         self._simMode = simMode
         self.customTabBinding = selectedTab

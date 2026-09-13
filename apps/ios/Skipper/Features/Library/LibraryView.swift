@@ -121,6 +121,7 @@ struct LibraryView: View {
             .onChange(of: viewModel.session.user?.id) { _, _ in viewModel.reconcileSession() }
             .task(id: viewModel.session.user?.id) {
                 await viewModel.loadDrives()
+                await viewModel.observeConnectivity()
             }
             .refreshable {
                 await viewModel.loadDrives()
