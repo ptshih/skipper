@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "constants": {
+    "formatVersion": 1,
+    "maxTraceFixes": 100000
+  },
+  "fingerprints": [
+    {
+      "polyline": [
+        [
+          0,
+          0
+        ],
+        [
+          0.001,
+          38.0002
+        ],
+        [
+          -119.987654,
+          39.123456
+        ]
+      ],
+      "expectedHash": "227e4d2d"
+    },
+    {
+      "polyline": [
+        [
+          -120,
+          39
+        ],
+        [
+          -120.01,
+          39.01
+        ]
+      ],
+      "expectedHash": "f7e77d5b"
+    }
+  ],
+  "recorder": {
+    "count": 2,
+    "spanSec": 1,
+    "truncated": false,
+    "envelope": {
+      "version": 1,
+      "driveId": "drive-12345678-test",
+      "label": "Test Trace",
+      "recordedAt": "2026-09-12T12:00:00.000Z",
+      "appVersion": "1.2.0",
+      "routeVertices": 2,
+      "routeHash": "2d0aec34",
+      "truncated": false,
+      "fixes": [
+        {
+          "coords": {
+            "latitude": 39,
+            "longitude": -120,
+            "accuracy": 5,
+            "speed": 20,
+            "heading": 90
+          },
+          "timestamp": 1700000000000
+        },
+        {
+          "coords": {
+            "latitude": 39.001,
+            "longitude": -120,
+            "accuracy": 5,
+            "speed": 20,
+            "heading": 90
+          },
+          "timestamp": 1700000001000
+        }
+      ]
+    },
+    "fileName": "trace-drive-12-2026-09-12T12-00-00-000Z.json",
+    "parsedOk": true,
+    "match": {
+      "ok": true
+    },
+    "mismatch": {
+      "ok": false,
+      "reason": "route fingerprint 97f582ab ≠ trace's 2d0aec34"
+    }
+  }
+}

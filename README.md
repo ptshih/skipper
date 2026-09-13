@@ -31,11 +31,11 @@ decisions, specs, and ideas live in `docs/` (indexed in `docs/README.md`).
 
 ## Stack
 
-- **TypeScript 6** everywhere · **bun** (package manager + runtime + workspaces)
+- **TypeScript 6 + Bun** for backend/tooling workspaces; **Swift + Xcode** for native iOS
 - **Backend:** Hono (served natively by bun) · **DB:** Neon + Drizzle · **Auth:** Better Auth (freemium) · **Audio:** Cloudflare R2 (private; presigned URLs) via `@skipper/storage`
 - **Routing:** Google Routes (A→B route materialization) via `@skipper/routing`
 - **AI:** Anthropic `claude-opus-4-8` (narration) · Google Cloud Text-to-Speech — Gemini-TTS voice "Charon" (OAuth/ADC, no API key; AAC-LC 48 kbps .m4a — LINEAR16 from TTS, then ffmpeg loudnorm + AAC encode)
-- **Mobile (MVP = phone player):** Expo SDK 56, `expo-audio` + `expo-location`; CarPlay (`@g4rb4g3/react-native-carplay`) deferred past the MVP
+- **iOS:** SwiftUI/Observation, iOS 17+, native Google Maps, AVFoundation/MediaPlayer and Core Location. The Expo client is retained until native acceptance; future Android is separate. CarPlay remains deferred.
 
 ## Layout
 
@@ -45,16 +45,17 @@ skipper/
 │   ├── api/        @skipper/api       — Hono API: /drives (+ /drives/plan, /drives/propose), /regions, /sample, signed R2 URLs. Bun-native serve.
 │   ├── admin/      @skipper/admin     — Vite + Hono ops console (cloud-run the studio CLIs) behind Google IAP.
 │   ├── site/       @skipper/site      — Astro landing page (skipper.fm).
-│   └── mobile/     @skipper/mobile    — Expo app. Phone player is the MVP (CarPlay later).
+│   ├── ios/        Skipper.xcodeproj  — native iPhone app, unit/UI tests and bundled brand assets.
+│   └── mobile/     @skipper/mobile    — shipped Expo client retained pending native acceptance.
 ├── packages/
 │   ├── shared/     @skipper/shared    — Zod schemas + types, imported everywhere.
 │   ├── db/         @skipper/db        — Drizzle schema + Neon client.
 │   ├── studio/     @skipper/studio    — server-side narration/corpus generation (discover → enrich → generate).
 │   ├── routing/    @skipper/routing   — Google Routes client (A→B route materialization).
 │   ├── storage/    @skipper/storage   — Cloudflare R2 / S3 client (audio upload + presign).
-│   ├── engine/     @skipper/engine    — pure geo + trigger engine + drive sim (RN-safe; shared by sim & mobile).
+│   ├── engine/     @skipper/engine    — retained TypeScript geo/trigger engine + simulator; native client behavior is ported to Swift.
 │   └── sim/        @skipper/sim       — DB-backed drive-sim CLI (runs @skipper/engine against a real drive).
-├── design-system/  — browsable HTML mirror of the "Trailhead 89" design system (open index.html). A specimen book; not a workspace. Canonical source = apps/mobile/DESIGN.md + src/theme + src/ui.
+├── design-system/  — browsable HTML mirror of the "Trailhead 89" design system (open index.html). A specimen book; not a workspace. Canonical source = apps/ios/DESIGN.md + Skipper/Design and native components.
 ├── tsconfig.base.json · package.json (bun workspaces)
 ```
 
@@ -74,13 +75,15 @@ Other dev surfaces (the human keeps these running — use them, don't restart a 
 
 - `bun run dev:admin` — the ops console (Vite client **:5173** → Hono admin-api **:8788**; cloud-runs the studio CLIs)
 - `bun run dev:site` — the Astro landing page
-- `bun --filter @skipper/mobile start` — the Expo phone player
+- `bun run ios:configure` — native client config from ignored JSON or `SKIPPER_*` environment
+- `bun run ios:check` — native Xcode build and simulator unit/UI tests (no Metro)
+- `bun run ios:release` / `bun run asc:builds` — reviewed native release/readiness workflow; actual distribution delivery remains pending
 - `bun run sim` — the DB-backed drive simulator (`packages/sim`)
 
 ### Coding agents
 
 Claude and Codex share this checkout. `CLAUDE.md` remains the operating truth;
-Codex enters through `AGENTS.md`, with an additional entry point in `apps/mobile`.
+Codex enters through `AGENTS.md`; native contributors also read `apps/ios/CLAUDE.md` and `apps/ios/DESIGN.md`.
 No application provider or model changes are needed to develop with either agent.
 
 Project workflows live in `.claude/skills`; `.agents/skills` links to that directory
@@ -110,9 +113,12 @@ The written rules apply in clients without hook support as well.
 
 Use the existing Bun installation and dependencies; run `bun install` if missing.
 Root `bun run check` provides local validation without loading dotenvx secrets or
-running paid operator jobs. Mobile changes also need `bun run check` from
-`apps/mobile`. Leave the human's dev servers running and preserve other agents'
-uncommitted changes. Environment access is described below; development and
+running paid operator jobs. Its native release fixture tests currently require macOS
+`plutil`; the retained Linux Cloud Build jobs do not invoke this root script suite.
+See the [conversion CI audit](docs/designs/native-ios-conversion.md#retained-linux-ci-boundary). Native changes also need relevant `bun run ios:check` coverage;
+full acceptance requires the full suite plus upgrade/device/distribution evidence. Explicit
+changes to the retained Expo client still need its own workspace check. Leave the human's
+dev servers running and preserve other agents' uncommitted changes. Environment access is described below; development and
 production currently share the same database and storage, so the label is not
 a safety boundary.
 
@@ -129,6 +135,28 @@ keys live only in `.env.keys`, which is gitignored — **never commit it**.
 - `.env.example` is the plaintext catalog of which vars exist.
 - **Deploy:** set `DOTENV_PRIVATE_KEY_PRODUCTION` in the host env; dotenvx
   decrypts at start.
+
+### Native client configuration
+
+Use ignored `.scratch/ios/client-config.json` with string keys `SKIPPER_API_URL`,
+`SKIPPER_GOOGLE_MAPS_API_KEY`, `SKIPPER_POSTHOG_KEY` and `SKIPPER_POSTHOG_HOST`.
+Explicit environment values override the file, including empty values; `SKIPPER_IOS_CONFIG_PATH`
+selects another file. `bun run ios:configure --release` requires the canonical production
+origin `https://api.skipper.fm` and public SDK keys. Configuration no longer reads the legacy
+client's `.env`. Keep local inputs private (mode 0600) and never commit or print their values.
+The checked-in Xcode configs contain no SDK keys and include the ignored generated configs.
+
+`SKIPPER_IOS_SIMULATOR_ID` chooses a dedicated simulator; `SKIPPER_IOS_DERIVED_DATA` isolates
+builds. Native simulator runs use ad-hoc signing so SystemKeychain gets its application
+identifier. Distribution credentials are not needed for simulator tests. A build with signing
+disabled establishes compilation/mock behavior, not real credential persistence.
+
+Read the [conversion plan](docs/designs/native-ios-conversion.md),
+[native verification](docs/guides/native-ios-verification.md), and
+[upgrade rehearsal](docs/guides/native-ios-upgrade-rehearsal.md) for current evidence.
+Preserve `apps/mobile` and backend installed-client compatibility until acceptance and the
+coordinated cutover. The [release implementation](docs/guides/native-ios-release.md) has passed
+independent code review; signed archive, cloud symbols and Apple delivery evidence remain pending.
 
 ### Database
 

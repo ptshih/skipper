@@ -1,0 +1,146 @@
+{
+  "version": 1,
+  "routeVertices": 501,
+  "stopsCount": 4,
+  "baseline": {
+    "traceCount": 277,
+    "sampleFirstFix": {
+      "coords": {
+        "latitude": 0,
+        "longitude": 0,
+        "accuracy": 5,
+        "speed": 20.1168,
+        "heading": 0
+      },
+      "timestamp": 1700000000000
+    },
+    "sampleLastFix": {
+      "coords": {
+        "latitude": 0.04993246515417013,
+        "longitude": 0,
+        "accuracy": 5,
+        "speed": 20.1168,
+        "heading": 0
+      },
+      "timestamp": 1700000276000
+    },
+    "result": {
+      "admitted": 277,
+      "rejected": 0,
+      "ended": true,
+      "fired": [
+        {
+          "seq": 0,
+          "tSec": 43,
+          "leadSec": 12.27467626637946,
+          "distanceM": 246.92720751550235
+        },
+        {
+          "seq": 1,
+          "tSec": 99,
+          "leadSec": 11.549334576393779,
+          "distanceM": 232.3356538063984
+        },
+        {
+          "seq": 2,
+          "tSec": 154,
+          "leadSec": 11.823994267667475,
+          "distanceM": 237.86092788381308
+        },
+        {
+          "seq": 3,
+          "tSec": 209,
+          "leadSec": 12.0986539589414,
+          "distanceM": 243.38620196123236
+        }
+      ],
+      "neverFired": [],
+      "finalAlongM": 5548.6345036533285
+    }
+  },
+  "noisyAtRest": {
+    "result": {
+      "admitted": 0,
+      "rejected": 277,
+      "ended": false,
+      "fired": [],
+      "neverFired": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "finalAlongM": 0
+    }
+  },
+  "noisyAtSpeed": {
+    "result": {
+      "admitted": 277,
+      "rejected": 0,
+      "ended": true,
+      "fired": [
+        {
+          "seq": 0,
+          "tSec": 38,
+          "leadSec": 11.583711548268004,
+          "distanceM": 347.5113464480401
+        },
+        {
+          "seq": 1,
+          "tSec": 93,
+          "leadSec": 11.767887350848163,
+          "distanceM": 353.0366205254449
+        },
+        {
+          "seq": 2,
+          "tSec": 148,
+          "leadSec": 11.952063153428613,
+          "distanceM": 358.5618946028584
+        },
+        {
+          "seq": 3,
+          "tSec": 204,
+          "leadSec": 11.465678029792192,
+          "distanceM": 343.97034089376575
+        }
+      ],
+      "neverFired": [],
+      "finalAlongM": 5548.6345036533285
+    }
+  },
+  "headingUnknown": {
+    "result": {
+      "admitted": 277,
+      "rejected": 0,
+      "ended": true,
+      "fired": [
+        {
+          "seq": 0,
+          "tSec": 43,
+          "leadSec": 12.27467626637946,
+          "distanceM": 246.92720751550235
+        },
+        {
+          "seq": 1,
+          "tSec": 99,
+          "leadSec": 11.549334576393779,
+          "distanceM": 232.3356538063984
+        },
+        {
+          "seq": 2,
+          "tSec": 154,
+          "leadSec": 11.823994267667475,
+          "distanceM": 237.86092788381308
+        },
+        {
+          "seq": 3,
+          "tSec": 209,
+          "leadSec": 12.0986539589414,
+          "distanceM": 243.38620196123236
+        }
+      ],
+      "neverFired": [],
+      "finalAlongM": 5548.6345036533285
+    }
+  }
+}

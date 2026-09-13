@@ -1,6 +1,12 @@
 # EAS setup — Skipper mobile (phone-player dev build)
 
-> **Status:** guide (written 2026-06-08) — re-verify exact commands against current EAS/Expo docs.
+> **Native workflow (2026-09-12):** use [native development instructions](../../apps/ios/CLAUDE.md),
+> [verification evidence](native-ios-verification.md) and the [conversion plan](../designs/native-ios-conversion.md).
+> Expo commands and client-source anchors below describe the retained legacy implementation;
+> they are not the native build/run procedure. The workspace stays until acceptance. Historical
+> desk/simulator passes do not close the native plan's upgrade, real-device or distribution gates.
+
+> **Status:** LEGACY REFERENCE 2026-09-12. Retained Expo client/rehearsal only; native development uses Xcode. Native release tooling remains under review.
 
 How to build and run the Expo app (`apps/mobile`) on EAS, for the M1 live
 phone-player work.

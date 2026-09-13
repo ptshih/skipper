@@ -1,11 +1,17 @@
 # The 1.1 submission sweep — from a clean tree to "Submit for Review"
 
-> **Status:** guide (written 2026-08-03) — the executable pass that clears the last gates between
+> **Native workflow (2026-09-12):** use [native development instructions](../../apps/ios/CLAUDE.md),
+> [verification evidence](native-ios-verification.md) and the [conversion plan](../designs/native-ios-conversion.md).
+> Expo commands and client-source anchors below describe the retained legacy implementation;
+> they are not the native build/run procedure. The workspace stays until acceptance. Historical
+> desk/simulator passes do not close the native plan's upgrade, real-device or distribution gates.
+
+> **Status:** LEGACY 1.1 SWEEP (native transition noted 2026-09-12; written 2026-08-03) — the recorded pass between
 > today's `main` and an App Store submission. It REPLACES, for 1.1, both
 > [device-verification-runbook.md](device-verification-runbook.md) (written against the M1 player, before
 > the conversation was the home screen) and
 > [create-a-drive-verification-runbook.md](create-a-drive-verification-runbook.md) (marked SUPERSEDED —
-> its FROM/TO pickers no longer exist). Those two keep their own history; **execute this one.**
+> its FROM/TO pickers no longer exist). Those two keep their own history; this sweep records the 1.1 procedure.
 > Companion to [app-store-submission.md](app-store-submission.md), which owns every ASC *field* — this
 > owns the *order* and the on-device proof. Code-anchored to `main` as of 2026-08-03; re-verify anchors
 > before trusting a line number.

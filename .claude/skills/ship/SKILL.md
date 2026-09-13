@@ -40,15 +40,16 @@ three, but the reason matters more than the block: they sweep up work in flight.
 bun run check
 ```
 
-That is `lint:docs` + `lint:types` + `lint:enums` + `typecheck` + `test`.
+The root script in `package.json` is the authoritative TypeScript/tooling check list.
+For native source, project, resources or native tooling changes, also run the relevant
+`bun run ios:check` scope; full native release acceptance requires its complete unit/UI run.
+Build-only or scoped results must be named as such. Preserve the QA simulator lane and use
+separate DerivedData for concurrent work. Native release tooling has passed code review;
+committing source is not distribution acceptance.
 
-**If you touched `apps/mobile`, also run its own check** — the real delta is
-`lint:tokens` + `lint` (ESLint exists only there, only for `react-hooks`);
-root `test`/`typecheck` already filter into the workspace:
-
-```bash
-cd apps/mobile && bun run check
-```
+The Expo workspace remains pending native acceptance. If an explicitly assigned change
+touches that retained client, its own `bun run check` is still required. Do not delete it
+as a side effect of adopting native commands.
 
 ⚠ **Capture the exit code. Do not grep the output.** Check output is
 ANSI-colored, so `grep "error TS"` never matches and a broken typecheck reads

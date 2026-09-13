@@ -1,0 +1,253 @@
+{
+  "fixtureVersion": 1,
+  "suite": "gc",
+  "provenance": "Synthetic inputs; expected semantics captured from listed legacy sources and the authorized conversion plan. Never production data.",
+  "clock": "2026-09-12T12:00:00.000Z",
+  "sources": [
+    "apps/mobile/src/lib/offline.ts#sweepOrphanClips",
+    "apps/mobile/src/lib/offline-util.ts#orphanStoreNames",
+    "docs/designs/native-ios-conversion.md"
+  ],
+  "cases": [
+    {
+      "id": "shared-file-referenced-twice",
+      "input": {
+        "inspection": "complete",
+        "busy": [],
+        "keep": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a"
+        ],
+        "onDisk": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+          "cluster-00000005-0000-4000-8000-000000000001.1789214400000.m4a",
+          "future-format.bin"
+        ],
+        "referenceCount": 2
+      },
+      "expected": {
+        "deleteFiles": [
+          "clips/cluster-00000005-0000-4000-8000-000000000001.1789214400000.m4a"
+        ],
+        "preserveUnknownFiles": true,
+        "deleteScope": "clips/ only"
+      }
+    },
+    {
+      "id": "unreadable-manifest",
+      "input": {
+        "inspection": "unreadable",
+        "busy": [],
+        "keep": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a"
+        ],
+        "onDisk": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+          "cluster-00000005-0000-4000-8000-000000000001.1789214400000.m4a",
+          "future-format.bin"
+        ],
+        "referenceCount": 1
+      },
+      "expected": {
+        "deleteFiles": [],
+        "preserveUnknownFiles": true,
+        "deleteScope": "clips/ only"
+      }
+    },
+    {
+      "id": "directory-list-failed",
+      "input": {
+        "inspection": "listing-failed",
+        "busy": [],
+        "keep": [],
+        "onDisk": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+          "cluster-00000005-0000-4000-8000-000000000001.1789214400000.m4a",
+          "future-format.bin"
+        ],
+        "referenceCount": 1
+      },
+      "expected": {
+        "deleteFiles": [],
+        "preserveUnknownFiles": true,
+        "deleteScope": "clips/ only"
+      }
+    },
+    {
+      "id": "download-in-flight",
+      "input": {
+        "inspection": "complete",
+        "busy": [
+          "cluster-00000005-0000-4000-8000-000000000001.1789214400000.m4a"
+        ],
+        "keep": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a"
+        ],
+        "onDisk": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+          "cluster-00000005-0000-4000-8000-000000000001.1789214400000.m4a",
+          "future-format.bin"
+        ],
+        "referenceCount": 1
+      },
+      "expected": {
+        "deleteFiles": [],
+        "preserveUnknownFiles": true,
+        "deleteScope": "clips/ only"
+      }
+    },
+    {
+      "id": "empty-keep-set",
+      "input": {
+        "inspection": "complete",
+        "busy": [],
+        "keep": [],
+        "onDisk": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+          "cluster-00000005-0000-4000-8000-000000000001.1789214400000.m4a",
+          "future-format.bin"
+        ],
+        "referenceCount": 1
+      },
+      "expected": {
+        "deleteFiles": [],
+        "preserveUnknownFiles": true,
+        "deleteScope": "clips/ only"
+      }
+    },
+    {
+      "id": "migration-incomplete",
+      "input": {
+        "inspection": "migration-incomplete",
+        "busy": [],
+        "keep": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a"
+        ],
+        "onDisk": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+          "cluster-00000005-0000-4000-8000-000000000001.1789214400000.m4a",
+          "future-format.bin"
+        ],
+        "referenceCount": 1
+      },
+      "expected": {
+        "deleteFiles": [],
+        "preserveUnknownFiles": true,
+        "deleteScope": "clips/ only"
+      }
+    },
+    {
+      "id": "absent-manifest-directory-skipped",
+      "input": {
+        "inspection": "complete",
+        "busy": [],
+        "keep": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a"
+        ],
+        "onDisk": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+          "cluster-00000005-0000-4000-8000-000000000001.1789214400000.m4a",
+          "future-format.bin"
+        ],
+        "referenceCount": 2,
+        "absentManifestDirectories": [
+          "drives/synthetic-uncommitted"
+        ]
+      },
+      "expected": {
+        "deleteFiles": [
+          "clips/cluster-00000005-0000-4000-8000-000000000001.1789214400000.m4a"
+        ],
+        "preserveUnknownFiles": true,
+        "deleteScope": "clips/ only"
+      }
+    },
+    {
+      "id": "manifest-existence-read-error",
+      "input": {
+        "inspection": "existence-read-error",
+        "busy": [],
+        "keep": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a"
+        ],
+        "onDisk": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+          "cluster-00000005-0000-4000-8000-000000000001.1789214400000.m4a",
+          "future-format.bin"
+        ],
+        "referenceCount": 2
+      },
+      "expected": {
+        "deleteFiles": [],
+        "preserveUnknownFiles": true,
+        "deleteScope": "clips/ only"
+      }
+    },
+    {
+      "id": "topup-in-flight",
+      "input": {
+        "inspection": "complete",
+        "busy": [
+          "topup"
+        ],
+        "keep": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a"
+        ],
+        "onDisk": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+          "cluster-00000005-0000-4000-8000-000000000001.1789214400000.m4a",
+          "future-format.bin"
+        ],
+        "referenceCount": 2
+      },
+      "expected": {
+        "deleteFiles": [],
+        "preserveUnknownFiles": true,
+        "deleteScope": "clips/ only"
+      }
+    },
+    {
+      "id": "active-filename",
+      "input": {
+        "inspection": "complete",
+        "busy": [
+          "cluster-00000005-0000-4000-8000-000000000001.1789214400000.m4a"
+        ],
+        "keep": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a"
+        ],
+        "onDisk": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+          "cluster-00000005-0000-4000-8000-000000000001.1789214400000.m4a",
+          "future-format.bin"
+        ],
+        "referenceCount": 2
+      },
+      "expected": {
+        "deleteFiles": [],
+        "preserveUnknownFiles": true,
+        "deleteScope": "clips/ only"
+      }
+    },
+    {
+      "id": "manifest-migration-failed",
+      "input": {
+        "inspection": "migration-failed",
+        "busy": [],
+        "keep": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a"
+        ],
+        "onDisk": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+          "cluster-00000005-0000-4000-8000-000000000001.1789214400000.m4a",
+          "future-format.bin"
+        ],
+        "referenceCount": 2
+      },
+      "expected": {
+        "deleteFiles": [],
+        "preserveUnknownFiles": true,
+        "deleteScope": "clips/ only"
+      }
+    }
+  ]
+}

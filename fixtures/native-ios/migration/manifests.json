@@ -1,0 +1,1622 @@
+{
+  "fixtureVersion": 1,
+  "suite": "manifests",
+  "provenance": "Synthetic inputs; expected semantics captured from listed legacy sources and the authorized conversion plan. Never production data.",
+  "clock": "2026-09-12T12:00:00.000Z",
+  "sources": [
+    "apps/mobile/src/lib/offline.ts",
+    "apps/mobile/src/lib/offline-util.ts",
+    "apps/mobile/src/lib/clip-store.ts"
+  ],
+  "cases": [
+    {
+      "id": "v4-pre-subject-complete",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "manifest": {
+          "version": 4,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "0.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 1000
+            },
+            "1": {
+              "name": "1.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 2000
+            }
+          }
+        },
+        "files": {
+          "drives/00000002-0000-4000-8000-000000000001/manifest.json": {
+            "text": "{\"version\":4,\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"savedAt\":\"2026-09-01T12:00:00.000Z\",\"detail\":{\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"label\":\"Fixture Loop\",\"polyline\":[[0,0],[0.01,0.01]],\"clips\":[{\"seq\":0,\"form\":\"story\",\"alongSec\":12.5,\"poiId\":\"00000004-0000-4000-8000-000000000001\",\"revisedAt\":\"2026-09-12T12:00:00.000Z\",\"contentType\":\"audio/mp4\",\"url\":null},{\"seq\":1,\"form\":\"story\",\"alongSec\":80,\"poiId\":null,\"revisedAt\":null,\"url\":null,\"contentType\":\"audio/mp4\"}]},\"audioSeqs\":[0,1],\"clips\":{\"0\":{\"name\":\"0.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":1000},\"1\":{\"name\":\"1.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":2000}}}"
+          },
+          "drives/00000002-0000-4000-8000-000000000001/0.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              84,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          },
+          "drives/00000002-0000-4000-8000-000000000001/1.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              84,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          }
+        },
+        "verifiedPlacedNames": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a"
+        ]
+      },
+      "expected": {
+        "manifest": {
+          "version": 5,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 1000,
+              "shared": true
+            },
+            "1": {
+              "name": "1.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 2000,
+              "shared": false
+            }
+          }
+        },
+        "preserveSavedAt": true,
+        "deleteDownloads": false,
+        "manifestCommit": "atomic-after-verified-bytes",
+        "readersObserveIntermediateAbsence": false
+      }
+    },
+    {
+      "id": "v4-move-fails-keeps-local",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "manifest": {
+          "version": 4,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "0.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 1000
+            },
+            "1": {
+              "name": "1.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 2000
+            }
+          }
+        },
+        "files": {
+          "drives/00000002-0000-4000-8000-000000000001/manifest.json": {
+            "text": "{\"version\":4,\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"savedAt\":\"2026-09-01T12:00:00.000Z\",\"detail\":{\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"label\":\"Fixture Loop\",\"polyline\":[[0,0],[0.01,0.01]],\"clips\":[{\"seq\":0,\"form\":\"story\",\"alongSec\":12.5,\"poiId\":\"00000004-0000-4000-8000-000000000001\",\"revisedAt\":\"2026-09-12T12:00:00.000Z\",\"contentType\":\"audio/mp4\",\"url\":null},{\"seq\":1,\"form\":\"story\",\"alongSec\":80,\"poiId\":null,\"revisedAt\":null,\"url\":null,\"contentType\":\"audio/mp4\"}]},\"audioSeqs\":[0,1],\"clips\":{\"0\":{\"name\":\"0.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":1000},\"1\":{\"name\":\"1.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":2000}}}"
+          },
+          "drives/00000002-0000-4000-8000-000000000001/0.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              84,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          },
+          "drives/00000002-0000-4000-8000-000000000001/1.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              84,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          }
+        },
+        "verifiedPlacedNames": []
+      },
+      "expected": {
+        "manifest": {
+          "version": 5,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "0.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 1000,
+              "shared": false
+            },
+            "1": {
+              "name": "1.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 2000,
+              "shared": false
+            }
+          }
+        },
+        "preserveSavedAt": true,
+        "deleteDownloads": false,
+        "manifestCommit": "atomic-after-verified-bytes",
+        "readersObserveIntermediateAbsence": false
+      }
+    },
+    {
+      "id": "v4-crash-source-gone-destination-present",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "manifest": {
+          "version": 4,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "0.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 1000
+            },
+            "1": {
+              "name": "1.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 2000
+            }
+          }
+        },
+        "files": {
+          "drives/00000002-0000-4000-8000-000000000001/manifest.json": {
+            "text": "{\"version\":4,\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"savedAt\":\"2026-09-01T12:00:00.000Z\",\"detail\":{\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"label\":\"Fixture Loop\",\"polyline\":[[0,0],[0.01,0.01]],\"clips\":[{\"seq\":0,\"form\":\"story\",\"alongSec\":12.5,\"poiId\":\"00000004-0000-4000-8000-000000000001\",\"revisedAt\":\"2026-09-12T12:00:00.000Z\",\"contentType\":\"audio/mp4\",\"url\":null},{\"seq\":1,\"form\":\"story\",\"alongSec\":80,\"poiId\":null,\"revisedAt\":null,\"url\":null,\"contentType\":\"audio/mp4\"}]},\"audioSeqs\":[0,1],\"clips\":{\"0\":{\"name\":\"0.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":1000},\"1\":{\"name\":\"1.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":2000}}}"
+          },
+          "clips/poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              84,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          },
+          "drives/00000002-0000-4000-8000-000000000001/1.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              84,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          }
+        },
+        "verifiedPlacedNames": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a"
+        ]
+      },
+      "expected": {
+        "manifest": {
+          "version": 5,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 1000,
+              "shared": true
+            },
+            "1": {
+              "name": "1.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 2000,
+              "shared": false
+            }
+          }
+        },
+        "preserveSavedAt": true,
+        "deleteDownloads": false,
+        "manifestCommit": "atomic-after-verified-bytes",
+        "readersObserveIntermediateAbsence": false
+      }
+    },
+    {
+      "id": "v5-complete-shared",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "manifest": {
+          "version": 5,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 1000,
+              "shared": true
+            },
+            "1": {
+              "name": "1.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 2000,
+              "shared": false
+            }
+          }
+        },
+        "files": {
+          "drives/00000002-0000-4000-8000-000000000001/manifest.json": {
+            "text": "{\"version\":5,\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"savedAt\":\"2026-09-01T12:00:00.000Z\",\"detail\":{\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"label\":\"Fixture Loop\",\"polyline\":[[0,0],[0.01,0.01]],\"clips\":[{\"seq\":0,\"form\":\"story\",\"alongSec\":12.5,\"poiId\":\"00000004-0000-4000-8000-000000000001\",\"revisedAt\":\"2026-09-12T12:00:00.000Z\",\"contentType\":\"audio/mp4\",\"url\":null},{\"seq\":1,\"form\":\"story\",\"alongSec\":80,\"poiId\":null,\"revisedAt\":null,\"url\":null,\"contentType\":\"audio/mp4\"}]},\"audioSeqs\":[0,1],\"clips\":{\"0\":{\"name\":\"poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":1000,\"shared\":true},\"1\":{\"name\":\"1.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":2000,\"shared\":false}}}"
+          },
+          "clips/poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              84,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          },
+          "drives/00000002-0000-4000-8000-000000000001/1.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              84,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          }
+        }
+      },
+      "expected": {
+        "manifest": {
+          "version": 5,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 1000,
+              "shared": true
+            },
+            "1": {
+              "name": "1.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 2000,
+              "shared": false
+            }
+          }
+        },
+        "availableSeqs": [
+          0,
+          1
+        ],
+        "missingSeqs": [],
+        "offlineGate": "play",
+        "onlineGate": "play",
+        "deleteDownloads": false
+      }
+    },
+    {
+      "id": "v5-partial-shared",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "manifest": {
+          "version": 5,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 1000,
+              "shared": true
+            },
+            "1": {
+              "name": "1.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 2000,
+              "shared": false
+            }
+          }
+        },
+        "files": {
+          "drives/00000002-0000-4000-8000-000000000001/manifest.json": {
+            "text": "{\"version\":5,\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"savedAt\":\"2026-09-01T12:00:00.000Z\",\"detail\":{\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"label\":\"Fixture Loop\",\"polyline\":[[0,0],[0.01,0.01]],\"clips\":[{\"seq\":0,\"form\":\"story\",\"alongSec\":12.5,\"poiId\":\"00000004-0000-4000-8000-000000000001\",\"revisedAt\":\"2026-09-12T12:00:00.000Z\",\"contentType\":\"audio/mp4\",\"url\":null},{\"seq\":1,\"form\":\"story\",\"alongSec\":80,\"poiId\":null,\"revisedAt\":null,\"url\":null,\"contentType\":\"audio/mp4\"}]},\"audioSeqs\":[0,1],\"clips\":{\"0\":{\"name\":\"poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":1000,\"shared\":true},\"1\":{\"name\":\"1.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":2000,\"shared\":false}}}"
+          },
+          "clips/poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              84,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          }
+        }
+      },
+      "expected": {
+        "manifest": {
+          "version": 5,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 1000,
+              "shared": true
+            },
+            "1": {
+              "name": "1.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 2000,
+              "shared": false
+            }
+          }
+        },
+        "availableSeqs": [
+          0
+        ],
+        "missingSeqs": [
+          1
+        ],
+        "offlineGate": "play",
+        "onlineGate": "needs-download",
+        "deleteDownloads": false
+      }
+    },
+    {
+      "id": "v5-zero-byte-is-missing",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "manifest": {
+          "version": 5,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 1000,
+              "shared": true
+            },
+            "1": {
+              "name": "1.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 2000,
+              "shared": false
+            }
+          }
+        },
+        "files": {
+          "drives/00000002-0000-4000-8000-000000000001/manifest.json": {
+            "text": "{\"version\":5,\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"savedAt\":\"2026-09-01T12:00:00.000Z\",\"detail\":{\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"label\":\"Fixture Loop\",\"polyline\":[[0,0],[0.01,0.01]],\"clips\":[{\"seq\":0,\"form\":\"story\",\"alongSec\":12.5,\"poiId\":\"00000004-0000-4000-8000-000000000001\",\"revisedAt\":\"2026-09-12T12:00:00.000Z\",\"contentType\":\"audio/mp4\",\"url\":null},{\"seq\":1,\"form\":\"story\",\"alongSec\":80,\"poiId\":null,\"revisedAt\":null,\"url\":null,\"contentType\":\"audio/mp4\"}]},\"audioSeqs\":[0,1],\"clips\":{\"0\":{\"name\":\"poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":1000,\"shared\":true},\"1\":{\"name\":\"1.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":2000,\"shared\":false}}}"
+          },
+          "clips/poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a": {
+            "bytes": []
+          }
+        }
+      },
+      "expected": {
+        "manifest": {
+          "version": 5,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 1000,
+              "shared": true
+            },
+            "1": {
+              "name": "1.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 2000,
+              "shared": false
+            }
+          }
+        },
+        "availableSeqs": [],
+        "missingSeqs": [
+          0,
+          1
+        ],
+        "offlineGate": "nothing-saved",
+        "onlineGate": "needs-download",
+        "deleteDownloads": false
+      }
+    },
+    {
+      "id": "future-version",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "manifest": {
+          "version": 6,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 1000,
+              "shared": true
+            },
+            "1": {
+              "name": "1.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 2000,
+              "shared": false
+            }
+          }
+        },
+        "files": {
+          "drives/00000002-0000-4000-8000-000000000001/manifest.json": {
+            "text": "{\"version\":6,\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"savedAt\":\"2026-09-01T12:00:00.000Z\",\"detail\":{\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"label\":\"Fixture Loop\",\"polyline\":[[0,0],[0.01,0.01]],\"clips\":[{\"seq\":0,\"form\":\"story\",\"alongSec\":12.5,\"poiId\":\"00000004-0000-4000-8000-000000000001\",\"revisedAt\":\"2026-09-12T12:00:00.000Z\",\"contentType\":\"audio/mp4\",\"url\":null},{\"seq\":1,\"form\":\"story\",\"alongSec\":80,\"poiId\":null,\"revisedAt\":null,\"url\":null,\"contentType\":\"audio/mp4\"}]},\"audioSeqs\":[0,1],\"clips\":{\"0\":{\"name\":\"poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":1000,\"shared\":true},\"1\":{\"name\":\"1.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":2000,\"shared\":false}}}"
+          },
+          "clips/poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              84,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          }
+        }
+      },
+      "expected": {
+        "readable": false,
+        "gcAllowed": false,
+        "deleteFiles": [],
+        "repairWhenReachable": true
+      }
+    },
+    {
+      "id": "unsupported-v3",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "manifest": {
+          "version": 3,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "0.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 1000
+            },
+            "1": {
+              "name": "1.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 2000
+            }
+          }
+        },
+        "files": {
+          "drives/00000002-0000-4000-8000-000000000001/manifest.json": {
+            "text": "{\"version\":3,\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"savedAt\":\"2026-09-01T12:00:00.000Z\",\"detail\":{\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"label\":\"Fixture Loop\",\"polyline\":[[0,0],[0.01,0.01]],\"clips\":[{\"seq\":0,\"form\":\"story\",\"alongSec\":12.5,\"poiId\":\"00000004-0000-4000-8000-000000000001\",\"revisedAt\":\"2026-09-12T12:00:00.000Z\",\"contentType\":\"audio/mp4\",\"url\":null},{\"seq\":1,\"form\":\"story\",\"alongSec\":80,\"poiId\":null,\"revisedAt\":null,\"url\":null,\"contentType\":\"audio/mp4\"}]},\"audioSeqs\":[0,1],\"clips\":{\"0\":{\"name\":\"0.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":1000},\"1\":{\"name\":\"1.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":2000}}}"
+          },
+          "clips/poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              84,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          }
+        }
+      },
+      "expected": {
+        "readable": false,
+        "gcAllowed": false,
+        "deleteFiles": [],
+        "repairWhenReachable": true
+      }
+    },
+    {
+      "id": "malformed-clip-table",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "manifest": {
+          "version": 5,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": null
+        },
+        "files": {
+          "drives/00000002-0000-4000-8000-000000000001/manifest.json": {
+            "text": "{\"version\":5,\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"savedAt\":\"2026-09-01T12:00:00.000Z\",\"detail\":{\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"label\":\"Fixture Loop\",\"polyline\":[[0,0],[0.01,0.01]],\"clips\":[{\"seq\":0,\"form\":\"story\",\"alongSec\":12.5,\"poiId\":\"00000004-0000-4000-8000-000000000001\",\"revisedAt\":\"2026-09-12T12:00:00.000Z\",\"contentType\":\"audio/mp4\",\"url\":null},{\"seq\":1,\"form\":\"story\",\"alongSec\":80,\"poiId\":null,\"revisedAt\":null,\"url\":null,\"contentType\":\"audio/mp4\"}]},\"audioSeqs\":[0,1],\"clips\":null}"
+          },
+          "clips/poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              84,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          }
+        }
+      },
+      "expected": {
+        "readable": false,
+        "gcAllowed": false,
+        "deleteFiles": [],
+        "repairWhenReachable": true
+      }
+    },
+    {
+      "id": "unsafe-relative-path",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "manifest": {
+          "version": 5,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "../outside.m4a",
+              "shared": true,
+              "contentType": "audio/mp4",
+              "durationMs": 1000
+            }
+          }
+        },
+        "files": {
+          "drives/00000002-0000-4000-8000-000000000001/manifest.json": {
+            "text": "{\"version\":5,\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"savedAt\":\"2026-09-01T12:00:00.000Z\",\"detail\":{\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"label\":\"Fixture Loop\",\"polyline\":[[0,0],[0.01,0.01]],\"clips\":[{\"seq\":0,\"form\":\"story\",\"alongSec\":12.5,\"poiId\":\"00000004-0000-4000-8000-000000000001\",\"revisedAt\":\"2026-09-12T12:00:00.000Z\",\"contentType\":\"audio/mp4\",\"url\":null},{\"seq\":1,\"form\":\"story\",\"alongSec\":80,\"poiId\":null,\"revisedAt\":null,\"url\":null,\"contentType\":\"audio/mp4\"}]},\"audioSeqs\":[0,1],\"clips\":{\"0\":{\"name\":\"../outside.m4a\",\"shared\":true,\"contentType\":\"audio/mp4\",\"durationMs\":1000}}}"
+          },
+          "outside.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              84,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          }
+        }
+      },
+      "expected": {
+        "availableSeqs": [],
+        "gcAllowed": false,
+        "deleteFiles": []
+      }
+    },
+    {
+      "id": "v4-interrupted-manifest-commit",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "manifest": {
+          "version": 4,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "0.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 1000
+            },
+            "1": {
+              "name": "1.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 2000
+            }
+          }
+        },
+        "files": {
+          "drives/00000002-0000-4000-8000-000000000001/manifest.json": {
+            "text": "{\"version\":4,\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"savedAt\":\"2026-09-01T12:00:00.000Z\",\"detail\":{\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"label\":\"Fixture Loop\",\"polyline\":[[0,0],[0.01,0.01]],\"clips\":[{\"seq\":0,\"form\":\"story\",\"alongSec\":12.5,\"poiId\":\"00000004-0000-4000-8000-000000000001\",\"revisedAt\":\"2026-09-12T12:00:00.000Z\",\"contentType\":\"audio/mp4\",\"url\":null},{\"seq\":1,\"form\":\"story\",\"alongSec\":80,\"poiId\":null,\"revisedAt\":null,\"url\":null,\"contentType\":\"audio/mp4\"}]},\"audioSeqs\":[0,1],\"clips\":{\"0\":{\"name\":\"0.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":1000},\"1\":{\"name\":\"1.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":2000}}}"
+          },
+          "clips/poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              84,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          },
+          "drives/00000002-0000-4000-8000-000000000001/1.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              84,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          }
+        },
+        "verifiedPlacedNames": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a"
+        ],
+        "interruptAt": "before-atomic-manifest-replace"
+      },
+      "expected": {
+        "manifest": {
+          "version": 5,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 1000,
+              "shared": true
+            },
+            "1": {
+              "name": "1.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 2000,
+              "shared": false
+            }
+          }
+        },
+        "preserveSavedAt": true,
+        "deleteDownloads": false,
+        "manifestCommit": "atomic-after-verified-bytes",
+        "readersObserveIntermediateAbsence": false,
+        "resumeIdempotently": true
+      }
+    },
+    {
+      "id": "malformed-json-original-preserved",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "manifest": null,
+        "files": {
+          "drives/00000002-0000-4000-8000-000000000001/manifest.json": {
+            "text": "{\"version\":5,"
+          },
+          "drives/00000002-0000-4000-8000-000000000001/0.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              84,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          },
+          "drives/00000002-0000-4000-8000-000000000001/1.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              84,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          }
+        },
+        "verifiedPlacedNames": [
+          "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a"
+        ]
+      },
+      "expected": {
+        "readable": false,
+        "gcAllowed": false,
+        "deleteFiles": [],
+        "repairWhenReachable": true
+      }
+    },
+    {
+      "id": "v5-two-drives-share-one-clip",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "manifest": {
+          "version": 5,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 1000,
+              "shared": true
+            },
+            "1": {
+              "name": "1.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 2000,
+              "shared": false
+            }
+          }
+        },
+        "files": {
+          "drives/00000002-0000-4000-8000-000000000001/manifest.json": {
+            "text": "{\"version\":5,\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"savedAt\":\"2026-09-01T12:00:00.000Z\",\"detail\":{\"driveId\":\"00000002-0000-4000-8000-000000000001\",\"label\":\"Fixture Loop\",\"polyline\":[[0,0],[0.01,0.01]],\"clips\":[{\"seq\":0,\"form\":\"story\",\"alongSec\":12.5,\"poiId\":\"00000004-0000-4000-8000-000000000001\",\"revisedAt\":\"2026-09-12T12:00:00.000Z\",\"contentType\":\"audio/mp4\",\"url\":null},{\"seq\":1,\"form\":\"story\",\"alongSec\":80,\"poiId\":null,\"revisedAt\":null,\"url\":null,\"contentType\":\"audio/mp4\"}]},\"audioSeqs\":[0,1],\"clips\":{\"0\":{\"name\":\"poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":1000,\"shared\":true},\"1\":{\"name\":\"1.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":2000,\"shared\":false}}}"
+          },
+          "clips/poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              84,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          },
+          "drives/00000003-0000-4000-8000-000000000001/manifest.json": {
+            "text": "{\"version\":5,\"driveId\":\"00000003-0000-4000-8000-000000000001\",\"savedAt\":\"2026-09-01T12:00:00.000Z\",\"detail\":{\"driveId\":\"00000003-0000-4000-8000-000000000001\",\"label\":\"Fixture Loop\",\"polyline\":[[0,0],[0.01,0.01]],\"clips\":[{\"seq\":7,\"form\":\"story\",\"alongSec\":12.5,\"poiId\":\"00000004-0000-4000-8000-000000000001\",\"revisedAt\":\"2026-09-12T12:00:00.000Z\",\"contentType\":\"audio/mp4\",\"url\":null}]},\"audioSeqs\":[7],\"clips\":{\"7\":{\"name\":\"poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":1000,\"shared\":true}}}"
+          }
+        }
+      },
+      "expected": {
+        "manifest": {
+          "version": 5,
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "savedAt": "2026-09-01T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 12.5,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mp4",
+                "url": null
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 80,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4"
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "poi-00000004-0000-4000-8000-000000000001.1789214400000.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 1000,
+              "shared": true
+            },
+            "1": {
+              "name": "1.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 2000,
+              "shared": false
+            }
+          }
+        },
+        "availableSeqs": [
+          0
+        ],
+        "missingSeqs": [
+          1
+        ],
+        "offlineGate": "play",
+        "onlineGate": "needs-download",
+        "deleteDownloads": false,
+        "otherDriveAvailableSeqs": [
+          7
+        ],
+        "sharedFileCopies": 1
+      }
+    }
+  ]
+}

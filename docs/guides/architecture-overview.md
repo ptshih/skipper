@@ -1,6 +1,12 @@
 # Skipper, from first principles — an architecture orientation
 
-**Status:** Snapshot — 2026-08-02, written against `main` during 1.1 step 12 by reading the route
+> **Native workflow (2026-09-12):** use [native development instructions](../../apps/ios/CLAUDE.md),
+> [verification evidence](native-ios-verification.md) and the [conversion plan](../designs/native-ios-conversion.md).
+> Expo commands and client-source anchors below describe the retained legacy implementation;
+> they are not the native build/run procedure. The workspace stays until acceptance. Historical
+> desk/simulator passes do not close the native plan's upgrade, real-device or distribution gates.
+
+**Status:** Backend/legacy-client snapshot — 2026-08-02; native transition noted 2026-09-12, written against `main` during 1.1 step 12 by reading the route
 table, schema, engine and mobile source directly rather than summarizing the docs. **Partly corrected
 2026-08-05** for the download-before-start build
 ([download-before-start.md](../designs/download-before-start.md)): a live drive is gated on a complete

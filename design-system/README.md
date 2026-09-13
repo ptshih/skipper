@@ -42,16 +42,16 @@ specimen full size.
 
 ## Relationship to the app — this is a MIRROR, the code is the source of truth
 
-The **canonical** design system lives in the mobile app, not here:
+The **canonical** design system for current iOS development lives in the native app:
 
-- `apps/mobile/DESIGN.md` — the design language (the words: the WPA-poster aesthetic,
-  dark-mode-first, the priority principles, the contrast guarantee).
-- `apps/mobile/src/theme/` — the real tokens + day/dusk themes.
-- `apps/mobile/src/ui/` — the real primitives screens compose.
+- `apps/ios/DESIGN.md` — presentation, native controls, accessibility and brand language.
+- `apps/ios/Skipper/Design/Trailhead.swift` — semantic tokens, typography and day/dusk roles.
+- `apps/ios/Skipper/Features/Shared` — native components; `apps/ios/BrandSources` — SVG masters.
 
-This bundle was generated *from* that system as a visual reference. Per repo doctrine,
-**code wins**: if a token or component here disagrees with `apps/mobile/src/theme`
-or `src/ui`, the native code is right and this mirror is stale. Treat it as a
+This bundle predates the native conversion and is a historical visual reference. Its web
+font specimens are not authoritative for the current Zilla Slab / Lora / Overpass Mono
+native palette. The retained Expo workspace remains available for migration acceptance.
+When a token or component differs, current native code and DESIGN.md win. Treat this as a
 specimen book and a brand front door, not an importable dependency — nothing in the
 app imports from `design-system/`, and it sits outside every workspace's build scope
 on purpose (its `.jsx`/`.d.ts` sources are browser specimens, not RN code).

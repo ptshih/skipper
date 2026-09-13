@@ -1,0 +1,107 @@
+{
+  "fixtureVersion": 1,
+  "suite": "transcript",
+  "provenance": "Synthetic inputs; expected semantics captured from listed legacy sources and the authorized conversion plan. Never production data.",
+  "clock": "2026-09-12T12:00:00.000Z",
+  "sources": [
+    "apps/mobile/src/lib/planner-transcript.ts"
+  ],
+  "cases": [
+    {
+      "id": "cold-open-excluded-consecutive-riders-merged",
+      "input": [
+        {
+          "role": "skipper",
+          "text": "Welcome.",
+          "wire": false
+        },
+        {
+          "role": "rider",
+          "text": "First ask",
+          "wire": true
+        },
+        {
+          "role": "skipper",
+          "text": "Outage",
+          "wire": false
+        },
+        {
+          "role": "rider",
+          "text": "Try again",
+          "wire": true
+        }
+      ],
+      "expected": [
+        {
+          "role": "rider",
+          "text": "First ask\n\nTry again"
+        }
+      ]
+    },
+    {
+      "id": "route-metadata-never-on-wire",
+      "input": [
+        {
+          "role": "rider",
+          "text": "Draw it",
+          "wire": true
+        },
+        {
+          "role": "skipper",
+          "text": "Drawn",
+          "wire": true,
+          "route": {
+            "start": "00000006-0000-4000-8000-000000000001",
+            "end": "00000007-0000-4000-8000-000000000001"
+          }
+        },
+        {
+          "role": "rider",
+          "text": "Change it",
+          "wire": true
+        }
+      ],
+      "expected": [
+        {
+          "role": "rider",
+          "text": "Draw it"
+        },
+        {
+          "role": "skipper",
+          "text": "Drawn"
+        },
+        {
+          "role": "rider",
+          "text": "Change it"
+        }
+      ]
+    },
+    {
+      "id": "trailing-skipper-refuses-post",
+      "input": [
+        {
+          "role": "rider",
+          "text": "A",
+          "wire": true
+        },
+        {
+          "role": "skipper",
+          "text": "B",
+          "wire": true
+        }
+      ],
+      "expected": null
+    },
+    {
+      "id": "blank-rider-refuses-post",
+      "input": [
+        {
+          "role": "rider",
+          "text": "  ",
+          "wire": true
+        }
+      ],
+      "expected": null
+    }
+  ]
+}

@@ -14,6 +14,7 @@ How truth is managed in this repo. Four layers; each fact lives in exactly ONE o
 - **Understand the current build:** [1.1 design](designs/drives-first-1-1.md), then the
   [architecture overview](guides/architecture-overview.md) for orientation. Code and the operating
   rules in [CLAUDE.md](../CLAUDE.md) settle questions about current behavior.
+- **Resume native iOS conversion and orchestration:** [complete conversion plan](designs/native-ios-conversion.md).
 - **Find work to do:** [engineering backlog](../TODO.md). Designs record intent and history;
   their presence in this index does not mean they are scheduled.
 - **Check release work:** [App Store submission record](guides/app-store-submission.md),
@@ -36,7 +37,7 @@ record's dated Status and addenda before treating its original proposal as curre
   was redundant, and the redundancy produced a real contradiction (a "promotion" that had to move a
   file, against a rule saying files never move). One folder, one status line, no promotion concept.
 - **`research/`** — competitive/external studies: *reference.* Inputs to decisions, not commitments.
-- **`guides/`** — operational how-tos (EAS builds, etc.).
+- **`guides/`** — operational how-tos (native iOS verification/releases, etc.).
 
 ## Conventions
 
@@ -114,6 +115,7 @@ the document itself, so this index does not maintain a second account of them.
 
 ### designs/
 
+- [Complete conversion to native iOS](designs/native-ios-conversion.md)
 - [Release batches](designs/release-batches.md)
 - [Yosemite launch and admin listening review](designs/yosemite-region-launch.md)
 - [A reviewer-reachable simulated drive](designs/app-review-demo-mode.md)
@@ -189,13 +191,17 @@ the document itself, so this index does not maintain a second account of them.
 ### guides/
 
 - [Agent delegation and model setup](guides/agent-delegation.md)
+- [Native iOS verification](guides/native-ios-verification.md) — fixtures, simulator, upgrade, device, and distribution evidence.
+- [Native iOS upgrade rehearsal](guides/native-ios-upgrade-rehearsal.md) — actual legacy SecureStore and Documents replacement evidence and limits.
+- [Native iOS release](guides/native-ios-release.md) — native archive/export, symbols, upload, and exact TestFlight readiness.
+- [Native iOS symbols](guides/native-ios-symbols.md) — isolated EAS dSYM upload, source association and authenticated readback evidence.
 - [App Store Connect — the submission cheat-sheet](guides/app-store-submission.md)
 - [The 1.1 submission sweep — from a clean tree to "Submit for Review"](guides/1-1-submission-sweep.md)
-- [EAS setup — Skipper mobile (phone-player dev build)](guides/eas-setup.md)
+- [Legacy EAS setup — retained Expo client only](guides/eas-setup.md)
 - [On-device verification runbook — M1 phone player](guides/device-verification-runbook.md)
 - [GCP Cloud Run deploy](guides/gcp-cloud-run-deploy.md)
 - [Skipper, from first principles — an architecture orientation](guides/architecture-overview.md)
-- [apps/mobile internals](guides/mobile-internals.md)
+- [Legacy apps/mobile internals](guides/mobile-internals.md)
 - [The 1.1 cutover — the first push](guides/1-1-cutover-runbook.md)
 - [Ops-scripts SOP](guides/ops-scripts-sop.md)
 - [Create-a-Drive verification runbook (V2)](guides/create-a-drive-verification-runbook.md)

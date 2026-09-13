@@ -10,6 +10,7 @@ Create-a-Drive IS a conversation. The live record is **`docs/guides/app-store-su
 block has the canonical listing URL; §13's go-live (site `APP_STORE_URL` + Apple badge) SHIPPED 2026-08-20;
 §15/§14 the review rounds; `bun run asc:state` reads the state. RISK-1's real drive: still not recorded done.
 `docs/designs/drives-first-1-1.md` is the build truth — read it before touching `apps/api` or `apps/mobile`.
+Authorized replacement in progress: [native iOS conversion](docs/designs/native-ios-conversion.md), including orchestration continuity; `apps/mobile` remains the shipped Expo client until cutover.
 
 ## STOP — the expensive or irreversible mistakes
 
@@ -37,26 +38,23 @@ block has the canonical listing URL; §13's go-live (site `APP_STORE_URL` + Appl
   This bullet and the spend rules above are ENFORCED, not merely documented: a `PreToolUse` hook
   (`scripts/guard-hook.ts`) hard-denies the NEVER list and prompts on spend. `/guard` is the
   cheat-sheet — read it before working around a block, and every rule must trace back to a line here.
-- **🖥 Don't boot or restart dev servers** — the human keeps them running continuously; just use them
-  (find ports with `lsof -nP -iTCP:<port> -sTCP:LISTEN`). ⚠ **METRO (:8081) IS THE EXCEPTION (founder,
-  2026-08-03): stopping and starting it for a simulator visual pass is ALWAYS fine, no need to ask.**
-  It is the app's own bundler, not a shared service, and a mobile change cannot be verified without
-  it — `cd apps/mobile && bun run start` in the background, then relaunch the app. The rule protects
-  the API/admin/site servers, whose state the human is often mid-way through.
-- **✅ Verify before committing:** root `bun run check` — the doc/type/enum lints, then every typecheck
-  and test suite, `scripts/` included (`package.json` holds the list; don't re-enumerate it here, it
-  drifts). If you touched `apps/mobile`, ALSO run `bun run check` there (the real delta is
-  `lint:tokens` + `lint` — root `test`/`typecheck` already filter into the workspace). ⚠ `lint` is ESLint,
-  which exists ONLY in `apps/mobile` and only for `react-hooks` (the hooks are unreachable by `bun test`);
-  pin it to 9.x and treat `eslint-suppressions.json` as a backlog — see `apps/mobile/CLAUDE.md`.
+- **🖥 Don't boot or restart dev servers** — the human keeps them running; use existing services.
+  Native iOS builds through Xcode and needs no Metro. The retained Expo client's simulator-only
+  Metro restart permission remains limited to explicitly assigned legacy verification; never restart
+  API/admin/site servers as part of native QA.
+- **✅ Verify before committing:** root `bun run check` (`package.json` owns the exact list), plus
+  relevant `bun run ios:check` coverage for native changes. Full native acceptance also needs upgrade,
+  device and distribution evidence. Use separate DerivedData and coordinate simulator ownership.
+  Normal simulator signing is ad-hoc; unsigned/mock checks do not prove SystemKeychain access.
+  An explicit change to retained `apps/mobile` still requires its own check (tokens and ESLint too).
   ⚠ **A new package needs its `test` script in the SAME commit** — `bun --filter '*' test` SILENTLY skips
   one without it, so an absent script is indistinguishable from a passing suite (it hid two packages).
 
 ## Git workflow
 
 - **Never create or switch branches without confirming first.** No `git switch -c` / `checkout -b` / moving branches on your own. Commit directly to `main` (1.1 too): agents share one tree; unannounced switches disrupt others. Commit hygiene lives in STOP above.
-- **Delegate independent read-only exploration/review when it materially helps; keep small or dependent work local.** At most two helpers, no recursive delegation; the parent owns edits, integration, checks, and commits. Helpers inherit STOP rules, never authority to spend or mutate prod.
-  Give each helper a bounded question, paths, constraints, and required evidence; verify its findings before acting. Use matching skills on demand, not every workflow on every task. Read [the delegation guide](docs/guides/agent-delegation.md) for roles, model configuration, and the trial. If spawning is unavailable, say so and proceed locally.
+- **Delegate independent read-only exploration/review when it materially helps; keep small or dependent work local.** Ordinary tasks: at most two helpers; parents own execution. Explicit coordinators delegate execution; their roster follows user selections/authority (see guide below). No recursive delegation. Helpers inherit STOP rules, never authority to spend or mutate prod.
+  Give each helper a bounded question, paths, constraints, and required evidence; verify its findings before acting. Use matching skills on demand, not every workflow on every task. Read [the delegation guide](docs/guides/agent-delegation.md) for roles, model configuration, and the trial. If spawning is unavailable, say so; ordinary task parents may proceed locally.
 - **Docs ride along with the change.** If your work ships / supersedes / invalidates anything in `docs/`
   (or this file), flip that doc's status line in the SAME commit — **statuses change in place; a doc file
   NEVER moves.** `bun run lint:docs` (a hook + first in `bun run check`) fails on a missing `**Status**`
@@ -177,8 +175,8 @@ block has the canonical listing URL; §13's go-live (site `APP_STORE_URL` + Appl
 
 ## Stack notes
 
-- **bun everywhere** (package manager + runtime). Internal packages export `.ts` source (no dist build); bun
-  runs it, `tsc --noEmit` type-checks. No `tsx`, no `@hono/node-server`.
+- **Bun for TypeScript; Xcode for native iOS.** Internal TS packages export source (no dist build);
+  Swift/SwiftUI lives in `apps/ios`, with iOS 17 minimum. No shared Android client framework.
 - Verified majors (exact pins live in `package.json`): TS 6 — do NOT bump to 7: the native/tsgo compiler drops
   the programmatic TS API, and expo's dynamic-config loader `@expo/require-utils` `require('typescript')`s it
   to transpile `app.config.ts`; under 7 `expo prebuild`/`export` die with `ModuleKind` undefined, and
@@ -230,8 +228,8 @@ block has the canonical listing URL; §13's go-live (site `APP_STORE_URL` + Appl
   of it; it lives where `apps/api` can import it (`apps/api` does NOT depend on `@skipper/studio`). Same
   voice, different job. Never copy fact-sheet / stop-kind language into the planner, or the deflection into
   the narration prompt. Each changes under its own review.
-- **`apps/mobile` has a real design system ("Trailhead 89") — never hand-roll a style or a raw color.** The
-  rules + what enforces them live in `apps/mobile/CLAUDE.md` (loads when you work there) + `DESIGN.md`.
+- **Native iOS uses the "Trailhead 89" semantic design system.** Read `apps/ios/CLAUDE.md` and
+  `apps/ios/DESIGN.md`; `Skipper/Design/Trailhead.swift` owns tokens. Preserve ordinary native controls.
 
 ## Posture & doctrine
 
@@ -312,12 +310,10 @@ stays advisory (no auto-judge for world-truth). `docs/decisions/automated-ground
 - **Triggering:** do NOT rely on fixed-radius background polling — the OS throttles background GPS and a car
   sails through a 350 m geofence at 60 mph. Use a continuous high-rate foreground service + speed-adaptive
   lead time; `trigger_radius_m` is a floor. Heading gate only above ~5 mph.
-- **Audio:** `expo-audio` (NOT `expo-av`, removed in SDK 55); background playback via config plugin. The
-  skipper takes EXCLUSIVE focus (`doNotMix`) whenever he speaks — the drive IS the audio (curated soundtrack
-  + narration), NOT a voice-over that ducks the rider's music, and pre-drive audio (the route
-  preview clip) owns the channel the same way. Don't "flip" it to `duckOthers` — ducking was tried and
-  rejected. `setAudioModeAsync` is PROCESS-WIDE, so only one surface may own it at a time. See
-  `docs/decisions/drive-audio-exclusive-focus.md`.
+- **Audio:** native AVFoundation/MediaPlayer with ONE process-wide exclusive audio owner. Narration,
+  soundtrack and pre-drive previews share that owner; do not mix with or duck the rider's other audio.
+  Stop audio before explicit sign-out/purge; verify interruptions and lock-screen controls on a device.
+  See `docs/decisions/drive-audio-exclusive-focus.md`; legacy Expo behavior remains compatibility evidence.
 - **Offline-first:** the store is keyed by NARRATION SUBJECT ID and filled from the `DriveManifest` the app
   already holds (create/open/refresh all return one). ⚠ **Only a drive's own manifest is authoritative for
   that drive** — no bbox-level eligibility rule can guarantee coverage of a selection frozen under a

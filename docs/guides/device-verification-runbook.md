@@ -1,15 +1,6 @@
 # On-device verification runbook — M1 phone player
 
-> **Update (2026-07-16):** the couch **PREVIEW is CUT.** Any step that says to tap **"Take the simulated
-> drive"** or open a `?mode=preview` player is OBSOLETE — that CTA and mode are gone. Auditioning is now
-> the drive-detail mini-preview (List/Map toggle + tap a stop to hear one clip); the "Preview drive"
-> header and tappable-rows-only-in-preview checks below no longer apply. ⚠ **Two clauses of this
-> banner went stale on 2026-08-05:** the player's list is NO longer "always read-only" (a PASSED stop
-> is tappable — §4), and the dev `⋯ → "Simulate the drive"` item is DELETED, not unchanged (§11 of the
-> download-before-start doc). See
-> [`../decisions/detail-page-mini-preview.md`](../decisions/detail-page-mini-preview.md).
-
-> **Status:** guide (written 2026-06-10) — ⚠ **PARTLY SUPERSEDED 2026-08-05** by the
+> **Status:** LEGACY RUNBOOK (native transition noted 2026-09-12; written 2026-06-10) — ⚠ **PARTLY SUPERSEDED 2026-08-05** by the
 > download-before-start gate: the unsaved-drive alert, the `?mode` param and drive-audio streaming are
 > all gone, and §§2–4, §6–§8 were rewritten that day against what replaced them (the banner below
 > carries the deltas). ⚠ **written against the M1 player, BEFORE the conversation
@@ -23,6 +14,21 @@
 > tree before trusting a line number. Pairs with `docs/guides/eas-setup.md` (how to build/install
 > the dev build) and `docs/designs/gps-player-spec.md` §6–§7 (the engineering accept bar this reports
 > against).
+
+> **Native workflow (2026-09-12):** use [native development instructions](../../apps/ios/CLAUDE.md),
+> [verification evidence](native-ios-verification.md) and the [conversion plan](../designs/native-ios-conversion.md).
+> Expo commands and client-source anchors below describe the retained legacy implementation;
+> they are not the native build/run procedure. The workspace stays until acceptance. Historical
+> desk/simulator passes do not close the native plan's upgrade, real-device or distribution gates.
+
+> **Update (2026-07-16):** the couch **PREVIEW is CUT.** Any step that says to tap **"Take the simulated
+> drive"** or open a `?mode=preview` player is OBSOLETE — that CTA and mode are gone. Auditioning is now
+> the drive-detail mini-preview (List/Map toggle + tap a stop to hear one clip); the "Preview drive"
+> header and tappable-rows-only-in-preview checks below no longer apply. ⚠ **Two clauses of this
+> banner went stale on 2026-08-05:** the player's list is NO longer "always read-only" (a PASSED stop
+> is tappable — §4), and the dev `⋯ → "Simulate the drive"` item is DELETED, not unchanged (§11 of the
+> download-before-start doc). See
+> [`../decisions/detail-page-mini-preview.md`](../decisions/detail-page-mini-preview.md).
 
 > **Update (2026-07-30, ⚠ half of it SUPERSEDED 2026-08-05 — read the next banner):** the offline
 > download is **no longer `⋯`-only.** The placard now always shows an offline state (a faint

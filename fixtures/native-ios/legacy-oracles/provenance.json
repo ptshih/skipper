@@ -1,0 +1,62 @@
+{
+  "oracleVersion": 1,
+  "purpose": "TEST ONLY: frozen shipped legacy behavior, never a production implementation",
+  "capturedAt": "2026-09-12",
+  "shippedBaseline": {
+    "version": "1.1.0",
+    "build": 25,
+    "commit": "98a292db08950b7db3be08e2a0e5ec971038e20e"
+  },
+  "captureHead": "7d202aa53b615e766790c3368845ad90b0080768",
+  "allFilesMatchShippedBaselineAndCaptureHead": true,
+  "runtimeImports": [],
+  "typeOnlyImports": [
+    "../../../packages/shared/src/schemas"
+  ],
+  "files": [
+    {
+      "file": "planner-util.ts",
+      "sourcePath": "apps/mobile/src/lib/planner-util.ts",
+      "sourceGitBlob": "479508b4dc922e892e0a99fc0938e8f56a09fc62",
+      "sha256": "3904bf04d115fcb31748bc1d806d0eee43b03a6e01e7394528b8dfc613190c05",
+      "copyMode": "byte-for-byte",
+      "sourceSHA256": "3904bf04d115fcb31748bc1d806d0eee43b03a6e01e7394528b8dfc613190c05"
+    },
+    {
+      "file": "planner-transcript.ts",
+      "sourcePath": "apps/mobile/src/lib/planner-transcript.ts",
+      "sourceGitBlob": "2b5f8a5927e2e4b9c8dcbe33950ff8e2aa614fbf",
+      "sha256": "e4bafee29c32fcd413926f8798b0f0fd957eea934b26653e33e865ee6367d416",
+      "copyMode": "type-only-import-relocation",
+      "sourceSHA256": "cecea9f3af6beba9a58508017cddf91bf0c49ca8b0e3ed7a61fbb993a747b7ad",
+      "transformations": [
+        {
+          "from": "from '@skipper/shared'",
+          "to": "from '../../../packages/shared/src/schemas'"
+        }
+      ]
+    },
+    {
+      "file": "anon-session-util.ts",
+      "sourcePath": "apps/mobile/src/lib/anon-session-util.ts",
+      "sourceGitBlob": "e6866cea301c0f996d78d3f5607f787d1985fd3d",
+      "sha256": "48cd9560b80eecea29c7937a1a1504f94c15847dce7d55fc938bbc417c260ec7",
+      "copyMode": "byte-for-byte",
+      "sourceSHA256": "48cd9560b80eecea29c7937a1a1504f94c15847dce7d55fc938bbc417c260ec7"
+    },
+    {
+      "file": "offline-util.ts",
+      "sourcePath": "apps/mobile/src/lib/offline-util.ts",
+      "sourceGitBlob": "90892b51eec4b09f2e3fdd542863b09da2ed8c76",
+      "sha256": "e3a7b655cee6344f8cc1b25b4ed66b4ab344db159669e6c6acee453071eeaa94",
+      "copyMode": "type-only-import-relocation",
+      "sourceSHA256": "8caed10fa707442405061cacf8c959ddd1f4985b7fb2b1014dbe750df859dc9d",
+      "transformations": [
+        {
+          "from": "from '@skipper/shared'",
+          "to": "from '../../../packages/shared/src/schemas'"
+        }
+      ]
+    }
+  ]
+}

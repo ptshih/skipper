@@ -1,0 +1,204 @@
+{
+  "version": 1,
+  "constants": {
+    "preStartStallMs": 12000,
+    "localClipStallMs": 2500,
+    "postStartStallMs": 6000,
+    "clipEndGraceSec": 0.6,
+    "seekReachedEpsSec": 0.4
+  },
+  "decidePump": [
+    {
+      "s": {
+        "clipBusy": true,
+        "queue": [
+          4,
+          5
+        ],
+        "reachedEnd": false
+      },
+      "expected": {
+        "kind": "wait"
+      }
+    },
+    {
+      "s": {
+        "clipBusy": true,
+        "queue": [],
+        "reachedEnd": true
+      },
+      "expected": {
+        "kind": "wait"
+      }
+    },
+    {
+      "s": {
+        "clipBusy": false,
+        "queue": [
+          7,
+          8,
+          9
+        ],
+        "reachedEnd": false
+      },
+      "expected": {
+        "kind": "play",
+        "seq": 7
+      }
+    },
+    {
+      "s": {
+        "clipBusy": false,
+        "queue": [
+          12
+        ],
+        "reachedEnd": true
+      },
+      "expected": {
+        "kind": "play",
+        "seq": 12
+      }
+    },
+    {
+      "s": {
+        "clipBusy": false,
+        "queue": [
+          0
+        ],
+        "reachedEnd": true
+      },
+      "expected": {
+        "kind": "play",
+        "seq": 0
+      }
+    },
+    {
+      "s": {
+        "clipBusy": false,
+        "queue": [],
+        "reachedEnd": true
+      },
+      "expected": {
+        "kind": "finish"
+      }
+    },
+    {
+      "s": {
+        "clipBusy": false,
+        "queue": [],
+        "reachedEnd": false
+      },
+      "expected": {
+        "kind": "idle"
+      }
+    }
+  ],
+  "decideStall": [
+    {
+      "name": "recent_progress_waits",
+      "s": {
+        "now": 100000,
+        "lastProgressAt": 95000,
+        "lastProgressTime": 30,
+        "duration": 120,
+        "resumeTried": false
+      },
+      "expected": "wait"
+    },
+    {
+      "name": "stalled_near_end_completes",
+      "s": {
+        "now": 100000,
+        "lastProgressAt": 90000,
+        "lastProgressTime": 119.5,
+        "duration": 120,
+        "resumeTried": false
+      },
+      "expected": "completeAtEnd"
+    },
+    {
+      "name": "stalled_short_of_end_grace_resumes",
+      "s": {
+        "now": 100000,
+        "lastProgressAt": 90000,
+        "lastProgressTime": 119.3,
+        "duration": 120,
+        "resumeTried": false
+      },
+      "expected": "resume"
+    },
+    {
+      "name": "stalled_mid_clip_resume_tried_gives_up",
+      "s": {
+        "now": 100000,
+        "lastProgressAt": 90000,
+        "lastProgressTime": 30,
+        "duration": 120,
+        "resumeTried": true
+      },
+      "expected": "giveUp"
+    },
+    {
+      "name": "duration_zero_never_completesAtEnd",
+      "s": {
+        "now": 100000,
+        "lastProgressAt": 90000,
+        "lastProgressTime": 30,
+        "duration": 0,
+        "resumeTried": false
+      },
+      "expected": "resume"
+    }
+  ],
+  "clampSeekSec": [
+    {
+      "ms": -1000,
+      "durationSec": 60,
+      "expected": 0
+    },
+    {
+      "ms": 30000,
+      "durationSec": 60,
+      "expected": 30
+    },
+    {
+      "ms": 90000,
+      "durationSec": 60,
+      "expected": 60
+    }
+  ],
+  "seekTargetReached": [
+    {
+      "current": 30.1,
+      "target": 30,
+      "expected": true
+    },
+    {
+      "current": 30.5,
+      "target": 30,
+      "expected": false
+    }
+  ],
+  "format": [
+    {
+      "sec": 83,
+      "expected": "1:23"
+    },
+    {
+      "sec": 119.6,
+      "expected": "2:00"
+    },
+    {
+      "sec": -5,
+      "expected": "0:00"
+    },
+    {
+      "sec": null,
+      "expected": "0:00"
+    },
+    {
+      "ms": 125000,
+      "expected": "2:05"
+    }
+  ]
+}

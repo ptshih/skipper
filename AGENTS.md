@@ -3,14 +3,17 @@
 Read [CLAUDE.md](CLAUDE.md) before doing any work. It is the shared operating
 truth for Claude and Codex; keep doctrine there rather than duplicating it here.
 
-- Before changing `apps/api` or `apps/mobile`, read
-  [the current build design](docs/designs/drives-first-1-1.md).
-- For anything under `apps/mobile`, also read [its instructions](apps/mobile/CLAUDE.md)
-  and [design system](apps/mobile/DESIGN.md), even when starting from the repo root.
+- Before changing `apps/api`, read [the current backend build design](docs/designs/drives-first-1-1.md).
+- For native iOS, read [the conversion plan](docs/designs/native-ios-conversion.md),
+  [native instructions](apps/ios/CLAUDE.md) and [design system](apps/ios/DESIGN.md).
+- `apps/mobile` remains intact pending native acceptance. If explicitly assigned a legacy
+  change, read that workspace's CLAUDE.md and DESIGN.md; preserve installed-client compatibility.
 - Inspect `git status --short` before editing. The tree and index are shared;
   preserve other agents' work and use explicit paths. Follow CLAUDE.md's git rules.
 - Use Bun and the scripts in `package.json`. Run root `bun run check` before
-  finishing; changes under `apps/mobile` also require that workspace's `bun run check`.
+  finishing; native changes also require relevant `bun run ios:check` coverage. Full native
+  acceptance requires the complete suite and separate upgrade/device/release evidence.
+  Explicit changes to the retained Expo client still require its workspace check.
 - Before implementing external library/API features, search Context7 for current
   documentation; use official vendor documentation if Context7 has no coverage.
 

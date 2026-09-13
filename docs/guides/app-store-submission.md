@@ -10,6 +10,11 @@ Canonical listing: `https://apps.apple.com/us/app/skipper-road-trip-audio-tours/
 no-op. RISK-1's real Tahoe drive is still not recorded as done; it is a post-launch obligation.
 The accessibility declaration was last recorded as `DRAFT`; publishing it requires the ASC UI (§11b).
 
+Native replacement development now uses [Xcode instructions](../../apps/ios/CLAUDE.md) and
+[native verification](native-ios-verification.md). The [native release tooling](native-ios-release.md)
+is still under independent review; the historical EAS records below are not the active native
+build procedure. Listing history and existing released-client compatibility remain unchanged.
+
 ## Update promotional text after a server-side region launch
 
 Apple permits [promotional text updates without a new app version](https://developer.apple.com/help/app-store-connect/reference/app-information/platform-version-information).

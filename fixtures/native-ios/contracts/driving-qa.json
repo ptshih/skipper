@@ -1,0 +1,285 @@
+{
+  "fixtureVersion": 1,
+  "suite": "driving-qa",
+  "clock": "2026-09-12T12:00:00.000Z",
+  "sources": [
+    "packages/engine/src/harness.ts",
+    "packages/engine/src/fix-mapper.ts",
+    "packages/engine/src/harness.test.ts"
+  ],
+  "provenance": "Synthetic geometry and deterministic legacy TypeScript execution; no recorded location data.",
+  "cases": [
+    {
+      "id": "gap-between-stops",
+      "input": {
+        "route": {
+          "kind": "straight",
+          "lastVertex": 500,
+          "stepLat": 0.0001
+        },
+        "mph": 45,
+        "removeFixRange": [
+          65,
+          90
+        ]
+      },
+      "expected": {
+        "admitted": 252,
+        "rejected": 0,
+        "ended": true,
+        "fired": [
+          {
+            "seq": 0,
+            "tSec": 43,
+            "leadSec": 12.27467626637946,
+            "distanceM": 246.92720751550235
+          },
+          {
+            "seq": 1,
+            "tSec": 99,
+            "leadSec": 11.549334576393779,
+            "distanceM": 232.3356538063984
+          },
+          {
+            "seq": 2,
+            "tSec": 154,
+            "leadSec": 11.823994267667475,
+            "distanceM": 237.86092788381308
+          },
+          {
+            "seq": 3,
+            "tSec": 209,
+            "leadSec": 12.0986539589414,
+            "distanceM": 243.38620196123236
+          }
+        ],
+        "neverFired": [],
+        "finalAlongM": 5548.6345036533285
+      }
+    },
+    {
+      "id": "gap-spans-stop",
+      "input": {
+        "route": {
+          "kind": "straight",
+          "lastVertex": 500,
+          "stepLat": 0.0001
+        },
+        "mph": 45,
+        "removeFixRange": [
+          120,
+          210
+        ]
+      },
+      "expected": {
+        "admitted": 187,
+        "rejected": 0,
+        "ended": true,
+        "fired": [
+          {
+            "seq": 0,
+            "tSec": 43,
+            "leadSec": 12.27467626637946,
+            "distanceM": 246.92720751550235
+          },
+          {
+            "seq": 1,
+            "tSec": 99,
+            "leadSec": 11.549334576393779,
+            "distanceM": 232.3356538063984
+          },
+          {
+            "seq": 3,
+            "tSec": 210,
+            "leadSec": 11.098652577682603,
+            "distanceM": 223.2693741747254
+          }
+        ],
+        "neverFired": [
+          2
+        ],
+        "finalAlongM": 5548.6345036533285
+      }
+    },
+    {
+      "id": "out-and-back-projection",
+      "input": {
+        "route": {
+          "kind": "out-and-back",
+          "lastVertex": 100,
+          "stepLat": 0.0001
+        },
+        "indices": [
+          0,
+          50,
+          100,
+          150,
+          200,
+          200
+        ],
+        "accuracy": 5,
+        "speed": 20,
+        "heading": -1,
+        "startMs": 1700000000000
+      },
+      "expected": {
+        "admitted": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "events": [
+          {
+            "kind": "fix",
+            "fix": {
+              "lat": 0,
+              "lng": 0,
+              "speedMps": 20,
+              "headingDeg": -1,
+              "tSec": 0,
+              "alongM": 0
+            }
+          },
+          {
+            "kind": "fix",
+            "fix": {
+              "lat": 0.005,
+              "lng": 0,
+              "speedMps": 20,
+              "headingDeg": -1,
+              "tSec": 1,
+              "alongM": 555.9754011676642
+            }
+          },
+          {
+            "kind": "fix",
+            "fix": {
+              "lat": 0.01,
+              "lng": 0,
+              "speedMps": 20,
+              "headingDeg": -1,
+              "tSec": 2,
+              "alongM": 1111.9508023353287
+            }
+          },
+          {
+            "kind": "fix",
+            "fix": {
+              "lat": 0.005,
+              "lng": 0,
+              "speedMps": 20,
+              "headingDeg": -1,
+              "tSec": 3,
+              "alongM": 1667.9262035029947
+            }
+          },
+          {
+            "kind": "fix",
+            "fix": {
+              "lat": 0,
+              "lng": 0,
+              "speedMps": 20,
+              "headingDeg": -1,
+              "tSec": 4,
+              "alongM": 2223.9016046706606
+            }
+          },
+          {
+            "kind": "end"
+          },
+          {
+            "kind": "fix",
+            "fix": {
+              "lat": 0,
+              "lng": 0,
+              "speedMps": 20,
+              "headingDeg": -1,
+              "tSec": 5,
+              "alongM": 2223.9016046706606
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "repeated-final-fix-callback-order",
+      "input": {
+        "route": {
+          "kind": "straight",
+          "lastVertex": 100,
+          "stepLat": 0.0001
+        },
+        "indices": [
+          0,
+          50,
+          100,
+          100
+        ],
+        "accuracy": 5,
+        "speed": 20,
+        "heading": -1,
+        "startMs": 1700000000000
+      },
+      "expected": {
+        "admitted": [
+          true,
+          true,
+          true,
+          true
+        ],
+        "events": [
+          {
+            "kind": "fix",
+            "fix": {
+              "lat": 0,
+              "lng": 0,
+              "speedMps": 20,
+              "headingDeg": -1,
+              "tSec": 0,
+              "alongM": 0
+            }
+          },
+          {
+            "kind": "fix",
+            "fix": {
+              "lat": 0.005,
+              "lng": 0,
+              "speedMps": 20,
+              "headingDeg": -1,
+              "tSec": 1,
+              "alongM": 555.9754011676642
+            }
+          },
+          {
+            "kind": "fix",
+            "fix": {
+              "lat": 0.01,
+              "lng": 0,
+              "speedMps": 20,
+              "headingDeg": -1,
+              "tSec": 2,
+              "alongM": 1111.9508023353287
+            }
+          },
+          {
+            "kind": "end"
+          },
+          {
+            "kind": "fix",
+            "fix": {
+              "lat": 0.01,
+              "lng": 0,
+              "speedMps": 20,
+              "headingDeg": -1,
+              "tSec": 3,
+              "alongM": 1111.9508023353287
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

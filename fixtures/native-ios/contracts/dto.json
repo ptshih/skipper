@@ -1,0 +1,1126 @@
+{
+  "fixtureVersion": 1,
+  "suite": "dto",
+  "provenance": "Synthetic inputs; expected semantics captured from listed legacy sources and the authorized conversion plan. Never production data.",
+  "clock": "2026-09-12T12:00:00.000Z",
+  "sources": [
+    "packages/shared/src/schemas.ts"
+  ],
+  "cases": [
+    {
+      "id": "region-missing",
+      "schema": "region",
+      "input": {
+        "id": "00000001-0000-4000-8000-000000000001",
+        "slug": "fixture-valley",
+        "displayName": "Fixture Valley"
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "id": "00000001-0000-4000-8000-000000000001",
+          "slug": "fixture-valley",
+          "displayName": "Fixture Valley",
+          "ready": true,
+          "exampleAnchors": [],
+          "examples": [],
+          "exampleNames": []
+        }
+      }
+    },
+    {
+      "id": "region-null",
+      "schema": "region",
+      "input": {
+        "id": "00000001-0000-4000-8000-000000000001",
+        "slug": "fixture-valley",
+        "displayName": "Fixture Valley",
+        "ready": null,
+        "exampleAnchors": null,
+        "examples": null,
+        "exampleNames": null
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "id": "00000001-0000-4000-8000-000000000001",
+          "slug": "fixture-valley",
+          "displayName": "Fixture Valley",
+          "ready": true,
+          "exampleAnchors": [],
+          "examples": [],
+          "exampleNames": []
+        }
+      }
+    },
+    {
+      "id": "region-malformed",
+      "schema": "region",
+      "input": {
+        "id": "00000001-0000-4000-8000-000000000001",
+        "slug": "fixture-valley",
+        "displayName": "Fixture Valley",
+        "ready": "false",
+        "exampleAnchors": [
+          "Gate",
+          7
+        ],
+        "examples": [
+          {
+            "shape": "future",
+            "title": "A",
+            "ask": "A"
+          }
+        ],
+        "exampleNames": {}
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "id": "00000001-0000-4000-8000-000000000001",
+          "slug": "fixture-valley",
+          "displayName": "Fixture Valley",
+          "ready": true,
+          "exampleAnchors": [],
+          "examples": [],
+          "exampleNames": []
+        }
+      }
+    },
+    {
+      "id": "region-explicit-not-ready",
+      "schema": "region",
+      "input": {
+        "id": "00000001-0000-4000-8000-000000000001",
+        "slug": "fixture-valley",
+        "displayName": "Fixture Valley",
+        "ready": false
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "id": "00000001-0000-4000-8000-000000000001",
+          "slug": "fixture-valley",
+          "displayName": "Fixture Valley",
+          "ready": false,
+          "exampleAnchors": [],
+          "examples": [],
+          "exampleNames": []
+        }
+      }
+    },
+    {
+      "id": "region-identity-required",
+      "schema": "region",
+      "input": {
+        "slug": "x",
+        "displayName": "x"
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "bootstrap-decoration-fallback",
+      "schema": "bootstrap",
+      "input": {
+        "regions": [
+          {
+            "id": "00000001-0000-4000-8000-000000000001",
+            "slug": "fixture-valley",
+            "displayName": "Fixture Valley"
+          }
+        ],
+        "adjustSay": null,
+        "noStopsSay": 7
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "regions": [
+            {
+              "id": "00000001-0000-4000-8000-000000000001",
+              "slug": "fixture-valley",
+              "displayName": "Fixture Valley",
+              "ready": true,
+              "exampleAnchors": [],
+              "examples": [],
+              "exampleNames": []
+            }
+          ],
+          "adjustSay": "",
+          "noStopsSay": ""
+        }
+      }
+    },
+    {
+      "id": "plan-default-done",
+      "schema": "drivePlanResponse",
+      "input": {
+        "say": "Ready when you are."
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "say": "Ready when you are.",
+          "done": false
+        }
+      }
+    },
+    {
+      "id": "plan-null-route",
+      "schema": "drivePlanResponse",
+      "input": {
+        "say": "No route yet.",
+        "route": null
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "say": "No route yet.",
+          "route": null,
+          "done": false
+        }
+      }
+    },
+    {
+      "id": "plan-null-done-invalid",
+      "schema": "drivePlanResponse",
+      "input": {
+        "say": "A",
+        "done": null
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "plan-required-say",
+      "schema": "drivePlanResponse",
+      "input": {
+        "done": false
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "route-missing",
+      "schema": "plannedRoute",
+      "input": {
+        "start": "00000006-0000-4000-8000-000000000001",
+        "end": "00000007-0000-4000-8000-000000000001"
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "start": "00000006-0000-4000-8000-000000000001",
+          "end": "00000007-0000-4000-8000-000000000001"
+        }
+      }
+    },
+    {
+      "id": "route-null-via-invalid",
+      "schema": "plannedRoute",
+      "input": {
+        "start": "00000006-0000-4000-8000-000000000001",
+        "end": "00000007-0000-4000-8000-000000000001",
+        "via": null,
+        "targetMinutes": null
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "route-empty",
+      "schema": "plannedRoute",
+      "input": {
+        "start": "00000006-0000-4000-8000-000000000001",
+        "end": "00000007-0000-4000-8000-000000000001",
+        "via": []
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "start": "00000006-0000-4000-8000-000000000001",
+          "end": "00000007-0000-4000-8000-000000000001",
+          "via": []
+        }
+      }
+    },
+    {
+      "id": "route-zero-duration-invalid",
+      "schema": "plannedRoute",
+      "input": {
+        "start": "00000006-0000-4000-8000-000000000001",
+        "end": "00000007-0000-4000-8000-000000000001",
+        "targetMinutes": 0
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "propose-degenerate-invalid",
+      "schema": "driveProposeRequest",
+      "input": {
+        "start": "00000006-0000-4000-8000-000000000001",
+        "end": "00000006-0000-4000-8000-000000000001"
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "propose-roundtrip-with-via",
+      "schema": "driveProposeRequest",
+      "input": {
+        "start": "00000006-0000-4000-8000-000000000001",
+        "end": "00000006-0000-4000-8000-000000000001",
+        "via": [
+          "00000007-0000-4000-8000-000000000001"
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "start": "00000006-0000-4000-8000-000000000001",
+          "end": "00000006-0000-4000-8000-000000000001",
+          "via": [
+            "00000007-0000-4000-8000-000000000001"
+          ]
+        }
+      }
+    },
+    {
+      "id": "create-stable-idempotency-key",
+      "schema": "createDriveRequest",
+      "input": {
+        "start": "00000006-0000-4000-8000-000000000001",
+        "end": "00000007-0000-4000-8000-000000000001",
+        "idempotencyKey": "00000002-0000-4000-8000-000000000001"
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "start": "00000006-0000-4000-8000-000000000001",
+          "end": "00000007-0000-4000-8000-000000000001",
+          "idempotencyKey": "00000002-0000-4000-8000-000000000001"
+        }
+      }
+    },
+    {
+      "id": "create-legacy-key-absent",
+      "schema": "createDriveRequest",
+      "input": {
+        "start": "00000006-0000-4000-8000-000000000001",
+        "end": "00000007-0000-4000-8000-000000000001"
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "start": "00000006-0000-4000-8000-000000000001",
+          "end": "00000007-0000-4000-8000-000000000001"
+        }
+      }
+    },
+    {
+      "id": "create-null-key-invalid",
+      "schema": "createDriveRequest",
+      "input": {
+        "start": "00000006-0000-4000-8000-000000000001",
+        "end": "00000007-0000-4000-8000-000000000001",
+        "idempotencyKey": null
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "clip-minimal",
+      "schema": "driveClip",
+      "input": {
+        "seq": 0,
+        "form": "story",
+        "alongSec": 12.5
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "seq": 0,
+          "form": "story",
+          "alongSec": 12.5
+        }
+      }
+    },
+    {
+      "id": "clip-fused-and-null-fields",
+      "schema": "driveClip",
+      "input": {
+        "seq": 0,
+        "form": "story",
+        "alongSec": 12.5,
+        "poiId": null,
+        "subjectId": "00000005-0000-4000-8000-000000000001",
+        "subjectKind": "cluster",
+        "name": "Fixture Overlook",
+        "lat": 0.01,
+        "lng": 0.01,
+        "url": null,
+        "contentType": null,
+        "durationMs": null,
+        "revisedAt": null
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "seq": 0,
+          "form": "story",
+          "alongSec": 12.5,
+          "poiId": null,
+          "subjectId": "00000005-0000-4000-8000-000000000001",
+          "subjectKind": "cluster",
+          "name": "Fixture Overlook",
+          "lat": 0.01,
+          "lng": 0.01,
+          "url": null,
+          "contentType": null,
+          "durationMs": null,
+          "revisedAt": null
+        }
+      }
+    },
+    {
+      "id": "clip-bad-attribution-fallback",
+      "schema": "driveClip",
+      "input": {
+        "seq": 0,
+        "form": "story",
+        "alongSec": 12.5,
+        "attribution": [
+          {
+            "source": "future",
+            "sourceId": "synthetic"
+          }
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "seq": 0,
+          "form": "story",
+          "alongSec": 12.5,
+          "attribution": []
+        }
+      }
+    },
+    {
+      "id": "clip-null-attribution-fallback",
+      "schema": "driveClip",
+      "input": {
+        "seq": 0,
+        "form": "story",
+        "alongSec": 12.5,
+        "attribution": null
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "seq": 0,
+          "form": "story",
+          "alongSec": 12.5,
+          "attribution": []
+        }
+      }
+    },
+    {
+      "id": "clip-future-form-invalid",
+      "schema": "driveClip",
+      "input": {
+        "seq": 0,
+        "form": "future",
+        "alongSec": 12.5
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "clip-relative-url-invalid",
+      "schema": "driveClip",
+      "input": {
+        "seq": 0,
+        "form": "story",
+        "alongSec": 12.5,
+        "url": "/audio.m4a"
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "manifest-minimal",
+      "schema": "driveManifest",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "label": "Fixture Loop",
+        "polyline": [
+          [
+            0,
+            0
+          ],
+          [
+            0.01,
+            0.01
+          ]
+        ],
+        "clips": [
+          {
+            "seq": 0,
+            "form": "story",
+            "alongSec": 12.5
+          }
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "label": "Fixture Loop",
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              0.01,
+              0.01
+            ]
+          ],
+          "clips": [
+            {
+              "seq": 0,
+              "form": "story",
+              "alongSec": 12.5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "manifest-ephemeral",
+      "schema": "driveManifest",
+      "input": {
+        "driveId": null,
+        "label": "Fixture Loop",
+        "polyline": [
+          [
+            0,
+            0
+          ],
+          [
+            0.01,
+            0.01
+          ]
+        ],
+        "clips": [
+          {
+            "seq": 0,
+            "form": "story",
+            "alongSec": 12.5
+          }
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "driveId": null,
+          "label": "Fixture Loop",
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              0.01,
+              0.01
+            ]
+          ],
+          "clips": [
+            {
+              "seq": 0,
+              "form": "story",
+              "alongSec": 12.5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "manifest-null-clips-invalid",
+      "schema": "driveManifest",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "label": "Fixture Loop",
+        "polyline": [
+          [
+            0,
+            0
+          ],
+          [
+            0.01,
+            0.01
+          ]
+        ],
+        "clips": null
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "manifest-coordinate-arity-invalid",
+      "schema": "driveManifest",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "label": "Fixture Loop",
+        "polyline": [
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        "clips": [
+          {
+            "seq": 0,
+            "form": "story",
+            "alongSec": 12.5
+          }
+        ]
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "summary-missing",
+      "schema": "driveSummary",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "label": "Fixture Loop",
+        "clipCount": 1,
+        "createdAt": "2026-09-12T12:00:00.000Z"
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "label": "Fixture Loop",
+          "clipCount": 1,
+          "createdAt": "2026-09-12T12:00:00.000Z"
+        }
+      }
+    },
+    {
+      "id": "summary-null",
+      "schema": "driveSummary",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "label": "Fixture Loop",
+        "clipCount": 1,
+        "createdAt": "2026-09-12T12:00:00.000Z",
+        "region": null,
+        "startName": null
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "label": "Fixture Loop",
+          "clipCount": 1,
+          "createdAt": "2026-09-12T12:00:00.000Z",
+          "region": null,
+          "startName": null
+        }
+      }
+    },
+    {
+      "id": "list-credits-absent",
+      "schema": "driveList",
+      "input": {
+        "drives": [
+          {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "clipCount": 1,
+            "createdAt": "2026-09-12T12:00:00.000Z"
+          }
+        ]
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "drives": [
+            {
+              "driveId": "00000002-0000-4000-8000-000000000001",
+              "label": "Fixture Loop",
+              "clipCount": 1,
+              "createdAt": "2026-09-12T12:00:00.000Z"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "list-credits-null",
+      "schema": "driveList",
+      "input": {
+        "drives": [
+          {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "clipCount": 1,
+            "createdAt": "2026-09-12T12:00:00.000Z"
+          }
+        ],
+        "credits": null
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "drives": [
+            {
+              "driveId": "00000002-0000-4000-8000-000000000001",
+              "label": "Fixture Loop",
+              "clipCount": 1,
+              "createdAt": "2026-09-12T12:00:00.000Z"
+            }
+          ],
+          "credits": null
+        }
+      }
+    },
+    {
+      "id": "list-credits-zero",
+      "schema": "driveList",
+      "input": {
+        "drives": [
+          {
+            "driveId": "00000002-0000-4000-8000-000000000001",
+            "label": "Fixture Loop",
+            "clipCount": 1,
+            "createdAt": "2026-09-12T12:00:00.000Z"
+          }
+        ],
+        "credits": {
+          "remaining": 0,
+          "cap": 3
+        }
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "drives": [
+            {
+              "driveId": "00000002-0000-4000-8000-000000000001",
+              "label": "Fixture Loop",
+              "clipCount": 1,
+              "createdAt": "2026-09-12T12:00:00.000Z"
+            }
+          ],
+          "credits": {
+            "remaining": 0,
+            "cap": 3
+          }
+        }
+      }
+    },
+    {
+      "id": "list-credit-fraction-invalid",
+      "schema": "driveList",
+      "input": {
+        "drives": [],
+        "credits": {
+          "remaining": 0.5,
+          "cap": 3
+        }
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "proposal-preview-missing",
+      "schema": "driveProposal",
+      "input": {
+        "start": {
+          "name": "Fixture Gate",
+          "lat": 0,
+          "lng": 0
+        },
+        "end": {
+          "name": "Fixture Overlook",
+          "lat": 0.01,
+          "lng": 0.01
+        },
+        "startId": "00000006-0000-4000-8000-000000000001",
+        "endId": "00000007-0000-4000-8000-000000000001",
+        "polyline": [
+          [
+            0,
+            0
+          ],
+          [
+            0.01,
+            0.01
+          ]
+        ],
+        "distanceMeters": 1600,
+        "durationSeconds": 180,
+        "routeSig": "synthetic-route"
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "start": {
+            "name": "Fixture Gate",
+            "lat": 0,
+            "lng": 0
+          },
+          "end": {
+            "name": "Fixture Overlook",
+            "lat": 0.01,
+            "lng": 0.01
+          },
+          "startId": "00000006-0000-4000-8000-000000000001",
+          "endId": "00000007-0000-4000-8000-000000000001",
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              0.01,
+              0.01
+            ]
+          ],
+          "distanceMeters": 1600,
+          "durationSeconds": 180,
+          "routeSig": "synthetic-route"
+        }
+      }
+    },
+    {
+      "id": "proposal-preview-null",
+      "schema": "driveProposal",
+      "input": {
+        "start": {
+          "name": "Fixture Gate",
+          "lat": 0,
+          "lng": 0
+        },
+        "end": {
+          "name": "Fixture Overlook",
+          "lat": 0.01,
+          "lng": 0.01
+        },
+        "startId": "00000006-0000-4000-8000-000000000001",
+        "endId": "00000007-0000-4000-8000-000000000001",
+        "polyline": [
+          [
+            0,
+            0
+          ],
+          [
+            0.01,
+            0.01
+          ]
+        ],
+        "distanceMeters": 1600,
+        "durationSeconds": 180,
+        "routeSig": "synthetic-route",
+        "previewClip": null,
+        "estStopCount": null
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "start": {
+            "name": "Fixture Gate",
+            "lat": 0,
+            "lng": 0
+          },
+          "end": {
+            "name": "Fixture Overlook",
+            "lat": 0.01,
+            "lng": 0.01
+          },
+          "startId": "00000006-0000-4000-8000-000000000001",
+          "endId": "00000007-0000-4000-8000-000000000001",
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              0.01,
+              0.01
+            ]
+          ],
+          "distanceMeters": 1600,
+          "durationSeconds": 180,
+          "routeSig": "synthetic-route",
+          "previewClip": null,
+          "estStopCount": null
+        }
+      }
+    },
+    {
+      "id": "preview-null-attribution",
+      "schema": "drivePreviewClip",
+      "input": {
+        "name": "Fixture Overlook",
+        "url": "https://audio.example.invalid/preview.m4a",
+        "contentType": "audio/mp4",
+        "attribution": null
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "name": "Fixture Overlook",
+          "url": "https://audio.example.invalid/preview.m4a",
+          "contentType": "audio/mp4",
+          "attribution": []
+        }
+      }
+    },
+    {
+      "id": "route-null-target-minutes",
+      "schema": "plannedRoute",
+      "input": {
+        "start": "00000006-0000-4000-8000-000000000001",
+        "end": "00000007-0000-4000-8000-000000000001",
+        "targetMinutes": null
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "start": "00000006-0000-4000-8000-000000000001",
+          "end": "00000007-0000-4000-8000-000000000001",
+          "targetMinutes": null
+        }
+      }
+    },
+    {
+      "id": "route-via-invalid-uuid-version",
+      "schema": "plannedRoute",
+      "input": {
+        "start": "00000006-0000-4000-8000-000000000001",
+        "end": "00000007-0000-4000-8000-000000000001",
+        "via": [
+          "00000006-0000-0000-8000-000000000001"
+        ]
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "route-via-over-limit",
+      "schema": "plannedRoute",
+      "input": {
+        "start": "00000006-0000-4000-8000-000000000001",
+        "end": "00000007-0000-4000-8000-000000000001",
+        "via": [
+          "00000007-0000-4000-8000-000000000001",
+          "00000007-0000-4000-8000-000000000001",
+          "00000007-0000-4000-8000-000000000001",
+          "00000007-0000-4000-8000-000000000001",
+          "00000007-0000-4000-8000-000000000001",
+          "00000007-0000-4000-8000-000000000001",
+          "00000007-0000-4000-8000-000000000001",
+          "00000007-0000-4000-8000-000000000001",
+          "00000007-0000-4000-8000-000000000001"
+        ]
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "route-target-outside-safe-integer",
+      "schema": "plannedRoute",
+      "input": {
+        "start": "00000006-0000-4000-8000-000000000001",
+        "end": "00000007-0000-4000-8000-000000000001",
+        "targetMinutes": 9007199254740992
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "clip-seq-outside-safe-integer",
+      "schema": "driveClip",
+      "input": {
+        "seq": 9007199254740992,
+        "form": "story",
+        "alongSec": 12.5
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "summary-minute-precision-utc",
+      "schema": "driveSummary",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "label": "Fixture Loop",
+        "clipCount": 1,
+        "createdAt": "2026-09-12T12:00Z"
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "driveId": "00000002-0000-4000-8000-000000000001",
+          "label": "Fixture Loop",
+          "clipCount": 1,
+          "createdAt": "2026-09-12T12:00Z"
+        }
+      }
+    },
+    {
+      "id": "summary-offset-not-utc",
+      "schema": "driveSummary",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000001",
+        "label": "Fixture Loop",
+        "clipCount": 1,
+        "createdAt": "2026-09-12T12:00:00+00:00"
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "plan-unknown-field-stripped",
+      "schema": "drivePlanResponse",
+      "input": {
+        "say": "Synthetic",
+        "done": false,
+        "futureMetadata": {
+          "safe": true
+        }
+      },
+      "expected": {
+        "valid": true,
+        "value": {
+          "say": "Synthetic",
+          "done": false
+        }
+      }
+    },
+    {
+      "id": "proposal-via-invalid-uuid-version",
+      "schema": "driveProposal",
+      "input": {
+        "start": {
+          "name": "Fixture Gate",
+          "lat": 0,
+          "lng": 0
+        },
+        "end": {
+          "name": "Fixture Overlook",
+          "lat": 0.01,
+          "lng": 0.01
+        },
+        "startId": "00000006-0000-4000-8000-000000000001",
+        "endId": "00000007-0000-4000-8000-000000000001",
+        "polyline": [
+          [
+            0,
+            0
+          ],
+          [
+            0.01,
+            0.01
+          ]
+        ],
+        "distanceMeters": 1600,
+        "durationSeconds": 180,
+        "routeSig": "synthetic-route",
+        "via": [
+          "00000006-0000-0000-8000-000000000001"
+        ]
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "proposal-via-null-invalid",
+      "schema": "driveProposal",
+      "input": {
+        "start": {
+          "name": "Fixture Gate",
+          "lat": 0,
+          "lng": 0
+        },
+        "end": {
+          "name": "Fixture Overlook",
+          "lat": 0.01,
+          "lng": 0.01
+        },
+        "startId": "00000006-0000-4000-8000-000000000001",
+        "endId": "00000007-0000-4000-8000-000000000001",
+        "polyline": [
+          [
+            0,
+            0
+          ],
+          [
+            0.01,
+            0.01
+          ]
+        ],
+        "distanceMeters": 1600,
+        "durationSeconds": 180,
+        "routeSig": "synthetic-route",
+        "via": null
+      },
+      "expected": {
+        "valid": false
+      }
+    },
+    {
+      "id": "manifest-drive-id-required",
+      "schema": "driveManifest",
+      "input": {
+        "label": "Fixture Loop",
+        "polyline": [
+          [
+            0,
+            0
+          ],
+          [
+            0.01,
+            0.01
+          ]
+        ],
+        "clips": [
+          {
+            "seq": 0,
+            "form": "story",
+            "alongSec": 12.5
+          }
+        ]
+      },
+      "expected": {
+        "valid": false
+      }
+    }
+  ]
+}

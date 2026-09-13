@@ -35,9 +35,9 @@ costs an hour of confident wrong reasoning.
 |---|---|
 | A check/typecheck "passes" but something is clearly broken | Output is ANSI-colored — `grep "error TS"` never matches. **Verify by exit code**, redirect and read `$?` (zsh: `$pipestatus`). |
 | Test file green alone, red in the suite (or vice versa) | `bun mock.module` is **process-wide** and leaks across files. Spread the real module and delegate when idle. |
-| `tsc --noEmit` green but `expo prebuild` / `expo export` dies | TS 7 drops the programmatic API that `@expo/require-utils` needs. A green typecheck **hides** this. Stay on TS 6. |
-| Typecheck fails right after adding an `app/*.tsx` route | `.expo/types/router.d.ts` hasn't regenerated. ⚠ The inverse is silent: a **stale** file is a superset, so tsc stays green on a **deleted** route. |
-| Dev redbox "Requiring unknown module N" | Metro lazy-bundling split a dynamic `import()` out. Fix = eager import in `index.js`. |
+| Xcode reports a locked build database | Another worker shares DerivedData. Choose a task-specific directory; do not kill their build or clean their files. |
+| Simulator Keychain returns -34018 | Check application-identifier entitlement and ad-hoc simulator signing. Unsigned builds do not prove real persistence. |
+| Swift files compile but behavior never changes | Check the exact installed app/source receipt and the actual production dependency graph. |
 | `db:generate` hangs or errors on a rename | drizzle-kit **prompts**; non-TTY stdin fails. Needs a real terminal, or shape the change to have no rename. |
 | A constant/function looks correct, tests around it pass, behavior never changes | **No production reader.** Orchestrator-owed wiring gets dropped — grep for a real call site, not just the definition. |
 | "It worked in dev but prod is wrong" | There is **no staging**. `.env.development` and `.env.production` point at the **same** Neon DB and the **same** R2. Dev already wrote to prod. |
@@ -94,11 +94,13 @@ next guess is due. That is a conversation, not more edits.
 
 1. Fix the **cause**, not the symptom.
 2. Remove every piece of temporary instrumentation.
-3. **Write a regression test** that fails without the fix. If the bug is in a
-   React hook (unreachable by `bun test`), say so explicitly rather than
-   pretending coverage exists.
-4. Run `bun run check` — and `apps/mobile`'s own check if you touched it.
-   Exit code, not grep.
+3. Add a meaningful regression for a behavioral bug. Native service/actor tests belong
+   in XCTest; view/lifecycle bugs may require actual app-target or UI execution. A Bun
+   fixture parser alone does not exercise Swift behavior.
+4. Run `bun run check` and relevant `bun run ios:check` coverage for native changes.
+   Use unique DerivedData and coordinate the simulator lane. Verify exit codes.
+   The retained Expo client's own check still applies if explicitly changing that client;
+   native work does not require Metro. Release and real-device acceptance remain separate.
 
 ## Phase 6: Capture what was learned
 

@@ -1,0 +1,596 @@
+{
+  "fixtureVersion": 1,
+  "suite": "version-policy-ui",
+  "clock": "2026-09-12T12:00:00.000Z",
+  "sources": [
+    "packages/shared/src/schemas.ts",
+    "apps/ios/Skipper/Features/VersionPolicy/VersionPolicyController.swift",
+    "apps/ios/Skipper/Features/VersionPolicy/VersionPolicyGate.swift",
+    "docs/designs/native-ios-conversion.md"
+  ],
+  "provenance": "Synthetic UI scenarios. Production policy DTO and views; no live /version or store request. Current app version comes from the real bundle.",
+  "cases": [
+    {
+      "id": "version-force",
+      "input": {
+        "initialTab": "library",
+        "offline": false,
+        "initialSession": {
+          "user": {
+            "id": "00000008-0000-4000-8000-000000000001",
+            "name": "Fixture Rider",
+            "email": "rider@example.invalid",
+            "emailVerified": true,
+            "isAnonymous": false,
+            "role": "user",
+            "createdAt": "2026-09-12T12:00:00.000Z",
+            "updatedAt": "2026-09-12T12:00:00.000Z"
+          },
+          "session": {
+            "id": "00000009-0000-4000-8000-000000000001",
+            "userId": "00000008-0000-4000-8000-000000000001",
+            "token": "SYNTHETIC-NOT-A-VALID-TOKEN",
+            "expiresAt": "2026-10-01T00:00:00.000Z",
+            "createdAt": "2026-09-12T12:00:00.000Z",
+            "updatedAt": "2026-09-12T12:00:00.000Z"
+          }
+        },
+        "versionDelayMs": 0,
+        "responses": {
+          "version": {
+            "policies": [
+              {
+                "platform": "ios",
+                "minimum": "99.0.0",
+                "recommended": "99.0.0",
+                "storeUrl": "https://store.example.invalid/skipper"
+              }
+            ]
+          },
+          "bootstrap": {
+            "regions": [
+              {
+                "id": "00000001-0000-4000-8000-000000000001",
+                "slug": "fixture-valley",
+                "displayName": "Fixture Valley",
+                "ready": true,
+                "exampleAnchors": [],
+                "examples": [],
+                "exampleNames": []
+              }
+            ],
+            "adjustSay": "",
+            "noStopsSay": ""
+          },
+          "ownedDrives": {
+            "drives": []
+          }
+        }
+      },
+      "expected": {
+        "gate": "force",
+        "laterVisible": false,
+        "appActionsAccessibleWhileGated": false,
+        "contentVisibleBeforePolicy": false,
+        "signInSheetVisibleBeforePolicy": false,
+        "dismissalPersistsForCurrentBundleVersion": false,
+        "storeOpenRequests": 0,
+        "receipt": {
+          "versionRequests": 1,
+          "unexpectedRequests": 0,
+          "anonymousMintRequests": 0
+        }
+      }
+    },
+    {
+      "id": "version-recommended",
+      "input": {
+        "initialTab": "library",
+        "offline": false,
+        "initialSession": {
+          "user": {
+            "id": "00000008-0000-4000-8000-000000000001",
+            "name": "Fixture Rider",
+            "email": "rider@example.invalid",
+            "emailVerified": true,
+            "isAnonymous": false,
+            "role": "user",
+            "createdAt": "2026-09-12T12:00:00.000Z",
+            "updatedAt": "2026-09-12T12:00:00.000Z"
+          },
+          "session": {
+            "id": "00000009-0000-4000-8000-000000000001",
+            "userId": "00000008-0000-4000-8000-000000000001",
+            "token": "SYNTHETIC-NOT-A-VALID-TOKEN",
+            "expiresAt": "2026-10-01T00:00:00.000Z",
+            "createdAt": "2026-09-12T12:00:00.000Z",
+            "updatedAt": "2026-09-12T12:00:00.000Z"
+          }
+        },
+        "versionDelayMs": 0,
+        "responses": {
+          "version": {
+            "policies": [
+              {
+                "platform": "ios",
+                "minimum": "0.0.0",
+                "recommended": "99.0.0",
+                "storeUrl": "https://store.example.invalid/skipper"
+              }
+            ]
+          },
+          "bootstrap": {
+            "regions": [
+              {
+                "id": "00000001-0000-4000-8000-000000000001",
+                "slug": "fixture-valley",
+                "displayName": "Fixture Valley",
+                "ready": true,
+                "exampleAnchors": [],
+                "examples": [],
+                "exampleNames": []
+              }
+            ],
+            "adjustSay": "",
+            "noStopsSay": ""
+          },
+          "ownedDrives": {
+            "drives": []
+          }
+        }
+      },
+      "expected": {
+        "gate": "nudge",
+        "laterVisible": true,
+        "appActionsAccessibleWhileGated": false,
+        "contentVisibleBeforePolicy": false,
+        "signInSheetVisibleBeforePolicy": false,
+        "dismissalPersistsForCurrentBundleVersion": true,
+        "storeOpenRequests": 0,
+        "receipt": {
+          "versionRequests": 2,
+          "unexpectedRequests": 0,
+          "anonymousMintRequests": 0
+        }
+      }
+    },
+    {
+      "id": "version-force-delayed-sheet",
+      "input": {
+        "initialTab": "settings",
+        "offline": false,
+        "initialSession": {
+          "user": {
+            "id": "00000008-0000-4000-8000-000000000001",
+            "name": "Fixture Rider",
+            "email": "anonymous@example.invalid",
+            "emailVerified": true,
+            "isAnonymous": true,
+            "role": "user",
+            "createdAt": "2026-09-12T12:00:00.000Z",
+            "updatedAt": "2026-09-12T12:00:00.000Z"
+          },
+          "session": {
+            "id": "00000009-0000-4000-8000-000000000001",
+            "userId": "00000008-0000-4000-8000-000000000001",
+            "token": "SYNTHETIC-NOT-A-VALID-TOKEN",
+            "expiresAt": "2026-10-01T00:00:00.000Z",
+            "createdAt": "2026-09-12T12:00:00.000Z",
+            "updatedAt": "2026-09-12T12:00:00.000Z"
+          }
+        },
+        "versionDelayMs": 12000,
+        "responses": {
+          "version": {
+            "policies": [
+              {
+                "platform": "ios",
+                "minimum": "99.0.0",
+                "recommended": "99.0.0",
+                "storeUrl": "https://store.example.invalid/skipper"
+              }
+            ]
+          },
+          "bootstrap": {
+            "regions": [
+              {
+                "id": "00000001-0000-4000-8000-000000000001",
+                "slug": "fixture-valley",
+                "displayName": "Fixture Valley",
+                "ready": true,
+                "exampleAnchors": [],
+                "examples": [],
+                "exampleNames": []
+              }
+            ],
+            "adjustSay": "",
+            "noStopsSay": ""
+          },
+          "ownedDrives": {
+            "drives": []
+          }
+        }
+      },
+      "expected": {
+        "gate": "force",
+        "laterVisible": false,
+        "appActionsAccessibleWhileGated": false,
+        "contentVisibleBeforePolicy": true,
+        "signInSheetVisibleBeforePolicy": true,
+        "dismissalPersistsForCurrentBundleVersion": false,
+        "storeOpenRequests": 0,
+        "receipt": {
+          "versionRequests": 1,
+          "unexpectedRequests": 0,
+          "anonymousMintRequests": 0
+        }
+      }
+    },
+    {
+      "id": "version-recommended-delayed-planner",
+      "input": {
+        "initialTab": "planner",
+        "offline": false,
+        "initialSession": {
+          "user": {
+            "id": "00000008-0000-4000-8000-000000000001",
+            "name": "Fixture Rider",
+            "email": "rider@example.invalid",
+            "emailVerified": true,
+            "isAnonymous": false,
+            "role": "user",
+            "createdAt": "2026-09-12T12:00:00.000Z",
+            "updatedAt": "2026-09-12T12:00:00.000Z"
+          },
+          "session": {
+            "id": "00000009-0000-4000-8000-000000000001",
+            "userId": "00000008-0000-4000-8000-000000000001",
+            "token": "SYNTHETIC-NOT-A-VALID-TOKEN",
+            "expiresAt": "2026-10-01T00:00:00.000Z",
+            "createdAt": "2026-09-12T12:00:00.000Z",
+            "updatedAt": "2026-09-12T12:00:00.000Z"
+          }
+        },
+        "versionDelayMs": 25000,
+        "responses": {
+          "version": {
+            "policies": [
+              {
+                "platform": "ios",
+                "minimum": "0.0.0",
+                "recommended": "99.0.0",
+                "storeUrl": "https://store.example.invalid/skipper"
+              }
+            ]
+          },
+          "bootstrap": {
+            "regions": [
+              {
+                "id": "00000001-0000-4000-8000-000000000001",
+                "slug": "fixture-valley",
+                "displayName": "Fixture Valley",
+                "ready": true,
+                "exampleAnchors": [],
+                "examples": [],
+                "exampleNames": []
+              }
+            ],
+            "adjustSay": "",
+            "noStopsSay": ""
+          },
+          "ownedDrives": {
+            "drives": []
+          },
+          "proposal": {
+            "start": {
+              "name": "Fixture Gate",
+              "lat": 0,
+              "lng": 0
+            },
+            "end": {
+              "name": "Fixture Overlook",
+              "lat": 0.01,
+              "lng": 0.01
+            },
+            "startId": "00000006-0000-4000-8000-000000000001",
+            "endId": "00000007-0000-4000-8000-000000000001",
+            "polyline": [
+              [
+                0,
+                0
+              ],
+              [
+                0.01,
+                0.01
+              ]
+            ],
+            "distanceMeters": 1600,
+            "durationSeconds": 180,
+            "routeSig": "synthetic-route"
+          }
+        },
+        "stream": {
+          "chunks": [
+            [
+              101,
+              118,
+              101,
+              110,
+              116,
+              58,
+              32,
+              115,
+              97,
+              121,
+              10,
+              100,
+              97,
+              116,
+              97,
+              58,
+              32,
+              123,
+              34,
+              100,
+              101,
+              108,
+              116,
+              97,
+              34,
+              58,
+              34,
+              65,
+              32,
+              113,
+              117,
+              105,
+              101,
+              116,
+              32,
+              102,
+              105,
+              120,
+              116,
+              117,
+              114,
+              101,
+              32,
+              100,
+              114,
+              105,
+              118,
+              101,
+              46,
+              32,
+              34,
+              125,
+              10,
+              10
+            ],
+            [
+              101,
+              118,
+              101,
+              110,
+              116,
+              58,
+              32,
+              116,
+              117,
+              114,
+              110,
+              10,
+              100,
+              97,
+              116,
+              97,
+              58,
+              32,
+              123,
+              34,
+              115,
+              97,
+              121,
+              34,
+              58,
+              34,
+              65,
+              32,
+              113,
+              117,
+              105,
+              101,
+              116,
+              32,
+              102,
+              105,
+              120,
+              116,
+              117,
+              114,
+              101,
+              32,
+              100,
+              114,
+              105,
+              118,
+              101,
+              32,
+              105,
+              115,
+              32,
+              114,
+              101,
+              97,
+              100,
+              121,
+              32,
+              116,
+              111,
+              32,
+              112,
+              114,
+              101,
+              118,
+              105,
+              101,
+              119,
+              46,
+              34,
+              44,
+              34,
+              114,
+              111,
+              117,
+              116,
+              101,
+              34,
+              58,
+              123,
+              34,
+              115,
+              116,
+              97,
+              114,
+              116,
+              34,
+              58,
+              34,
+              48,
+              48,
+              48,
+              48,
+              48,
+              48,
+              48,
+              54,
+              45,
+              48,
+              48,
+              48,
+              48,
+              45,
+              52,
+              48,
+              48,
+              48,
+              45,
+              56,
+              48,
+              48,
+              48,
+              45,
+              48,
+              48,
+              48,
+              48,
+              48,
+              48,
+              48,
+              48,
+              48,
+              48,
+              48,
+              49,
+              34,
+              44,
+              34,
+              101,
+              110,
+              100,
+              34,
+              58,
+              34,
+              48,
+              48,
+              48,
+              48,
+              48,
+              48,
+              48,
+              55,
+              45,
+              48,
+              48,
+              48,
+              48,
+              45,
+              52,
+              48,
+              48,
+              48,
+              45,
+              56,
+              48,
+              48,
+              48,
+              45,
+              48,
+              48,
+              48,
+              48,
+              48,
+              48,
+              48,
+              48,
+              48,
+              48,
+              48,
+              49,
+              34,
+              125,
+              44,
+              34,
+              100,
+              111,
+              110,
+              101,
+              34,
+              58,
+              102,
+              97,
+              108,
+              115,
+              101,
+              125,
+              10,
+              10
+            ]
+          ],
+          "delayBeforeChunkMs": [
+            0,
+            3000
+          ],
+          "terminal": {
+            "say": "A quiet fixture drive is ready to preview.",
+            "route": {
+              "start": "00000006-0000-4000-8000-000000000001",
+              "end": "00000007-0000-4000-8000-000000000001"
+            },
+            "done": false
+          }
+        }
+      },
+      "expected": {
+        "gate": "nudge",
+        "laterVisible": true,
+        "appActionsAccessibleWhileGated": false,
+        "contentVisibleBeforePolicy": true,
+        "signInSheetVisibleBeforePolicy": false,
+        "dismissalPersistsForCurrentBundleVersion": true,
+        "storeOpenRequests": 0,
+        "receipt": {
+          "versionRequests": 1,
+          "unexpectedRequests": 0,
+          "anonymousMintRequests": 0,
+          "planRequests": 1,
+          "proposalRequests": 1,
+          "createRequests": 0
+        },
+        "plannerDraft": "Keep this draft",
+        "plannerDraftPreservedAfterLater": true,
+        "proposalPreservedAfterLater": true
+      }
+    }
+  ]
+}

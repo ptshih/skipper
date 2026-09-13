@@ -1,0 +1,124 @@
+{
+  "fixtureVersion": 1,
+  "suite": "anonymous-mint",
+  "clock": "2026-09-12T12:00:00.000Z",
+  "provenance": "Synthetic review acceptance; native coordinators must enforce lifecycle expectations.",
+  "sources": [
+    "apps/mobile/src/lib/anon-session-util.ts",
+    "apps/mobile/src/lib/anon-session.ts"
+  ],
+  "cases": [
+    {
+      "id": "authoritative-null-online",
+      "input": {
+        "attempted": false,
+        "isPending": false,
+        "hasSession": false,
+        "offline": false,
+        "sessionErrored": false
+      },
+      "expected": {
+        "mint": true,
+        "attemptedAfter": true
+      }
+    },
+    {
+      "id": "read-pending",
+      "input": {
+        "attempted": false,
+        "isPending": true,
+        "hasSession": false,
+        "offline": false,
+        "sessionErrored": false
+      },
+      "expected": {
+        "mint": false,
+        "attemptedAfter": false
+      }
+    },
+    {
+      "id": "offline-preserves-shot",
+      "input": {
+        "attempted": false,
+        "isPending": false,
+        "hasSession": false,
+        "offline": true,
+        "sessionErrored": false
+      },
+      "expected": {
+        "mint": false,
+        "attemptedAfter": false
+      }
+    },
+    {
+      "id": "session-read-error",
+      "input": {
+        "attempted": false,
+        "isPending": false,
+        "hasSession": false,
+        "offline": false,
+        "sessionErrored": true
+      },
+      "expected": {
+        "mint": false,
+        "attemptedAfter": false
+      }
+    },
+    {
+      "id": "locked-keychain",
+      "input": {
+        "attempted": false,
+        "isPending": false,
+        "hasSession": false,
+        "offline": false,
+        "sessionErrored": true
+      },
+      "expected": {
+        "mint": false,
+        "attemptedAfter": false
+      }
+    },
+    {
+      "id": "real-session-consumes-shot",
+      "input": {
+        "attempted": false,
+        "isPending": false,
+        "hasSession": true,
+        "offline": false,
+        "sessionErrored": false
+      },
+      "expected": {
+        "mint": false,
+        "attemptedAfter": true
+      }
+    },
+    {
+      "id": "anonymous-session-consumes-shot",
+      "input": {
+        "attempted": false,
+        "isPending": false,
+        "hasSession": true,
+        "offline": false,
+        "sessionErrored": false
+      },
+      "expected": {
+        "mint": false,
+        "attemptedAfter": true
+      }
+    },
+    {
+      "id": "already-attempted",
+      "input": {
+        "attempted": true,
+        "isPending": false,
+        "hasSession": false,
+        "offline": false,
+        "sessionErrored": false
+      },
+      "expected": {
+        "mint": false,
+        "attemptedAfter": true
+      }
+    }
+  ]
+}

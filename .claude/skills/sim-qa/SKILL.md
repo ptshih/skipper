@@ -1,132 +1,94 @@
 ---
 name: sim-qa
-description: Use to verify mobile changes on the iOS simulator — works out which screens a diff touches, drives them, screenshots, and reports what it actually observed. For "test the app", "does this screen work", "QA the mobile change", "check it in the simulator".
+description: Verify native iOS changes with simulator XCTest and inspected screenshots, reporting actual flow and accessibility evidence. For "test the app", "does this screen work", "QA the mobile change", "check it in the simulator".
 ---
 
 # Sim QA
 
-Diff-aware verification of `apps/mobile` against the iOS simulator. The phone
-player is the bet; this exists so verifying it is not always a human reading
-`docs/guides/device-verification-runbook.md` by hand.
+Verify `apps/ios` against its actual SwiftUI views and injected services. The Expo client
+is retained pending acceptance, but native QA uses Xcode and XCTest without Metro.
+Read `apps/ios/CLAUDE.md`, `apps/ios/DESIGN.md` and the relevant flow contract in
+`docs/guides/native-ios-verification.md` before choosing assertions.
 
-## Iron Law
+## Evidence first
 
-**Report only what you observed.** Never write "works" for a screen you did not
-reach, and never infer a pass from a screenshot you did not look at. A QA report
-that overclaims is worse than no QA, because it retires a risk that is still live.
+Report only what you observed. A compiled test, discovered selector, or screenshot you
+have not inspected is not a passing flow. Keep the source snapshot, build receipt,
+simulator/runtime, selected tests, exit status and xcresult with the report.
 
-## What a simulator CANNOT prove
+## Scope and build
 
-State this in every report. These are not skippable steps — they are outside the
-tool's reach, and quietly omitting them turns "8 of 8 checks passed" into a lie:
+Inspect `git status --short` plus explicit-path diffs; include untracked native files.
+Map shared components to every affected screen using their actual call sites:
 
-| Runbook section | Why the simulator can't |
+| Native area | Exercise |
 |---|---|
-| §7 real GPS, outdoors, in motion | No real fix, no speed, no heading. The trigger core is speed-adaptive; a stationary sim proves none of it. |
-| §8 offline / airplane mode | Simulator network control is not the device's radio state. |
-| §1 splash & app icon | Native, and only after a fresh build — hot reload never shows it. |
-| Audio behaviour | Exclusive focus (`doNotMix`), lock-screen Now Playing, and interruption handling are device concerns. The sim will happily play and prove nothing. |
+| App/Auth/VersionPolicy | startup, deferred/recovered credentials, first paint and late version gates |
+| Planner | streaming, account wall, explicit Make/Retry, cancellation and idempotency |
+| Library/DriveDetail/Storage | filtering, partial/offline downloads, repair, local previews and Start gates |
+| Driving/Playback/Location | simulated progress, controls and lifecycle; retain device limitations |
+| Settings/Shared/Design | all importing screens, legal/account forms, themes and text scaling |
 
-For the parts a simulator *can* reach, the runbook's §0–§6 are the reference for
-what "correct" looks like. Read the relevant section before driving the screen —
-it carries the acceptance criteria, and re-deriving them from the UI is how a
-regression gets called a feature.
+Coordinate the simulator execution lane with its owner. Use a dedicated simulator/run ID
+and separate DerivedData for concurrent work. Do not erase all simulators or uninstall
+an app holding upgrade evidence. Prefer headless `xcrun simctl` and XCTest; a visible
+Simulator window is unnecessary for automation and screenshots.
 
-## Phase 1: Scope from the diff
+From the repo root:
 
 ```bash
-git diff --stat main...HEAD -- apps/mobile
-git diff --name-only -- apps/mobile
+bun run ios:configure
+SKIPPER_IOS_SIMULATOR_ID=<assigned-uuid> SKIPPER_IOS_DERIVED_DATA=.scratch/ios/<run-name> bun run ios:check
 ```
 
-Map changed files to screens. The routes are `apps/mobile/app/`:
+The script builds the real targets, then executes unit/UI tests and records an xcresult.
+`--unit` and `--foundation` are scoped checks, not full acceptance. Native changes require
+a rebuilt app/test target; there is no JavaScript hot reload. Root `bun run check` remains
+required for retained TypeScript and tooling. Do not start or restart API/admin/site servers.
 
-| Changed | Exercise |
-|---|---|
-| `app/index.tsx` | the cold open / home |
-| `app/sample.tsx` | the ungated sample ride |
-| `app/sign-in.tsx`, `src/ui/AccountGate.tsx` | the gate — both anonymous and signed-in |
-| `app/drives/*` | drive detail and the player |
-| `app/settings.tsx`, `legal.tsx`, `developer.tsx` | those screens |
-| `src/ui/*` | **every screen that imports it** — grep for the component name, do not guess |
+Use normal ad-hoc simulator signing (`CODE_SIGNING_ALLOWED=YES`, `CODE_SIGN_IDENTITY=-`),
+as `ios:check` does. Real SystemKeychain tests require the simulator's application-identifier
+entitlement; an unsigned launch can fail with -34018. This needs no distribution certificate
+or provisioning profile. `CODE_SIGNING_ALLOWED=NO` is compile/mock evidence only.
 
-A change to a shared component is the one that gets under-tested. If the diff
-touches `src/ui/`, list the importing screens explicitly in the report and say
-which you actually reached.
+## Drive the production flows
 
-## Phase 2: Get a build running
+Use the registered DEBUG launch scenarios and accessibility identifiers from the QA
+contract. Unknown scenarios must fail closed. Fixture services must feed the production
+views/models, never substitute a lookalike screen. Reuse the same run ID when proving
+persistence; use a fresh ID for independent cases. Valid UI scenarios initialize the real
+native Maps renderer with the existing public bundle key before any map objects mount;
+PostHog, app API requests and credentials remain isolated. Unit/rejected launches do not
+initialize Maps. Do not use map IDs or Street View for this no-charge renderer verification,
+contact the production app API, mint real accounts or perform billed planner/corpus calls.
 
-⚠ **Do not boot or restart dev servers** — the human keeps them running. Check
-before starting anything:
+Wait for observable state transitions, not fixed sleeps. Prefer accessibility identifiers
+and labels to coordinates. Inspect the tree when a selector fails: a parent identifier can
+hide descendants without the visual element being absent. Report coordinate taps as brittle.
+For scrolling, keep the gesture inside the list viewport above persistent tab bars. A static
+badge need not be tappable; verify its visible count or combined row label, then tap the row.
 
-```bash
-lsof -nP -iTCP:8081 -sTCP:LISTEN
-```
+Map acceptance uses a separate known-land fixture in the wire's longitude/latitude order.
+Keep financial/idempotency fixtures unchanged. A snapshot-ready callback alone cannot prove
+visible tiles or a fitted route: inspect the route, recognizable land/street detail, and
+Google attribution, with current-route viewport evidence from the isolated fixture run.
 
-Then, via the `ios-simulator` MCP: `get_booted_sim_id` (or `open_simulator` if
-none), then `launch_app`. Only rebuild (`expo run:ios`) when the change is
-native — a config plugin, a new dependency, an app config change. A JS-only
-change reloads; rebuilding wastes minutes.
+For state-changing interactions, retain before/after evidence and inspect it for truncation,
+overlap, controls behind tab bars, multiline buttons, disabled gates and stale account data.
+Exercise day/dusk/system, small supported iPhones and largest accessibility text. Element
+presence does not establish visual acceptance or VoiceOver usability. Record exact text size
+and restore simulator preferences you changed.
 
-⚠ A brand-new `app/*.tsx` route breaks typecheck until `.expo/types/router.d.ts`
-regenerates. If typecheck is red on a route file, that is the cause, not your change.
+## Limits and follow-through
 
-## Phase 3: Drive it
+Simulator playback can prove local decoding and certain mocked/production lifecycle edges.
+It does not prove real GPS, airplane-mode radio behavior, Bluetooth, call interruptions,
+exclusive audio focus or real-device lock-screen behavior. Actual simulator SecureStore to
+SystemKeychain in-place replacement is stronger than JSON mocks, but it still does not prove
+distribution access groups, device lock behavior or App Store delivery. Keep these separate
+from `docs/guides/native-ios-upgrade-rehearsal.md` observations and the real driving gate.
 
-**Drive by accessibility label.** There are no `testID`s in this codebase — but
-there are ~65 `accessibilityLabel`s, and the simulator's UI tools read the
-accessibility tree. So `ui_find_element` on a label is the reliable handle.
-
-- Prefer `ui_find_element` → `ui_tap` on the returned element.
-- `ui_describe_all` first when you do not know what is on screen.
-- **Coordinate taps are a last resort** and must be flagged in the report as
-  brittle — they break on any layout change and they silently tap the wrong
-  thing rather than failing.
-- If a control you need has no label, that is itself a finding: it is also
-  invisible to VoiceOver. Report it as an accessibility gap, not just a QA
-  inconvenience.
-
-Screenshot **before and after** every interaction that should change state. A
-screenshot after only proves the end state, not that your tap caused it.
-
-For anything needing motion, use the drive simulator (`bun run sim`) rather than
-pretending the sim has GPS — and say in the report that the fix source was
-simulated.
-
-## Phase 4: Look at the screenshots
-
-Actually read them. For each, check against the runbook's criteria for that
-section, plus:
-
-- Is the intended change visibly present?
-- Is anything clipped, overlapping, or off-screen?
-- Empty and loading states — not just the happy path.
-- Does it match Trailhead 89, or did a raw colour or hand-rolled style creep in?
-  (`apps/mobile` has `lint:tokens` for this — run `bun run check` there.)
-
-## Phase 5: Report
-
-```
-Sim QA — <N> screens, simulator <device/iOS>
-
-Scope: <files changed> → <screens exercised>
-
-PASS
-  <screen> — <what you did> → <what you saw>   [screenshot]
-
-FAIL
-  <screen> — expected <runbook §X criterion>, saw <observed>   [screenshot]
-  Repro: <exact steps>
-
-NOT VERIFIABLE HERE
-  §7 real GPS in motion — needs the bike/drive pass
-  §8 airplane-mode offline — needs a device
-  Audio focus / Now Playing — needs a device
-
-Coordinate taps used: <none | list — brittle, will break on layout change>
-mobile check: PASS (exit 0)
-```
-
-If you found a bug, do **not** fix it in the same pass. Report it, and let the
-human decide whether to fix now or file it — a QA run that edits code as it goes
-loses the ability to say which observation preceded which change.
+Report passed/failed/unreached flows with screenshots and precise reproduction steps.
+When authorized to fix, preserve the failing snapshot first, edit only owned files, and
+rerun affected checks against a new recorded build. During QA-only ownership, route findings
+to the assigned owner; never silently repair their source or relabel an old result as new.

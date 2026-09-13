@@ -1,0 +1,166 @@
+{
+  "fixtureVersion": 1,
+  "suite": "idempotency",
+  "clock": "2026-09-12T12:00:00.000Z",
+  "provenance": "Synthetic review acceptance; native coordinators must enforce lifecycle expectations.",
+  "sources": [
+    "apps/mobile/app/index.tsx",
+    "apps/mobile/src/lib/planner-route.ts",
+    "docs/designs/native-ios-conversion.md",
+    "Fable review acceptance relayed by root 2026-09-12"
+  ],
+  "cases": [
+    {
+      "id": "account-wall-signin-lost-ack-retry",
+      "input": {
+        "mintedUUIDs": [
+          "ABCDEF12-3456-4789-8ABC-DEF012345678",
+          "FEDCBA98-7654-4321-8ABC-DEF012345678"
+        ],
+        "events": [
+          "new-card",
+          "account-wall",
+          "sign-in",
+          "create",
+          "lost-ack",
+          "rider-retry",
+          "server-success"
+        ],
+        "serverDriveId": "abcdef12-3456-4789-8abc-def012345678"
+      },
+      "expected": {
+        "requestKeys": [
+          "abcdef12-3456-4789-8abc-def012345678",
+          "abcdef12-3456-4789-8abc-def012345678"
+        ],
+        "localDirectory": "drives/abcdef12-3456-4789-8abc-def012345678",
+        "canonicalLowercase": true,
+        "automaticRetryCount": 0
+      }
+    },
+    {
+      "id": "server-canonical-id-owns-directory",
+      "input": {
+        "mintedUUIDs": [
+          "ABCDEF12-3456-4789-8ABC-DEF012345678",
+          "FEDCBA98-7654-4321-8ABC-DEF012345678"
+        ],
+        "events": [
+          "new-card",
+          "create",
+          "server-success"
+        ],
+        "serverDriveId": "11223344-5566-4789-8abc-def012345678"
+      },
+      "expected": {
+        "requestKeys": [
+          "abcdef12-3456-4789-8abc-def012345678"
+        ],
+        "localDirectory": "drives/11223344-5566-4789-8abc-def012345678",
+        "canonicalLowercase": true,
+        "automaticRetryCount": 0
+      }
+    },
+    {
+      "id": "other-owner-conflict-only-remint",
+      "input": {
+        "mintedUUIDs": [
+          "ABCDEF12-3456-4789-8ABC-DEF012345678",
+          "FEDCBA98-7654-4321-8ABC-DEF012345678"
+        ],
+        "events": [
+          "new-card",
+          "create",
+          "other-user-409",
+          "rider-retry",
+          "server-success"
+        ],
+        "serverDriveId": "fedcba98-7654-4321-8abc-def012345678"
+      },
+      "expected": {
+        "requestKeys": [
+          "abcdef12-3456-4789-8abc-def012345678",
+          "fedcba98-7654-4321-8abc-def012345678"
+        ],
+        "localDirectory": "drives/fedcba98-7654-4321-8abc-def012345678",
+        "canonicalLowercase": true,
+        "automaticRetryCount": 0
+      }
+    },
+    {
+      "id": "ordinary-failure-preserves-key",
+      "input": {
+        "mintedUUIDs": [
+          "ABCDEF12-3456-4789-8ABC-DEF012345678",
+          "FEDCBA98-7654-4321-8ABC-DEF012345678"
+        ],
+        "events": [
+          "new-card",
+          "create",
+          "http-500",
+          "rider-retry",
+          "server-success"
+        ],
+        "serverDriveId": "abcdef12-3456-4789-8abc-def012345678"
+      },
+      "expected": {
+        "requestKeys": [
+          "abcdef12-3456-4789-8abc-def012345678",
+          "abcdef12-3456-4789-8abc-def012345678"
+        ],
+        "localDirectory": "drives/abcdef12-3456-4789-8abc-def012345678",
+        "canonicalLowercase": true,
+        "automaticRetryCount": 0
+      }
+    },
+    {
+      "id": "unrelated-409-preserves-key",
+      "input": {
+        "mintedUUIDs": [
+          "ABCDEF12-3456-4789-8ABC-DEF012345678",
+          "FEDCBA98-7654-4321-8ABC-DEF012345678"
+        ],
+        "events": [
+          "new-card",
+          "create",
+          "unrelated-409",
+          "rider-retry",
+          "server-success"
+        ],
+        "serverDriveId": "abcdef12-3456-4789-8abc-def012345678"
+      },
+      "expected": {
+        "requestKeys": [
+          "abcdef12-3456-4789-8abc-def012345678",
+          "abcdef12-3456-4789-8abc-def012345678"
+        ],
+        "localDirectory": "drives/abcdef12-3456-4789-8abc-def012345678",
+        "canonicalLowercase": true,
+        "automaticRetryCount": 0
+      }
+    },
+    {
+      "id": "rapid-double-tap-single-request",
+      "input": {
+        "mintedUUIDs": [
+          "ABCDEF12-3456-4789-8ABC-DEF012345678",
+          "FEDCBA98-7654-4321-8ABC-DEF012345678"
+        ],
+        "events": [
+          "new-card",
+          "double-tap-create",
+          "server-success"
+        ],
+        "serverDriveId": "abcdef12-3456-4789-8abc-def012345678"
+      },
+      "expected": {
+        "requestKeys": [
+          "abcdef12-3456-4789-8abc-def012345678"
+        ],
+        "localDirectory": "drives/abcdef12-3456-4789-8abc-def012345678",
+        "canonicalLowercase": true,
+        "automaticRetryCount": 0
+      }
+    }
+  ]
+}

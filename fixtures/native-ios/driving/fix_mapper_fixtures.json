@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "constants": {
+    "maxFixAccuracyM": 50,
+    "accuracyLeadFraction": 0.5,
+    "routeEndEpsilonM": 25,
+    "projectWindowVerts": 400
+  },
+  "saneNonNeg": [
+    {
+      "in": -1,
+      "out": 0
+    },
+    {
+      "in": null,
+      "out": 0
+    },
+    {
+      "out": 0
+    },
+    {
+      "in": 0,
+      "out": 0
+    },
+    {
+      "in": 15.5,
+      "out": 15.5
+    }
+  ],
+  "accuracyCeiling": [
+    {
+      "speed": 0,
+      "out": 50
+    },
+    {
+      "speed": 10,
+      "out": 60
+    },
+    {
+      "speed": 30,
+      "out": 180
+    }
+  ],
+  "accuracyOk": [
+    {
+      "acc": 10,
+      "speed": 0,
+      "out": true
+    },
+    {
+      "acc": 55,
+      "speed": 0,
+      "out": false
+    },
+    {
+      "acc": 120,
+      "speed": 30,
+      "out": true
+    },
+    {
+      "acc": 200,
+      "speed": 30,
+      "out": false
+    },
+    {
+      "acc": -1,
+      "speed": 30,
+      "out": false
+    },
+    {
+      "acc": null,
+      "speed": 30,
+      "out": true
+    }
+  ],
+  "projectForwardIndex": {
+    "c1": 5,
+    "c2": 5,
+    "c3": 5
+  },
+  "reachedRouteEnd": [
+    {
+      "name": "clause1_alongM_near_end",
+      "args": {
+        "alongM": 990,
+        "routeEndM": 1000,
+        "cursor": 50,
+        "polylineLen": 100,
+        "rawToEndM": 500,
+        "epsilonM": 25
+      },
+      "expected": true
+    },
+    {
+      "name": "clause2_cursor_near_end_and_rawToEnd_small",
+      "args": {
+        "alongM": 500,
+        "routeEndM": 1000,
+        "cursor": 98,
+        "polylineLen": 100,
+        "rawToEndM": 50,
+        "epsilonM": 25,
+        "maxEndDistM": 700
+      },
+      "expected": true
+    },
+    {
+      "name": "clause2_cursor_at_end_but_far_away_rejected",
+      "args": {
+        "alongM": 500,
+        "routeEndM": 1000,
+        "cursor": 98,
+        "polylineLen": 100,
+        "rawToEndM": 1000,
+        "epsilonM": 25,
+        "maxEndDistM": 700
+      },
+      "expected": false
+    },
+    {
+      "name": "clause3_rawToEnd_small_and_half_route_covered",
+      "args": {
+        "alongM": 600,
+        "routeEndM": 1000,
+        "cursor": 60,
+        "polylineLen": 100,
+        "rawToEndM": 20,
+        "epsilonM": 25
+      },
+      "expected": true
+    },
+    {
+      "name": "clause3_rawToEnd_small_at_start_of_loop_rejected",
+      "args": {
+        "alongM": 100,
+        "routeEndM": 1000,
+        "cursor": 10,
+        "polylineLen": 100,
+        "rawToEndM": 20,
+        "epsilonM": 25
+      },
+      "expected": false
+    }
+  ]
+}

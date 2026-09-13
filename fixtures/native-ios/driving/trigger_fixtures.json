@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "defaultOptions": {
+    "leadSeconds": 12,
+    "headingGateMps": 2.2,
+    "headingConeDeg": 90,
+    "bearingFloorM": 15,
+    "recedeMarginM": 40
+  },
+  "effectiveRadiusCases": [
+    {
+      "triggerRadiusM": 120,
+      "speedMps": 26.82,
+      "leadSeconds": 12,
+      "expectedM": 321.84000000000003
+    },
+    {
+      "triggerRadiusM": 120,
+      "speedMps": 8.94,
+      "leadSeconds": 12,
+      "expectedM": 120
+    }
+  ],
+  "approachAndDebounce": {
+    "fix1Result": [],
+    "fix2Result": [
+      {
+        "seq": 1,
+        "tSec": 1,
+        "alongM": 0,
+        "distanceM": 222.39016046706584,
+        "speedMps": 26.82,
+        "leadSec": 8.291952291836907
+      }
+    ],
+    "fix3Result": [],
+    "firedCount": 1
+  },
+  "headingGate": {
+    "behindAtSpeed": [],
+    "crawling": [
+      {
+        "seq": 1,
+        "tSec": 0,
+        "alongM": 0,
+        "distanceM": 100.0755722101796,
+        "speedMps": 1,
+        "leadSec": 100.0755722101796
+      }
+    ],
+    "unknownHeading": [
+      {
+        "seq": 1,
+        "tSec": 0,
+        "alongM": 0,
+        "distanceM": 100.0755722101796,
+        "speedMps": 26.82,
+        "leadSec": 3.731378531326607
+      }
+    ]
+  },
+  "passedPointRetire": {
+    "step1": [],
+    "step2": [],
+    "step3Retired": [],
+    "step4OutOfRange": [],
+    "step5ReArmedFired": [
+      {
+        "seq": 1,
+        "tSec": 4,
+        "alongM": 0,
+        "distanceM": 222.39016046706584,
+        "speedMps": 26.82,
+        "leadSec": 8.291952291836907
+      }
+    ]
+  },
+  "malformedFixes": {
+    "nanCoord": [],
+    "nanSpeed": [],
+    "countAfterBad": 0,
+    "validFix": [
+      {
+        "seq": 1,
+        "tSec": 0,
+        "alongM": 0,
+        "distanceM": 11.119508023353223,
+        "speedMps": 26.82,
+        "leadSec": 0.41459761459184274
+      },
+      {
+        "seq": 2,
+        "tSec": 0,
+        "alongM": 0,
+        "distanceM": 22.239016046706446,
+        "speedMps": 26.82,
+        "leadSec": 0.8291952291836855
+      }
+    ]
+  }
+}

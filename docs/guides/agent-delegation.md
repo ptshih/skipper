@@ -1,10 +1,20 @@
 # Agent delegation and model setup
 
-**Status**: Configured and CLI smoke-tested 2026-09-09; both named helpers spawned and returned evidence.
+**Status**: Configured and CLI smoke-tested 2026-09-09; both named helpers spawned and returned evidence. Explicit coordinator role clarified 2026-09-12.
 
 The shared policy lives in [CLAUDE.md](../../CLAUDE.md#git-workflow).
 This guide explains how to apply it. Skills remain the reusable workflows;
-helpers supply bounded evidence while the parent carries the task to completion.
+helpers supply bounded evidence while the ordinary task parent carries the task to completion.
+
+When the user explicitly selects an orchestrator, that coordinator delegates research,
+writing, implementation, checks, integration, and delivery to assigned workers and owns
+coordination, acceptance, and follow-through. The default execution table below applies
+to ordinary task parents; configured read-only scout/reviewer roles remain read-only.
+The two-helper default applies to ordinary tasks; an explicitly selected coordinator's
+managed roster follows the user's selected agents and creation/retirement authority.
+Internal helpers may support a Herdr coordinator alongside its managed long-running
+Herdr agents. Keep separate path ownership, preserve selected roles/harnesses, and
+carry forward user authorizations; workers do not recursively recruit helpers.
 
 ## Choose the work, then the helper
 

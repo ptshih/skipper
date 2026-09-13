@@ -1,6 +1,12 @@
 # `apps/mobile` internals
 
-**Status:** Snapshot — 2026-08-02, **partly re-read and corrected 2026-08-05** for the
+> **Native workflow (2026-09-12):** use [native development instructions](../../apps/ios/CLAUDE.md),
+> [verification evidence](native-ios-verification.md) and the [conversion plan](../designs/native-ios-conversion.md).
+> Expo commands and client-source anchors below describe the retained legacy implementation;
+> they are not the native build/run procedure. The workspace stays until acceptance. Historical
+> desk/simulator passes do not close the native plan's upgrade, real-device or distribution gates.
+
+**Status:** LEGACY CLIENT SNAPSHOT (native transition noted 2026-09-12) — 2026-08-02, **partly re-read and corrected 2026-08-05** for the
 download-before-start build (`docs/designs/download-before-start.md`): a live drive is gated on a
 complete local copy, a drive's audio is only ever played from disk, the whole re-sign path is gone,
 and `?mode` is retired in favour of the `simMode` setting. The sections that moved say so; everything
