@@ -5,7 +5,7 @@ import Foundation
 /// storage actor, feature models, navigation, and views.
 @MainActor
 enum DebugDependencies {
-    static let scenarios: Set<String> = ["offline-library", "offline-empty", "signed-out", "migration-deferred", "planner-account-retry", "planner-account-lost-ack", "planner-reset-during-stream", "planner-map-landmark", "offline-no-playable-clips", "corrupt-credentials-recovery", "version-force", "version-recommended", "version-force-delayed-sheet", "version-recommended-delayed-planner"]
+    static let scenarios: Set<String> = ["offline-library", "offline-empty", "signed-out", "migration-deferred", "planner-account-retry", "planner-account-lost-ack", "planner-reset-during-stream", "planner-map-landmark", "offline-no-playable-clips", "corrupt-credentials-recovery", "version-force", "version-recommended", "version-force-delayed-sheet", "version-recommended-delayed-planner", "driving-qa-two-stops"]
 
     /// Shared fixture/diagnostic destination; unavailable for production or invalid launches.
     static func runDirectory(for launch: AppLaunchConfiguration) -> URL? {
@@ -29,7 +29,8 @@ enum DebugDependencies {
         let marker = documents.appendingPathComponent("fixture-seeded")
         if !FileManager.default.fileExists(atPath: marker.path) {
             if !scenario.hasPrefix("planner-"), scenario != "offline-empty" {
-                let input = try fixture("v5-partial-shared", file: "manifests", resources: resources)
+                let manifestCase = scenario == "driving-qa-two-stops" ? "v5-driving-qa-two-stops" : "v5-partial-shared"
+                let input = try fixture(manifestCase, file: "manifests", resources: resources)
                 guard let files = input["files"] as? [String: [String: Any]] else { throw ContractError() }
                 for (path, contents) in files {
                     let components = path.split(separator: "/")
@@ -44,6 +45,22 @@ enum DebugDependencies {
                     }
                     else { throw ContractError() }
                     try data.write(to: destination, options: .atomic)
+                }
+                if scenario == "driving-qa-two-stops" {
+                    let clip0Dest = documents.appendingPathComponent("drives/00000002-0000-4000-8000-000000000003/0.m4a")
+                    try FileManager.default.createDirectory(at: clip0Dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    let aacSource = resources.appendingPathComponent("audio/create-continuity.m4a")
+                    let aacData = try Data(contentsOf: aacSource)
+                    try aacData.write(to: clip0Dest, options: .atomic)
+
+                    let clip1Dest = documents.appendingPathComponent("clips/poi-00000004-0000-4000-8000-000000000001.1789214400000.mp3")
+                    try FileManager.default.createDirectory(at: clip1Dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    guard let loopURL = bundle.url(forResource: "drive_loop", withExtension: "mp3")
+                        ?? bundle.url(forResource: "drive_loop", withExtension: "mp3", subdirectory: "Resources") else {
+                        throw ContractError()
+                    }
+                    let loopData = try Data(contentsOf: loopURL)
+                    try loopData.write(to: clip1Dest, options: .atomic)
                 }
             }
             try Data(scenario.utf8).write(to: marker, options: .atomic)
@@ -61,6 +78,13 @@ enum DebugDependencies {
         if let initial = flow?["initialSession"] {
             values[.init(service: "app:no-auth", key: "skipper_session_data")] = try JSONSerialization.data(withJSONObject: initial)
         }
+        if scenario == "driving-qa-two-stops" {
+            let adminSessionJson = """
+            {"user":{"id":"00000008-0000-4000-8000-000000000001","name":"Fixture Admin","email":"admin@example.invalid","emailVerified":true,"isAnonymous":false,"role":"admin","createdAt":"2026-09-12T12:00:00.000Z","updatedAt":"2026-09-12T12:00:00.000Z"},"session":{"id":"00000009-0000-4000-8000-000000000001","userId":"00000008-0000-4000-8000-000000000001","token":"SYNTHETIC-NOT-A-VALID-TOKEN","expiresAt":"2026-10-01T00:00:00.000Z","createdAt":"2026-09-12T12:00:00.000Z","updatedAt":"2026-09-12T12:00:00.000Z"}}
+            """
+            values[.init(service: "app:no-auth", key: "skipper_session_data")] = Data(adminSessionJson.utf8)
+            defaults.set("1", forKey: "skipper.simMode")
+        }
         if scenario == "signed-out" { values[.init(service: "app:no-auth", key: "skipper_cookie")] = Data("{}".utf8) }
         let keychain = try DebugKeychain(rows: values, unavailable: scenario == "migration-deferred", file: documents.appendingPathComponent("mock-keychain.json"))
         let clock = DebugClock(date: date)
@@ -76,13 +100,15 @@ enum DebugDependencies {
                 _ = await storage.deleteAllDriveDownloads()
             })
         let initialTab: MainTab?
-        if let rawTab = flow?["initialTab"] as? String {
+        if scenario == "driving-qa-two-stops" {
+            initialTab = .library
+        } else if let rawTab = flow?["initialTab"] as? String {
             guard let tab = MainTab(rawValue: rawTab) else { throw ContractError() }
             initialTab = tab
         } else { initialTab = nil }
         return AppDependencies(api: api, planner: PlannerClient(baseURL: URL(string: "https://api.invalid")!, transport: transport, network: network),
             documentsURL: documents, launch: launch, session: session, storage: storage, network: network, defaults: defaults, preview: nil, analytics: nil,
-            makePlayback: { DebugPlaybackServices.make(session: session, date: date, root: documents) }, initialTab: initialTab)
+            makePlayback: { DebugPlaybackServices.make(scenario: scenario, session: session, date: date, root: documents) }, initialTab: initialTab)
     }
     static func downloader(for launch: AppLaunchConfiguration, resources: URL) throws -> any StorageFileDownloader {
         guard case .uiTest(let scenario, _, _) = launch.mode,

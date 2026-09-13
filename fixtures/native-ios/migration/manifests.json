@@ -1617,6 +1617,195 @@
         ],
         "sharedFileCopies": 1
       }
+    },
+    {
+      "id": "v5-driving-qa-two-stops",
+      "input": {
+        "driveId": "00000002-0000-4000-8000-000000000003",
+        "manifest": {
+          "version": 5,
+          "driveId": "00000002-0000-4000-8000-000000000003",
+          "savedAt": "2026-09-12T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000003",
+            "label": "Two-Stop Simulated QA Drive",
+            "polyline": [
+              [
+                -122.4200,
+                37.7740
+              ],
+              [
+                -122.4200,
+                37.77834
+              ],
+              [
+                -122.4200,
+                37.77919
+              ],
+              [
+                -122.4200,
+                37.78048
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 6.0,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4",
+                "lat": 37.77834,
+                "lng": -122.4200,
+                "triggerRadiusM": 100
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 10.0,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mpeg",
+                "url": null,
+                "lat": 37.77919,
+                "lng": -122.4200,
+                "triggerRadiusM": 100
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "0.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 250,
+              "shared": false
+            },
+            "1": {
+              "name": "poi-00000004-0000-4000-8000-000000000001.1789214400000.mp3",
+              "contentType": "audio/mpeg",
+              "durationMs": 54900,
+              "shared": true
+            }
+          }
+        },
+        "files": {
+          "drives/00000002-0000-4000-8000-000000000003/manifest.json": {
+            "text": "{\"version\":5,\"driveId\":\"00000002-0000-4000-8000-000000000003\",\"savedAt\":\"2026-09-12T12:00:00.000Z\",\"detail\":{\"driveId\":\"00000002-0000-4000-8000-000000000003\",\"label\":\"Two-Stop Simulated QA Drive\",\"polyline\":[[-122.4200,37.7740],[-122.4200,37.77834],[-122.4200,37.77919],[-122.4200,37.78048]],\"clips\":[{\"seq\":0,\"form\":\"story\",\"alongSec\":6.0,\"poiId\":null,\"revisedAt\":null,\"url\":null,\"contentType\":\"audio/mp4\",\"lat\":37.77834,\"lng\":-122.4200,\"triggerRadiusM\":100},{\"seq\":1,\"form\":\"story\",\"alongSec\":10.0,\"poiId\":\"00000004-0000-4000-8000-000000000001\",\"revisedAt\":\"2026-09-12T12:00:00.000Z\",\"contentType\":\"audio/mpeg\",\"url\":null,\"lat\":37.77919,\"lng\":-122.4200,\"triggerRadiusM\":100}]},\"audioSeqs\":[0,1],\"clips\":{\"0\":{\"name\":\"0.m4a\",\"contentType\":\"audio/mp4\",\"durationMs\":250,\"shared\":false},\"1\":{\"name\":\"poi-00000004-0000-4000-8000-000000000001.1789214400000.mp3\",\"contentType\":\"audio/mpeg\",\"durationMs\":54900,\"shared\":true}}}"
+          },
+          "drives/00000002-0000-4000-8000-000000000003/0.m4a": {
+            "bytes": [
+              83,
+              89,
+              78,
+              74,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          },
+          "clips/poi-00000004-0000-4000-8000-000000000001.1789214400000.mp3": {
+            "bytes": [
+              83,
+              89,
+              78,
+              74,
+              72,
+              69,
+              84,
+              73,
+              67
+            ]
+          }
+        }
+      },
+      "expected": {
+        "manifest": {
+          "version": 5,
+          "driveId": "00000002-0000-4000-8000-000000000003",
+          "savedAt": "2026-09-12T12:00:00.000Z",
+          "detail": {
+            "driveId": "00000002-0000-4000-8000-000000000003",
+            "label": "Two-Stop Simulated QA Drive",
+            "polyline": [
+              [
+                -122.4200,
+                37.7740
+              ],
+              [
+                -122.4200,
+                37.77834
+              ],
+              [
+                -122.4200,
+                37.77919
+              ],
+              [
+                -122.4200,
+                37.78048
+              ]
+            ],
+            "clips": [
+              {
+                "seq": 0,
+                "form": "story",
+                "alongSec": 6.0,
+                "poiId": null,
+                "revisedAt": null,
+                "url": null,
+                "contentType": "audio/mp4",
+                "lat": 37.77834,
+                "lng": -122.4200,
+                "triggerRadiusM": 100
+              },
+              {
+                "seq": 1,
+                "form": "story",
+                "alongSec": 10.0,
+                "poiId": "00000004-0000-4000-8000-000000000001",
+                "revisedAt": "2026-09-12T12:00:00.000Z",
+                "contentType": "audio/mpeg",
+                "url": null,
+                "lat": 37.77919,
+                "lng": -122.4200,
+                "triggerRadiusM": 100
+              }
+            ]
+          },
+          "audioSeqs": [
+            0,
+            1
+          ],
+          "clips": {
+            "0": {
+              "name": "0.m4a",
+              "contentType": "audio/mp4",
+              "durationMs": 250,
+              "shared": false
+            },
+            "1": {
+              "name": "poi-00000004-0000-4000-8000-000000000001.1789214400000.mp3",
+              "contentType": "audio/mpeg",
+              "durationMs": 54900,
+              "shared": true
+            }
+          }
+        },
+        "availableSeqs": [
+          0,
+          1
+        ],
+        "missingSeqs": [],
+        "offlineGate": "play",
+        "onlineGate": "play",
+        "deleteDownloads": false
+      }
     }
   ]
 }

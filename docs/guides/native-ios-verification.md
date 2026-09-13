@@ -71,6 +71,26 @@ Implementation and verification details:
   2. Explicit anonymous runtime UI scenario coverage across theme variants.
 
 
+### Two-stop simulated driving QA cycle and playback verification (2026-09-13)
+
+A simulated driving UI verification flow exercises the complete two-stop playback lifecycle under process-isolated `skipper.simMode = "1"`:
+- **Scenario and setup:** Registered DEBUG scenario `.drivingQATwoStops` (`driving-qa-two-stops`) in `FixtureApp.swift` seeds migration manifest `v5-driving-qa-two-stops` with two stops along a calibrated 720.5m route (Civic Center / Van Ness, SF). Seeds real bundle `drive_loop.mp3` (~55s) to Stop 1 and contract AAC (`create-continuity.m4a`, 250ms) to Stop 0. Injected `NativeNarrationPlayer` drives actual AVPlayer audio decoding and lifecycle.
+- **Cycle coverage:** Full automated flow in `OfflineSmokeTests.testSimulatedTwoStopDrivingCycle`:
+  1. Offline Library card selection (`Two-Stop Simulated QA Drive`).
+  2. Drive detail presentation and `Start Drive` trigger.
+  3. Departure gate presentation and `Simulate drive` action.
+  4. Real-time driving screen: initial `0 / 2 stops` counter and `SIMULATION` badge asserted stably.
+  5. Stop 0 triggers and completes (250ms), advancing counter to `1 / 2 stops`.
+  6. Stop 1 triggers (~55s audio), entering `NOW PLAYING`.
+  7. Transport controls exercised: Pause verified (`PAUSED`), Resume verified (`NOW PLAYING`), forward 15s seek x3 verified hittable and executed.
+  8. Stop 1 completion and route finish verified with completion wrap banner and summary (`That's a wrap, road crew.`, `2 stops heard. Thanks for riding along.`).
+  9. `Ride again` tapped: counter cleanly resets to `0 / 2 stops` and simulation re-arms.
+- **Focused UI test evidence:** Focused test executed on simulator `69401A43-2D6D-4155-BD4F-E688777CB43A` (`UI_TEST_EXIT_CODE=0`, 49.688s, 0 failures, 0 unexpected; xcresult `.scratch/ios/DrivingQA/Test-DrivingQA-Calibrated.xcresult`). All 8 inspected screenshots confirm clean visual presentation with zero clipping or overlapping controls (expected trailing ellipsis on long status line).
+- **Media readback:** Seeded files read back from container `E8FAFA56-CCB5-4064-83EB-983A06B897C1` matched source fixture AAC (`7c31c2b7...`) and bundle MP3 (`934c0ae2...`) byte-for-byte.
+- **Preserved failure boundaries:** Retained investigative records in `.scratch/ios/DrivingQA/` preserve earlier candidate failure boundaries (initial Plan tab default before explicit initial tab injection, and initial route vertex trigger timing before geometric calibration to 1x vehicle simulation speed).
+- **Target and limits:** Prior full native suite (349 tests) and TestFlight delivery (1.2.0 (27) / `977cd1c5`) remain historical; no new full-suite count is recorded for this focused addition. Physical device verification remains blocked pending device unlock (`kAMDMobileImageMounterDeviceLocked`).
+
+
 ### Exact-source delivery failure: forced-wall readiness
 
 The `f1ee2eb3` release preflight ran **338/339** tests (321/321 unit, 17/18 UI), zero

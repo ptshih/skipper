@@ -3,11 +3,15 @@ import Foundation
 
 @MainActor
 enum DebugPlaybackServices {
-    static func make(session: SessionStore, date: Date, root: URL) -> DrivePlaybackController {
-        DrivePlaybackController(player: DebugSilentNarration(), music: DebugSilentMusic(),
+    static func make(scenario: String? = nil, session: SessionStore, date: Date, root: URL) -> DrivePlaybackController {
+        let isDrivingQA = scenario == "driving-qa-two-stops"
+        let player: any NarrationPlaying = isDrivingQA ? NativeNarrationPlayer() : DebugSilentNarration()
+        let start = Date()
+        let nowClosure: () -> Date = isDrivingQA ? { date.addingTimeInterval(Date().timeIntervalSince(start)) } : { date }
+        return DrivePlaybackController(player: player, music: DebugSilentMusic(),
             location: DebugLocation(), awake: DebugScreenAwake(),
             channel: AudioChannel(session: DebugAudioSession(), observeSystem: false), systemControls: false,
-            now: { date }, session: { session.session }, traceDirectory: root.appendingPathComponent("traces"))
+            now: nowClosure, session: { session.session }, traceDirectory: root.appendingPathComponent("traces"))
     }
 }
 @MainActor private final class DebugSilentNarration: NarrationPlaying {
