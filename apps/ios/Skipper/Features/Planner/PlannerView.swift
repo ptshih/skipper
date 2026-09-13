@@ -110,14 +110,6 @@ struct PlannerView: View {
                         .font(TrailheadType.wordmark)
                         .foregroundColor(TrailheadColors.ink)
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        onOpenLibrary()
-                    } label: {
-                        Image(systemName: "car.2.fill")
-                            .foregroundColor(TrailheadColors.inkMuted)
-                    }
-                }
             }
             .task {
                 await viewModel.loadInitialData()
