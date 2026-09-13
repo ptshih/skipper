@@ -1,6 +1,6 @@
 # Complete conversion to native iOS
 
-**Status**: IMPLEMENTED / CHECKPOINT PREPARATION 2026-09-12. The reviewed simulator snapshot passed 333/333 tests (315 unit, 18 UI). Subsequent reviewed DEBUG receipt/download fixtures and strengthened UI persistence checks passed their focused suites; the immutable release pipeline must select the whole native suite again. Final documentation/checkpoint handoff is pending. Physical-device and distribution acceptance remain incomplete. The shipped client stays in `apps/mobile` until coordinated cutover. Native development/configuration/skills are active; release tooling has passed independent code review, while actual delivery remains unverified.
+**Status**: IMPLEMENTED / TESTFLIGHT DELIVERED 2026-09-12. Native conversion is implemented and committed through `977cd1c5`. Full release verification passed root checks (309) and the native test suite (339/339), archive, manual distribution export, inspection, signed fixture exclusion, in-process EAS symbols upload/readback, and Apple validation/upload (delivery UUID `7acfc478-b11c-4dfc-ba4b-fe3d176891db`). App Store Connect processed build 1.2.0 (27) as valid in beta testing (`IN_BETA_TESTING`). The original pipeline exited 1 solely on a local JSON delivery UUID parsing mismatch; the original record is preserved while GeminiRelease generates a separate reconciliation receipt with fresh ASC. Physical-device testing remains blocked by a locked phone (`kAMDMobileImageMounterDeviceLocked`), with an external unlock request pending and no physical app or road test established. Physical upgrade/driving verification and canonical legacy retirement remain pending.
 
 ## Intent and chosen direction
 
@@ -226,7 +226,7 @@ Google Maps 11.1.0 and PostHog 3.74.0 are exact SPM pins. Root scripts `ios:conf
 and `ios:check` provide local public SDK configuration and simulator verification.
 The native app foundation includes branded fonts/assets, URLSession/Codable/SSE transport,
 explicit Keychain credentials, migration, SessionStore, and injectable App dependencies.
-The reviewed native implementation is under final checkpoint preparation; this is not release acceptance.
+The native checkpoint and follow-up fixes are committed; full delivery verification remains active.
 
 QA's retained build-25 log and signed build-26 IPA establish team/prefix `L24UJYJ5DK`
 and application identifier/default Keychain group `L24UJYJ5DK.fm.skipper.app`. Native
@@ -341,13 +341,15 @@ was verified inside the matching Debug app bundle. Independent reviews cleared t
 without HIGH/MEDIUM findings. Release fixture exclusion still requires archive inspection.
 
 The completed 333-test snapshot remains historical to these bounded, focused-tested changes.
-The final immutable release pipeline must execute the complete suite from its accepted SHA;
-focused follow-ups are not relabeled as a second full run. QA's guide and retained-receipt
+Subsequent immutable `d22363e0` and `9f6bc3d3` runs each passed the complete 339-test suite;
+the `977cd1c5` full release established its own root check pass (309) and native suite pass (339/339).
+Earlier focused runs are not relabeled as complete runs or transferred to a different source revision. QA's guide and retained-receipt
 audits are complete, including the independent pre-sign-in counter audit and negative controls.
 After that freeze, the Detail subtitle received one authorized copy-only correction from
 “1 stops” to “1 stop” for one clip, retaining the plural otherwise. Historical screenshots
 remain before-copy evidence; no new simulator run is claimed for that expression change.
-The final root check and checkpoint handoff follow this documentation reconciliation.
+The native checkpoint and follow-up fixes are committed. The immutable release evidence below
+records later checks without rewriting those historical screenshots or focused results.
 
 Maps ownership transferred from Workhorse to Playback for the final corrections. Astra
 cleared deferred fitting versus driving follow, diagnostic isolation/privacy, stale readiness
@@ -364,6 +366,40 @@ unexpected requests. QA corrected the new fixture to longitude/latitude wire ord
 earlier financial/reset/recovery cases remain unchanged. Their offshore 0,0 geometry never
 established tile failure. The earlier `1e53d517` candidate and its results remain historical.
 These are accepted focused results, not physical-device or distribution proof.
+
+## Committed release attempts and current boundary
+
+The native checkpoint is `8c55da14`; `d22363e0` fixes clean-checkout skill guidance and passed
+an isolated frozen-dependency root check. Its full 339-test run passed and archive succeeded,
+but export failed. `4b87b52d` fixes configuration-specific fixture outputs. `f1ee2eb3` corrects
+inspector false positives exposed by an old-archive manual distribution-export probe.
+
+The `f1ee2eb3` full run retained 338/339: Update was initially non-hittable after its title
+appeared. Actual tracing confirmed readiness within 111 ms with the old email absent and
+stable readiness for three seconds. `843d8d6c` adds only a bounded readiness predicate while
+retaining all assertions; its four version UI cases and receipts passed. `9f6bc3d3` fixes
+local symbols preparation for archive plist dates. Its immutable full run passed 339/339
+(321 unit, 18 UI), archive, manual export, native inspection and signed-archive fixture
+exclusion. Remote EAS symbols then failed generically; Apple was not invoked.
+
+`977cd1c5` fixes immutable EAS run queries and safe diagnostics (45 scoped tests; root 309).
+One actual symbols-only diagnostic using retained `9f6bc3d3` artifacts passed exact PostHog
+UUID/content readback and fresh authenticated EAS artifact verification, without retry or
+original-byte changes. The previous generic failure was not reproduced and remains unexplained.
+This old-source diagnostic is not Apple delivery or acceptance of new source. See the
+[symbols record](../guides/native-ios-symbols.md) for its exact evidence.
+
+The full `.scratch/releases/native-delivery-977cd1c5-01/` pipeline completed with the proven
+manual export options: root check (309), native suite (339/339), archive, manual export, inspection,
+fixture debug exclusion, in-process EAS symbols upload and readback (PostHog UUID `48B46270-1CF1-3060-827D-1909354B1562`),
+Apple validation, and Apple upload (delivery UUID `7acfc478-b11c-4dfc-ba4b-fe3d176891db`)
+all passed. App Store Connect ingested build 1.2.0 (27) as `VALID` and `IN_BETA_TESTING` (available for
+internal testing in TestFlight). The pipeline script's final exit was 1 solely because the local delivery
+UUID extractor expected plaintext regex rather than the JSON object returned by `--output-format json`;
+the original failed execution record is preserved while GeminiRelease provides a separate reconciliation
+receipt with fresh ASC status. Physical DDI preparation failed with `kAMDMobileImageMounterDeviceLocked`;
+an external unlock response is pending. No physical app installation/launch or real road drive has occurred.
+These pending gates do not permit legacy retirement under the acceptance requirement above.
 
 ## Retained Linux CI boundary
 
@@ -436,10 +472,16 @@ the Orchestrator tab focused during coordination. Keep project execution delegat
 acting as the selected orchestrator; ordinary task-agent defaults are explained in
 [the delegation guide](../guides/agent-delegation.md).
 
-**Next action:** run the final root check against the frozen candidate and inspect final drift.
-After accepted docs/checks and the coordinator's concrete checkpoint
-go, commit the adopted conversion paths atomically; preserve the legacy client for the later
-retirement step. Physical-device and actual distribution verification remain separate.
+For ongoing operational continuity, the founder has designated **Gemini** as the default model
+for routine implementation, testing, documentation reconciliation, and release pipeline operations
+to reduce Codex token consumption. **Codex** is reserved for high-level coordination and short,
+bounded, critical correctness reviews. This operating default is recorded for project continuity
+without modifying global skills or preferences files.
+
+**Next action:** await user unlock for physical device verification (audio, interruptions, Bluetooth,
+lock-screen controls, GPS and actual road drive) and populated-state physical upgrade verification. Preserve
+earlier failed attempts, the separate diagnostic scope, and the original parser exit record. Retain the legacy
+client in `apps/mobile` until physical native acceptance is recorded under step 5.
 On a new session, discover current Herdr agents
 and bounded recent reports before assigning work; do not assume prior live identities
 or pane labels remain valid. Continue the active authorized goal without repeating

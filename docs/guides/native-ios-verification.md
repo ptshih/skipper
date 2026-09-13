@@ -1,8 +1,33 @@
 # Native iOS verification
 
-**Status**: IN PROGRESS 2026-09-12. Reviewed frozen simulator snapshot passed 333/333 tests (315 unit, 18 UI); matching SE AX5 subset passed 3/3. Recognizable Maps tiles/route, cancellation, late-nudge state, account retry and recovery UI were inspected. A newer DEBUG counter candidate passed all four version UI cases with exact request receipts. A later synthetic-download candidate passed both create UI tests and all three canonical commit/relaunch byte audits; prior seven receipt mismatches remain recorded. Distribution-signed physical upgrade and real driving remain unverified. See the [conversion plan](../designs/native-ios-conversion.md).
+**Status**: TESTFLIGHT DELIVERED / PHYSICAL VERIFICATION PENDING 2026-09-12. The `977cd1c5` full release passed root checks (309), 339/339 native tests, archive/manual export/inspection, signed fixture exclusion, in-process EAS symbols upload/readback, Apple validation, and upload (delivery UUID `7acfc478-b11c-4dfc-ba4b-fe3d176891db`). App Store Connect processed build 1.2.0 (27) as `VALID` and `IN_BETA_TESTING` (TestFlight internal testing available). The original pipeline script exited 1 solely due to the local delivery UUID parser on JSON output; original failed record is preserved while GeminiRelease generates a separate reconciliation receipt with fresh ASC. Earlier 333/SE/focused results, the `f1ee2eb3` 338/339 failure, and the `843d8d6c` readiness correction retain their exact source authority. A prior old-source symbols diagnostic passed, distinct from new-source delivery. Physical preparation failed because the phone was locked (`kAMDMobileImageMounterDeviceLocked`); external unlock request is pending and no physical app or road-test operation is established. See the [conversion plan](../designs/native-ios-conversion.md).
 
 ## Recorded simulator evidence
+
+### Immutable pipeline: `9f6bc3d3` and delivered `977cd1c5`
+
+`.scratch/releases/native-delivery-9f6bc3d3-01/` retains source-bound native evidence:
+339 passed, zero failed/skipped (321 unit, 18 UI). Its `failure-handoff.json`, `inspection.json`
+and `archive-debug-exclusion.json` also establish successful archive/manual export, valid native
+inspection and no fixture directory/AAC in the signed archive. Root checks passed 293 tests.
+The remote EAS symbols stage failed before Apple; that failure remains preserved and unresolved.
+The later one-attempt symbols-only diagnostic proved exact older-artifact UUID/bytes/hash
+readback and fresh authenticated EAS artifact verification, without Apple or new-source acceptance.
+
+Current immutable source `977cd1c5b0fb1f73ec79f04e56fe29f3e8225de7` has a completed full run
+at `.scratch/releases/native-delivery-977cd1c5-01/`: root check (309 tests), native check (339/339),
+archive, manual export, native inspection, fixture debug exclusion, in-process EAS symbols upload and
+readback (PostHog UUID `48B46270-1CF1-3060-827D-1909354B1562`), Apple validation, and upload (delivery
+UUID `7acfc478-b11c-4dfc-ba4b-fe3d176891db`) all succeeded. App Store Connect processed build 1.2.0 (27)
+as `VALID` and `IN_BETA_TESTING`. The original pipeline script exited 1 solely on local delivery UUID parsing
+against JSON output; that execution record is preserved. Historical 333/focused/SE evidence and the readiness
+failure/correction below remain intact.
+
+Physical-phone network reachability did not establish developer readiness: the one bounded
+DDI preparation attempt failed because the device was locked (`kAMDMobileImageMounterDeviceLocked`).
+The retained record is `.scratch/ios-qa/ddi-preparation-attempt-20260912-1922/REPORT.md`. External unlock
+is pending; no app operation, physical upgrade or actual driving proof follows from this attempt.
+
 
 ### Exact-source delivery failure: forced-wall readiness
 

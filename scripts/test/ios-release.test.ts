@@ -35,6 +35,8 @@ import {
   defaultRunCommand,
   computeSourceBuildInputsHash,
   formatReleaseRecord,
+  extractDeliveryUuid,
+  UUID_REGEX,
   parseCliArgs,
   readProjectMarketingVersion,
   redactSecrets,
@@ -415,6 +417,89 @@ describe('Command argument generation and signing safety', () => {
       '--build', '27',
       '--skip-release-on-fail',
     ])
+  })
+})
+
+describe('extractDeliveryUuid delivery receipt parsing and validation', () => {
+  const retainedStdout = `{
+  "details" : {
+    "delivery-uuid" : "7acfc478-b11c-4dfc-ba4b-fe3d176891db",
+    "transferred" : "75713070 bytes in 1.952 seconds (38.8MB/s, 310.322Mbps)"
+  },
+  "os-version" : "Version 26.6.2 (Build 25G83)",
+  "success-message" : "No errors uploading archive at '/path/to/skipper.ipa'.",
+  "tool-path" : "/Applications/Xcode.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources",
+  "tool-version" : "26.40.1 (174001)"
+}`
+
+  const retainedStderr = `Running altool at path '/Applications/Xcode.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+2026-09-12 20:35:34.392  INFO: [ContentDelivery.Uploader.9EAC6C480] 
+==========================================
+UPLOAD SUCCEEDED with no errors
+Delivery UUID: 7acfc478-b11c-4dfc-ba4b-fe3d176891db
+Transferred 75713070 bytes in 1.952 seconds (38.8MB/s, 310.322Mbps)
+==========================================`
+
+  test('extracts delivery-uuid from actual retained altool stdout and stderr fixture', () => {
+    const uuid = extractDeliveryUuid(retainedStdout, retainedStderr)
+    expect(uuid).toBe('7acfc478-b11c-4dfc-ba4b-fe3d176891db')
+    expect(UUID_REGEX.test(uuid)).toBe(true)
+  })
+
+  test('extracts delivery-uuid from structured JSON details without stderr', () => {
+    const uuid = extractDeliveryUuid(retainedStdout, '')
+    expect(uuid).toBe('7acfc478-b11c-4dfc-ba4b-fe3d176891db')
+  })
+
+  test('extracts delivery-uuid from plaintext stdout when JSON is not present', () => {
+    const stdout = 'Delivery UUID: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\nUpload succeeded'
+    const uuid = extractDeliveryUuid(stdout, '')
+    expect(uuid).toBe('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee')
+  })
+
+  test('extracts delivery-uuid from plaintext stderr when stdout is empty', () => {
+    const stderr = 'Delivery UUID: aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+    const uuid = extractDeliveryUuid('', stderr)
+    expect(uuid).toBe('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee')
+  })
+
+  test('normalizes uppercase UUID to lowercase', () => {
+    const stdout = JSON.stringify({ details: { 'delivery-uuid': '7ACFC478-B11C-4DFC-BA4B-FE3D176891DB' } })
+    const uuid = extractDeliveryUuid(stdout)
+    expect(uuid).toBe('7acfc478-b11c-4dfc-ba4b-fe3d176891db')
+  })
+
+  test('rejects malformed delivery UUID in JSON output', () => {
+    const stdout = JSON.stringify({ details: { 'delivery-uuid': 'not-a-valid-uuid' } })
+    expect(() => extractDeliveryUuid(stdout)).toThrow(/Malformed Apple delivery UUID in JSON/)
+  })
+
+  test('rejects malformed delivery UUID in plaintext output', () => {
+    const stderr = 'Delivery UUID: invalid-uuid-123'
+    expect(() => extractDeliveryUuid('', stderr)).toThrow(/Malformed Apple delivery UUID in plaintext/)
+  })
+
+  test('rejects conflicting delivery UUID claims between JSON and plaintext', () => {
+    const stdout = JSON.stringify({ details: { 'delivery-uuid': '11111111-1111-1111-1111-111111111111' } })
+    const stderr = 'Delivery UUID: 22222222-2222-2222-2222-222222222222'
+    expect(() => extractDeliveryUuid(stdout, stderr)).toThrow(/Conflicting Apple delivery UUID claims/)
+  })
+
+  test('rejects conflicting delivery UUID claims across multiple plaintext matches', () => {
+    const stdout = 'Delivery UUID: 11111111-1111-1111-1111-111111111111\nDelivery UUID: 22222222-2222-2222-2222-222222222222'
+    expect(() => extractDeliveryUuid(stdout, '')).toThrow(/Conflicting Apple delivery UUID claims/)
+  })
+
+  test('fails closed when stdout has malformed JSON-looking text even with valid stderr UUID', () => {
+    const malformedJsonStdout = '{\n  "details": broken json'
+    const validStderr = 'Delivery UUID: 7acfc478-b11c-4dfc-ba4b-fe3d176891db'
+    expect(() => extractDeliveryUuid(malformedJsonStdout, validStderr)).toThrow(/Malformed Apple delivery JSON in stdout/)
+  })
+
+  test('rejects empty or unextractable output without ever returning unknown', () => {
+    expect(() => extractDeliveryUuid('', '')).toThrow(/Could not extract valid Apple delivery UUID/)
+    expect(() => extractDeliveryUuid('No errors reported', '')).toThrow(/Could not extract valid Apple delivery UUID/)
   })
 })
 
@@ -1501,7 +1586,14 @@ describe('In-process EAS symbols release integration', () => {
       if (cmd[0] !== 'xcrun') return f.runner(cmd, options)
       expect(f.stages.slice(0, 3)).toEqual(['prepare', 'execute', 'fresh-verify'])
       f.stages.push(cmd.includes('--upload-package') ? 'apple-upload' : 'apple-validate')
-      return { exitCode: 0, stdout: 'Delivery UUID: 11111111-2222-3333-4444-555555555555', stderr: '' }
+      if (cmd.includes('--upload-package')) {
+        return {
+          exitCode: 0,
+          stdout: JSON.stringify({ details: { 'delivery-uuid': '11111111-2222-3333-4444-555555555555' } }),
+          stderr: 'Delivery UUID: 11111111-2222-3333-4444-555555555555',
+        }
+      }
+      return { exitCode: 0, stdout: '{}', stderr: '' }
     }
     await runReleasePipeline({ ...f.options, upload: true, runner, ascFetchFn })
     expect(f.stages).toEqual(['prepare', 'execute', 'fresh-verify', 'apple-validate', 'apple-upload'])
@@ -1513,6 +1605,75 @@ describe('In-process EAS symbols release integration', () => {
     expect(record).toContain(await hashArchive(join(f.options.outputDir!, 'Skipper.xcarchive')))
     expect(record).toContain(await hashFile(join(f.options.outputDir!, 'skipper-1.2.0-999.ipa')))
     expect(existsSync(join(f.options.outputDir!, 'symbols-receipt.json'))).toBe(true)
+  })
+
+  test('persists uploadedAt, ASC outcome, and receipt failure with shipped=false before rethrowing when receipt parse fails after upload', async () => {
+    const f = symbolsReleaseFixture()
+    let ascCalls = 0
+    let uploadAttempts = 0
+    const ascFetchFn = (async () => {
+      if (++ascCalls === 1) return new Response(JSON.stringify({ data: [{ id: '50', attributes: { version: '50' } }] }))
+      return new Response(JSON.stringify({ data: [{ id: '999', attributes: { version: '999', processingState: 'VALID', usesNonExemptEncryption: false },
+        relationships: { preReleaseVersion: { data: { id: 'version' } }, buildBetaDetail: { data: { id: 'beta' } } } }],
+        included: [{ type: 'preReleaseVersions', id: 'version', attributes: { version: '1.2.0' } },
+          { type: 'buildBetaDetails', id: 'beta', attributes: { internalBuildState: 'IN_BETA_TESTING' } }] }))
+    }) as unknown as typeof fetch
+    const runner: CommandRunner = async (cmd, options) => {
+      if (cmd[0] !== 'xcrun') return f.runner(cmd, options)
+      if (cmd.includes('--upload-package')) {
+        uploadAttempts++
+        return {
+          exitCode: 0,
+          stdout: '{\n  "details": broken-json-from-altool',
+          stderr: 'Delivery UUID: 11111111-2222-3333-4444-555555555555',
+        }
+      }
+      return { exitCode: 0, stdout: '{}', stderr: '' }
+    }
+    await expect(runReleasePipeline({ ...f.options, upload: true, runner, ascFetchFn })).rejects.toThrow(/Apple upload completed but receipt verification failed: Malformed Apple delivery JSON in stdout/)
+    // Must upload exactly once (never retried)
+    expect(uploadAttempts).toBe(1)
+    // ASC readiness must have been queried
+    expect(ascCalls).toBe(2)
+    // Release record must be persisted on disk
+    const recordPath = join(f.options.outputDir!, 'release-record.md')
+    expect(existsSync(recordPath)).toBe(true)
+    const record = readFileSync(recordPath, 'utf8')
+    // shipped=false
+    expect(record).not.toContain('SHIPPED TO TESTFLIGHT')
+    expect(record).toContain('UPLOADED — RELEASE VERIFICATION INCOMPLETE')
+    expect(record).toContain('- **Uploaded At**:')
+    expect(record).toContain('- **ASC Processing State**: `VALID`')
+    expect(record).toContain('- **ASC Internal State**: `IN_BETA_TESTING`')
+    expect(record).toContain('- **Apple Delivery Receipt**: FAILED (Malformed Apple delivery JSON in stdout:')
+  })
+
+  test('retains sanitized ASC diagnostic upon dual receipt parse and ASC readiness failure without leaking tokens', async () => {
+    const f = symbolsReleaseFixture()
+    let ascCalls = 0
+    let uploadAttempts = 0
+    const ascFetchFn = (async () => {
+      if (++ascCalls === 1) return new Response(JSON.stringify({ data: [{ id: '50', attributes: { version: '50' } }] }))
+      throw new Error('ASC query failed with Bearer secret-bearer-token-value')
+    }) as unknown as typeof fetch
+    const runner: CommandRunner = async (cmd, options) => {
+      if (cmd[0] !== 'xcrun') return f.runner(cmd, options)
+      if (cmd.includes('--upload-package')) {
+        uploadAttempts++
+        return {
+          exitCode: 0,
+          stdout: '{\n  "details": broken-json',
+          stderr: '',
+        }
+      }
+      return { exitCode: 0, stdout: '{}', stderr: '' }
+    }
+    await expect(runReleasePipeline({ ...f.options, upload: true, runner, ascFetchFn })).rejects.toThrow(/Apple upload completed but receipt verification failed: .* ASC readiness check also failed: ASC query failed with \[REDACTED_TOKEN\]/)
+    expect(uploadAttempts).toBe(1)
+    const record = readFileSync(join(f.options.outputDir!, 'release-record.md'), 'utf8')
+    expect(record).toContain('UPLOADED — RELEASE VERIFICATION INCOMPLETE')
+    expect(record).toContain('- **ASC Readiness Query**: FAILED (ASC query failed with [REDACTED_TOKEN])')
+    expect(record).not.toContain('secret-bearer-token-value')
   })
 
   test('successful workflow return cannot bypass failed fresh authenticated verification', async () => {

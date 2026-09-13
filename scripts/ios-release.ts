@@ -104,6 +104,8 @@ export interface ReleaseMetadata {
   posthogSymbolStatus?: 'uploaded' | 'pending_verification' | 'skipped_no_keys' | 'skipped_flag'
   uploadedAt?: string
   deliveryUuid?: string
+  deliveryReceiptError?: string
+  ascVerificationError?: string
   ascProcessingState?: string
   ascInternalState?: string
 }
@@ -385,6 +387,63 @@ export function buildAltoolUploadArgs(options: {
     '--p8-file-path', options.authConfig.keyPath,
     '--output-format', 'json',
   ]
+}
+
+export const UUID_REGEX = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+
+export function extractDeliveryUuid(stdout: string, stderr: string = ''): string {
+  let jsonUuid: string | undefined
+
+  // 1. Validate structured JSON details.delivery-uuid (from altool --output-format json)
+  const trimmed = stdout.trim()
+  const looksLikeJson = trimmed.startsWith('{') || (trimmed.includes('{') && trimmed.includes('delivery-uuid'))
+  if (looksLikeJson) {
+    let parsed: any
+    try {
+      parsed = JSON.parse(trimmed)
+    } catch (err: any) {
+      throw new Error(`Malformed Apple delivery JSON in stdout: ${err.message}`)
+    }
+    const raw = parsed?.details?.['delivery-uuid'] ?? parsed?.['delivery-uuid'] ?? parsed?.details?.deliveryUuid
+    if (raw !== undefined) {
+      if (typeof raw === 'string' && UUID_REGEX.test(raw.trim())) {
+        jsonUuid = raw.trim().toLowerCase()
+      } else {
+        throw new Error(`Malformed Apple delivery UUID in JSON output: ${JSON.stringify(raw)}`)
+      }
+    }
+  }
+
+  // 2. Validate supported plaintext format in stdout and stderr
+  const textUuids = new Set<string>()
+  for (const stream of [stdout, stderr]) {
+    const matches = stream.matchAll(/Delivery UUID:\s*(\S+)/gi)
+    for (const match of matches) {
+      const candidate = match[1]?.trim()
+      if (candidate) {
+        if (UUID_REGEX.test(candidate)) {
+          textUuids.add(candidate.toLowerCase())
+        } else {
+          throw new Error(`Malformed Apple delivery UUID in plaintext output: "${candidate}"`)
+        }
+      }
+    }
+  }
+
+  // 3. Reject conflicting receipt claims
+  if (jsonUuid && textUuids.size > 0 && !textUuids.has(jsonUuid)) {
+    throw new Error(`Conflicting Apple delivery UUID claims: JSON reported "${jsonUuid}" but plaintext reported "${Array.from(textUuids).join(', ')}"`)
+  }
+  if (textUuids.size > 1) {
+    throw new Error(`Conflicting Apple delivery UUID claims in plaintext output: ${Array.from(textUuids).join(', ')}`)
+  }
+
+  const finalUuid = jsonUuid ?? Array.from(textUuids)[0]
+  if (!finalUuid || finalUuid === 'unknown') {
+    throw new Error('Could not extract valid Apple delivery UUID from altool output')
+  }
+
+  return finalUuid
 }
 
 export function buildPosthogUploadArgs(options: {
@@ -713,14 +772,44 @@ export async function runReleasePipeline(options: Partial<ReleaseOptions> = {}):
       cwd: effectiveRoot, env: environment, logPath: resolve(outputDir, 'apple-upload.log') })
     if (upload.exitCode !== 0) throw new Error(`altool upload failed (exit ${upload.exitCode})`)
     metadata.uploadedAt = new Date().toISOString()
-    metadata.deliveryUuid = upload.stdout.match(/Delivery UUID:\s*([0-9a-fA-F-]+)/)?.[1] ?? 'unknown'
-    const freshToken = await generateAscJwt(authConfig.keyId, authConfig.issuerId, readFileSync(authConfig.keyPath, 'utf8'))
-    const ready = await waitForBuildReadiness({ appId: authConfig.appId, token: freshToken,
-      expectedBuild: buildNumber, expectedVersion: version, fetchFn: options.ascFetchFn })
-    metadata.ascProcessingState = ready.processingState
-    metadata.ascInternalState = ready.internalBuildState
+
+    let receiptError: Error | null = null
+    try {
+      metadata.deliveryUuid = extractDeliveryUuid(upload.stdout, upload.stderr)
+    } catch (err: any) {
+      receiptError = err instanceof Error ? err : new Error(String(err))
+      metadata.deliveryReceiptError = receiptError.message
+    }
+
+    let ascError: Error | null = null
+    try {
+      const freshToken = await generateAscJwt(authConfig.keyId, authConfig.issuerId, readFileSync(authConfig.keyPath, 'utf8'))
+      const ready = await waitForBuildReadiness({ appId: authConfig.appId, token: freshToken,
+        expectedBuild: buildNumber, expectedVersion: version, fetchFn: options.ascFetchFn })
+      metadata.ascProcessingState = ready.processingState
+      metadata.ascInternalState = ready.internalBuildState
+    } catch (err: any) {
+      ascError = err instanceof Error ? err : new Error(String(err))
+      metadata.ascVerificationError = ascError.message
+        .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, '[REDACTED_TOKEN]')
+        .replace(/[A-Za-z0-9-_]{20,}\.[A-Za-z0-9-_]{20,}\.[A-Za-z0-9-_]{20,}/g, '[REDACTED_JWT]')
+    }
+
     await writeReleaseRecord(outputDir, metadata)
-    if (metadata.deliveryUuid === 'unknown') throw new Error('ASC is ready but Apple delivery receipt is missing; release record remains unverified')
+
+    if (receiptError && ascError) {
+      const ascDiag = metadata.ascVerificationError ?? 'ASC verification failed'
+      throw new Error(`Apple upload completed but receipt verification failed: ${receiptError.message}; ASC readiness check also failed: ${ascDiag}`)
+    }
+    if (receiptError) {
+      throw new Error(`Apple upload completed but receipt verification failed: ${receiptError.message}`)
+    }
+    if (ascError) {
+      throw ascError
+    }
+    if (!metadata.deliveryUuid || metadata.deliveryUuid === 'unknown') {
+      throw new Error('ASC is ready but Apple delivery receipt is missing; release record remains unverified')
+    }
     console.log(`Release ${version} (${buildNumber}) shipped to TestFlight with verified symbols and ASC readiness.`)
   } finally {
     const frozen = resolve(effectiveRoot, '.scratch/ios/frozen')
@@ -735,6 +824,8 @@ export function formatReleaseRecord(meta: ReleaseMetadata): string {
     meta.uploadedAt &&
     meta.deliveryUuid &&
     meta.deliveryUuid !== 'unknown' &&
+    !meta.deliveryReceiptError &&
+    !meta.ascVerificationError &&
     meta.ascProcessingState === 'VALID' &&
     meta.ascInternalState === 'IN_BETA_TESTING' &&
     meta.posthogSymbolStatus === 'uploaded' &&
@@ -758,6 +849,7 @@ export function formatReleaseRecord(meta: ReleaseMetadata): string {
 
 - **Status**: ${status}
 - **Date**: ${new Date().toISOString()}
+${meta.uploadedAt ? `- **Uploaded At**: \`${meta.uploadedAt}\`` : ''}
 - **Marketing Version**: \`${meta.version}\`
 - **Build Number**: \`${meta.buildNumber}\`
 - **Source Commit**: \`${meta.gitCommit}\`${meta.gitDirty ? ' (working tree dirty at build snapshot)' : ''}
@@ -773,7 +865,8 @@ ${meta.exportOptionsHash ? `- **Frozen Export Options SHA-256**: \`${meta.export
 ${meta.symbolsVerification ? `- **Authenticated Symbols Workflow**: \`${meta.symbolsVerification.workflowRunId}\` (job \`${meta.symbolsVerification.jobId}\`, artifact \`${meta.symbolsVerification.artifactId}\`)
 - **Symbols Manifest SHA-256**: \`${meta.symbolsVerification.manifestSha256}\`
 - **Symbols Receipt**: \`${meta.symbolsReceiptPath}\`` : ''}
-${meta.deliveryUuid ? `- **Apple Delivery UUID**: \`${meta.deliveryUuid}\`` : ''}
+${meta.deliveryReceiptError ? `- **Apple Delivery Receipt**: FAILED (${meta.deliveryReceiptError})` : meta.deliveryUuid ? `- **Apple Delivery UUID**: \`${meta.deliveryUuid}\`` : ''}
+${meta.ascVerificationError ? `- **ASC Readiness Query**: FAILED (${meta.ascVerificationError})` : ''}
 ${meta.ascProcessingState ? `- **ASC Processing State**: \`${meta.ascProcessingState}\`` : ''}
 ${meta.ascInternalState ? `- **ASC Internal State**: \`${meta.ascInternalState}\`` : ''}
 
