@@ -733,7 +733,229 @@ final class ProposalCardTests: XCTestCase {
         _ = map.body
     }
 
+    @MainActor
+    func testSuspendedCreateSameOwnerStartFreshPreservesDownloadAndNavigation() async throws {
+        let canonicalServerID = "00000000-0000-4000-8000-000000000001"
+        let clipURL = "https://audio.example.invalid/clip0.mp3"
+        let manifest = try makeTestManifestWithClip(driveId: canonicalServerID, clipURL: clipURL)
 
+        let controllableAPI = ControllableCreateDriveAPI(manifest: manifest)
+        let sessionValue = syntheticSession(anonymous: false)
+        let keychain = try syntheticKeychain(session: sessionValue)
+        let vault = CredentialVault(keychain: keychain, clock: FeaturesQAClock())
+        let auth = AuthClient(baseURL: baseURL, transport: FeaturesQAHTTP(responses: [:]), vault: vault)
+        let session = SessionStore(auth: auth, vault: vault, clock: FeaturesQAClock(), purgeDownloads: {})
+        await session.refresh()
+
+        let recordingDownloader = RecordingHangingDownloader()
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        let storage = StorageService(rootURL: tempDir, downloader: recordingDownloader)
+
+        let planner = RecordingPlanner()
+        let model = PlannerViewModel(planner: planner, api: controllableAPI, session: session, storage: storage)
+        model.selectRegion(makeTestRegion())
+
+        let route = PlannedRoute(start: "Start", end: "End", via: nil)
+        let cardId = "test-card-sameowner"
+        model.cards.append(ProposalCardItem(id: cardId, afterTurn: 0, route: route))
+
+        var navigatedDriveId: String?
+        let makeDriveTask = Task { @MainActor in
+            await model.makeDrive(cardId: cardId) { driveId in
+                navigatedDriveId = driveId
+            }
+        }
+
+        await controllableAPI.waitForCreateCall()
+        XCTAssertEqual(model.cards[0].state, .creating)
+
+        // Same owner resets conversation while create is in flight
+        model.startFresh()
+        XCTAssertTrue(model.cards.isEmpty)
+
+        // API resumes
+        await controllableAPI.resumePending()
+        await makeDriveTask.value
+
+        // Same owner: navigation still occurs to keep paid create visible
+        XCTAssertEqual(navigatedDriveId, canonicalServerID, "Same owner startFresh must still navigate to keep paid drive visible")
+
+        // 1 background download still triggered
+        await fulfillment(of: [recordingDownloader.downloadStarted], timeout: 2)
+        XCTAssertEqual(recordingDownloader.requestedURLs, [URL(string: clipURL)!])
+
+        // Cards remain empty (no stale card resurfacing)
+        XCTAssertTrue(model.cards.isEmpty, "Cards must remain empty after startFresh")
+    }
+
+    @MainActor
+    func testSuspendedCreateOwnerChangeSuppressesDownloadNavigationAndCardWrite() async throws {
+        let canonicalServerID = "00000000-0000-4000-8000-000000000001"
+        let clipURL = "https://audio.example.invalid/clip0.mp3"
+        let manifest = try makeTestManifestWithClip(driveId: canonicalServerID, clipURL: clipURL)
+
+        let controllableAPI = ControllableCreateDriveAPI(manifest: manifest)
+        let sessionValue = syntheticSession(anonymous: false)
+        let keychain = try syntheticKeychain(session: sessionValue)
+        let vault = CredentialVault(keychain: keychain, clock: FeaturesQAClock())
+        let auth = AuthClient(baseURL: baseURL, transport: FeaturesQAHTTP(responses: [:]), vault: vault)
+        let session = SessionStore(auth: auth, vault: vault, clock: FeaturesQAClock(), purgeDownloads: {})
+        await session.refresh()
+
+        let recordingDownloader = RecordingHangingDownloader()
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        let storage = StorageService(rootURL: tempDir, downloader: recordingDownloader)
+
+        let planner = RecordingPlanner()
+        let model = PlannerViewModel(planner: planner, api: controllableAPI, session: session, storage: storage)
+        model.selectRegion(makeTestRegion())
+
+        let route = PlannedRoute(start: "Start", end: "End", via: nil)
+        let cardId = "test-card-ownerchange"
+        model.cards.append(ProposalCardItem(id: cardId, afterTurn: 0, route: route))
+
+        var navigatedDriveId: String?
+        let makeDriveTask = Task { @MainActor in
+            await model.makeDrive(cardId: cardId) { driveId in
+                navigatedDriveId = driveId
+            }
+        }
+
+        await controllableAPI.waitForCreateCall()
+        XCTAssertEqual(model.cards[0].state, .creating)
+
+        // Owner changes (signs out) while create is in flight
+        try await session.signOut()
+        XCTAssertFalse(session.isSignedIn)
+        XCTAssertNil(session.user)
+
+        // API resumes
+        await controllableAPI.resumePending()
+        await makeDriveTask.value
+
+        // Owner change: 0 navigation
+        XCTAssertNil(navigatedDriveId, "Owner change must suppress navigation")
+
+        // 0 downloads
+        XCTAssertTrue(recordingDownloader.requestedURLs.isEmpty, "Owner change must not trigger download of old owner bytes")
+
+        // Card state is restored to .idle
+        XCTAssertEqual(model.cards.count, 1)
+        XCTAssertEqual(model.cards[0].state, .idle, "Card state must be restored to .idle after owner change")
+
+        // Next tap by signed-out user shows account wall
+        await model.makeDrive(cardId: cardId) { _ in }
+        XCTAssertEqual(model.cards[0].state, .needsAccount)
+    }
+
+    @MainActor
+    func testSuspendedCreateOwnerChangeSuppresses401WallAndCardWrite() async throws {
+        var recordedEvents: [(String, [String: Any])] = []
+        let analytics: AnalyticsTracker = { event, props in
+            recordedEvents.append((event, props))
+        }
+
+        let controllableAPI = ControllableCreateDriveAPI()
+        let sessionValue = syntheticSession(anonymous: false)
+        let keychain = try syntheticKeychain(session: sessionValue)
+        let vault = CredentialVault(keychain: keychain, clock: FeaturesQAClock())
+        let auth = AuthClient(baseURL: baseURL, transport: FeaturesQAHTTP(responses: [:]), vault: vault)
+        let session = SessionStore(auth: auth, vault: vault, clock: FeaturesQAClock(), purgeDownloads: {})
+        await session.refresh()
+
+        let planner = RecordingPlanner()
+        let model = PlannerViewModel(planner: planner, api: controllableAPI, session: session, analytics: analytics)
+        model.selectRegion(makeTestRegion())
+
+        let route = PlannedRoute(start: "Start", end: "End", via: nil)
+        let cardId = "test-card-ownerchange-401"
+        model.cards.append(ProposalCardItem(id: cardId, afterTurn: 0, route: route))
+
+        var navigatedDriveId: String?
+        let makeDriveTask = Task { @MainActor in
+            await model.makeDrive(cardId: cardId) { driveId in
+                navigatedDriveId = driveId
+            }
+        }
+
+        await controllableAPI.waitForCreateCall()
+        XCTAssertEqual(model.cards[0].state, .creating)
+
+        // Owner changes (signs out) while create is in flight
+        try await session.signOut()
+        XCTAssertFalse(session.isSignedIn)
+        XCTAssertNil(session.user)
+
+        // API resumes with 401 error
+        await controllableAPI.resumePending(throwing: APIError(status: 401, code: "unauthorized", message: "Account required"))
+        await makeDriveTask.value
+
+        // Owner change: 0 navigation
+        XCTAssertNil(navigatedDriveId, "Owner change must suppress navigation")
+
+        // No wall event triggered for new/signed-out state
+        XCTAssertFalse(recordedEvents.contains { $0.0 == "wall_shown" }, "Stale 401 must not trigger wall event after owner change")
+
+        // Card state is restored to .idle
+        XCTAssertEqual(model.cards.count, 1)
+        XCTAssertEqual(model.cards[0].state, .idle, "Card state must be restored to .idle after owner change")
+
+        // Next tap by signed-out user shows account wall and records event
+        await model.makeDrive(cardId: cardId) { _ in }
+        XCTAssertEqual(model.cards[0].state, .needsAccount)
+        XCTAssertTrue(recordedEvents.contains { $0.0 == "wall_shown" })
+    }
+
+    @MainActor
+    func testSuspendedCreateOwnerChangeSuppressesGenericErrorAndCardWrite() async throws {
+        let controllableAPI = ControllableCreateDriveAPI()
+        let sessionValue = syntheticSession(anonymous: false)
+        let keychain = try syntheticKeychain(session: sessionValue)
+        let vault = CredentialVault(keychain: keychain, clock: FeaturesQAClock())
+        let auth = AuthClient(baseURL: baseURL, transport: FeaturesQAHTTP(responses: [:]), vault: vault)
+        let session = SessionStore(auth: auth, vault: vault, clock: FeaturesQAClock(), purgeDownloads: {})
+        await session.refresh()
+
+        let planner = RecordingPlanner()
+        let model = PlannerViewModel(planner: planner, api: controllableAPI, session: session)
+        model.selectRegion(makeTestRegion())
+
+        let route = PlannedRoute(start: "Start", end: "End", via: nil)
+        let cardId = "test-card-ownerchange-error"
+        model.cards.append(ProposalCardItem(id: cardId, afterTurn: 0, route: route))
+
+        var navigatedDriveId: String?
+        let makeDriveTask = Task { @MainActor in
+            await model.makeDrive(cardId: cardId) { driveId in
+                navigatedDriveId = driveId
+            }
+        }
+
+        await controllableAPI.waitForCreateCall()
+        XCTAssertEqual(model.cards[0].state, .creating)
+
+        // Owner changes (signs out) while create is in flight
+        try await session.signOut()
+        XCTAssertFalse(session.isSignedIn)
+        XCTAssertNil(session.user)
+
+        // API resumes with generic error
+        await controllableAPI.resumePending(throwing: URLError(.timedOut))
+        await makeDriveTask.value
+
+        // Owner change: 0 navigation
+        XCTAssertNil(navigatedDriveId, "Owner change must suppress navigation")
+
+        // Card state is restored to .idle
+        XCTAssertEqual(model.cards.count, 1)
+        XCTAssertEqual(model.cards[0].state, .idle, "Card state must be restored to .idle after owner change")
+
+        // Next tap by signed-out user shows account wall
+        await model.makeDrive(cardId: cardId) { _ in }
+        XCTAssertEqual(model.cards[0].state, .needsAccount)
+    }
 }
 
 // MARK: - Test Helpers
@@ -775,6 +997,38 @@ private func makeTestManifest(
     }
     let data = try JSONSerialization.data(withJSONObject: dict)
     return try JSONDecoder().decode(DriveManifest.self, from: data)
+}
+
+private func makeTestManifestWithClip(
+    driveId: String = "00000000-0000-4000-8000-000000000001",
+    clipURL: String = "https://audio.example.invalid/clip0.mp3"
+) throws -> DriveManifest {
+    let manifestData = Data("""
+    {
+        "driveId": "\(driveId)",
+        "label": "Test Drive",
+        "polyline": [[-122.0, 37.0]],
+        "distanceMeters": 1000,
+        "durationSeconds": 60,
+        "clips": [
+            {
+                "seq": 0,
+                "form": "story",
+                "poiId": "00000000-0000-4000-8000-000000000002",
+                "subjectId": "00000000-0000-4000-8000-000000000003",
+                "subjectKind": "poi",
+                "name": "Stop 1",
+                "lat": 37.0,
+                "lng": -122.0,
+                "alongSec": 10.0,
+                "durationMs": 5000,
+                "url": "\(clipURL)",
+                "contentType": "audio/mpeg"
+            }
+        ]
+    }
+    """.utf8)
+    return try JSONDecoder().decode(DriveManifest.self, from: manifestData)
 }
 
 private func makeTestProposal(
@@ -931,6 +1185,74 @@ private actor ControllableProposeAPI: SkipperAPI {
         throw URLError(.badURL)
     }
     func create(_ request: CreateDriveRequest) async throws -> DriveManifest {
+        throw URLError(.badURL)
+    }
+    func deleteDrive(id: String) async throws {}
+    func setAccountPassword(_ password: String) async throws {}
+    func version() async throws -> [VersionPolicy] { [] }
+}
+
+private actor ControllableCreateDriveAPI: SkipperAPI {
+    private let manifest: DriveManifest?
+    private var continuations: [CheckedContinuation<DriveManifest, Error>] = []
+    private var enteredContinuations: [CheckedContinuation<Void, Never>] = []
+
+    init(manifest: DriveManifest? = nil) {
+        self.manifest = manifest
+    }
+
+    func waitForCreateCall() async {
+        if !continuations.isEmpty { return }
+        await withCheckedContinuation { continuation in
+            enteredContinuations.append(continuation)
+        }
+    }
+
+    func create(_ request: CreateDriveRequest) async throws -> DriveManifest {
+        try await withCheckedThrowingContinuation { continuation in
+            continuations.append(continuation)
+            while !enteredContinuations.isEmpty {
+                let entered = enteredContinuations.removeFirst()
+                entered.resume()
+            }
+        }
+    }
+
+    func resumePending() {
+        while !continuations.isEmpty {
+            let cont = continuations.removeFirst()
+            if let manifest {
+                cont.resume(returning: manifest)
+            } else {
+                cont.resume(throwing: URLError(.badServerResponse))
+            }
+        }
+    }
+
+    func resumePending(returning manifest: DriveManifest) {
+        while !continuations.isEmpty {
+            let cont = continuations.removeFirst()
+            cont.resume(returning: manifest)
+        }
+    }
+
+    func resumePending(throwing error: Error) {
+        while !continuations.isEmpty {
+            let cont = continuations.removeFirst()
+            cont.resume(throwing: error)
+        }
+    }
+
+    func bootstrap(rotation: Int) async throws -> Bootstrap {
+        throw URLError(.badURL)
+    }
+    func listDrives() async throws -> DriveList {
+        throw URLError(.badURL)
+    }
+    func drive(id: String) async throws -> DriveManifest {
+        throw URLError(.badURL)
+    }
+    func propose(_ request: DriveProposeRequest) async throws -> DriveProposal {
         throw URLError(.badURL)
     }
     func deleteDrive(id: String) async throws {}

@@ -1660,4 +1660,82 @@ final class StorageServiceTests: XCTestCase {
         let clipFile = tempDir.appendingPathComponent("clips").appendingPathComponent(storeName)
         XCTAssertFalse(fm.fileExists(atPath: clipFile.path))
     }
+
+    func testInitializationCleansStagingWhilePreservingCommittedFiles() async throws {
+        let fm = FileManager.default
+        let tempDir = fm.temporaryDirectory.appendingPathComponent("StagingCleanTest-\(UUID().uuidString)")
+        try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: tempDir) }
+
+        let driveId = "00000002-0000-4000-8000-000000000001"
+        let driveDir = tempDir.appendingPathComponent("drives/\(driveId)")
+        let clipsDir = tempDir.appendingPathComponent("clips")
+        let stagingDir = tempDir.appendingPathComponent(".staging")
+
+        try fm.createDirectory(at: driveDir, withIntermediateDirectories: true)
+        try fm.createDirectory(at: clipsDir, withIntermediateDirectories: true)
+        try fm.createDirectory(at: stagingDir, withIntermediateDirectories: true)
+
+        let committedClip = clipsDir.appendingPathComponent("poi-00000004-rev1.m4a")
+        let committedClipData = Data(repeating: 0xAA, count: 512)
+        try committedClipData.write(to: committedClip)
+
+        let manifestFile = driveDir.appendingPathComponent("manifest.json")
+        let clip = StorageSavedDriveClip(
+            seq: 0,
+            alongSec: 10,
+            subjectId: "00000004-0000-4000-8000-000000000001",
+            subjectKind: .poi,
+            contentType: "audio/mp4",
+            revisedAt: "2026-09-12T12:00:00.000Z",
+            url: "https://example.com/audio/0.m4a"
+        )
+        let detail = StorageSavedDriveDetail(
+            driveId: driveId,
+            label: "Test Loop",
+            polyline: [[0, 0], [0.01, 0.01]],
+            clips: [clip]
+        )
+        let clipRef = StorageStoredClipRef(
+            name: "poi-00000004-rev1.m4a",
+            contentType: "audio/mp4",
+            durationMs: 12000,
+            shared: true
+        )
+        let manifest = StorageOfflineManifest(
+            driveId: driveId,
+            version: 5,
+            savedAt: "2026-09-12T12:00:00.000Z",
+            detail: detail,
+            audioSeqs: [0],
+            clips: ["0": clipRef]
+        )
+        let manifestData = try JSONEncoder().encode(manifest)
+        try manifestData.write(to: manifestFile)
+
+        let orphanStagingFile = stagingDir.appendingPathComponent("E2A5D842-1234-4567-89AB-CDEF01234567-temp.m4a")
+        let orphanData = Data(repeating: 0xBB, count: 256)
+        try orphanData.write(to: orphanStagingFile)
+
+        XCTAssertTrue(fm.fileExists(atPath: committedClip.path))
+        XCTAssertTrue(fm.fileExists(atPath: manifestFile.path))
+        XCTAssertTrue(fm.fileExists(atPath: orphanStagingFile.path))
+
+        // Initialize fresh StorageService pointing to the populated root
+        let service = StorageService(rootURL: tempDir)
+
+        // Verify orphan in .staging was removed
+        XCTAssertFalse(fm.fileExists(atPath: orphanStagingFile.path), "Orphan staging files must be cleaned on init")
+        XCTAssertFalse(fm.fileExists(atPath: stagingDir.path), "Staging directory itself should be cleaned")
+
+        // Verify committed manifest and audio files were strictly preserved
+        XCTAssertTrue(fm.fileExists(atPath: committedClip.path), "Committed clips must be preserved on init")
+        XCTAssertTrue(fm.fileExists(atPath: manifestFile.path), "Committed manifest must be preserved on init")
+        XCTAssertEqual(try Data(contentsOf: committedClip), committedClipData)
+
+        let loadedManifest = await service.loadManifest(driveId: driveId)
+        XCTAssertNotNil(loadedManifest, "Committed manifest must still be readable by service")
+        XCTAssertEqual(loadedManifest?.driveId, driveId)
+        XCTAssertEqual(loadedManifest?.clips.count, 1)
+    }
 }

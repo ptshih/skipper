@@ -42,4 +42,41 @@ final class FoundationTests: XCTestCase {
         model.open(URL(string: "https://evil.invalid/drives/anything")!)
         XCTAssertEqual(model.path.count, 1)
     }
+
+    @MainActor func testDeepLinkWhileDrivingIsDeferredUntilStopDrive() {
+        let model = AppModel(dependencies: nil)
+        model.playbackPresented = true
+        model.open(URL(string: "skipper://drives/00000002-0000-4000-8000-000000000003")!)
+        XCTAssertTrue(model.path.isEmpty, "Path must not change while playback is presented")
+        XCTAssertEqual(model.selectedTab, MainTab.planner, "Tab must not switch while playback is presented")
+
+        model.stopDrive()
+        XCTAssertFalse(model.playbackPresented)
+        XCTAssertEqual(model.path, [.drive("00000002-0000-4000-8000-000000000003")])
+        XCTAssertEqual(model.selectedTab, MainTab.library)
+    }
+
+    @MainActor func testForcedVersionGateSuppressesDeferredDeepLinkDelivery() async throws {
+        let policyData = Data(#"{"platform":"ios","minimum":"2.0.0","recommended":"2.0.0","storeUrl":"https://apps.apple.com/app/id6778946770"}"#.utf8)
+        let decodedPolicy = try JSONDecoder().decode(VersionPolicy.self, from: policyData)
+        let policy = VersionPolicyController(
+            currentVersion: "1.0.0",
+            loadPolicies: { [decodedPolicy] },
+            readDismissal: { nil },
+            saveDismissal: { _ in })
+        await policy.checkOnce()
+        XCTAssertEqual(policy.gate, VersionPolicyController.Gate.force)
+
+        let model = AppModel(dependencies: nil, versionPolicy: policy)
+        XCTAssertTrue(model.blocksForUpdate)
+
+        model.playbackPresented = true
+        model.open(URL(string: "skipper://drives/00000002-0000-4000-8000-000000000003")!)
+        XCTAssertTrue(model.path.isEmpty, "Path must not change while playback is presented")
+
+        model.stopDrive()
+        XCTAssertFalse(model.playbackPresented)
+        XCTAssertTrue(model.path.isEmpty, "Deferred deep link must be suppressed when force version gate is active")
+        XCTAssertEqual(model.selectedTab, MainTab.planner, "Selected tab must not switch to library when force gated")
+    }
 }

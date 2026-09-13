@@ -252,6 +252,7 @@ struct AuthView: View {
             HStack(spacing: TrailheadSpace.lg) {
                 Button("Forgot password?") {
                     errorText = nil
+                    resetSent = false
                     step = .reset
                 }
                 .accessibilityIdentifier("account.reset")

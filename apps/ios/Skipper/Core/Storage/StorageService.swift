@@ -72,6 +72,7 @@ public actor StorageService {
         self.regionCache = StorageRegionCache(rootURL: rootURL)
         self.downloader = downloader ?? StorageDefaultDownloader()
         self.driveProvider = driveProvider
+        self.clipStore.cleanStaging()
     }
 
     // MARK: - Download Registry & Subscriptions

@@ -325,7 +325,7 @@ final class PlannerViewModel {
         }
 
         // Account requirement check: anonymous users cannot spend drive credits
-        guard session.isSignedIn else {
+        guard session.isSignedIn, let initiatingUserId = session.user?.id else {
             cards[index].state = .needsAccount
             AnalyticsEvents.wallShown(source: "create_drive", track: analytics)
             return
@@ -335,6 +335,13 @@ final class PlannerViewModel {
 
         do {
             let manifest = try await api.create(request)
+            // Account boundary check: if user signed out or changed accounts while create was in flight,
+            // drop completion to prevent downloading old owner bytes after purge or navigating.
+            guard session.user?.id == initiatingUserId else {
+                restoreIdleAfterOwnerChange(cardId: cardId)
+                return
+            }
+
             guard let driveId = manifest.driveId, !driveId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 if let idx = cards.firstIndex(where: { $0.id == cardId }) {
                     cards[idx].state = .failed(message: "Server returned incomplete drive manifest.")
@@ -357,14 +364,29 @@ final class PlannerViewModel {
 
             onNavigate(driveId)
         } catch let apiError as APIError where apiError.status == 401 {
+            guard session.user?.id == initiatingUserId else {
+                restoreIdleAfterOwnerChange(cardId: cardId)
+                return
+            }
             if let idx = cards.firstIndex(where: { $0.id == cardId }) {
                 cards[idx].state = .needsAccount
             }
             AnalyticsEvents.wallShown(source: "create_drive", track: analytics)
         } catch {
+            guard session.user?.id == initiatingUserId else {
+                restoreIdleAfterOwnerChange(cardId: cardId)
+                return
+            }
             if let idx = cards.firstIndex(where: { $0.id == cardId }) {
                 cards[idx].state = .failed(message: error.localizedDescription)
             }
+        }
+    }
+
+    private func restoreIdleAfterOwnerChange(cardId: String) {
+        guard let idx = cards.firstIndex(where: { $0.id == cardId }) else { return }
+        if case .creating = cards[idx].state {
+            cards[idx].state = .idle
         }
     }
 }

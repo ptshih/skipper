@@ -8,6 +8,7 @@ final class AppModel {
     var path: [Destination] = []
     var selectedTab: MainTab = .planner
     var incomingDriveId: String?
+    private var deferredDriveId: String?
     var theme: ThemeMode = .system
     var simMode = false
     var activePlayback: DrivePlaybackController?
@@ -28,9 +29,9 @@ final class AppModel {
     let dependencies: AppDependencies?
     let versionPolicy: VersionPolicyController?
 
-    init(dependencies: AppDependencies?) {
+    init(dependencies: AppDependencies?, versionPolicy: VersionPolicyController? = nil) {
         self.dependencies = dependencies
-        self.versionPolicy = dependencies.map { VersionPolicyController(api: $0.api, defaults: $0.defaults) }
+        self.versionPolicy = versionPolicy ?? dependencies.map { VersionPolicyController(api: $0.api, defaults: $0.defaults) }
         if case .uiTest(let scenario, _, _) = dependencies?.launch.mode,
            ["offline-library", "offline-empty", "signed-out", "offline-no-playable-clips", "corrupt-credentials-recovery"].contains(scenario) { selectedTab = .library }
         if let initial = dependencies?.initialTab { selectedTab = initial }
@@ -119,6 +120,15 @@ final class AppModel {
 
     func stopDrive() {
         activePlayback?.stop(); activePlayback = nil; playbackPresented = false
+        guard let id = deferredDriveId else { return }
+        deferredDriveId = nil
+        if !blocksForUpdate {
+            presentDrive(id)
+        }
+    }
+
+    private func presentDrive(_ id: String) {
+        path = [.drive(id)]; incomingDriveId = id; selectedTab = .library
     }
 
     /// A received deep link selects a destination; it never starts a drive, spends a credit, or mints auth.
@@ -127,7 +137,11 @@ final class AppModel {
         let parts = ([url.host].compactMap { $0 } + url.pathComponents.filter { $0 != "/" })
         if parts.count == 2, parts[0] == "drives", UUID(uuidString: parts[1]) != nil {
             let id = parts[1].lowercased()
-            path = [.drive(id)]; incomingDriveId = id; selectedTab = .library
+            if activePlayback != nil || playbackPresented {
+                deferredDriveId = id
+            } else {
+                presentDrive(id)
+            }
         } else if parts == ["settings"] { path = [.settings]; selectedTab = .settings }
     }
 }
