@@ -45,7 +45,7 @@ costs an hour of confident wrong reasoning.
 | Anonymous rider state vanishes after signup | The anonymous user row is **hard-deleted** at link and a fresh user created. State that must survive lives on the client and is re-sent. |
 | A signed-in check behaves oddly for anonymous users | `session` truthiness is **not** "signed in" — anonymous sessions are truthy. Go through the one helper that excludes `isAnonymous`. |
 | A preview route suddenly requires auth (or a walled one doesn't) | `requireAccount` is **per-route**, never on the `driveRoutes.use('*', …)` mount. |
-| A scratch DB query can't resolve `@skipper/db` | It must live in `packages/studio/.scratch/` (gitignored). |
+| A scratch DB query can't resolve `@skipper/db` | Put it in the `packages/studio/` workspace; create its gitignored `.scratch` directory first if needed. |
 | A shell command dies with `no matches found` | zsh aborts on an unmatched glob where bash passes it through. Guard globs, or use the Read/Grep/Glob tools. |
 
 If none match, continue to the generic table:
