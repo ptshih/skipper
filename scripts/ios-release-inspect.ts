@@ -421,7 +421,9 @@ export async function inspectIpa(ipaPath: string, options: InspectionOptions = {
         if (scan.exitCode !== 0) throw new Error(`${args[0]} failed while inspecting ${relativePath}; native runtime scan is incomplete`)
         const output = scan.stdout.toString('utf8')
         for (const line of output.split('\n')) {
-          if (/React(?:Common)?\.framework|hermes|ExpoModules|RCT[A-Z]|_OBJC_(?:META)?CLASS_\$_EXModule|facebook5react/i.test(line)) {
+          // RCT is a case-sensitive symbol prefix, not the "rcT" inside Apple's ArcToPoint APIs.
+          const hasRCTSymbol = /(?:^|[^A-Za-z0-9_])_?RCT[A-Z][A-Za-z0-9_]*/.test(line)
+          if (hasRCTSymbol || /React(?:Common)?\.framework|hermes|ExpoModules|_OBJC_(?:META)?CLASS_\$_EXModule|facebook5react/i.test(line)) {
             bannedSymbolsFound.push(`${relativePath}: ${line.trim()}`)
           }
         }
@@ -506,7 +508,10 @@ export async function inspectIpa(ipaPath: string, options: InspectionOptions = {
       profileErrors.push('Provisioning profile does not authorize the signed Keychain groups')
     }
     const permittedDomains = provisioningEntitlements['com.apple.developer.associated-domains']
-    if (!Array.isArray(permittedDomains) || associatedDomains.some(domain => !permittedDomains.some(pattern => profileAllows(pattern, domain)))) {
+    // Apple's App Store profiles can authorize domains with scalar "*". TN3125 distinguishes
+    // this profile allowlist from the app's signed array, which still requires our exact domain.
+    const domainPatterns = permittedDomains === '*' ? ['*'] : permittedDomains
+    if (!Array.isArray(domainPatterns) || associatedDomains.some(domain => !domainPatterns.some(pattern => profileAllows(pattern, domain)))) {
       profileErrors.push('Provisioning profile does not authorize the signed associated domains')
     }
     const nativeScanEvidence = `Scanned ${scannedBinaries.length} Mach-O binaries with otool and nm plus bundle filenames; ${bannedSymbolsFound.length + bannedCheck.banned.length} known React Native, Hermes, or Expo markers found. This is marker inspection, not proof about stripped or obfuscated code.`

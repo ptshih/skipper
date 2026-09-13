@@ -1,6 +1,6 @@
 # Native iOS releases
 
-**Status**: Code review complete, 2026-09-12. Independent review cleared the core release safeguards, EAS symbols adapter/integration, and XCTest evidence retention. The release suite passed 74 tests; root `bun run check` passed, including 278 script tests. Real distribution signing, native archive/export, cloud symbol upload/readback, and Apple delivery remain unverified. Execution awaits app acceptance and its immutable commit. The shipped Expo baseline remains recorded in [release batches](../designs/release-batches.md).
+**Status**: Execution in progress, 2026-09-12. Independent review cleared the core pipeline, symbols integration, and XCTest evidence retention. The first native source retry passed root checks and all 339 native tests, then archived successfully. A retained-archive diagnostic proved manual distribution export with the existing team credentials; its first inspection exposed two checker false positives, now being corrected and independently reviewed. That diagnostic uses older source and is ineligible for delivery. The latest accepted source still requires a complete release run; cloud symbols and Apple delivery remain unverified. The shipped Expo baseline remains recorded in [release batches](../designs/release-batches.md).
 
 The native pipeline builds the tracked `apps/ios/Skipper.xcodeproj` with Xcode, exports an IPA, inspects it, and verifies Apple processing. The existing app identity stays `fm.skipper.app`, team `L24UJYJ5DK`, ASC app `6778946770`, and default Keychain group `L24UJYJ5DK.fm.skipper.app`. Native iOS requires iOS 17; the API remains compatible with older installed clients.
 
@@ -20,6 +20,14 @@ Before entering the checkout, the script captures the four public `SKIPPER_*` cl
 Generated Release configuration and the selected export plist are copied into a private read-only directory before checks. Xcode receives that frozen configuration through `-xcconfig` and exports using the exact validated plist bytes. Snapshot hashes cover all committed files, generated configuration, and frozen export options. Checks and archive/export transitions reject changed inputs. The shared workspace's `.scratch/ios/Release.xcconfig` is never a build input.
 
 ASC key paths are made absolute before checkout creation. SDK and private credential values are excluded from logs and receipts. Distribution credentials remain external to the source checkout.
+
+### Existing local distribution signing
+
+When automatic export selects cloud signing that the API key cannot access, reuse the team's existing distribution certificate/private key and App Store profile. [Expo supports downloading existing EAS credentials](https://docs.expo.dev/app-signing/syncing-credentials/); [Apple supports local or manual signing](https://developer.apple.com/help/account/certificates/cloud-managed-certificates). Verify certificate validity, private-key correspondence, profile certificate membership, team, app ID and expiry before installing. Preserve existing identities and the default keychain, keep private files outside tracked source, and never expose passwords in command arguments or logs.
+
+The existing `--export-options /absolute/path/to/local-export.plist` option supports manual export without changing the Xcode project. Keep all default export options, change `signingStyle` to `manual`, set `signingCertificate` to the installed certificate SHA-1, and set `provisioningProfiles` to a dictionary mapping `fm.skipper.app` to its App Store profile UUID. Xcode's installed `xcodebuild -help` documents both selectors. The pipeline validates and freezes those exact plist bytes before checks; export still only writes a local IPA for subsequent inspection. Do not embed expiring credential selectors or private credential material in application source.
+
+On 2026-09-12, the diagnostic manual export used the already managed `L24UJYJ5DK` EAS distribution identity and its matching App Store profile. Automatic export still requested a cloud-managed certificate; manual export succeeded with local credentials. Its receipt is `.scratch/signing-recovery/manual-export-probe-01/probe-evidence.json`. The copied and original archive hashes matched before export and remained unchanged afterward. These old-source artifacts never qualify as the latest release's archive, IPA or symbols evidence.
 
 ## Commands
 
@@ -71,11 +79,11 @@ dotenvx run -f .env.development -- bun .claude/skills/testflight/asc-builds.ts -
 The inspector unpacks the IPA privately and verifies:
 
 - Deep code signature validity and actual signed application/team identifiers. An empty signed entitlement dictionary cannot borrow identity from the provisioning profile.
-- Exact signed `webcredentials:skipper.fm`. Substring matches and profile wildcards do not establish actual app claims.
+- Exact signed `webcredentials:skipper.fm`. Substring matches and profile wildcards do not establish actual app claims. The profile may authorize domains with either an array or Apple's scalar `"*"`; only the profile authorization check normalizes this shape. [Apple TN3125](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles) distinguishes the profile allowlist from the signed entitlements.
 - The first signed Keychain group equals `L24UJYJ5DK.fm.skipper.app`. When the groups entitlement is legitimately omitted, the default derives only from the signed application identifier. Profile permissions are checked separately against the signed claims.
 - Production distribution entitlements, bundle/version/build, minimum iOS version, canonical production API URL, SDK keys, and the bundled PostHog host against frozen configuration. Development ATS exceptions are rejected.
 - Presence of the app's privacy manifest. The broader manifest declaration audit remains part of native release acceptance.
-- Known React Native, Hermes, and Expo filenames, dynamic dependencies, and symbol markers in every embedded Mach-O, including innocently named frameworks and extensions. `otool`/`nm` failure aborts inspection. Receipts report the binaries and marker results; this scan does not claim proof about stripped or obfuscated code.
+- Known React Native, Hermes, and Expo filenames, dynamic dependencies, and symbol markers in every embedded Mach-O, including innocently named frameworks and extensions. RCT symbol prefixes use case-sensitive token boundaries so Apple's `ArcToPoint` APIs do not match. `otool`/`nm` failure aborts inspection. Receipts report the binaries and marker results; this scan does not claim proof about stripped or obfuscated code.
 - Every main executable architecture UUID has matching archive dSYM coverage.
 
 Export options must request App Store distribution for the expected team and export locally. Apple-managed version changes are forbidden. Export never uploads directly. Only the subsequently inspected IPA is passed to `altool`; its hash is rechecked before validation and upload.

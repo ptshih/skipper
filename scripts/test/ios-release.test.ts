@@ -1114,7 +1114,7 @@ const fixtureSigned = {
 }
 function inspectionFixture(options: {
   signed?: Record<string, any>; profile?: Record<string, any>; host?: string;
-  embeddedRuntime?: boolean; failTool?: string; omitGroups?: boolean;
+  embeddedRuntime?: boolean; failTool?: string; omitGroups?: boolean; nmOutput?: string; otoolOutput?: string;
 } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'skipper-ipa-fixture-'))
   fixtureRoots.push(root)
@@ -1142,8 +1142,8 @@ function inspectionFixture(options: {
     let output: Buffer | undefined
     if (cmd[0] === 'codesign') output = cmd.includes('--verify') ? Buffer.from('') : xml(signed)
     if (cmd[0] === 'security') output = xml({ Entitlements: profile, TeamIdentifier: [DEFAULT_TEAM_ID] })
-    if (cmd[0] === 'otool') output = Buffer.from('/usr/lib/libSystem.B.dylib')
-    if (cmd[0] === 'nm') output = Buffer.from(options.embeddedRuntime && cmd.at(-1)?.endsWith('/Innocent') ? '_OBJC_CLASS_$_RCTBridge' : '_main')
+    if (cmd[0] === 'otool') output = Buffer.from(options.otoolOutput ?? '/usr/lib/libSystem.B.dylib')
+    if (cmd[0] === 'nm') output = Buffer.from(options.embeddedRuntime && cmd.at(-1)?.endsWith('/Innocent') ? '_OBJC_CLASS_$_RCTBridge' : options.nmOutput ?? '_main')
     if (cmd[0] === 'dwarfdump') output = Buffer.from('UUID: 11111111-2222-3333-4444-555555555555 (arm64) fixture')
     if (output !== undefined) return { exitCode: 0, stdout: output, stderr: Buffer.from('') }
     const result = Bun.spawnSync(cmd, args)
@@ -1359,6 +1359,64 @@ describe('Native release independent blocker regressions', () => {
     const result = await inspectIpa(f.ipa, { commandRunner: f.runner, archivePath: f.archive })
     expect(result.valid).toBe(false)
     expect(result.errors).toContain('Provisioning profile does not authorize the signed application identifier')
+  })
+  test('actual inspector accepts Apple scalar profile wildcard with exact signed domains', async () => {
+    // Shape read from the existing Apple App Store profile in the 2026-09-12 manual export probe.
+    const f = inspectionFixture({ profile: { ...fixtureSigned, 'com.apple.developer.associated-domains': '*' }, omitGroups: true })
+    const result = await inspectIpa(f.ipa, { commandRunner: f.runner, archivePath: f.archive })
+    expect(result.errors).toEqual([])
+    expect(result.associatedDomains).toEqual(['webcredentials:skipper.fm'])
+    expect(result.keychainGroups).toEqual([fixtureAppId])
+  })
+  test('profile scalar wildcard cannot authorize missing, wildcard, or spoofed actual domain claims', async () => {
+    for (const domainClaim of [undefined, '*', ['*'], ['webcredentials:skipper.fm.evil.invalid']]) {
+      const f = inspectionFixture({ profile: { ...fixtureSigned, 'com.apple.developer.associated-domains': '*' },
+        signed: { ...fixtureSigned, 'com.apple.developer.associated-domains': domainClaim } })
+      const result = await inspectIpa(f.ipa, { commandRunner: f.runner, archivePath: f.archive })
+      expect(result.valid).toBe(false)
+      expect(result.errors.some(error => error.includes('associated domain'))).toBe(true)
+    }
+  })
+  test('actual inspector rejects malformed scalar and restrictive profile domain authorizations', async () => {
+    for (const domainPermission of [undefined, true, 'webcredentials:skipper.fm', 'webcredentials:*', ['webcredentials:other.invalid']]) {
+      const f = inspectionFixture({ profile: { ...fixtureSigned, 'com.apple.developer.associated-domains': domainPermission } })
+      const result = await inspectIpa(f.ipa, { commandRunner: f.runner, archivePath: f.archive })
+      expect(result.valid).toBe(false)
+      expect(result.errors).toContain('Provisioning profile does not authorize the signed associated domains')
+    }
+  })
+  test('actual inspector accepts Core Graphics ArcToPoint imports without case-insensitive RCT false positives', async () => {
+    // Exact undefined-symbol lines observed in the distribution-signed native Skipper executable.
+    const f = inspectionFixture({ nmOutput: '                 U _CGContextAddArcToPoint\n                 U _CGPathAddArcToPoint\n00000000 T _NOTRCTBridge' })
+    const result = await inspectIpa(f.ipa, { commandRunner: f.runner, archivePath: f.archive })
+    expect(result.errors).toEqual([])
+    expect(result.bannedSymbolsFound).toEqual([])
+    expect(result.scannedBinaries).toHaveLength(2)
+  })
+  test('actual inspector still rejects RCT C, Objective-C class, metaclass, and method symbols', async () => {
+    for (const symbol of ['                 U _RCTFatal', '00000000 S _OBJC_CLASS_$_RCTBridge',
+      '00000000 S _OBJC_METACLASS_$_RCTBridge', '00000000 t -[RCTBridge init]', '00000000 t +[RCTBridge moduleName]']) {
+      const f = inspectionFixture({ nmOutput: symbol })
+      const result = await inspectIpa(f.ipa, { commandRunner: f.runner, archivePath: f.archive })
+      expect(result.valid).toBe(false)
+      expect(result.bannedSymbolsFound).toContain(`Skipper: ${symbol.trim()}`)
+    }
+  })
+  test('actual inspector still rejects Expo, Hermes, React framework and C++ runtime markers', async () => {
+    for (const marker of [
+      { nmOutput: '00000000 S _OBJC_CLASS_$_EXModule' },
+      { nmOutput: '00000000 S _OBJC_METACLASS_$_EXModule' },
+      { nmOutput: '00000000 T __ZN8facebook5react11ShadowNodeE' },
+      { otoolOutput: '@rpath/React.framework/React (compatibility version 1.0.0)' },
+      { otoolOutput: '@rpath/ReactCommon.framework/ReactCommon (compatibility version 1.0.0)' },
+      { otoolOutput: '@rpath/hermes.framework/hermes (compatibility version 1.0.0)' },
+      { nmOutput: '00000000 T _$s11ExpoModules10ModuleBaseC' },
+    ]) {
+      const f = inspectionFixture(marker)
+      const result = await inspectIpa(f.ipa, { commandRunner: f.runner, archivePath: f.archive })
+      expect(result.valid).toBe(false)
+      expect(result.bannedSymbolsFound.length).toBeGreaterThan(0)
+    }
   })
   test('actual inspector catches runtime in innocently named embedded Mach-O', async () => {
     const f = inspectionFixture({ embeddedRuntime: true })
