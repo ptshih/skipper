@@ -1,0 +1,1 @@
+# No fixture outputs in Release, including directory parents Xcode may create before running the script.

@@ -54,6 +54,11 @@ and coordinated cutover.
   bundle key; PostHog/app API/credentials stay isolated. Unit/rejected launches skip Maps. Map
   views require `NativeSDKs.mapsReady`; absent/rejected registration shows the production
   unavailable state instead of constructing GMS objects. No map IDs or Street View are used.
+  The fixture phase selects its output file list by configuration: Debug declares bundled
+  JSON/audio paths, while Release declares none. A shell-only Debug guard is insufficient:
+  Xcode can create declared output parents before executing the script. Keep Release's list
+  empty so even the fixture directory skeleton stays outside the product. See Apple's
+  [script output guidance](https://developer.apple.com/documentation/xcode/running-custom-scripts-during-a-build).
 
 Current package APIs were checked through Context7 and vendor sources on 2026-09-12:
 [Google setup](https://developers.google.com/maps/documentation/ios-sdk/config),
