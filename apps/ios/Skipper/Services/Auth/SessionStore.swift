@@ -109,9 +109,9 @@ final class SessionStore {
             try await self.finishSignIn()
         }
     }
-    func hasPassword() async -> Bool {
+    func hasPassword() async -> Bool? {
         guard isSignedIn else { return false }
-        return (try? await auth.accounts().contains { $0.providerId == "credential" }) ?? false
+        return try? await auth.accounts().contains { $0.providerId == "credential" }
     }
     func sendDeletionCode() async throws {
         guard let user, isSignedIn else { throw AuthFailure.accountRequired }

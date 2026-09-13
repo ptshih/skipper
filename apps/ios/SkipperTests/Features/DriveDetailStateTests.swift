@@ -1,3 +1,5 @@
+import SwiftUI
+import UIKit
 import XCTest
 @testable import Skipper
 
@@ -207,6 +209,105 @@ import XCTest
         XCTAssertEqual(model.gate, .needsDownload)
     }
 
+    func testPurgeDownloadClearsStaleDownloadError() async throws {
+        let rig = try DetailRig(driveID: driveID)
+        defer { rig.removeFiles() }
+        await rig.downloader.allow([0])
+        let model = rig.model()
+        await model.load()
+        await model.topUpTask?.value
+        await model.startDownload()
+        XCTAssertNotNil(model.downloadError, "Download of incomplete clips must set downloadError")
+        XCTAssertEqual(model.missingCount, 1)
+
+        await model.purgeDownload()
+        XCTAssertFalse(model.hasLocalAudio)
+        XCTAssertEqual(model.directoryState, .none)
+        XCTAssertNil(model.downloadError, "Purging a download must clear stale download error")
+    }
+
+    func testInitialPresentationShowsLoadingAndDoesNotFallThroughToErrorState() async throws {
+        let rig = try DetailRig(driveID: driveID)
+        defer { rig.removeFiles() }
+        let suspended = expectation(description: "API call suspended")
+        await rig.api.suspendNext(suspended)
+
+        let model = rig.model()
+        let view = DriveDetailView(viewModel: model)
+
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let oldKey = scene.windows.first(where: \.isKeyWindow)
+        let window = UIWindow(windowScene: scene)
+        window.frame = scene.coordinateSpace.bounds
+        let host = UIHostingController(rootView: view)
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+            oldKey?.makeKeyAndVisible()
+            Task { await rig.api.release() }
+        }
+        host.view.layoutIfNeeded()
+
+        // Initial presentation while loading must show activity indicator and NOT error scroll view
+        XCTAssertTrue(findActivityIndicator(in: host.view), "Initial presentation must show loading indicator, not error scroll view")
+        XCTAssertFalse(findScrollView(in: host.view), "Initial presentation must not render error scroll view")
+
+        await fulfillment(of: [suspended], timeout: 2)
+        await rig.api.release()
+    }
+
+    func testAccountDidChangeOnSignOutTransitionsToAccountWallWithoutDeadSpinner() async throws {
+        let rig = try DetailRig(driveID: driveID)
+        defer { rig.removeFiles() }
+
+        let clock = FixedAuthClock(date: authDate("2026-09-01T00:00:00Z")!)
+        let value = syntheticSession(anonymous: false)
+        let vault = CredentialVault(keychain: try syntheticKeychain(session: value), clock: clock)
+        let auth = AuthTestService(session: value)
+        let session = SessionStore(auth: auth, vault: vault, clock: clock, purgeDownloads: {})
+        await session.start()
+        XCTAssertTrue(session.isSignedIn)
+
+        let model = rig.model(session: session)
+        await model.load()
+        XCTAssertNotNil(model.manifest)
+        XCTAssertFalse(model.needsAccount)
+
+        // Sign out transitions SessionStore to .signedOut
+        try await session.signOut()
+        XCTAssertEqual(session.state, .signedOut)
+
+        // DriveDetailView's onChange triggers model.accountDidChange()
+        model.accountDidChange()
+
+        // Account-required state must be set; no dead spinner with manifest nil & needsAccount false
+        XCTAssertTrue(model.needsAccount, "Signing out must set needsAccount so the view renders the account wall")
+        XCTAssertNil(model.manifest, "Manifest must be cleared on sign out")
+        XCTAssertFalse(model.isLoading, "Must not remain loading")
+        XCTAssertNil(model.errorMessage, "Signout is not an API error")
+    }
+
+    func testAccountDidChangeInDeferredStatePreservesDeferredPolicyWithoutForcingSignInWall() async throws {
+        let rig = try DetailRig(driveID: driveID)
+        defer { rig.removeFiles() }
+
+        let clock = FixedAuthClock(date: authDate("2026-09-01T00:00:00Z")!)
+        let keychain = AuthTestKeychain()
+        let auth = AuthTestService()
+        let vault = CredentialVault(keychain: keychain, clock: clock)
+        let network = AuthTestNetwork(offline: true)
+        let session = SessionStore(auth: auth, vault: vault, network: network, clock: clock, purgeDownloads: {})
+        await session.start()
+        XCTAssertEqual(session.state, .deferred)
+
+        let model = rig.model(session: session)
+        model.accountDidChange()
+
+        XCTAssertFalse(model.needsAccount, "Deferred state must preserve deferred policy without forcing signIn wall")
+    }
+
     func testCancelDuringFreshManifestFetchCannotStartALateDownload() async throws {
         let rig = try DetailRig(driveID: driveID)
         defer { rig.removeFiles() }
@@ -383,8 +484,8 @@ import XCTest
             try FileManager.default.removeItem(at: url)
         }
     }
-    func model(audio: (any AudioPreviewControlling)? = nil, analytics: AnalyticsTracker? = nil) -> DriveDetailViewModel {
-        DriveDetailViewModel(driveId: id, api: api, storage: storage, audio: audio, analytics: analytics, network: network)
+    func model(session: SessionStore? = nil, audio: (any AudioPreviewControlling)? = nil, analytics: AnalyticsTracker? = nil) -> DriveDetailViewModel {
+        DriveDetailViewModel(driveId: id, api: api, storage: storage, session: session, audio: audio, analytics: analytics, network: network)
     }
     func removeFiles() { try? FileManager.default.removeItem(at: root) }
 }
@@ -464,3 +565,23 @@ private func detailManifest(id: String, revision: String = "2026-01-01T00:00:00Z
         "durationSeconds": 600, "clips": clips])
     return try JSONDecoder().decode(DriveManifest.self, from: data)
 }
+
+@MainActor
+private func findActivityIndicator(in view: UIView) -> Bool {
+    if view is UIActivityIndicatorView { return true }
+    for child in view.subviews {
+        if findActivityIndicator(in: child) { return true }
+    }
+    return false
+}
+
+@MainActor
+private func findScrollView(in view: UIView) -> Bool {
+    if view is UIScrollView { return true }
+    for child in view.subviews {
+        if findScrollView(in: child) { return true }
+    }
+    return false
+}
+
+

@@ -87,4 +87,67 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertTrue(state.explicitlySignedOut); XCTAssertNil(state.session)
         let header = try await relaunched.cookieHeader(); XCTAssertNil(header)
     }
+    func testHasPasswordTriStateLookupDistinguishesFailureFromMissingPassword() async throws {
+        let value = syntheticSession(anonymous: false)
+        let vault = CredentialVault(keychain: try syntheticKeychain(session: value), clock: clock)
+
+        // 1. Failing accounts lookup (e.g. offline / network timeout) must return nil, NOT collapse to false.
+        let failingAuth = InjectedAccountsAuthService(session: value, failure: URLError(.notConnectedToInternet))
+        let failingStore = SessionStore(auth: failingAuth, vault: vault, clock: clock, purgeDownloads: {})
+        await failingStore.start()
+        let unknownResult: Bool? = await failingStore.hasPassword()
+        XCTAssertNil(unknownResult, "A failed accounts lookup must yield nil (unknown), not false")
+
+        // 2. Account with credential provider yields true.
+        let withPasswordAuth = InjectedAccountsAuthService(session: value, accounts: [LinkedAccount(providerId: "credential")])
+        let withPasswordStore = SessionStore(auth: withPasswordAuth, vault: vault, clock: clock, purgeDownloads: {})
+        await withPasswordStore.start()
+        let hasPasswordResult: Bool? = await withPasswordStore.hasPassword()
+        XCTAssertEqual(hasPasswordResult, true, "Account with credential provider returns true")
+
+        // 3. Account without credential provider yields false.
+        let noPasswordAuth = InjectedAccountsAuthService(session: value, accounts: [])
+        let noPasswordStore = SessionStore(auth: noPasswordAuth, vault: vault, clock: clock, purgeDownloads: {})
+        await noPasswordStore.start()
+        let noPasswordResult: Bool? = await noPasswordStore.hasPassword()
+        XCTAssertEqual(noPasswordResult, false, "Account without credential provider returns false")
+
+        // 4. Signed out store yields false.
+        let signedOutVault = CredentialVault(keychain: AuthTestKeychain(), clock: clock)
+        let signedOutAuth = InjectedAccountsAuthService(session: nil)
+        let signedOutStore = SessionStore(auth: signedOutAuth, vault: signedOutVault, clock: clock, purgeDownloads: {})
+        await signedOutStore.start()
+        try await signedOutStore.signOut()
+        XCTAssertFalse(signedOutStore.isSignedIn)
+        let signedOutResult: Bool? = await signedOutStore.hasPassword()
+        XCTAssertEqual(signedOutResult, false, "Signed out store returns false")
+    }
 }
+
+private actor InjectedAccountsAuthService: AuthenticationService {
+    var sessionValue: SessionSnapshot?
+    var accountsList: [LinkedAccount]
+    var failure: Error?
+
+    init(session: SessionSnapshot? = nil, accounts: [LinkedAccount] = [], failure: Error? = nil) {
+        self.sessionValue = session
+        self.accountsList = accounts
+        self.failure = failure
+    }
+
+    func session() async throws -> SessionSnapshot? { sessionValue }
+    func signInAnonymously() async throws {}
+    func sendCode(email: String) async throws {}
+    func signIn(email: String, code: String) async throws {}
+    func signIn(email: String, password: String) async throws {}
+    func requestPasswordReset(email: String) async throws {}
+    func updateName(_ name: String) async throws {}
+    func accounts() async throws -> [LinkedAccount] {
+        if let failure { throw failure }
+        return accountsList
+    }
+    func verifyDeletionCode(email: String, code: String) async throws {}
+    func deleteAccount(password: String?) async throws {}
+    func signOut(cookie: String?) async throws {}
+}
+

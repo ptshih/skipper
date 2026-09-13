@@ -163,6 +163,14 @@ final class LibraryViewModel {
     func loadDrives() async {
         reconcileSession()
         guard !isLoading, !Task.isCancelled else { return }
+        guard session.isSignedIn else {
+            drives = []
+            rawSummaries = []
+            credits = nil
+            errorMessage = nil
+            isOfflineFallback = false
+            return
+        }
         isLoading = true
         let generation = loadGeneration
         defer {

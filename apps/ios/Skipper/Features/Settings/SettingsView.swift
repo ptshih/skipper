@@ -8,6 +8,11 @@ struct SettingsView: View {
     @Binding var simMode: Bool
     let onSignIn: @MainActor () -> Void
 
+    enum DeletionProofMode: Equatable {
+        case password
+        case code
+    }
+
     @State private var userName: String = ""
     @State private var nameRequest = SettingsRequestState()
 
@@ -15,9 +20,11 @@ struct SettingsView: View {
     @State private var passwordState = SettingsPasswordState()
     @State private var isCheckingPassword = false
     @State private var isResolvingDeletion = false
+    @State private var loadedUserId: String?
 
     @State private var isShowingSignOutConfirm: Bool = false
     @State private var isShowingDeleteSheet: Bool = false
+    @State private var deleteProofMode: DeletionProofMode = .code
     @State private var deletePassword: String = ""
     @State private var deleteCode: String = ""
     @State private var deletionRequest = SettingsRequestState()
@@ -183,15 +190,23 @@ struct SettingsView: View {
             .task(id: session.user?.id) {
                 userName = session.user?.name ?? ""
                 newPassword = ""
-                passwordState = SettingsPasswordState()
                 nameRequest.clearResult()
+                if loadedUserId != session.user?.id {
+                    loadedUserId = session.user?.id
+                    passwordState = SettingsPasswordState()
+                }
                 if let user = session.user {
                     isCheckingPassword = true
-                    let hasPassword = await session.hasPassword()
+                    defer {
+                        if !Task.isCancelled, session.user?.id == user.id {
+                            isCheckingPassword = false
+                        }
+                    }
+                    let lookup = await session.hasPassword()
                     guard !Task.isCancelled, session.user?.id == user.id else { return }
-                    passwordState.hasPassword = hasPassword
-                    isCheckingPassword = false
+                    passwordState.applyLookupResult(lookup)
                 } else {
+                    passwordState.hasPassword = false
                     isCheckingPassword = false
                 }
             }
@@ -208,14 +223,15 @@ struct SettingsView: View {
             .sheet(isPresented: $isShowingDeleteSheet, onDismiss: {
                 deletePassword = ""
                 deleteCode = ""
+                deleteProofMode = .code
                 deletionRequest.clearResult()
                 deletionCodeRequest.clearResult()
             }) {
                 deleteAccountSheet
                     .task {
-                        let hasPassword = await session.hasPassword()
+                        let lookup = await session.hasPassword()
                         guard !Task.isCancelled else { return }
-                        passwordState.hasPassword = hasPassword
+                        deleteProofMode = (lookup == true) ? .password : .code
                         isResolvingDeletion = false
                     }
             }
@@ -270,7 +286,7 @@ struct SettingsView: View {
 
                     if isResolvingDeletion {
                         ProgressView("Checking account verification options…")
-                    } else if passwordState.hasPassword {
+                    } else if deleteProofMode == .password {
                         VStack(alignment: .leading, spacing: TrailheadSpace.xs) {
                             Text("Confirm with your password:")
                                 .font(TrailheadType.caption)
@@ -321,7 +337,7 @@ struct SettingsView: View {
                         "Permanently Delete Account",
                         variant: .danger,
                         isLoading: deletionRequest.isRunning,
-                        isEnabled: !isAccountBusy && !isResolvingDeletion && (passwordState.hasPassword ? !deletePassword.isEmpty : !deleteCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        isEnabled: !isAccountBusy && !isResolvingDeletion && (deleteProofMode == .password ? !deletePassword.isEmpty : !deleteCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     ) {
                         performAccountDeletion()
                     }
@@ -343,7 +359,7 @@ struct SettingsView: View {
 
     private func performAccountDeletion() {
         guard !isAccountBusy, !isResolvingDeletion else { return }
-        let proof: SessionStore.DeletionProof = passwordState.hasPassword ? .password(deletePassword) : .code(deleteCode)
+        let proof: SessionStore.DeletionProof = (deleteProofMode == .password) ? .password(deletePassword) : .code(deleteCode)
         Task {
             if await deletionRequest.run(operation: { try await session.deleteAccount(proof: proof) }) {
                 isShowingDeleteSheet = false

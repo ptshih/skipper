@@ -239,6 +239,43 @@ import XCTest
         return nil
     }
 
+    func testAccountEntryPolicyLibraryPresentationTransitionsAndDeferredGuards() {
+        let anonymous = SessionState.anonymous(syntheticSession(anonymous: true))
+        let signedOut = SessionState.signedOut
+        let deferred = SessionState.deferred
+        let loading = SessionState.loading
+        let signedIn = SessionState.signedIn(syntheticSession(anonymous: false))
+
+        // 1. Enter My Drives when signed out / anonymous: presents sign-in modal
+        XCTAssertTrue(AccountEntryPolicy.shouldPresentSignInOnTabChange(from: .planner, to: .library, in: anonymous))
+        XCTAssertTrue(AccountEntryPolicy.shouldPresentSignInOnTabChange(from: .planner, to: .library, in: signedOut))
+        XCTAssertTrue(AccountEntryPolicy.shouldPresentSignInOnTabChange(from: .settings, to: .library, in: signedOut))
+        XCTAssertTrue(AccountEntryPolicy.shouldPresentSignInOnTabChange(from: nil, to: .library, in: signedOut))
+
+        // 2. Dismissing modal leaves user on .library: no re-presentation / no loop
+        XCTAssertFalse(AccountEntryPolicy.shouldPresentSignInOnTabChange(from: .library, to: .library, in: anonymous))
+        XCTAssertFalse(AccountEntryPolicy.shouldPresentSignInOnTabChange(from: .library, to: .library, in: signedOut))
+
+        // 3. Re-enter: moving to Planner then back to My Drives offers sign-in again
+        XCTAssertFalse(AccountEntryPolicy.shouldPresentSignInOnTabChange(from: .library, to: .planner, in: signedOut))
+        XCTAssertTrue(AccountEntryPolicy.shouldPresentSignInOnTabChange(from: .planner, to: .library, in: signedOut))
+
+        // 4. Deferred guards: deferred migration must retain existing recovery policy and never trigger ordinary sign-in
+        XCTAssertFalse(AccountEntryPolicy.shouldPresentSignInOnTabChange(from: .planner, to: .library, in: deferred))
+        XCTAssertFalse(AccountEntryPolicy.shouldPresentSignInOnTabChange(from: .settings, to: .library, in: deferred))
+        XCTAssertFalse(AccountEntryPolicy.shouldPresentSignInOnTabChange(from: nil, to: .library, in: deferred))
+        XCTAssertFalse(AccountEntryPolicy.canOfferSignIn(in: deferred))
+
+        // 5. Loading and signed-in guards: never trigger tab sign-in
+        XCTAssertFalse(AccountEntryPolicy.shouldPresentSignInOnTabChange(from: .planner, to: .library, in: loading))
+        XCTAssertFalse(AccountEntryPolicy.shouldPresentSignInOnTabChange(from: .planner, to: .library, in: signedIn))
+
+        // 6. Deep link pending drive ID guard: skip tab-driven auth when pending drive ID exists, preserving detail own account wall
+        XCTAssertFalse(AccountEntryPolicy.shouldPresentSignInOnTabChange(from: .planner, to: .library, in: signedOut, hasPendingDriveId: true))
+        XCTAssertFalse(AccountEntryPolicy.shouldPresentSignInOnTabChange(from: nil, to: .library, in: signedOut, hasPendingDriveId: true))
+        XCTAssertFalse(AccountEntryPolicy.shouldPresentSignInOnTabChange(from: .planner, to: .library, in: anonymous, hasPendingDriveId: true))
+    }
+
     /// Mount the production root, not a reconstructed routing enum. The previous whole-app
     /// deferred branch fails here: it has neither a UITabBar nor a mounted Planner bootstrap.
     private func assertPublicTabs(session: SessionStore, api: any SkipperAPI,

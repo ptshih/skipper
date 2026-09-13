@@ -23,24 +23,33 @@ struct DriveDetailView: View {
         self.onDeleted = onDeleted
     }
 
+    init(viewModel: DriveDetailViewModel,
+         onStartDrive: @escaping @MainActor (String, DriveManifest) -> Void = { _, _ in },
+         onBack: @escaping @MainActor () -> Void = {},
+         onDeleted: @escaping @MainActor (String) -> Void = { _ in }) {
+        _viewModel = State(initialValue: viewModel)
+        self.onStartDrive = onStartDrive; self.onBack = onBack
+        self.onDeleted = onDeleted
+    }
+
     var body: some View {
         Group {
             if viewModel.needsAccount {
                 accountWall
             } else if let manifest = viewModel.manifest {
                 content(for: manifest)
-            } else if viewModel.isLoading {
-                ProgressView("Loading drive…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
+            } else if let error = viewModel.errorMessage, !viewModel.isLoading {
                 ScrollView {
                     VStack(spacing: TrailheadSpace.large) {
-                        Text(viewModel.errorMessage ?? "Could not load drive")
+                        Text(error)
                             .font(TrailheadType.body)
                             .foregroundStyle(TrailheadColors.danger)
                         TrailheadButton("Retry", variant: .secondary) { Task { await viewModel.load() } }
                     }.padding(TrailheadSpace.large)
                 }
+            } else {
+                ProgressView("Loading drive…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .background(TrailheadColors.surface.ignoresSafeArea())

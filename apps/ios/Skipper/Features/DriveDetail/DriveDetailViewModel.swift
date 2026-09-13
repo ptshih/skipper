@@ -252,6 +252,7 @@ final class DriveDetailViewModel {
 
     func purgeDownload() async {
         downloadGeneration = UUID(); downloadRequested = false
+        downloadError = nil
         stopAudition(); topUpTask?.cancel()
         await storage?.deleteDriveDownload(driveId: driveId)
         await refreshOfflineState()
@@ -294,6 +295,13 @@ final class DriveDetailViewModel {
         endPresentation()
         downloadGeneration = UUID(); downloadRequested = false
         manifest = nil; freshDetail = nil; clearLocalAccess()
+        if let session {
+            if AccountEntryPolicy.canOfferSignIn(in: session.state) {
+                showWall(source: "drive_detail")
+            }
+        } else {
+            showWall(source: "drive_detail")
+        }
     }
 
     func deleteDrive(onDeleted: @escaping @MainActor (String) -> Void) async {

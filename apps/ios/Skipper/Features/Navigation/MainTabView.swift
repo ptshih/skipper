@@ -180,9 +180,30 @@ struct MainTabView: View {
             .tag(MainTab.settings)
         }
         .tint(TrailheadColors.accent)
+        .onAppear {
+            if AccountEntryPolicy.shouldPresentSignInOnTabChange(
+                from: nil,
+                to: activeTab.wrappedValue,
+                in: session.state,
+                hasPendingDriveId: activeDriveId.wrappedValue != nil
+            ) {
+                presentSignIn()
+            }
+        }
+        .onChange(of: activeTab.wrappedValue) { oldTab, newTab in
+            if AccountEntryPolicy.shouldPresentSignInOnTabChange(
+                from: oldTab,
+                to: newTab,
+                in: session.state,
+                hasPendingDriveId: activeDriveId.wrappedValue != nil
+            ) {
+                presentSignIn()
+            }
+        }
     }
 
     private func presentSignIn() {
+        guard activeDriveId.wrappedValue == nil else { return }
         guard AccountEntryPolicy.canOfferSignIn(in: session.state) else { return }
         isShowingAuthSheet = true
     }

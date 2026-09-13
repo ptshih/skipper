@@ -309,18 +309,52 @@ import XCTest
         XCTAssertNil(model.errorMessage)
         XCTAssertEqual(model.drives.count, 4)
     }
+
+    func testSignedOutLoadDrivesTwiceMakesZeroRequestsLeavesDrivesEmptyAndNilError() async throws {
+        let clock = FixedAuthClock(date: authDate("2026-09-12T12:00:00Z")!)
+        for isAnonymous in [true, false] {
+            let value = syntheticSession(anonymous: isAnonymous)
+            let vault = CredentialVault(keychain: try syntheticKeychain(session: value), clock: clock)
+            let auth = AuthTestService(session: value)
+            let session = SessionStore(auth: auth, vault: vault, clock: clock, purgeDownloads: {})
+            await session.start()
+            if !isAnonymous {
+                try await session.signOut()
+            }
+            XCTAssertFalse(session.isSignedIn)
+
+            let api = MockLibraryAPI(driveList: try fixtureList())
+            let model = LibraryViewModel(api: api, session: session)
+
+            await model.loadDrives()
+            let firstCount = await api.listDrivesCalls
+            XCTAssertEqual(firstCount, 0, "Signed-out loadDrives must make 0 requests")
+            XCTAssertTrue(model.drives.isEmpty)
+            XCTAssertNil(model.errorMessage)
+            XCTAssertFalse(model.isLoading)
+
+            await model.loadDrives()
+            let secondCount = await api.listDrivesCalls
+            XCTAssertEqual(secondCount, 0, "Repeated signed-out loadDrives must make 0 requests")
+            XCTAssertTrue(model.drives.isEmpty)
+            XCTAssertNil(model.errorMessage)
+            XCTAssertFalse(model.isLoading)
+        }
+    }
 }
 
 private actor MockLibraryAPI: SkipperAPI {
     var result: Result<DriveList, Error>
     var entered: XCTestExpectation?
     var pending: CheckedContinuation<DriveList, Never>?
+    var listDrivesCalls: Int = 0
     init(driveList: DriveList) { result = .success(driveList) }
     func setFailure(_ error: Error) { result = .failure(error) }
     func setList(_ list: DriveList) { result = .success(list) }
     func hold(_ entered: XCTestExpectation) { self.entered = entered }
     func release(_ list: DriveList) { pending?.resume(returning: list); pending = nil }
     func listDrives() async throws -> DriveList {
+        listDrivesCalls += 1
         if let entered {
             self.entered = nil
             return await withCheckedContinuation { pending = $0; entered.fulfill() }

@@ -28,6 +28,48 @@ DDI preparation attempt failed because the device was locked (`kAMDMobileImageMo
 The retained record is `.scratch/ios-qa/ddi-preparation-attempt-20260912-1922/REPORT.md`. External unlock
 is pending; no app operation, physical upgrade or actual driving proof follows from this attempt.
 
+### Signed-out Library transition, neutral empty state, and deep-link race guard verification (2026-09-12)
+
+A transient error flash occurred when navigating from Planner to My Drives while signed out:
+`LibraryViewModel.loadDrives()` unconditionally issued `listDrives()`, throwing 401 and populating
+`errorMessage` before the account gate settled. The corrected architecture replaces the inline gate
+with a clarified neutral empty Library page and immediately presents the existing sign-in modal
+(`account.sign-in`). Dismissing the modal leaves the stable empty drives page (`library.empty`) with zero
+error flash and no reopen loop. Selecting My Drives again after switching to another tab offers sign-in again.
+
+Implementation and verification details:
+- **Model guard:** `LibraryViewModel.loadDrives()` guards against `!session.isSignedIn`, resetting
+  `drives = []`, `rawSummaries = []`, `credits = nil`, `errorMessage = nil`, and `isOfflineFallback = false`
+  with zero network requests. Signed-in cancelled-refresh prior-error preservation remains intact.
+- **Deep-link race guard:** `AccountEntryPolicy.shouldPresentSignInOnTabChange(..., hasPendingDriveId:)`
+  skips tab-driven auth presentation when `hasPendingDriveId: true` (e.g. shared-drive deep links opening
+  Library with `activeDriveId`), preventing a sheet presentation race against `DriveDetailView` and
+  preserving detail's own account wall.
+- **Prior contaminated run boundary:** An earlier UI test run on simulator `45E44967` was contaminated
+  by concurrent runner execution from the Release lane; that task (PID 20163) was terminated and its
+  captures are explicitly unaccepted.
+- **Fresh accepted UI evidence:** A clean rerun of `SkipperUITests/OfflineSmokeTests` passed **5/5**
+  (63.49s, xcresult `.scratch/ios/LibraryFixDD/Logs/Test/Test-Skipper-2026.09.12_22-27-22--0700.xcresult`).
+  Inspected attachments confirm:
+  1. `01_signed_out_library_auth_sheet.png`: cold Library launch presents auth modal immediately over
+     neutral empty state with zero error screen.
+  2. `02_signed_out_library_dismissed_neutral.png`: Cancel dismisses modal, leaving stable empty library
+     without error flash or reopen loop.
+  3. `03_signed_out_library_reopened_auth_sheet.png`: Plan tab switch and back to My Drives cleanly re-presents
+     the auth modal.
+- **Unit test evidence:** `DeferredNavigationTests` (9/9) and `LibraryFilterTests` (10/10) passed (**19/19**,
+  xcresult `.scratch/ios/LibraryFixDD/Logs/Test/Test-Skipper-2026.09.12_22-26-59--0700.xcresult`).
+- **Target and limits:** This fix forms part of the ongoing stability 9/10 target. Storage completed concurrent
+  Detail + Settings focused acceptance at **36/36 passed** (20 `DriveDetailStateTests`, 8 `SessionStoreTests`,
+  8 `SettingsPasswordStateTests`, zero failures/skips; exact xcresult
+  `.scratch/ios-drivedetail/DerivedData/Logs/Test/Test-Skipper-2026.09.12_22-33-28--0700.xcresult`), with judge final
+  review pending. Physical device verification remains blocked by the locked phone (`kAMDMobileImageMounterDeviceLocked`),
+  unlock request pending, with judge/physical limits strictly maintained. No current app TestFlight update is claimed
+  (delivered build remains 1.2.0 (27) / `977cd1c5`).
+- **Next QA items:**
+  1. Residual deep-link arrival while the tab auth modal is already open.
+  2. Explicit anonymous runtime UI scenario coverage across theme variants.
+
 
 ### Exact-source delivery failure: forced-wall readiness
 

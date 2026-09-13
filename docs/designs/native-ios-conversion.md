@@ -401,6 +401,20 @@ receipt with fresh ASC status. Physical DDI preparation failed with `kAMDMobileI
 an external unlock response is pending. No physical app installation/launch or real road drive has occurred.
 These pending gates do not permit legacy retirement under the acceptance requirement above.
 
+On 2026-09-12, the signed-out Library transition was corrected: `LibraryViewModel.loadDrives()` guards
+against `!session.isSignedIn` (clearing state and issuing 0 network requests), and `LibraryView` presents a
+neutral empty drives view (`library.empty`) while `MainTabView` immediately presents the existing sign-in modal
+on tab entry. Dismissal leaves the neutral empty page stable with zero error flash or reopen loop; re-entry
+from Plan re-presents sign-in. `AccountEntryPolicy.shouldPresentSignInOnTabChange` guards against `hasPendingDriveId`
+to prevent racing incoming shared-drive detail sheets. A clean UI test run passed 5/5 in `OfflineSmokeTests`
+(superseding an earlier contaminated run from concurrent Release lane activity) with verified screenshots, and
+19/19 targeted unit tests passed. Storage completed concurrent Detail + Settings focused acceptance at 36/36 passed
+(20 Detail, 8 SessionStore, 8 SettingsPasswordState; exact xcresult
+`.scratch/ios-drivedetail/DerivedData/Logs/Test/Test-Skipper-2026.09.12_22-33-28--0700.xcresult`), with judge final
+review pending. This work advances the ongoing stability 9/10 target while preserving physical and judge limits
+(phone locked `kAMDMobileImageMounterDeviceLocked`, unlock pending). Next QA items record residual
+deep-link-while-auth-open and anonymous runtime coverage. No new TestFlight build is claimed for this fix.
+
 ## Retained Linux CI boundary
 
 A read-only repository audit found no retained Cloud Build job invoking root `bun run check`

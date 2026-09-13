@@ -59,4 +59,11 @@ final class SettingsPasswordState {
         if saved || request.errorCode == "password_already_set" { hasPassword = true }
         return saved
     }
+
+    /// Retains last known capability when the lookup is unknown (nil).
+    func applyLookupResult(_ result: Bool?) {
+        if let result {
+            hasPassword = result
+        }
+    }
 }

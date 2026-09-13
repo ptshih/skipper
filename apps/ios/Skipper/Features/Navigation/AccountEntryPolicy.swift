@@ -10,6 +10,17 @@ enum AccountEntryPolicy {
         }
     }
 
+    static func shouldPresentSignInOnTabChange(
+        from oldTab: MainTab?,
+        to newTab: MainTab,
+        in state: SessionState,
+        hasPendingDriveId: Bool = false
+    ) -> Bool {
+        guard !hasPendingDriveId else { return false }
+        guard newTab == .library && oldTab != .library else { return false }
+        return canOfferSignIn(in: state)
+    }
+
     @MainActor static func canOfferRecovery(for session: SessionStore) -> Bool {
         session.state == .deferred && session.canRecoverCredentials
     }

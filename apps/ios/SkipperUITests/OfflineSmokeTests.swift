@@ -31,8 +31,37 @@ final class OfflineSmokeTests: XCTestCase {
     func testSignedOutMarkerCannotRestoreOldLibrary() {
         let fixture = FixtureApp(scenario: .signedOut)
         fixture.launch()
+
+        // Cold Library launch presents auth modal immediately over neutral empty state; no error screen
         XCTAssertTrue(fixture.element("account.sign-in").waitForExistence(timeout: 10))
+        XCTAssertTrue(fixture.element("library.empty").exists)
+        XCTAssertFalse(fixture.element("library.error").exists)
         XCTAssertFalse(fixture.element("library.drive.00000002-0000-4000-8000-000000000001").exists)
+        attachScreenshot(fixture.application, name: "signed-out-library-auth-sheet")
+
+        // Dismiss modal via Cancel: leaves stable neutral empty library without error flash or reopen loop
+        let cancelButton = fixture.application.buttons["Cancel"]
+        XCTAssertTrue(cancelButton.waitForExistence(timeout: 5))
+        cancelButton.tap()
+        XCTAssertTrue(fixture.element("library.empty").waitForExistence(timeout: 5))
+        XCTAssertFalse(fixture.element("account.sign-in").exists)
+        XCTAssertFalse(fixture.element("library.error").exists)
+        attachScreenshot(fixture.application, name: "signed-out-library-dismissed-neutral")
+
+        // Plan / back reopens: switching away to Plan and back to My Drives reopens the auth sheet
+        let planTab = fixture.application.tabBars.buttons["Plan"]
+        XCTAssertTrue(planTab.waitForExistence(timeout: 5))
+        planTab.tap()
+        XCTAssertTrue(fixture.element("planner.input").waitForExistence(timeout: 5))
+        XCTAssertFalse(fixture.element("account.sign-in").exists)
+
+        let libraryTab = fixture.application.tabBars.buttons["My Drives"]
+        XCTAssertTrue(libraryTab.waitForExistence(timeout: 5))
+        libraryTab.tap()
+        XCTAssertTrue(fixture.element("account.sign-in").waitForExistence(timeout: 5))
+        XCTAssertTrue(fixture.element("library.empty").exists)
+        XCTAssertFalse(fixture.element("library.error").exists)
+        attachScreenshot(fixture.application, name: "signed-out-library-reopened-auth-sheet")
     }
 
     func testDeferredMigrationOffersRetryWithoutClaimingSignOut() {

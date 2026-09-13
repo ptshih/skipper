@@ -92,8 +92,8 @@ struct LibraryView: View {
                 }
 
                 // Content list
-                if AccountEntryPolicy.canOfferSignIn(in: viewModel.session.state) && viewModel.drives.isEmpty && !viewModel.isLoading {
-                    signedOutState
+                if AccountEntryPolicy.canOfferSignIn(in: viewModel.session.state) && viewModel.drives.isEmpty {
+                    emptyState
                 } else if viewModel.session.state == .deferred && viewModel.drives.isEmpty {
                     ContentUnavailableView("Verifying your account", systemImage: "lock",
                         description: Text("Your saved drives will be available after account verification. You can still use the planner."))
@@ -324,51 +324,5 @@ struct LibraryView: View {
             .frame(maxWidth: .infinity)
         }
         .accessibilityIdentifier("library.empty")
-    }
-
-    // MARK: - Signed Out State
-
-    private var signedOutState: some View {
-        ScrollView {
-            VStack(spacing: TrailheadSpace.lg) {
-                Spacer()
-                    .frame(height: TrailheadSpace.xl)
-
-                Image(systemName: "person.crop.circle")
-                    .font(.system(size: 48))
-                    .foregroundColor(TrailheadColors.inkMuted)
-
-                VStack(spacing: TrailheadSpace.xs) {
-                    Text("Sign in to see your drives")
-                        .font(TrailheadType.title)
-                        .foregroundColor(TrailheadColors.ink)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(nil)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Text("Your created drives and offline audio are linked to your account.")
-                        .font(TrailheadType.body)
-                        .foregroundColor(TrailheadColors.inkMuted)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(nil)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, TrailheadSpace.lg)
-                }
-
-                TrailheadButton(
-                    "Sign In",
-                    icon: "arrow.right.circle",
-                    variant: .primary
-                ) {
-                    onSignIn()
-                }
-                .accessibilityIdentifier("account.sign-in")
-                .padding(.horizontal, TrailheadSpace.lg)
-
-                Spacer()
-            }
-            .padding(TrailheadSpace.md)
-            .frame(maxWidth: .infinity)
-        }
     }
 }
