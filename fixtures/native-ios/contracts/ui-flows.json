@@ -1824,6 +1824,69 @@
           "terminalCallbackAloneIsInsufficient": true
         }
       }
+    },
+    {
+      "id": "settings-account-lifecycle",
+      "input": {
+        "lifecycleScenario": true,
+        "initialTab": "settings",
+        "offline": false,
+        "initialSession": {
+          "user": {
+            "id": "00000008-0000-4000-8000-000000000001",
+            "name": "Fixture Member",
+            "email": "member@example.invalid",
+            "emailVerified": true,
+            "isAnonymous": false,
+            "role": "user",
+            "createdAt": "2026-09-12T12:00:00.000Z",
+            "updatedAt": "2026-09-12T12:00:00.000Z"
+          },
+          "session": {
+            "id": "00000009-0000-4000-8000-000000000001",
+            "userId": "00000008-0000-4000-8000-000000000001",
+            "token": "SYNTHETIC-NOT-A-VALID-TOKEN",
+            "expiresAt": "2026-10-01T00:00:00.000Z",
+            "createdAt": "2026-09-12T12:00:00.000Z",
+            "updatedAt": "2026-09-12T12:00:00.000Z"
+          }
+        },
+        "guestSession": {
+          "user": {
+            "id": "00000008-0000-4000-8000-000000000099",
+            "name": "Guest",
+            "email": "anonymous@example.invalid",
+            "emailVerified": true,
+            "isAnonymous": true,
+            "role": "user",
+            "createdAt": "2026-09-12T12:00:00.000Z",
+            "updatedAt": "2026-09-12T12:00:00.000Z"
+          },
+          "session": {
+            "id": "00000009-0000-4000-8000-000000000099",
+            "userId": "00000008-0000-4000-8000-000000000099",
+            "token": "SYNTHETIC-GUEST-TOKEN",
+            "expiresAt": "2026-10-01T00:00:00.000Z",
+            "createdAt": "2026-09-12T12:00:00.000Z",
+            "updatedAt": "2026-09-12T12:00:00.000Z"
+          }
+        },
+        "email": "member@example.invalid",
+        "otp": "123456",
+        "responses": {
+          "bootstrap": {
+            "regions": []
+          },
+          "version": {
+            "policies": []
+          }
+        }
+      },
+      "expected": {
+        "canonicalDriveId": null,
+        "detailTitle": null,
+        "streamingText": null
+      }
     }
   ]
 }

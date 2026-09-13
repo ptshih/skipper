@@ -21,6 +21,14 @@ final class DebugScenarioTransport: HTTPTransport, @unchecked Sendable {
         var planStreamBarrierReached: Bool?
         var planStreamCancellations: Int?
         var planStreamTerminalDeliveries: Int?
+        var passwordRequests: Int?
+        var passwordResetRequests: Int?
+        var deleteCodeSendRequests: Int?
+        var deleteCodeVerifyRequests: Int?
+        var deleteAccountRequests: Int?
+        var signOutRequests: Int?
+        var explicitlySignedOut: Bool?
+        var anonymousMinted: Bool?
     }
     private struct Reply: Sendable {
         var status = 200
@@ -95,6 +103,7 @@ final class DebugScenarioTransport: HTTPTransport, @unchecked Sendable {
         guard request.url?.host == "api.invalid" else { return try unexpected() }
         let route = (request.httpMethod ?? "GET") + " " + (request.url?.path ?? "")
         let responses = input["responses"] as? [String: Any] ?? [:]
+        let isLifecycle = input["lifecycleScenario"] as? Bool == true
         func json(_ value: Any, status: Int = 200, cookie: Bool = false) throws -> Reply {
             var result = Reply(status: status, chunks: [try JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed, .sortedKeys])])
             if cookie { result.headers["Set-Cookie"] = "__Secure-better-auth.session_token=SYNTHETIC-UI-ACCOUNT; Max-Age=86400; Path=/; Secure" }
@@ -102,11 +111,52 @@ final class DebugScenarioTransport: HTTPTransport, @unchecked Sendable {
         }
         switch route {
         case "GET /api/auth/get-session":
+            if isLifecycle, state.explicitlySignedOut == true {
+                let value = (state.anonymousMinted == true) ? input["guestSession"] : nil
+                return try json(value ?? NSNull())
+            }
             let value = state.signedIn ? input["signedInSession"] : input["initialSession"]
             return try json(value ?? NSNull())
+        case "POST /account/password":
+            guard isLifecycle else { return try unexpected() }
+            state.passwordRequests = (state.passwordRequests ?? 0) + 1
+            if state.passwordRequests == 1 {
+                return try json([
+                    "error": "password_already_set",
+                    "message": "This account already has a password. Use password reset to change it."
+                ], status: 409)
+            }
+            return try json(["success": true])
+        case "POST /api/auth/request-password-reset":
+            guard isLifecycle else { return try unexpected() }
+            state.passwordResetRequests = (state.passwordResetRequests ?? 0) + 1
+            return try json(["success": true])
         case "POST /api/auth/email-otp/send-verification-otp":
+            // Generic BetterAuth OTP issuance endpoint; used across sign-in and account deletion verification flows.
             let body = try requestBody(request)
             guard body["email"] as? String == input["email"] as? String, body["type"] as? String == "sign-in" else { return try unexpected() }
+            if isLifecycle { state.deleteCodeSendRequests = (state.deleteCodeSendRequests ?? 0) + 1 }
+            return try json(["success": true])
+        case "POST /api/auth/email-otp/check-verification-otp":
+            guard isLifecycle else { return try unexpected() }
+            state.deleteCodeVerifyRequests = (state.deleteCodeVerifyRequests ?? 0) + 1
+            let body = try requestBody(request)
+            guard body["email"] as? String == input["email"] as? String,
+                  body["otp"] as? String == (input["otp"] as? String ?? "123456") else {
+                return try json(["code": "INVALID_OTP", "message": "Invalid fixture code"], status: 400)
+            }
+            return try json(["success": true])
+        case "POST /api/auth/delete-user":
+            guard isLifecycle else { return try unexpected() }
+            state.deleteAccountRequests = (state.deleteAccountRequests ?? 0) + 1
+            state.signedIn = false
+            state.explicitlySignedOut = true
+            return try json(["success": true])
+        case "POST /api/auth/sign-out":
+            guard isLifecycle else { return try unexpected() }
+            state.signOutRequests = (state.signOutRequests ?? 0) + 1
+            state.signedIn = false
+            state.explicitlySignedOut = true
             return try json(["success": true])
         case "POST /api/auth/sign-in/email-otp":
             let body = try requestBody(request)
@@ -114,9 +164,17 @@ final class DebugScenarioTransport: HTTPTransport, @unchecked Sendable {
                 return try json(["code": "INVALID_OTP", "message": "Invalid fixture code"], status: 400)
             }
             state.signedIn = true
+            state.explicitlySignedOut = false
+            state.anonymousMinted = false
             return try json(input["signedInSession"] ?? NSNull(), cookie: true)
         case "POST /api/auth/sign-in/anonymous":
             state.anonymousMintRequests += 1
+            if isLifecycle, let guest = input["guestSession"] {
+                state.anonymousMinted = true
+                var reply = try json(guest, status: 200)
+                reply.headers["Set-Cookie"] = "__Secure-better-auth.session_token=SYNTHETIC-GUEST-TOKEN; Max-Age=86400; Path=/; Secure"
+                return reply
+            }
             return try unexpected()
         case "GET /api/auth/list-accounts": return try json([])
         case "GET /bootstrap": return try json(responses["bootstrap"] ?? ["regions": []])
@@ -129,8 +187,15 @@ final class DebugScenarioTransport: HTTPTransport, @unchecked Sendable {
             }
             return reply
         case "GET /drives":
-            guard state.signedIn || (input["initialSession"] as? [String: Any])?["user"].flatMap({ $0 as? [String: Any] })?["isAnonymous"] as? Bool == false else {
-                return try json(["error": "account_required"], status: 401)
+            let initialMember = (input["initialSession"] as? [String: Any])?["user"].flatMap({ $0 as? [String: Any] })?["isAnonymous"] as? Bool == false
+            if isLifecycle {
+                guard (state.signedIn || initialMember), !(state.explicitlySignedOut ?? false), !(state.anonymousMinted ?? false) else {
+                    return try json(["error": "account_required"], status: 401)
+                }
+            } else {
+                guard state.signedIn || initialMember else {
+                    return try json(["error": "account_required"], status: 401)
+                }
             }
             return try json(responses["ownedDrives"] ?? input["ownedDrives"] ?? ["drives": []])
         case "POST /drives/plan":
@@ -202,7 +267,15 @@ final class DebugScenarioTransport: HTTPTransport, @unchecked Sendable {
             "purgeCalls": state.purgeCalls, "localDriveDirectoryIds": ids,
             "planStreamBarrierReached": state.planStreamBarrierReached ?? false,
             "planStreamCancellations": state.planStreamCancellations ?? 0,
-            "planStreamTerminalDeliveries": state.planStreamTerminalDeliveries ?? 0]
+            "planStreamTerminalDeliveries": state.planStreamTerminalDeliveries ?? 0,
+            "passwordRequests": state.passwordRequests ?? 0,
+            "passwordResetRequests": state.passwordResetRequests ?? 0,
+            "deleteCodeSendRequests": state.deleteCodeSendRequests ?? 0,
+            "deleteCodeVerifyRequests": state.deleteCodeVerifyRequests ?? 0,
+            "deleteAccountRequests": state.deleteAccountRequests ?? 0,
+            "signOutRequests": state.signOutRequests ?? 0,
+            "explicitlySignedOut": state.explicitlySignedOut ?? false,
+            "anonymousMinted": state.anonymousMinted ?? false]
         try JSONSerialization.data(withJSONObject: receipt, options: [.sortedKeys]).write(to: root.appendingPathComponent("qa-receipt.json"), options: .atomic)
     }
 }

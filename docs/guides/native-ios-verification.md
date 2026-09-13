@@ -112,6 +112,35 @@ Shipped React Native client self-healed on an offline-to-online transition, wher
 
 
 
+### Settings account lifecycle, purge readback, and GPS cue latch verification (2026-09-13)
+
+A process-isolated Settings account lifecycle test suite exercises both authenticated user departure flows under debug scenario `.settingsAccountLifecycle` (`settings-account-lifecycle`): Run AB (password collision 409, reset request, and explicit sign-out) and Run C (deletion confirmation code issuance, verification, and permanent account deletion). Both flows assert complete local data purge, stable retention of the neutral Settings screen, and headless relaunch as an online guest session without modal lockouts.
+
+- **Interaction and AutoFill handling:**
+  - Password entry exercises `.textContentType(.newPassword)` validation: entering `< 8` characters keeps the submission action disabled; appending to `>= 8` characters enables it via settled predicate.
+  - On platforms presenting the system AutoFill "Use Strong Password?" sheet in a secondary window (`GenerateStrongPasswordButton` / `Fill Strong Password`), the test safely detects the overlay, captures screenshot/hierarchy evidence, scopes the `Close` dismissal to the containing window (avoiding global cross-mark interference), and awaits software keyboard presentation before typing.
+  - Delete account flow confirms the 6-digit verification code input sheet, validates deletion request delivery, and asserts immediate dismissal to the stable neutral Settings view (`account.sign-in` visible, `auth.email` absent, Settings navigation bar present, Settings tab selected).
+- **External host watcher settlement & keychain readback:**
+  - Dedicated external watcher (`verify-account-lifecycle.sh`) observes isolated simulator runs, excluding stale historical run UUIDs.
+  - Executable verification (`verify-account-lifecycle.sh --report`) evaluates **34/34 assertions across both runs**:
+    - Exact endpoint counters: Run AB records `passwordRequests == 1`, `passwordResetRequests == 1`, `signOutRequests == 1`, `purgeCalls == 1`, `unexpectedRequests == 0`; Run C records `deleteCodeSendRequests == 1`, `deleteCodeVerifyRequests == 1`, `deleteAccountRequests == 1`, `purgeCalls == 1`, `unexpectedRequests == 0`.
+    - Host filesystem purge check verifies that all local drive directories are completely erased (`driveCount == 0`).
+    - Fixture-isolated keychain store (`FileKeychainStore`) proves explicit signed-out state (`explicitlySignedOut == true`, null active session) prior to relaunch, followed by automatic anonymous guest mint (`mintRequests == 1`, `anonymousMinted == true`, guest active session) upon same-run relaunch.
+- **Accepted UI test evidence (Run 04):**
+  - Executed on headless simulator `69401A43-2D6D-4155-BD4F-E688777CB43A` (`AccountLifecycleTests`, 62.15s, 0 failures, 0 unexpected; xcresult `.scratch/ios/AccountLifecycleQA/results_account_lifecycle_revised_04.xcresult`).
+  - Attachments with `.keepAlways` lifetime preserve screenshots and full accessibility hierarchy snapshots at each lifecycle transition.
+- **Prior failed run boundary & overwritten bundle record:**
+  - Initial Run 01 (`results.xcresult`) passed 29 unit tests but failed UI password entry; its original bundle was overwritten by an immediate rerun. Retained task logs (`task-2586.log`, `task-2624.log`) and receipt backups (`receipts_backup_01`) preserve the original diagnostic evidence.
+  - Run 02 (`results_account_lifecycle_revised_02.xcresult`) passed Run C but failed on direct character count comparison against SwiftUI `SecureField`.
+  - Run 03 (`results_account_lifecycle_revised_03.xcresult`) uncovered the secondary AutoFill window presence blocking direct software keyboard presentation. All three prior result bundles and receipt directories (`receipts_backup_01/`, `receipts_backup_02/`, `receipts_backup_03/`) are permanently retained.
+- **Combined scoped GPS and Playback unit acceptance:**
+  - Scoped native build incorporates Release GPS latch (`DrivePlaybackController.swift`, SHA `b50f4b4f...`) and 29 unit tests (**29/29 passed**): 7 `DriveLocationLifecycleTests` (SHA `d4362f10...`) and 22 `PlaybackLifecycleTests` validating location cue playback coordination.
+- **Target and limits:**
+  - This verification is strictly scoped to `AccountLifecycleTests`, `DriveLocationLifecycleTests`, and `PlaybackLifecycleTests`; it is not a full new native test suite run.
+  - Physical device gaps remain open: real road GPS reception, audio focus interruption, incoming phone calls/Siri, Bluetooth handoff, Lock Screen Now Playing, background execution, VoiceOver accessibility, and hardware Secure Enclave keychain persistence. Physical device testing remains blocked pending hardware unlock (`kAMDMobileImageMounterDeviceLocked`).
+
+
+
 ### Exact-source delivery failure: forced-wall readiness
 
 The `f1ee2eb3` release preflight ran **338/339** tests (321/321 unit, 17/18 UI), zero

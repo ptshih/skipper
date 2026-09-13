@@ -20,6 +20,7 @@ struct FixtureApp {
         case versionForceDelayedSheet = "version-force-delayed-sheet"
         case versionRecommendedDelayedPlanner = "version-recommended-delayed-planner"
         case drivingQATwoStops = "driving-qa-two-stops"
+        case settingsAccountLifecycle = "settings-account-lifecycle"
     }
 
     enum Theme: String, CaseIterable {

@@ -69,4 +69,45 @@ import XCTest
         rig.location.onForeground?()
         XCTAssertTrue(rig.controller.gpsSearching)
     }
+
+    func testLiveSearchingCuePersistsAcrossTicksUntilAcceptedFixAndReassertsOnErrorsOrResume() throws {
+        let rig = PlaybackRig(); defer { rig.controller.stop() }
+        try rig.start()
+        XCTAssertTrue(rig.controller.gpsSearching, "Live drive must start in searching state")
+        rig.clock.advance(0.2); rig.controller.tick()
+        XCTAssertTrue(rig.controller.gpsSearching, "Searching cue must persist across 200ms tick before first fix")
+
+        rig.fix(0)
+        XCTAssertFalse(rig.controller.gpsSearching, "Accepted fix must clear searching cue")
+        rig.clock.advance(0.2); rig.controller.tick()
+        XCTAssertFalse(rig.controller.gpsSearching, "Recent fix must keep searching cleared")
+
+        rig.location.onError?()
+        XCTAssertTrue(rig.controller.gpsSearching, "Location error must assert searching cue")
+        rig.clock.advance(0.2); rig.controller.tick()
+        XCTAssertTrue(rig.controller.gpsSearching, "Error state must persist across tick until fresh fix")
+
+        rig.fix(0)
+        XCTAssertFalse(rig.controller.gpsSearching, "Accepted fix must clear error searching cue")
+
+        rig.controller.pause()
+        rig.controller.resume()
+        XCTAssertTrue(rig.controller.gpsSearching, "Resume must reassert searching cue")
+        rig.clock.advance(0.2); rig.controller.tick()
+        XCTAssertTrue(rig.controller.gpsSearching, "Resume searching must persist across tick until fresh fix")
+
+        rig.fix(0)
+        XCTAssertFalse(rig.controller.gpsSearching, "Accepted fix must clear resume searching cue")
+    }
+
+    func testSimulationStartAndTicksKeepGpsSearchingFalse() throws {
+        let rig = PlaybackRig(); defer { rig.controller.stop() }
+        try rig.controller.load(rig.playback(), online: false)
+        rig.controller.start(simulate: true)
+        XCTAssertFalse(rig.controller.gpsSearching, "Simulation start must not search GPS")
+        rig.clock.advance(0.2); rig.controller.tick()
+        XCTAssertFalse(rig.controller.gpsSearching, "Simulation tick must keep gpsSearching false")
+        rig.clock.advance(8.5); rig.controller.tick()
+        XCTAssertFalse(rig.controller.gpsSearching, "Simulation past stale threshold must remain false")
+    }
 }

@@ -348,7 +348,10 @@ final class DrivePlaybackController {
                     }
                     if simIndex >= simFixes.count { routeEnded() }
                 }
-            } else { gpsSearching = currentTime.timeIntervalSince(lastFixAt) >= 8 }
+            } else if currentTime.timeIntervalSince(lastFixAt) >= 8 {
+                // Stale fix timeout raises searching; receiveFix is the sole mechanism that clears it.
+                gpsSearching = true
+            }
         }
         if currentTime.timeIntervalSince(lastTraceSave) >= 10 { saveTrace(); lastTraceSave = currentTime }
         guard activeSeq != nil else { updateNowPlaying(); return }

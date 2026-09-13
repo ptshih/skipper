@@ -5,7 +5,7 @@ import Foundation
 /// storage actor, feature models, navigation, and views.
 @MainActor
 enum DebugDependencies {
-    static let scenarios: Set<String> = ["offline-library", "offline-empty", "signed-out", "migration-deferred", "planner-account-retry", "planner-account-lost-ack", "planner-reset-during-stream", "planner-map-landmark", "offline-no-playable-clips", "corrupt-credentials-recovery", "version-force", "version-recommended", "version-force-delayed-sheet", "version-recommended-delayed-planner", "driving-qa-two-stops"]
+    static let scenarios: Set<String> = ["offline-library", "offline-empty", "signed-out", "migration-deferred", "planner-account-retry", "planner-account-lost-ack", "planner-reset-during-stream", "planner-map-landmark", "offline-no-playable-clips", "corrupt-credentials-recovery", "version-force", "version-recommended", "version-force-delayed-sheet", "version-recommended-delayed-planner", "driving-qa-two-stops", "settings-account-lifecycle"]
 
     /// Shared fixture/diagnostic destination; unavailable for production or invalid launches.
     static func runDirectory(for launch: AppLaunchConfiguration) -> URL? {
