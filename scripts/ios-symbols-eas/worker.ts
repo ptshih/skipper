@@ -78,6 +78,50 @@ export interface SymbolsReceipt {
   }>
 }
 
+const WORKER_FAILURE_PHASES = {
+  PLATFORM_UNSUPPORTED: 'preflight',
+  MANIFEST_INVALID: 'preflight',
+  WORKER_SOURCE_MISMATCH: 'preflight',
+  SYMBOL_ARCHIVE_MISMATCH: 'preflight',
+  SECRET_MISSING: 'preflight',
+  PROJECT_MISMATCH: 'preflight',
+  HOST_MISMATCH: 'preflight',
+  ARCHIVE_EXTRACTION_FAILED: 'extract',
+  DWARF_MEASUREMENT_FAILED: 'measure',
+  DWARF_MANIFEST_MISMATCH: 'measure',
+  UPLOAD_COMMAND_FAILED: 'upload',
+  UPLOAD_EVIDENCE_INVALID: 'upload',
+  READBACK_DIRECTORY_FAILED: 'readback',
+  READBACK_COMMAND_FAILED: 'readback',
+  READBACK_PATH_INVALID: 'readback',
+  READBACK_MEASUREMENT_FAILED: 'readback',
+  READBACK_SLICE_MISMATCH: 'readback',
+  RECEIPT_INVALID: 'receipt',
+  RECEIPT_WRITE_FAILED: 'receipt',
+  UNKNOWN_WORKER_FAILURE: 'unknown',
+} as const
+type WorkerFailureCode = keyof typeof WORKER_FAILURE_PHASES
+class SymbolsWorkerError extends Error {
+  readonly code: WorkerFailureCode
+  constructor(code: WorkerFailureCode) {
+    super(code)
+    this.code = code
+  }
+}
+export function workerFailureRecord(error: unknown) {
+  // Never serialize exceptions, CLI output, paths, environment, or caller-authored error fields.
+  const code =
+    error instanceof SymbolsWorkerError && Object.hasOwn(WORKER_FAILURE_PHASES, error.code)
+      ? error.code
+      : 'UNKNOWN_WORKER_FAILURE'
+  return {
+    schemaVersion: 1,
+    phase: WORKER_FAILURE_PHASES[code],
+    code,
+    error: 'Symbol upload/readback did not complete; no verified receipt produced.',
+  }
+}
+
 export const SHA = /^[a-f0-9]{64}$/
 export const UUID = /^[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}$/
 export function ensure(value: unknown, message: string): asserts value {
@@ -395,33 +439,55 @@ export async function runSymbolsWorker(
   runner: CommandRunner = defaultRunner,
   environment = process.env,
 ): Promise<SymbolsReceipt> {
+  const state: { code: WorkerFailureCode } = { code: 'PLATFORM_UNSUPPORTED' }
+  try {
+    return await runSymbolsWorkerImpl(directory, runner, environment, state)
+  } catch {
+    // Capture the fixed gate that failed, never the untrusted underlying exception or its cause.
+    throw new SymbolsWorkerError(state.code)
+  }
+}
+async function runSymbolsWorkerImpl(
+  directory: string,
+  runner: CommandRunner,
+  environment: NodeJS.ProcessEnv,
+  state: { code: WorkerFailureCode },
+): Promise<SymbolsReceipt> {
   ensure(process.platform === 'darwin', 'dSYM upload requires macOS')
   const root = resolve(directory)
+  state.code = 'MANIFEST_INVALID'
   const m: SymbolsManifest = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8'))
   validateManifest(m)
+  state.code = 'WORKER_SOURCE_MISMATCH'
   ensure(
     (await hashFile(join(root, 'worker.ts'))) === m.supportSha256.worker &&
       (await hashFile(join(root, 'archive.py'))) === m.supportSha256.archive,
     'Worker source mismatch',
   )
+  state.code = 'SYMBOL_ARCHIVE_MISMATCH'
   ensure(
     (await hashFile(join(root, 'symbols.zip'))) === m.symbolsZipSha256,
     'Symbol archive hash mismatch',
   )
+  state.code = 'SECRET_MISSING'
+  ensure(environment.POSTHOG_CLI_API_KEY, 'Missing EAS secret')
+  state.code = 'PROJECT_MISMATCH'
   ensure(
-    environment.POSTHOG_CLI_API_KEY &&
-      (environment.POSTHOG_CLI_PROJECT_ID ?? environment.POSTHOG_CLI_ENV_ID) === m.posthogProjectId,
-    'Missing EAS secret or wrong PostHog project',
+    (environment.POSTHOG_CLI_PROJECT_ID ?? environment.POSTHOG_CLI_ENV_ID) === m.posthogProjectId,
+    'Wrong PostHog project',
   )
+  state.code = 'HOST_MISMATCH'
   ensure(
     !environment.POSTHOG_CLI_HOST || environment.POSTHOG_CLI_HOST === m.posthogHost,
     'PostHog host mismatch',
   )
+  state.code = 'ARCHIVE_EXTRACTION_FAILED'
   await checked(
     runner,
     ['python3', 'archive.py', 'unpack', 'symbols.zip', 'symbols', 'manifest.json'],
     root,
   )
+  state.code = 'DWARF_MEASUREMENT_FAILED'
   await mkdir(join(root, 'thin'))
   const measured: SymbolSlice[] = []
   for (const path of [...new Set(m.slices.map((s) => s.dwarfPath))]) {
@@ -432,6 +498,7 @@ export async function runSymbolsWorker(
       })),
     )
   }
+  state.code = 'DWARF_MANIFEST_MISMATCH'
   ensure(
     canonical(measured.sort((a, b) => a.uuid.localeCompare(b.uuid))) ===
       canonical([...m.slices].sort((a, b) => a.uuid.localeCompare(b.uuid))),
@@ -443,17 +510,23 @@ export async function runSymbolsWorker(
     POSTHOG_CLI_HOST: m.posthogHost,
     POSTHOG_CLI_PROJECT_ID: m.posthogProjectId,
   }
-  const upload = parseUploadEvidence(
-    await runner(uploadCommand(m, 'symbols'), { cwd: root, env }),
-    m,
-  )
+  state.code = 'UPLOAD_COMMAND_FAILED'
+  const uploadResult = await runner(uploadCommand(m, 'symbols'), { cwd: root, env })
+  ensure(uploadResult.exitCode === 0, 'Upload command failed')
+  state.code = 'UPLOAD_EVIDENCE_INVALID'
+  const upload = parseUploadEvidence(uploadResult, m)
   const readbacks: SymbolsReceipt['readbacks'] = []
+  state.code = 'READBACK_DIRECTORY_FAILED'
   await mkdir(join(root, 'readback'))
   for (const slice of m.slices) {
+    state.code = 'READBACK_COMMAND_FAILED'
     await checked(runner, downloadCommand(slice.uuid, 'readback'), root, env)
+    state.code = 'READBACK_PATH_INVALID'
     const path = join(root, 'readback', slice.uuid, 'dwarf')
     ensure(realpathSync(path) === path && lstatSync(path).isFile(), 'Unsafe symbol readback path')
+    state.code = 'READBACK_MEASUREMENT_FAILED'
     const measuredReadback = await measureDwarf(path, join(root, 'thin'), runner)
+    state.code = 'READBACK_SLICE_MISMATCH'
     ensure(
       measuredReadback.length === 1 &&
         canonical(measuredReadback[0]) ===
@@ -478,7 +551,9 @@ export async function runSymbolsWorker(
     upload,
     readbacks,
   }
+  state.code = 'RECEIPT_INVALID'
   validateSymbolsReceipt(receipt, m)
+  state.code = 'RECEIPT_WRITE_FAILED'
   await writeFile(join(root, 'receipt.json'), `${canonical(receipt)}\n`, {
     flag: 'wx',
     mode: 0o600,
@@ -497,16 +572,15 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     try {
       await runSymbolsWorker(directory)
       console.log('All expected dSYM slices uploaded and read back.')
-    } catch {
+    } catch (error) {
       // Never publish CLI output: npm/HTTP errors may contain credentials. Failure is not a receipt.
-      await writeFile(
-        join(directory, 'failure.json'),
-        JSON.stringify({
-          schemaVersion: 1,
-          error: 'Symbol upload/readback did not complete; no verified receipt produced.',
-        }),
+      const failure = workerFailureRecord(error)
+      await writeFile(join(directory, 'failure.json'), JSON.stringify(failure)).catch(() => {
+        console.error('Symbol failure record could not be written.')
+      })
+      console.error(
+        `Symbol verification failed [${failure.phase}/${failure.code}]. No verified receipt produced.`,
       )
-      console.error('Symbol verification failed. No verified receipt produced.')
       process.exitCode = 1
     }
   }

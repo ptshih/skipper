@@ -13,6 +13,7 @@ import {
 } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
+import { createHash } from 'node:crypto'
 import {
   assertPreparedStage,
   canonical,
@@ -23,6 +24,7 @@ import {
   prepareEasSymbols,
   RECEIPT_ARTIFACT_NAME,
   validateSymbolsReceipt,
+  validateEasRunIdentity,
   verifyEasSymbolsReceipt,
 } from '../ios-symbols-eas'
 import type { EasSymbolsReceiptRecord, PreparedEasSymbols } from '../ios-symbols-eas'
@@ -36,6 +38,7 @@ import {
   sha256,
   uploadCommand,
   validateManifest,
+  workerFailureRecord,
 } from '../ios-symbols-eas/worker'
 import type { CommandRunner, SymbolsManifest, SymbolsReceipt } from '../ios-symbols-eas/worker'
 
@@ -176,15 +179,31 @@ function structuralReceipt(m: SymbolsManifest): SymbolsReceipt {
     })),
   }
 }
-function runView(m: SymbolsManifest) {
+function runView(prepared: PreparedEasSymbols) {
+  const m = prepared.manifest
+  const yaml = readFileSync(join(prepared.stagingDirectory, '.eas/workflows/symbols.yml'), 'utf8')
+  const workflowIdentity = {
+    id: '66666666-6666-4666-8666-666666666666',
+    fileName: 'symbols.yml',
+    app: { id: projectId },
+  }
   return {
     id: runId,
+    name: `symbols-${manifestSha256(m)}`,
     status: 'SUCCESS',
     errors: [],
     workflow: {
-      name: `symbols-${manifestSha256(m)}`,
-      fileName: 'symbols.yml',
-      app: { id: projectId },
+      ...workflowIdentity,
+      name: null,
+    },
+    workflowRevision: {
+      id: '77777777-7777-4777-8777-777777777777',
+      yamlConfig: yaml,
+      blobSha: createHash('sha1')
+        .update(`blob ${Buffer.byteLength(yaml)}\0`)
+        .update(yaml)
+        .digest('hex'),
+      workflow: { ...workflowIdentity },
     },
     jobs: [
       {
@@ -405,6 +424,100 @@ z.close()`,
 })
 
 describe('PostHog completion and readback', () => {
+  test('failure diagnostics ignore arbitrary exception fields and secret-bearing messages', () => {
+    const error = Object.assign(new Error('synthetic-secret https://private.invalid/token'), {
+      code: 'UPLOAD_COMMAND_FAILED',
+      phase: 'upload',
+      stack: 'synthetic-secret',
+    })
+    expect(workerFailureRecord(error)).toEqual({
+      schemaVersion: 1,
+      phase: 'unknown',
+      code: 'UNKNOWN_WORKER_FAILURE',
+      error: 'Symbol upload/readback did not complete; no verified receipt produced.',
+    })
+  })
+  for (const code of [
+    'MANIFEST_INVALID',
+    'WORKER_SOURCE_MISMATCH',
+    'SYMBOL_ARCHIVE_MISMATCH',
+    'SECRET_MISSING',
+    'PROJECT_MISMATCH',
+    'HOST_MISMATCH',
+    'ARCHIVE_EXTRACTION_FAILED',
+    'DWARF_MEASUREMENT_FAILED',
+    'DWARF_MANIFEST_MISMATCH',
+    'UPLOAD_COMMAND_FAILED',
+    'UPLOAD_EVIDENCE_INVALID',
+  ] as const) {
+    test(`worker reports only fixed diagnostic ${code}`, async () => {
+      const { prepared } = await fixture()
+      const root = prepared.stagingDirectory
+      const m = structuredClone(prepared.manifest)
+      if (code === 'MANIFEST_INVALID')
+        await file(join(root, 'manifest.json'), 'synthetic-secret invalid JSON')
+      if (code === 'WORKER_SOURCE_MISMATCH')
+        await file(join(root, 'worker.ts'), 'synthetic-secret changed source')
+      if (code === 'SYMBOL_ARCHIVE_MISMATCH')
+        await file(join(root, 'symbols.zip'), 'synthetic-secret corrupt ZIP')
+      if (code === 'DWARF_MANIFEST_MISMATCH') {
+        m.slices[0]!.sha256 = 'f'.repeat(64)
+        await file(join(root, 'manifest.json'), JSON.stringify(m))
+      }
+      let uploads = 0
+      const runner: CommandRunner = async (cmd, options) => {
+        if (
+          (code === 'ARCHIVE_EXTRACTION_FAILED' && cmd[0] === 'python3') ||
+          (code === 'DWARF_MEASUREMENT_FAILED' && cmd[0] === 'xcrun')
+        )
+          throw new Error('synthetic-secret command exception')
+        if (cmd[0] !== 'npx') return localRunner(cmd, options)
+        expect(cmd.includes('upload')).toBe(true)
+        uploads++
+        if (code === 'UPLOAD_COMMAND_FAILED')
+          return {
+            exitCode: 1,
+            stdout: 'synthetic-secret',
+            stderr: 'https://private.invalid/token',
+          }
+        return ok('synthetic-secret invalid upload evidence')
+      }
+      let caught: unknown
+      try {
+        await runSymbolsWorker(root, runner, {
+          POSTHOG_CLI_API_KEY: code === 'SECRET_MISSING' ? '' : 'synthetic-secret',
+          POSTHOG_CLI_PROJECT_ID: code === 'PROJECT_MISMATCH' ? '5678' : '1234',
+          ...(code === 'HOST_MISMATCH' ? { POSTHOG_CLI_HOST: 'https://eu.posthog.com' } : {}),
+        })
+      } catch (error) {
+        caught = error
+      }
+      const diagnostic = workerFailureRecord(caught)
+      expect(diagnostic.code).toBe(code)
+      expect(JSON.stringify(diagnostic)).not.toContain('synthetic-secret')
+      expect(JSON.stringify(diagnostic)).not.toContain('private.invalid')
+      expect(existsSync(join(root, 'receipt.json'))).toBe(false)
+      expect(uploads).toBe(code.startsWith('UPLOAD_') ? 1 : 0)
+    }, 15000)
+  }
+  test('actual worker CLI writes a fixed phase/code failure without exception contents', async () => {
+    const root = await temporary()
+    await file(join(root, 'manifest.json'), 'synthetic-secret invalid JSON')
+    await cp(resolve('scripts/ios-symbols-eas/worker.ts'), join(root, 'worker.ts'))
+    const result = await defaultRunner([process.execPath, '--no-env-file', 'worker.ts'], {
+      cwd: root,
+    })
+    expect(result.exitCode).toBe(1)
+    const diagnostic = JSON.parse(readFileSync(join(root, 'failure.json'), 'utf8'))
+    expect(diagnostic.code).toBe('MANIFEST_INVALID')
+    expect(diagnostic.phase).toBe('preflight')
+    expect(result.stdout).toBe('')
+    expect(result.stderr).toBe(
+      'Symbol verification failed [preflight/MANIFEST_INVALID]. No verified receipt produced.\n',
+    )
+    expect(JSON.stringify(diagnostic)).not.toContain('synthetic-secret')
+    expect(existsSync(join(root, 'receipt.json'))).toBe(false)
+  })
   test.skipIf(process.platform !== 'darwin')(
     'real local generated dSYM bundle prepares both architectures and excludes relocation metadata',
     async () => {
@@ -579,7 +692,13 @@ describe('PostHog completion and readback', () => {
         validateSymbolsReceipt(receipt, prepared.manifest)
         expect(calls.length).toBe(3)
       } else {
-        await expect(run).rejects.toThrow()
+        const error = await run.catch((error: unknown) => error)
+        const diagnostic = workerFailureRecord(error)
+        expect(diagnostic.code).toBe(
+          behavior === 'wrong-bytes' ? 'READBACK_SLICE_MISMATCH' : 'READBACK_COMMAND_FAILED',
+        )
+        expect(diagnostic.phase).toBe('readback')
+        expect(JSON.stringify(diagnostic)).not.toContain('synthetic read forbidden')
         expect(existsSync(join(prepared.stagingDirectory, 'receipt.json'))).toBe(false)
       }
     })
@@ -615,6 +734,94 @@ describe('PostHog completion and readback', () => {
 })
 
 describe('authenticated EAS proof', () => {
+  test('portable helper discovers only the exact pinned EAS package on npm PATH', async () => {
+    const { findPinnedEas } = require('../ios-symbols-eas/eas-run-identity.cjs')
+    const root = await temporary()
+    const bins: string[] = []
+    for (const version of ['25.0.0', '24.3.0']) {
+      const base = join(root, version, 'node_modules', 'eas-cli')
+      const bin = join(root, version, 'node_modules', '.bin')
+      await file(join(base, 'bin', 'run'), '#!/usr/bin/env node\n')
+      await file(join(base, 'package.json'), JSON.stringify({ name: 'eas-cli', version }))
+      await mkdir(bin, { recursive: true })
+      await symlink('../eas-cli/bin/run', join(bin, 'eas'))
+      bins.push(bin)
+    }
+    expect(findPinnedEas(bins.join(':'))).toBe(join(root, '24.3.0', 'node_modules', 'eas-cli'))
+    expect(() => findPinnedEas(bins[0])).toThrow('Pinned EAS CLI unavailable')
+    expect(() => findPinnedEas('.')).toThrow('Pinned EAS CLI unavailable')
+  })
+  test('query helper uses fresh exact-run query and never returns unexpected YAML or server errors', async () => {
+    const { queryRunIdentity, QUERY } = require('../ios-symbols-eas/eas-run-identity.cjs')
+    const fixture = JSON.parse(
+      readFileSync(resolve('scripts/ios-symbols-eas/fixtures/eas-run-identity.json'), 'utf8'),
+    )
+    const expectedSha = sha256(fixture.run.workflowRevision.yamlConfig)
+    let args: unknown[] = []
+    let response: any = { data: { workflowRuns: { byId: fixture.run } } }
+    const client = {
+      query: (...values: unknown[]) => {
+        args = values
+        return { toPromise: async () => response }
+      },
+    }
+    const value = await queryRunIdentity(client, fixture.run.id, expectedSha)
+    expect(args).toEqual([
+      QUERY,
+      { id: fixture.run.id },
+      { requestPolicy: 'network-only', noRetry: true },
+    ])
+    validateEasRunIdentity(value, fixture.run.id, fixture.manifest)
+    expect(value.workflow.name).toBeUndefined()
+    response = { error: { message: 'synthetic-secret GraphQL failure' } }
+    await expect(queryRunIdentity(client, fixture.run.id, expectedSha)).rejects.toThrow(
+      'EAS identity query failed',
+    )
+    response = { data: { workflowRuns: { byId: structuredClone(fixture.run) } } }
+    response.data.workflowRuns.byId.workflowRevision.yamlConfig = 'synthetic-secret unexpected YAML'
+    await expect(queryRunIdentity(client, fixture.run.id, expectedSha)).rejects.toThrow(
+      'EAS identity query failed',
+    )
+  })
+  test('actual EAS fixture binds run name and immutable revision despite null workflow name', () => {
+    const fixture = JSON.parse(
+      readFileSync(resolve('scripts/ios-symbols-eas/fixtures/eas-run-identity.json'), 'utf8'),
+    )
+    expect(fixture.run.workflow.name).toBeNull()
+    expect(fixture.run.status).toBe('FAILURE')
+    validateEasRunIdentity(fixture.run, fixture.run.id, fixture.manifest)
+    for (const mutate of [
+      (run: any) => {
+        delete run.name
+        run.workflow.name = `symbols-${manifestSha256(fixture.manifest)}`
+      },
+      (run: any) => {
+        run.workflowRevision.yamlConfig += '\n'
+      },
+      (run: any) => {
+        run.workflowRevision.blobSha = 'f'.repeat(40)
+      },
+      (run: any) => {
+        run.workflowRevision.workflow.id = runId
+      },
+      (run: any) => {
+        run.workflowRevision.workflow.app.id = runId
+      },
+      (run: any) => {
+        run.workflowRevision.workflow.fileName = 'different.yml'
+      },
+      (run: any) => {
+        run.workflow.latestRevision = run.workflowRevision
+        delete run.workflowRevision
+      },
+    ]) {
+      const changed = structuredClone(fixture.run)
+      mutate(changed)
+      expect(() => validateEasRunIdentity(changed, fixture.run.id, fixture.manifest)).toThrow(
+        'immutable workflow identity mismatch',
+      )
+    }
+  })
   test('accepts bounded EAS tar receipt and rejects link/traversal archive artifacts', async () => {
     const root = await temporary()
     const source = join(root, 'receipt.json')
@@ -645,9 +852,7 @@ with tarfile.open(sys.argv[2],'w:gz') as t:
     const calls: Array<{ cmd: string[]; options: any }> = []
     const runner: CommandRunner = async (cmd, options) => {
       calls.push({ cmd, options })
-      return ok(
-        JSON.stringify(cmd.includes('workflow:run') ? { id: runId } : runView(prepared.manifest)),
-      )
+      return ok(JSON.stringify(cmd.includes('workflow:run') ? { id: runId } : runView(prepared)))
     }
     const receiptPath = join(root, 'receipt-record.json')
     const fetchArtifact = async (url: string) => {
@@ -663,6 +868,9 @@ with tarfile.open(sys.argv[2],'w:gz') as t:
     })
     expect(calls.filter((c) => c.cmd.includes('workflow:run')).length).toBe(1)
     expect(calls.filter((c) => c.cmd.includes('workflow:view')).length).toBe(2)
+    expect(
+      calls.filter((c) => c.cmd.some((arg) => arg.endsWith('/eas-run-identity.cjs'))).length,
+    ).toBe(2)
     expect(calls[0]!.options.env).toEqual({
       EAS_NO_VCS: '1',
       EAS_PROJECT_ROOT: prepared.stagingDirectory,
@@ -699,7 +907,7 @@ with tarfile.open(sys.argv[2],'w:gz') as t:
         view.jobs[0].artifacts = []
       },
     ]) {
-      const view = runView(prepared.manifest)
+      const view = runView(prepared)
       mutate(view)
       await expect(
         verifyEasSymbolsReceipt(receiptPath, prepared.manifest, {
@@ -712,7 +920,7 @@ with tarfile.open(sys.argv[2],'w:gz') as t:
     wrongReceipt.readbacks[0]!.sha256 = 'f'.repeat(64)
     await expect(
       verifyEasSymbolsReceipt(receiptPath, prepared.manifest, {
-        runner: async () => ok(JSON.stringify(runView(prepared.manifest))),
+        runner: async () => ok(JSON.stringify(runView(prepared))),
         fetchArtifact: async () => Buffer.from(canonical(wrongReceipt)),
       }),
     ).rejects.toThrow('readback mismatch')

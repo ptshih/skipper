@@ -1,10 +1,10 @@
 # Native iOS symbols through EAS
 
-**Status** — 2026-09-12: the original adapter/integration passed independent Astra review and exact
-Node 22.19.0 compatibility. Release `843d8d6c` exposed a local plist-date serialization failure before
-cloud execution. The narrow date fix now prepares unchanged copies of its real archive/IPA locally;
-this delta awaits independent review. No real EAS workflow or PostHog upload/readback has run, and
-the production secret's read permission remains unverified. The release owner controls the next run.
+**Status** — 2026-09-12: after independent Astra clearance, the release owner's single symbols-only
+diagnostic passed actual PostHog upload, exact UUID/content readback, and authenticated EAS artifact
+verification using retained `9f6bc3d3` artifacts. No retry occurred. The earlier generic remote failure
+remains unresolved and was not reproduced. This proves the exercised upload/read capability, with
+no Apple operation or delivery acceptance for new source.
 
 The native release pipeline can use an isolated macOS EAS job to upload dSYMs without bringing the
 PostHog secret onto this computer. `scripts/ios-symbols-eas.ts` prepares the job locally, executes it
@@ -141,11 +141,22 @@ There are deliberately two different validation results:
   It checks all bindings, re-parses the selected upload evidence, and requires every expected
   readback. A caller could author such JSON; this operation never authenticates a cloud run.
 - `verifyEasSymbolsReceipt(path, expectedManifest, options)` performs a fresh authenticated
-  `workflow:view` with pinned EAS CLI. It requires the exact project, manifest-bound workflow name,
-  successful run and symbols job, no run/job errors, and one named receipt artifact. It downloads
+  `workflow:view` with pinned EAS CLI plus a fresh authenticated exact-run identity query. It requires
+  the immutable run name, run-bound revision's exact YAML and Git blob hash, linked workflow/project
+  IDs and filename, successful run and symbols job, no errors, and one named receipt artifact. The
+  reusable `workflow.name` may be null; a mutable latest revision is never substituted. It downloads
   that artifact using only the URL returned by EAS, validates its bounded JSON or tar.gz contents,
   and compares artifact ID/hash and all receipt bytes with the saved record. Only this returns
   `verification: "authenticated-eas-artifact"`. Test runners/fetchers are injection seams, not proof.
+
+The local `eas-run-identity.cjs` helper discovers the exact pinned EAS package through npm's PATH,
+uses its noninteractive SessionManager and GraphQL client, and requests `network-only` with no
+query retry. Authentication remains inside EAS's in-memory objects. Dependency output and arbitrary
+server errors are suppressed; only the expected public YAML and selected identity fields return.
+This helper stays local and does not enlarge the nine-file remote stage. The contract comes from
+the [pinned EAS schema](https://github.com/expo/eas-cli/blob/v24.3.0/packages/eas-cli/src/graphql/generated.ts)
+and [authenticated client](https://github.com/expo/eas-cli/blob/v24.3.0/packages/eas-cli/src/commandUtils/context/contextUtils/createGraphqlClient.ts),
+confirmed against the actual run's immutable revision.
 
 The authenticated proof trusts EAS project access and the reviewed staged worker. It is not an
 independent cryptographic attestation against a malicious EAS project administrator. Release
@@ -159,6 +170,10 @@ produces only a nonsecret failure record. An `always()` cleanup removes temporar
 thin files, readbacks, archive and manifest; EAS workspace destruction handles a forcibly killed VM.
 Local original symbols, stage, and release records are retained for investigation. A failed remote
 upload may already have stored some symbols; no release success or rollback is inferred.
+Worker failures now identify a fixed allowlisted `phase` and `code` for the failed gate, covering
+preflight, extraction, DWARF measurement, upload command/evidence, readback, and receipt writing.
+They never serialize underlying exceptions, CLI output, environment values, or arbitrary paths.
+A diagnostic code identifies where execution stopped; it does not establish prior mutation status.
 
 The local record preserves actual run/job/artifact IDs, artifact hash, manifest and receipt. When
 EAS returns a run ID with a failed/canceled/aborted wait, `<receiptPath>.run.json` preserves it without
@@ -181,7 +196,7 @@ archive helper, and its actual `--cleanup` entry ran only on synthetic scratch f
 isolated npx import also passed offline. The earlier exit-1/empty-output failure remains
 unreproduced and retained. See the [local compatibility report](../../.scratch/ios-upgrade/node22-compat-20260912/report.md)
 for exact commands, hashes, and receipts. This involved no EAS/PostHog/token operations;
-real cloud workflow execution and readback remain unverified.
+that earlier local check did not establish cloud workflow execution or readback.
 
 Release `843d8d6c986d6f3fd41b3557a447dc248e03a5ae` reached local symbols preparation with a valid
 archive/export, then failed because Xcode's `CreationDate` becomes a Python `datetime`, which the
@@ -203,7 +218,24 @@ scope, or delivery eligibility for a new source commit. TypeScript APIs, archive
 validation, and cloud execution logic are unchanged by this repair.
 
 Context7 was unavailable in this session; implementation used the official vendor documents and
-exact tagged source linked above. After independent review of the date repair, the release owner
-must bind any new delivery run to its accepted immutable source and artifacts. Real EAS execution
-still requires actual PostHog readback and fresh EAS verification; no local test proves the token's
-read scope or a successful production symbol upload.
+exact tagged source linked above. Actual workflow `01a098a5-b34d-71e3-9684-85632989df38` failed with
+a generic 100-byte failure artifact. Fresh Node and production Bun fetch both retrieved it with
+HTTP 200; an earlier Python-only HTTP 403 did not demonstrate missing scope. Signed CDN fetching
+and headers remain unchanged. The exact retained worker and symbols pass local pre-upload gates
+under Node 22.19.0, with upload intercepted; this does not reproduce the remote macOS 14.5/Xcode
+15.4 environment or identify its failure. See the [diagnostic report and owner handoff](../../.scratch/ios-upgrade/cloud-failure-9f6bc3d3/report.md).
+
+The release owner executed the reviewed diagnostic exactly once: workflow
+`01a098c0-b150-7a2d-9f0b-4f6363cf5ec9`, job `01a098c0-b241-7e28-b4e2-dc0da9e5f400`, artifact
+`01a098c2-014a-7cd5-b350-9fddbd3ad650`. Manifest
+`47b9e41c5797d322d9e2b2b6e2af1cd43904200ae64f48275317f49416aa818f` bound the retained archive/IPA
+and reviewed worker bytes. One dSYM uploaded for `fm.skipper.app` / `1.2.0` / build `27`, with no
+accepted fallback or conflict. Readback verified arm64 UUID `9134FEDC-C7D7-3D9E-96D5-6BD8C3DD5951`,
+32,076,212 bytes, SHA-256 `8c0873179da4ef9f93f383071569fc5a76a2e69a82a1baf8218489eb37533a7d`.
+The authenticated artifact SHA-256 was
+`6a1816067dc52edf2add081c87323ee930893ad98010291a8bf8219f3fe407b0`.
+The [operator outcome](../../.scratch/ios-upgrade/cloud-failure-9f6bc3d3/release-owner-diagnostic-outcome.json)
+and retained receipt record the actual evidence. Frozen sources, stage, and original artifacts
+remained unchanged during execution. The original failed run's cause and mutation status remain
+unknown; diagnostic success does not establish a fix for that failure. No Apple operation occurred,
+and the release owner must separately verify any full delivery from new source.

@@ -1,0 +1,85 @@
+{
+  "provenance": "Actual authenticated EAS 24.3.0 query, failed run 2026-09-13; identity fixture only, not successful upload proof.",
+  "manifest": {
+    "archiveSha256": "b86aac2f2c554dc245d04c4b61814a25951e33b24cf49ded02bd05639c8443fe",
+    "buildNumber": 27,
+    "bundleId": "fm.skipper.app",
+    "easProjectId": "dd556bd3-5c16-430e-8b1f-cfdeb410f26d",
+    "files": [
+      {
+        "path": "Skipper.app.dSYM/Contents/Info.plist",
+        "sha256": "431e128941042d9787e1a22784cf9fd195b9b2ef8b677d0bd0ab96fa622af3af",
+        "size": 646
+      },
+      {
+        "path": "Skipper.app.dSYM/Contents/Resources/DWARF/Skipper",
+        "sha256": "8c0873179da4ef9f93f383071569fc5a76a2e69a82a1baf8218489eb37533a7d",
+        "size": 32076212
+      }
+    ],
+    "ipaSha256": "b77b01936b5e6ab7e46e4e9517de6df832fe8252110ce38dadcfcb84c5df2b3f",
+    "posthogCliVersion": "0.9.1",
+    "posthogHost": "https://us.posthog.com",
+    "posthogProjectId": "517151",
+    "schemaVersion": 1,
+    "slices": [
+      {
+        "architecture": "arm64",
+        "dwarfPath": "Skipper.app.dSYM/Contents/Resources/DWARF/Skipper",
+        "sha256": "8c0873179da4ef9f93f383071569fc5a76a2e69a82a1baf8218489eb37533a7d",
+        "size": 32076212,
+        "uuid": "9134FEDC-C7D7-3D9E-96D5-6BD8C3DD5951"
+      }
+    ],
+    "sourceCommit": "9f6bc3d385abf5444510e0983d64564a0edbb147",
+    "supportSha256": {
+      "archive": "c6cb773db96bd1728f8a4d5abc0927d3b56b7649821b2bebb2cf9d2bfaa51dd0",
+      "worker": "fa1fb17ecaa47a980a234e586e6c7c249ae1e7102190180f31bbc193ac4e6170"
+    },
+    "symbolsZipSha256": "18fece22efdb75326d9e446075b8a2340831cc70fb79345e4f4ca3951004fc59",
+    "version": "1.2.0"
+  },
+  "run": {
+    "id": "01a098a5-b34d-71e3-9684-85632989df38",
+    "name": "symbols-35c19ac427a76ad93cf999a97867676d55256aa92086deeee7fa8b5e5b24ace9",
+    "displayTitle": null,
+    "status": "FAILURE",
+    "workflow": {
+      "id": "a933163c-7449-4aa5-83d3-9572e5c203f8",
+      "name": null,
+      "fileName": "symbols.yml",
+      "app": {
+        "id": "dd556bd3-5c16-430e-8b1f-cfdeb410f26d",
+        "__typename": "App"
+      },
+      "__typename": "Workflow"
+    },
+    "workflowRevision": {
+      "id": "01a098a5-b34d-700a-9ac4-2105ff7a7b1d",
+      "blobSha": "cc77b6da3d7615827fe1fa0b6c4d280729a5f651",
+      "commitSha": null,
+      "createdAt": "2026-09-13T02:43:11.309Z",
+      "yamlConfig": "name: symbols-35c19ac427a76ad93cf999a97867676d55256aa92086deeee7fa8b5e5b24ace9\ndefaults:\n  tools:\n    node: '22.19.0'\njobs:\n  symbols:\n    runs_on: macos-medium\n    environment: production\n    steps:\n      - uses: eas/checkout\n      - name: Upload and verify every DWARF slice\n        run: node --experimental-strip-types worker.ts\n      - uses: eas/upload_artifact\n        if: ${{ always() }}\n        with:\n          type: other\n          name: skipper-symbols-receipt\n          path: |\n            receipt.json\n            failure.json\n      - name: Remove temporary symbols and readbacks\n        if: ${{ always() }}\n        run: node --experimental-strip-types worker.ts --cleanup\n",
+      "workflow": {
+        "id": "a933163c-7449-4aa5-83d3-9572e5c203f8",
+        "fileName": "symbols.yml",
+        "app": {
+          "id": "dd556bd3-5c16-430e-8b1f-cfdeb410f26d",
+          "__typename": "App"
+        },
+        "__typename": "Workflow"
+      },
+      "__typename": "WorkflowRevision"
+    },
+    "jobs": [
+      {
+        "id": "01a098a5-b461-762b-9d8c-ab39c3a04a57",
+        "key": "symbols",
+        "name": "symbols",
+        "status": "FAILURE",
+        "__typename": "WorkflowJob"
+      }
+    ],
+    "__typename": "WorkflowRun"
+  }
+}

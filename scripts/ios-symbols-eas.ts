@@ -12,6 +12,7 @@ import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createHash } from 'node:crypto'
 import {
   canonical,
   checked,
@@ -170,6 +171,30 @@ jobs:
         if: \${{ always() }}
         run: node --experimental-strip-types worker.ts --cleanup
 `
+}
+
+/** Bind immutable run snapshots; the reusable Workflow.name can be null or change later. */
+export function validateEasRunIdentity(run: any, runId: string, m: SymbolsManifest): void {
+  const revision = run.workflowRevision
+  const yaml = workflow(m)
+  const blobSha = createHash('sha1')
+    .update(`blob ${Buffer.byteLength(yaml)}\0`)
+    .update(yaml)
+    .digest('hex')
+  ensure(
+    run.id === runId &&
+      run.name === `symbols-${manifestSha256(m)}` &&
+      UUID.test(run.workflow?.id?.toUpperCase()) &&
+      run.workflow?.app?.id === m.easProjectId &&
+      run.workflow?.fileName === WORKFLOW_FILE &&
+      UUID.test(revision?.id?.toUpperCase()) &&
+      revision?.yamlConfig === yaml &&
+      revision?.blobSha === blobSha &&
+      revision?.workflow?.id === run.workflow.id &&
+      revision?.workflow?.app?.id === m.easProjectId &&
+      revision?.workflow?.fileName === WORKFLOW_FILE,
+    'EAS immutable workflow identity mismatch',
+  )
 }
 function staticStageFiles(m: SymbolsManifest): Record<string, string> {
   return {
@@ -459,10 +484,31 @@ async function authenticatedArtifact(
     'EAS workflow has not completed successfully',
   )
   ensure(
-    run.workflow?.app?.id === m.easProjectId &&
-      run.workflow?.name === `symbols-${manifestSha256(m)}` &&
-      run.workflow?.fileName === WORKFLOW_FILE,
+    run.workflow?.app?.id === m.easProjectId && run.workflow?.fileName === WORKFLOW_FILE,
     'EAS workflow/project identity mismatch',
+  )
+  const identity = JSON.parse(
+    await checked(
+      runner,
+      [
+        'npx',
+        '--yes',
+        '--package',
+        `eas-cli@${EAS_CLI_VERSION}`,
+        '--',
+        'node',
+        join(support, 'eas-run-identity.cjs'),
+        runId,
+        sha256(workflow(m)),
+      ],
+      options.cwd,
+      options.cwd ? { EAS_NO_VCS: '1', EAS_PROJECT_ROOT: resolve(options.cwd) } : undefined,
+    ),
+  )
+  validateEasRunIdentity(identity, runId, m)
+  ensure(
+    identity.status === 'SUCCESS' && identity.workflow.id === run.workflow.id,
+    'EAS workflow snapshots disagree',
   )
   ensure(Array.isArray(run.jobs) && run.jobs.length === 1, 'Unexpected EAS jobs')
   const job = run.jobs[0]
