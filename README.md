@@ -1,5 +1,23 @@
 # Skipper
 
+**A corny old tour guide rides shotgun and narrates your drive.**
+
+[![App Store](https://img.shields.io/itunes/v/6778946770?label=App%20Store&logo=apple&logoColor=white&color=000000)](https://apps.apple.com/us/app/skipper-road-trip-audio-tours/id6778946770)
+[![skipper.fm](https://img.shields.io/website?url=https%3A%2F%2Fskipper.fm&label=skipper.fm&up_message=live&color=1f5f45)](https://skipper.fm)
+[![iOS: Swift + SwiftUI](https://img.shields.io/badge/iOS-Swift%20%2B%20SwiftUI-F05138?logo=swift&logoColor=white)](apps/ios)
+[![Backend: Bun + Hono](https://img.shields.io/badge/backend-Bun%20%2B%20Hono-000000?logo=bun&logoColor=white)](apps/api)
+[![Narration: Claude](https://img.shields.io/badge/narration-Claude-D97757?logo=claude&logoColor=white)](packages/studio)
+[![Voice: Gemini TTS](https://img.shields.io/badge/voice-Gemini%20TTS-4285F4?logo=googlecloud&logoColor=white)](packages/studio)
+
+<p align="center">
+  <a href="https://apps.apple.com/us/app/skipper-road-trip-audio-tours/id6778946770"><img src="apps/site/public/app-store-badge.svg" alt="Download on the App Store" height="56"></a>
+</p>
+
+![Skipper's six App Store screenshots, three at a time: plan a drive by talking to the skipper, his proposed route, the stories along it, the route on a map of Lake Tahoe, hands-free playback while driving, and drives saved for offline](assets/store-screens.gif)
+
+_The 1.1 App Store listing screenshots, captured from the shipped app — three at a time, all
+six in [`assets/store/`](assets/store). First region: Lake Tahoe._
+
 An AI-narrated, GPS-triggered driving audio tour. Think _Shaka Guide, but the
 narration is AI-generated_ — played by a charming Jungle-Cruise-skipper persona,
 over a route you pick (any A→B), as phone audio (CarPlay later). First region:
