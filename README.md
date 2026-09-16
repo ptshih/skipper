@@ -8,6 +8,7 @@
 [![Backend: Bun + Hono](https://img.shields.io/badge/backend-Bun%20%2B%20Hono-000000?logo=bun&logoColor=white)](apps/api)
 [![Narration: Claude](https://img.shields.io/badge/narration-Claude-D97757?logo=claude&logoColor=white)](packages/studio)
 [![Voice: Gemini TTS](https://img.shields.io/badge/voice-Gemini%20TTS-4285F4?logo=googlecloud&logoColor=white)](packages/studio)
+[![License: MIT](https://img.shields.io/github/license/ptshih/skipper?color=1f6feb)](LICENSE)
 
 <p align="center">
   <a href="https://apps.apple.com/us/app/skipper-road-trip-audio-tours/id6778946770"><img src="apps/site/public/app-store-badge.svg" alt="Download on the App Store" height="56"></a>
@@ -183,3 +184,7 @@ bun run db:push      # apply schema to Neon (dev)
 bun run db:studio    # browse
 bun run db:migrate   # run migrations (db:migrate:prod targets .env.production)
 ```
+
+## License
+
+[MIT](LICENSE) © 2026 Peter Shih.
