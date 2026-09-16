@@ -426,8 +426,8 @@ workspace closure; Admin additionally runs its SPA build. The site pipeline runs
 `bun install --frozen-lockfile && bun --filter @skipper/site build` in
 [cloudbuild.site.yaml](../../cloudbuild.site.yaml). These paths do not run native release tests.
 
-The new root script suite is not fully Linux-portable: the real `xcrun clang`/`dsymutil`/`lipo`
-test in `scripts/test/ios-symbols-eas.test.ts` has a Darwin-only guard, but real plist encoding
+The new root script suite is not fully Linux-portable: the Darwin-only `xcrun clang`/`dsymutil`/`lipo`
+test in `scripts/test/ios-symbols-eas.test.ts` was retired on 2026-09-16, but real plist encoding
 and inspection in `scripts/test/ios-release.test.ts` invoke `plutil` without a platform guard.
 Thus no current pipeline invocation mismatch was found, but running the full root check on
 ordinary Linux would need a separate portability change. This audit changed no CI command or

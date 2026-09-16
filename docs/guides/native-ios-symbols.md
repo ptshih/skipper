@@ -183,7 +183,9 @@ Failures that return no run ID cannot be assigned one; inspect the EAS dashboard
 
 Local coverage is `bun test ./scripts/test/ios-symbols-eas.test.ts`, including actual ZIP handling,
 stage allowlist and identity rejection, skipped/failed upload evidence, wrong-byte/read-permission
-readbacks, EAS failure statuses, forged local receipts, and local clang/dsymutil/lipo slice hashing.
+readbacks, EAS failure statuses, and forged local receipts. The Darwin-only `xcrun clang`/`dsymutil`/`lipo`
+bundle test was retired on 2026-09-16: it rebuilt real binaries on every run and its final symlink
+assertion had drifted from the archive walk's guard order (`Archive link escapes root` fires first).
 Cloud interactions in these tests are injected. Root `bun run check` remains required.
 QA's retained `late-nudge-root-check.log` recorded two failures at Bun's default five-second limit
 during real Python fixture preparation, before the injected EAS response. The three wait-status
