@@ -140,6 +140,14 @@ export const TTS_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_TTS_CON
  * stop-keyed tools). No prompt-cache interplay: scout calls carry no cache_control and
  * their prefix is under the Opus cacheable minimum. */
 export const SCOUT_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_SCOUT_CONCURRENCY, 4)
+/** Concurrent golden CASES in eval/calibrate.ts — each fans out GROUNDING_VOTE_SAMPLES judge calls of
+ * its own, so in-flight Opus calls = this × samples. ⚠ BEDROCK THROTTLES PER ACCOUNT AND PER PROFILE:
+ * measured 2026-09-17 on Opus 4.6, the `global.` profile 429'd at 16 concurrent and the `us.` profile
+ * (the live one) at 36, with 24 clean (`docs/decisions/bedrock-opus-4-6.md`). The old `Promise.all`
+ * over all 18 cases fired 54 at once and died on 429 through the SDK's five retries. 2 × 3 = 6 in
+ * flight sits well under either ceiling; raise it to 6–8 on the `us.` profile if the run feels slow.
+ * Override: SKIPPER_CALIBRATE_CONCURRENCY. */
+export const CALIBRATE_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_CALIBRATE_CONCURRENCY, 2)
 
 // --- Eval panel + evaluator-optimizer (the in-pipeline flywheel) -------------
 

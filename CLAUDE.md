@@ -183,7 +183,7 @@ Authorized replacement in progress: [native iOS conversion](docs/designs/native-
   `tsc --noEmit` alone passes and HIDES it. zod 4 (`z.enum`, top-level `z.uuid()`/`z.url()`); drizzle
   (neon-http, stateless — no interactive transactions; use `db.batch`).
 - **Claude runs on AMAZON BEDROCK — Opus 4.6 for EVERY tier (founder, 2026-09-17).** Client =
-  `AnthropicBedrock` (`@anthropic-ai/bedrock-sdk`); model id = the `global.` INFERENCE PROFILE (the bare id
+  `AnthropicBedrock` (`@anthropic-ai/bedrock-sdk`); model id = the `us.` INFERENCE PROFILE (the bare id
   400s); auth = a Bedrock API key (bearer) in the env var named ONCE as `BEDROCK.tokenEnv` (`@skipper/shared`)
   — `ANTHROPIC_API_KEY` is read by NOTHING. ⚠ 4.6: thinking must be REQUESTED (omit = off); cache minimum
   4096 tokens; the eval gate is still CALIBRATED ON OPUS 5. `docs/decisions/bedrock-opus-4-6.md`.

@@ -64,9 +64,13 @@ describe('LLM spend tally', () => {
 
   // ⚠ The planner is the ONLY rider-triggered model — a wrong rate here misprices every anonymous
   // request, forever, with no --apply and no human in the loop (INV-11). Pinned to the published
-  // Opus-tier rate rather than left to a generic "is it defined" check.
-  test('the live planner is priced at the published Opus rate', () => {
-    expect(MODEL_PRICING[CLAUDE_MODELS.planner]).toEqual({ inputPerMTok: 5, outputPerMTok: 25 })
+  // Opus-tier rate rather than left to a generic "is it defined" check. Since 2026-09-17 that is the
+  // Opus list rate ($5/$25) plus Bedrock's +10% for the `us.` regional inference profile the founder
+  // chose — so a silent switch back to `global.` (list price) or a bump that forgets the premium both
+  // fail here.
+  test('the live planner is priced at the published Opus rate plus the Bedrock regional premium', () => {
+    expect(CLAUDE_MODELS.planner.startsWith('us.')).toBe(true)
+    expect(MODEL_PRICING[CLAUDE_MODELS.planner]).toEqual({ inputPerMTok: 5.5, outputPerMTok: 27.5 }) // $5/$25 × 1.1
   })
 
   // usageUsd prices ONE call without touching the process tally — the shape the request path needs,
@@ -74,7 +78,8 @@ describe('LLM spend tally', () => {
   // nothing. Same arithmetic as the tally, so pin them against each other.
   test('usageUsd prices a single call and leaves the tally untouched', () => {
     const usage = { input_tokens: 1_000_000, output_tokens: 100_000 }
-    expect(usageUsd(CLAUDE_MODELS.planner, usage)).toBeCloseTo(7.5, 6)
+    // 1M in at $5.50 + 100k out at $27.50/MTok — the `us.` profile's +10% is on every token category.
+    expect(usageUsd(CLAUDE_MODELS.planner, usage)).toBeCloseTo(8.25, 6)
     expect(llmSpentUsd()).toBe(0) // nothing recorded
     recordModelUsage(CLAUDE_MODELS.planner, usage)
     expect(llmSpentUsd()).toBeCloseTo(usageUsd(CLAUDE_MODELS.planner, usage), 6)

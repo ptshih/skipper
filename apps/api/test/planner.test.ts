@@ -554,7 +554,10 @@ describe('the plan_spend cost line', () => {
     // field with no extractor regex; a currency-prefixed string needs one, and that regex starts
     // matching nothing the day someone tidies the prefix — the metric goes quiet, not red.
     expect(typeof line.usd).toBe('number')
-    expect(line.usd).toBeCloseTo(10 * 5e-6 + 5 * 25e-6, 9) // priced off MODEL_PRICING[planner]
+    // 10 in × $5.50/MTok + 5 out × $27.50/MTok — the `us.` Bedrock profile's rate (list +10%). Hard-coded
+    // rather than read off MODEL_PRICING so a repriced planner row is a red test here, not a silent shift.
+    // The line rounds to 6 decimals (micro-dollars), so compare at that precision: $0.0001925 → 0.000193.
+    expect(line.usd).toBe(Math.round((10 * 5.5e-6 + 5 * 27.5e-6) * 1e6) / 1e6)
   })
 
   // ⚠ INV-13, AND THIS IS THE FILE'S ONLY PROOF OF IT. Every field on the line is meant to be a count,

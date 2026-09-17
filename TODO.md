@@ -39,6 +39,14 @@ survives deleting the newest item. `/todo` takes the max of the two.
 
 ## Planner eval — TWO PAID RUNS 2026-08-04. Run 2 after the duration change: routing 0.96, 2/57 flagged
 
+> ⚠ **RUN 3 (2026-09-17, `$0.5713`, 15 scenarios / 59 turns + judge) — ON A DIFFERENT MODEL: Opus 4.6 via
+> Amazon Bedrock, the provider switch recorded in
+> [docs/decisions/bedrock-opus-4-6.md](docs/decisions/bedrock-opus-4-6.md) (its "Re-measured" section has
+> the full comparison).** Routing **1.00 (0/59)**, voice 1.00, discipline 1.00, persona advisory 0.72 with
+> 1/59 flagged (the `wrap-up-long-conversation` "actually two" turn read as canned), judge 8/10 — ship,
+> GATE PASS. `durations` 1 (the same "Two hours" detector-noise shape as below — still do not tighten it);
+> `repeats` 12 → 28, nearly all place-name read-backs the prompt requires. Every number below was measured
+> on Opus 5 and is the Opus 5 baseline, not the current model's.
 > ⚠ **RUN 2 (founder go, `$0.5433`, 14 scenarios / 57 turns + judge, raw at
 > `apps/api/eval/.runs/2026-08-04T17-48-46-730Z-mem.json`) — read this before the run-1 notes below.**
 > It measured the duration change ([planner-stops-asking-how-long](docs/decisions/planner-stops-asking-how-long.md)),

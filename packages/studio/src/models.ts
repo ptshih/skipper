@@ -65,9 +65,13 @@ export function getAnthropic(label = 'a model call needs it'): AnthropicBedrock 
 // is `output_config.effort` (4.6 has no `xhigh`). `temperature`/`top_p`/`top_k` are ALLOWED on 4.6
 // (they were rejected on 4.8/5) — nothing here sends them, so treat that as a fact, not a lever.
 //
-// COST: unchanged per token. Opus 4.6 is $5/$25 per MTok at list (MODEL_PRICING in @skipper/shared),
-// identical to Opus 5, and the older tokenizer bills ~30% FEWER tokens for the same text — so a regen
-// bills what it did before or less.
+// COST: Opus 4.6 is $5/$25 per MTok at list, +10% on the `us.` Bedrock profile the founder chose
+// ($5.50/$27.50 — MODEL_PRICING in @skipper/shared), and the older tokenizer bills ~30% FEWER tokens for
+// the same text than Opus 5 — net, a regen bills about what it did before or less.
+// ⚠ BEDROCK THROTTLES PER ACCOUNT: the `us.` profile returned 429s at ~36 concurrent requests (24 was
+// clean; measured 2026-09-17). NARRATION_CONCURRENCY (12) × the 3-vote grounding gate can reach that.
+// The maxRetries: 5 backoff above is what absorbs it; if a regen logs sustained 429s, lower
+// SKIPPER_NARRATION_CONCURRENCY before anything else. Details: docs/decisions/bedrock-opus-4-6.md.
 // ✅ LAST CALIBRATION (Opus 5, 2026-08-04, `eval/calibrate.ts`, 54 calls): verdict agreement 16/18,
 // violation recall 8/8, false positives 4 claims across 2/10 clean cases. Recall is the FAIL-CLOSED axis
 // and it was perfect on THAT model. ⚠ Two clean cases over-flagged, and `grounding-inverse-relation`

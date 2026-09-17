@@ -31,16 +31,17 @@ export const BEDROCK = {
    *  deployment — see CLAUDE.md). */
   tokenEnv: 'AWS_BEARER_TOKEN_BEDROCK',
   /** Read by the SDK for the endpoint host (`bedrock-runtime.<region>.amazonaws.com`); defaults to
-   *  us-east-1 inside the SDK when unset. The `global.` inference profile below routes independently of
-   *  this, so the region only picks the front door, not where inference runs. */
+   *  us-east-1 inside the SDK when unset. The `us.` inference profile below routes within the US
+   *  regions independently of this, so the region only picks the front door. */
   regionEnv: 'AWS_REGION',
-  /** Claude Opus 4.6 on Bedrock, via the GLOBAL cross-region inference profile. ⚠ The bare model id
-   *  (`anthropic.claude-opus-4-6-v1`) is REJECTED for on-demand invocation — Bedrock reports
-   *  `inferenceTypesSupported: [INFERENCE_PROFILE]` for it, so a request naming the bare id is a 400.
-   *  `global.` is the documented default and carries no regional premium; the `us.` prefix is the
-   *  same model with data-residency routing at +10%. Verified 2026-09-17 against the account's
-   *  `list-inference-profiles` (ACTIVE) before this landed. */
-  opus46: 'global.anthropic.claude-opus-4-6-v1',
+  /** Claude Opus 4.6 on Bedrock, via the US cross-region inference profile (founder, 2026-09-17:
+   *  "make sure we are using the US profile"). ⚠ The bare model id (`anthropic.claude-opus-4-6-v1`) is
+   *  REJECTED for on-demand invocation — Bedrock reports `inferenceTypesSupported: [INFERENCE_PROFILE]`
+   *  for it, so a request naming the bare id is a 400. `us.` keeps inference inside US regions and
+   *  bills Bedrock's regional (CRIS) rate, +10% over the `global.` profile, which is the same model
+   *  routed anywhere with capacity at list price — MODEL_PRICING carries both. Verified 2026-09-17
+   *  against the account's `list-inference-profiles` (both ACTIVE) and by a live call on each. */
+  opus46: 'us.anthropic.claude-opus-4-6-v1',
 } as const
 
 export const CLAUDE_MODELS = {

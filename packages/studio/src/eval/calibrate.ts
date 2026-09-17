@@ -24,7 +24,8 @@
 // Usage (the Bedrock token via dotenvx):
 //   dotenvx run -f .env.development -- bun packages/studio/src/eval/calibrate.ts
 
-import { GROUNDING_VOTE_SAMPLES } from '../config'
+import { CALIBRATE_CONCURRENCY, GROUNDING_VOTE_SAMPLES } from '../config'
+import { mapLimit } from '../pipeline/concurrency'
 import { llmSpendLines, llmSpentUsd } from '@skipper/shared'
 import { GROUNDING_CASES, type GroundingCase } from './golden'
 import { evaluateGrounding } from './grounding'
@@ -96,7 +97,8 @@ async function main() {
     `Calibrating the grounding judge against ${GROUNDING_CASES.length} golden cases ` +
       `(Opus, ${samples} vote sample(s) each → ${GROUNDING_CASES.length * samples} judge calls)...\n`,
   )
-  const evals = await Promise.all(GROUNDING_CASES.map((c) => evaluateGrounding(c.input)))
+  // Bounded, not Promise.all: the provider throttles per account (CALIBRATE_CONCURRENCY has the number).
+  const evals = await mapLimit(GROUNDING_CASES, CALIBRATE_CONCURRENCY(), (c) => evaluateGrounding(c.input))
   const results = GROUNDING_CASES.map((c, i) => scoreCase(c, evals[i]!))
 
   for (const r of results) {
