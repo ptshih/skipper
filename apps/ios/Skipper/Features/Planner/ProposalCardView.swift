@@ -42,9 +42,12 @@ struct ProposalCardView: View {
                     }
 
                     // Route preview map
+                    // A preview, not a map to explore: with gestures on, the UIKit map wins the
+                    // pan and a swipe over the card scrolls the map instead of the transcript.
                     GoogleRouteMap(
                         coordinates: proposal.polyline,
-                        padding: 30
+                        padding: 30,
+                        allowsGestures: false
                     )
                     .frame(height: 180)
                     .clipShape(RoundedRectangle(cornerRadius: TrailheadSpace.radiusSm))

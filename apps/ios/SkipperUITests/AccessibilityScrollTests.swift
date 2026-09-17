@@ -208,7 +208,9 @@ final class AccessibilityScrollTests: XCTestCase {
         // Proposal card appears inside scroll container
         let proposal = fixture.element("planner.proposal")
         XCTAssertTrue(proposal.waitForExistence(timeout: 10))
-        let scroll = fixture.application.scrollViews.firstMatch
+        // The transcript by name: the multiline composer is a text view, so it is also a
+        // scroll view and `firstMatch` can land on its 40 pt viewport instead (2026-09-16).
+        let scroll = fixture.application.scrollViews.matching(identifier: "planner.transcript").firstMatch
 
         // Make drive button: reveal in scroll before asserting hittable / tapping
         let makeButton = fixture.element("proposal.make")

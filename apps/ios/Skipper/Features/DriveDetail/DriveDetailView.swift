@@ -244,7 +244,7 @@ struct DriveDetailView: View {
 
     private func stopRow(_ clip: DriveClip) -> some View {
         VStack(alignment: .leading, spacing: TrailheadSpace.small) {
-            Text(clip.name ?? "Stop \(clip.seq)")
+            Text(clip.name ?? "Stop \(clip.seq + 1)")
                 .font(TrailheadType.bodyStrong).foregroundStyle(TrailheadColors.ink)
             Text(clip.form.rawValue.capitalized)
                 .font(TrailheadType.caption).foregroundStyle(TrailheadColors.accent)
@@ -272,7 +272,7 @@ struct DriveDetailView: View {
     private func mapView(_ manifest: DriveManifest) -> some View {
         GoogleRouteMap(coordinates: manifest.polyline, stops: manifest.clips.compactMap { clip in
             guard let lat = clip.lat, let lng = clip.lng else { return nil }
-            return MapStopMarker(seq: clip.seq, name: clip.name ?? "Stop \(clip.seq)", latitude: lat, longitude: lng,
+            return MapStopMarker(seq: clip.seq, name: clip.name ?? "Stop \(clip.seq + 1)", latitude: lat, longitude: lng,
                 kind: clip.form.rawValue, state: viewModel.auditionStopSeq == clip.seq ? .playing : .upcoming)
         }, selectedStopSeq: viewModel.auditionStopSeq,
             onSelectStop: { seq in Task { await viewModel.auditionStop(seq: seq) } }, padding: 40)
@@ -282,7 +282,7 @@ struct DriveDetailView: View {
         if let seq = viewModel.auditionStopSeq {
             VStack(spacing: TrailheadSpace.small) {
                 HStack(alignment: .top) {
-                    Text(viewModel.manifest?.clips.first(where: { $0.seq == seq })?.name ?? "Stop \(seq)")
+                    Text(viewModel.manifest?.clips.first(where: { $0.seq == seq })?.name ?? "Stop \(seq + 1)")
                         .font(TrailheadType.bodyStrong).frame(maxWidth: .infinity, alignment: .leading)
                     Button { isShowingAttributions = true } label: {
                         Image(systemName: "info.circle").frame(minWidth: 48, minHeight: 48)

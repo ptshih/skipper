@@ -123,6 +123,7 @@ struct SettingsView: View {
                         .accessibilityIdentifier("account.sign-in")
                     }
                 }
+                .listRowBackground(TrailheadColors.surfaceRaised)
 
                 // MARK: - Appearance Section
                 Section(header: Text("Appearance").font(TrailheadType.caption)) {
@@ -133,6 +134,7 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                 }
+                .listRowBackground(TrailheadColors.surfaceRaised)
 
                 // MARK: - Driving Simulation
                 if session.isAdmin {
@@ -141,6 +143,7 @@ struct SettingsView: View {
                             .font(TrailheadType.body)
                             .tint(TrailheadColors.accent)
                     }
+                    .listRowBackground(TrailheadColors.surfaceRaised)
                 }
 
                 // MARK: - Legal & Developer
@@ -161,6 +164,7 @@ struct SettingsView: View {
                         }
                     }
                 }
+                .listRowBackground(TrailheadColors.surfaceRaised)
 
                 // MARK: - Sign Out & Destructive Actions
                 if session.isSignedIn {
@@ -183,8 +187,10 @@ struct SettingsView: View {
                         .disabled(isAccountBusy)
                         requestResult(signOutRequest)
                     }
+                    .listRowBackground(TrailheadColors.surfaceRaised)
                 }
             }
+            .trailheadList()
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .task(id: session.user?.id) {

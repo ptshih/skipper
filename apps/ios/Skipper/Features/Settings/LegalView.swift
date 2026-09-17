@@ -28,6 +28,7 @@ struct LegalView: View {
                     }
                 }
             }
+            .listRowBackground(TrailheadColors.surfaceRaised)
 
             Section(header: Text("Sources & Licenses").font(TrailheadType.caption)) {
                 Text("The skipper does his homework. Every tale and every rock on a drive is built from the sources below, and we keep the credit where it’s due.")
@@ -60,6 +61,7 @@ struct LegalView: View {
                 }
                 .padding(.vertical, TrailheadSpace.xs)
             }
+            .listRowBackground(TrailheadColors.surfaceRaised)
 
             Section(header: Text("The road music").font(TrailheadType.caption)) {
                 Text("And the songs between stops: the skipper’s glovebox playlist, credited where it counts.")
@@ -85,8 +87,10 @@ struct LegalView: View {
                     Link("Pixabay Content License", destination: LegalCredits.pixabayLicenseURL)
                 }
             }
+            .listRowBackground(TrailheadColors.surfaceRaised)
         }
         .tint(TrailheadColors.accent)
+        .trailheadList()
         .navigationTitle("Legal & Licenses")
         .navigationBarTitleDisplayMode(.inline)
     }

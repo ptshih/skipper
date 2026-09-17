@@ -48,6 +48,8 @@ struct GoogleRouteMap: View {
     let onSelectStop: ((Int) -> Void)?
     let padding: CGFloat
     let isFollowingBinding: Binding<Bool>?
+    /// False for a static preview inside a scrolling transcript; true wherever the rider explores.
+    let allowsGestures: Bool
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var internalIsFollowing: Bool = true
@@ -65,7 +67,8 @@ struct GoogleRouteMap: View {
         selectedStopSeq: Int? = nil,
         onSelectStop: ((Int) -> Void)? = nil,
         padding: CGFloat = 40,
-        isFollowing: Binding<Bool>? = nil
+        isFollowing: Binding<Bool>? = nil,
+        allowsGestures: Bool = true
     ) {
         self.coordinates = coordinates
         self.currentCoordinate = currentCoordinate
@@ -75,6 +78,7 @@ struct GoogleRouteMap: View {
         self.onSelectStop = onSelectStop
         self.padding = padding
         self.isFollowingBinding = isFollowing
+        self.allowsGestures = allowsGestures
     }
 
     var body: some View {
@@ -88,6 +92,7 @@ struct GoogleRouteMap: View {
                     selectedStopSeq: selectedStopSeq,
                     onSelectStop: onSelectStop,
                     padding: padding,
+                    allowsGestures: allowsGestures,
                     colorScheme: colorScheme,
                     isFollowing: isFollowing,
                     onUserPan: {
@@ -354,6 +359,7 @@ struct GoogleRouteMapCore: UIViewRepresentable {
     let selectedStopSeq: Int?
     let onSelectStop: ((Int) -> Void)?
     let padding: CGFloat
+    var allowsGestures: Bool = true
     let colorScheme: ColorScheme
     let isFollowing: Bool
     let onUserPan: () -> Void
@@ -374,6 +380,8 @@ struct GoogleRouteMapCore: UIViewRepresentable {
         mapView.settings.myLocationButton = false
         mapView.settings.rotateGestures = false
         mapView.settings.tiltGestures = false
+        mapView.settings.scrollGestures = allowsGestures
+        mapView.settings.zoomGestures = allowsGestures
 
         mapView.onLayoutSubviews = { [weak coordinator = context.coordinator] mv in
             coordinator?.mapViewDidLayout(mv)

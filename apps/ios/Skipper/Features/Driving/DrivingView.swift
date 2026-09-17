@@ -138,8 +138,11 @@ struct DrivingView: View {
                         .labelStyle(.iconOnly).frame(minWidth: TrailheadSpace.minimumHit, minHeight: TrailheadSpace.minimumHit)
                 }
             }
+            // The map above takes the slack, so without an explicit vertical fit this Text
+            // gets one line and an ellipsis instead of wrapping (audit, 2026-09-16).
             Text(controller.activeStop?.name ?? nextStopText)
                 .font(TrailheadType.title).frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
             if controller.buffering { ProgressView("Getting the recording ready…").font(TrailheadType.caption) }
             if controller.canSeek {
                 Slider(value: Binding(get: { scrubbing ? scrubPosition : controller.position }, set: { scrubPosition = $0 }), in: 0...max(0.1, controller.duration), onEditingChanged: { editing in
@@ -159,10 +162,12 @@ struct DrivingView: View {
             }
             HStack {
                 Button("Replay last stop", systemImage: "arrow.counterclockwise") { controller.replayLast() }
-                    .disabled(!controller.canReplay).frame(minHeight: TrailheadSpace.minimumHit)
+                    .disabled(!controller.canReplay)
                 Spacer()
-                Button("Pull over") { confirmEnd = true }.frame(minHeight: TrailheadSpace.minimumHit)
+                Button("Pull over") { confirmEnd = true }
             }
+            // Driving controls need the full 48 pt row tappable, not just the glyphs — see the style.
+            .buttonStyle(.trailheadLink(minHeight: TrailheadSpace.minimumHit))
             .font(TrailheadType.caption)
         }
         .padding(TrailheadSpace.medium)
@@ -176,6 +181,7 @@ struct DrivingView: View {
     @ViewBuilder private var gate: some View {
         VStack(spacing: TrailheadSpace.large) {
             Image(systemName: controller.phase == .done ? "checkmark.seal" : "car.side").font(.largeTitle).foregroundStyle(TrailheadColors.accent)
+                .accessibilityHidden(true) // decorative; VoiceOver otherwise reads the symbol name
             switch controller.phase {
             case .done:
                 Text("That's a wrap, road crew.").font(TrailheadType.display)
@@ -196,7 +202,9 @@ struct DrivingView: View {
                 Text("The road's ready when you are.").font(TrailheadType.display)
                 Text("Keep Skipper open and your eyes on the road. I'll handle the stories.").font(TrailheadType.body)
                 if controller.missingClipCount > 0 {
-                    Text("\(controller.missingClipCount) recordings aren't saved on this phone. Those stops will be quiet.")
+                    Text(controller.missingClipCount == 1
+                        ? "1 recording isn't saved on this phone. That stop will be quiet."
+                        : "\(controller.missingClipCount) recordings aren't saved on this phone. Those stops will be quiet.")
                         .font(TrailheadType.body).foregroundStyle(TrailheadColors.inkDim)
                 }
                 if let error = controller.error { Text(error).font(TrailheadType.body).foregroundStyle(TrailheadColors.danger) }

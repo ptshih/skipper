@@ -34,6 +34,7 @@ struct DeveloperSettingsView: View {
                             .foregroundColor(TrailheadColors.inkMuted)
                     }
                 }
+                .listRowBackground(TrailheadColors.surfaceRaised)
 
                 Section(header: Text("Offline Storage").font(TrailheadType.caption)) {
                     HStack {
@@ -65,11 +66,13 @@ struct DeveloperSettingsView: View {
                         }
                     }
                 }
+                .listRowBackground(TrailheadColors.surfaceRaised)
             } else {
                 Text("Developer tools are available to admins only.")
                     .font(TrailheadType.body)
             }
         }
+        .trailheadList()
         .navigationTitle("Developer")
         .navigationBarTitleDisplayMode(.inline)
         .task {

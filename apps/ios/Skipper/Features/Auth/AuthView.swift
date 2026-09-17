@@ -165,6 +165,7 @@ struct AuthView: View {
                 errorText = nil
                 step = .password
             }
+            .buttonStyle(.trailheadLink)
             .font(TrailheadType.subheadline)
             .foregroundColor(TrailheadColors.accent)
             .padding(.top, TrailheadSpace.sm)
@@ -201,6 +202,7 @@ struct AuthView: View {
                 Button("Resend code") {
                     sendCode()
                 }
+                .buttonStyle(.trailheadLink)
                 .font(TrailheadType.subheadline)
                 .foregroundColor(TrailheadColors.accent)
 
@@ -208,6 +210,7 @@ struct AuthView: View {
                     errorText = nil
                     step = .email
                 }
+                .buttonStyle(.trailheadLink)
                 .font(TrailheadType.subheadline)
                 .foregroundColor(TrailheadColors.inkMuted)
             }
@@ -255,6 +258,7 @@ struct AuthView: View {
                     resetSent = false
                     step = .reset
                 }
+                .buttonStyle(.trailheadLink)
                 .accessibilityIdentifier("account.reset")
                 .font(TrailheadType.subheadline)
                 .foregroundColor(TrailheadColors.accent)
@@ -263,6 +267,7 @@ struct AuthView: View {
                     errorText = nil
                     step = .email
                 }
+                .buttonStyle(.trailheadLink)
                 .font(TrailheadType.subheadline)
                 .foregroundColor(TrailheadColors.inkMuted)
             }
@@ -311,6 +316,7 @@ struct AuthView: View {
                 errorText = nil
                 step = .email
             }
+            .buttonStyle(.trailheadLink)
             .font(TrailheadType.subheadline)
             .foregroundColor(TrailheadColors.accent)
             .padding(.top, TrailheadSpace.sm)
