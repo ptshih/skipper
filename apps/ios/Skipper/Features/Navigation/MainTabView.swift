@@ -135,9 +135,6 @@ struct MainTabView: View {
                 onOpenLibrary: {
                     activeTab.wrappedValue = .library
                 },
-                onOpenSettings: {
-                    activeTab.wrappedValue = .settings
-                },
                 onSignIn: {
                     presentSignIn()
                 }

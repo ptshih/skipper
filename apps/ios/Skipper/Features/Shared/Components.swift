@@ -23,6 +23,68 @@ extension TrailheadType {
     static let subheadline = TrailheadType.caption
 }
 
+extension View {
+    /// Pins screen chrome (filters, banners, a region picker) above a scroll view as a bar the
+    /// content scrolls beneath. The scroll view must stay the navigation content's topmost view:
+    /// wrapping it in a VStack under the chrome starts it at the safe-area edge, so nothing ever
+    /// passes under the navigation bar and iOS 26's glass edge has nothing to blur (2026-09-16).
+    /// iOS 26 extends that edge effect under a `safeAreaBar`; earlier systems have no such effect,
+    /// so the fallback inset takes the page background to hide the rows passing under it.
+    /// ⚠ Only under an INLINE title. iOS 26 draws a large title inside the scroll region, so the
+    /// extended effect blurs the title itself (seen on My Drives, 2026-09-16); a large-title
+    /// screen pins its chrome with `trailheadTopInset` instead.
+    /// ⚠ A `background` on the chrome must not ignore the top safe-area edge (the default): the
+    /// chrome touches that edge, so the fill bleeds up through the navigation bar and paints over
+    /// the title (same day). Pass `ignoresSafeAreaEdges: .horizontal`.
+    @ViewBuilder
+    func trailheadTopBar<Bar: View>(@ViewBuilder _ bar: @escaping () -> Bar) -> some View {
+        if #available(iOS 26.0, *) {
+            safeAreaBar(edge: .top, spacing: 0, content: bar)
+        } else {
+            trailheadTopInset(bar)
+        }
+    }
+
+    /// The large-title counterpart of `trailheadTopBar`: the chrome stays pinned on the page
+    /// background, the rows pass under it and the navigation bar, and the large title collapses
+    /// into the glass bar untouched because no edge effect is extended over it.
+    func trailheadTopInset<Bar: View>(@ViewBuilder _ bar: @escaping () -> Bar) -> some View {
+        safeAreaInset(edge: .top, spacing: 0) {
+            bar().background(TrailheadColors.background, ignoresSafeAreaEdges: .horizontal)
+        }
+    }
+
+    /// A system `List` on the Trailhead paper instead of the grouped system gray. Without this a
+    /// settings-style screen is the one place the app stops looking like Skipper (audit, 2026-09-16).
+    /// Pair it with `.listRowBackground(TrailheadColors.surfaceRaised)` on each Section so the
+    /// rows read as raised placards on the paper rather than white cards on cream.
+    func trailheadList() -> some View {
+        scrollContentBackground(.hidden)
+            .background(TrailheadColors.background.ignoresSafeArea())
+    }
+}
+
+/// A text-link button whose whole row is tappable. A bare `Button("…")` hit-tests only its
+/// glyphs (about 18 pt tall), and a `.frame(minHeight:)` applied OUTSIDE the button does not
+/// grow that area — it only pads around it. The height belongs on the label, with a content
+/// shape, which is what this style does (audit, 2026-09-16). Driving controls pass
+/// `TrailheadSpace.minimumHit`; ordinary screens use the 44 pt default.
+struct TrailheadLinkButtonStyle: ButtonStyle {
+    var minHeight: CGFloat = 44
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(minHeight: minHeight)
+            .contentShape(Rectangle())
+            .opacity(configuration.isPressed ? 0.6 : 1)
+    }
+}
+
+extension ButtonStyle where Self == TrailheadLinkButtonStyle {
+    static var trailheadLink: TrailheadLinkButtonStyle { TrailheadLinkButtonStyle() }
+    static func trailheadLink(minHeight: CGFloat) -> TrailheadLinkButtonStyle { TrailheadLinkButtonStyle(minHeight: minHeight) }
+}
+
 enum TrailheadButtonVariant {
     case primary
     case secondary

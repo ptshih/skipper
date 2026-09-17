@@ -41,90 +41,104 @@ struct LibraryView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Offline fallback banner
-                if viewModel.isOfflineFallback {
-                    HStack(spacing: TrailheadSpace.sm) {
-                        Image(systemName: "wifi.slash")
-                            .foregroundColor(TrailheadColors.accentWarm)
-                        Text(viewModel.drives.isEmpty ? "You’re offline" : "Using saved offline drives")
-                            .font(TrailheadType.caption)
-                            .foregroundColor(TrailheadColors.ink)
-                            .lineLimit(nil)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Spacer()
-                    }
+            // The list is the navigation content itself so the rows pass under the bar and the
+            // large title collapses; see `trailheadTopBar` for why a VStack cannot, and why a
+            // large-title screen pins its chrome with the inset rather than the bar.
+            content
+                .trailheadTopInset { chrome }
+                .background(TrailheadColors.background.ignoresSafeArea())
+                .navigationTitle("My Drives")
+                .navigationBarTitleDisplayMode(.large)
+                .overlay(alignment: .topLeading) {
+                    Color.clear
+                        .frame(width: 1, height: 1)
+                        .accessibilityIdentifier("screen.library")
+                        .accessibilityElement(children: .ignore)
+                }
+                .onChange(of: viewModel.session.user?.id) { _, _ in viewModel.reconcileSession() }
+                .task(id: viewModel.session.user?.id) {
+                    await viewModel.loadDrives()
+                    await viewModel.observeConnectivity()
+                }
+                .refreshable {
+                    await viewModel.loadDrives()
+                }
+        }
+    }
+
+    // MARK: - Content
+
+    @ViewBuilder
+    private var content: some View {
+        if AccountEntryPolicy.canOfferSignIn(in: viewModel.session.state) && viewModel.drives.isEmpty {
+            emptyState
+        } else if viewModel.session.state == .deferred && viewModel.drives.isEmpty {
+            ContentUnavailableView("Verifying your account", systemImage: "lock",
+                description: Text("Your saved drives will be available after account verification. You can still use the planner."))
+        } else if viewModel.isOfflineFallback && viewModel.drives.isEmpty && !viewModel.isLoading {
+            ContentUnavailableView("No drives available offline", systemImage: "arrow.down.circle",
+                description: Text("Go online to view your library and download a drive."))
+                .accessibilityIdentifier("library.empty")
+        } else if viewModel.drives.isEmpty, let message = viewModel.errorMessage {
+            ScrollView { loadError(message).padding(TrailheadSpace.md) }
+        } else if viewModel.filteredDrives.isEmpty && !viewModel.isLoading {
+            emptyState
+        } else {
+            drivesList
+        }
+    }
+
+    // MARK: - Chrome
+
+    /// Pinned above the content: the offline banner, the low-credit hint, and the region
+    /// filter chips (only offered when multiple regions are represented).
+    private var chrome: some View {
+        VStack(spacing: 0) {
+            if viewModel.isOfflineFallback {
+                HStack(spacing: TrailheadSpace.sm) {
+                    Image(systemName: "wifi.slash")
+                        .foregroundColor(TrailheadColors.accentWarm)
+                    Text(viewModel.drives.isEmpty ? "You’re offline" : "Using saved offline drives")
+                        .font(TrailheadType.caption)
+                        .foregroundColor(TrailheadColors.ink)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                }
+                .padding(.horizontal, TrailheadSpace.md)
+                .padding(.vertical, TrailheadSpace.xs)
+                // Pinned at the top edge, so the fill must not bleed up over the title (see trailheadTopBar).
+                .background(TrailheadColors.accentWarm.opacity(0.15), ignoresSafeAreaEdges: .horizontal)
+            }
+
+            if let credits = viewModel.credits, credits.remaining <= 5 {
+                CreditHintView(remaining: credits.remaining, cap: credits.cap)
                     .padding(.horizontal, TrailheadSpace.md)
-                    .padding(.vertical, TrailheadSpace.xs)
-                    .background(TrailheadColors.accentWarm.opacity(0.15))
-                }
+                    .padding(.top, TrailheadSpace.sm)
+            }
 
-                // Credit Hint Banner if <= 5
-                if let credits = viewModel.credits, credits.remaining <= 5 {
-                    CreditHintView(remaining: credits.remaining, cap: credits.cap)
-                        .padding(.horizontal, TrailheadSpace.md)
-                        .padding(.top, TrailheadSpace.sm)
-                }
+            if viewModel.shouldOfferRegionFilter {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: TrailheadSpace.sm) {
+                        FilterChip(
+                            title: "All",
+                            isSelected: viewModel.selectedRegion == nil
+                        ) {
+                            viewModel.selectRegion(nil)
+                        }
 
-                // Region filter chips (only offered when multiple regions are represented)
-                if viewModel.shouldOfferRegionFilter {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: TrailheadSpace.sm) {
+                        ForEach(viewModel.facets) { facet in
                             FilterChip(
-                                title: "All",
-                                isSelected: viewModel.selectedRegion == nil
+                                title: facet.displayName,
+                                isSelected: viewModel.selectedRegion == facet.id
                             ) {
-                                viewModel.selectRegion(nil)
-                            }
-
-                            ForEach(viewModel.facets) { facet in
-                                FilterChip(
-                                    title: facet.displayName,
-                                    isSelected: viewModel.selectedRegion == facet.id
-                                ) {
-                                    viewModel.selectRegion(facet.id)
-                                }
+                                viewModel.selectRegion(facet.id)
                             }
                         }
-                        .padding(.horizontal, TrailheadSpace.md)
-                        .padding(.vertical, TrailheadSpace.sm)
                     }
+                    .padding(.horizontal, TrailheadSpace.md)
+                    .padding(.vertical, TrailheadSpace.sm)
                 }
-
-                // Content list
-                if AccountEntryPolicy.canOfferSignIn(in: viewModel.session.state) && viewModel.drives.isEmpty {
-                    emptyState
-                } else if viewModel.session.state == .deferred && viewModel.drives.isEmpty {
-                    ContentUnavailableView("Verifying your account", systemImage: "lock",
-                        description: Text("Your saved drives will be available after account verification. You can still use the planner."))
-                } else if viewModel.isOfflineFallback && viewModel.drives.isEmpty && !viewModel.isLoading {
-                    ContentUnavailableView("No drives available offline", systemImage: "arrow.down.circle",
-                        description: Text("Go online to view your library and download a drive."))
-                        .accessibilityIdentifier("library.empty")
-                } else if viewModel.drives.isEmpty, let message = viewModel.errorMessage {
-                    ScrollView { loadError(message).padding(TrailheadSpace.md) }
-                } else if viewModel.filteredDrives.isEmpty && !viewModel.isLoading {
-                    emptyState
-                } else {
-                    drivesList
-                }
-            }
-            .background(TrailheadColors.background.ignoresSafeArea())
-            .navigationTitle("My Drives")
-            .navigationBarTitleDisplayMode(.large)
-            .overlay(alignment: .topLeading) {
-                Color.clear
-                    .frame(width: 1, height: 1)
-                    .accessibilityIdentifier("screen.library")
-                    .accessibilityElement(children: .ignore)
-            }
-            .onChange(of: viewModel.session.user?.id) { _, _ in viewModel.reconcileSession() }
-            .task(id: viewModel.session.user?.id) {
-                await viewModel.loadDrives()
-                await viewModel.observeConnectivity()
-            }
-            .refreshable {
-                await viewModel.loadDrives()
             }
         }
     }

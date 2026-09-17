@@ -5,7 +5,6 @@ struct PlannerView: View {
     let audio: (any AudioPreviewControlling)?
     let onOpenDrive: @MainActor (String) -> Void
     let onOpenLibrary: @MainActor () -> Void
-    let onOpenSettings: @MainActor () -> Void
     let onSignIn: @MainActor () -> Void
 
     @State private var inputText: String = ""
@@ -20,7 +19,6 @@ struct PlannerView: View {
         analytics: AnalyticsTracker? = nil,
         onOpenDrive: @escaping @MainActor (String) -> Void,
         onOpenLibrary: @escaping @MainActor () -> Void,
-        onOpenSettings: @escaping @MainActor () -> Void,
         onSignIn: @escaping @MainActor () -> Void
     ) {
         _viewModel = State(initialValue: PlannerViewModel(
@@ -33,78 +31,52 @@ struct PlannerView: View {
         self.audio = audio
         self.onOpenDrive = onOpenDrive
         self.onOpenLibrary = onOpenLibrary
-        self.onOpenSettings = onOpenSettings
         self.onSignIn = onSignIn
     }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Top control bar
-                headerBar
-
-                // Transcript or empty state
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(spacing: TrailheadSpace.md) {
-                            if viewModel.turns.isEmpty {
-                                emptyStateHero
-                            } else {
-                                transcriptFlow
-                            }
-                            Color.clear.frame(height: 1).id("bottomAnchor")
+            // Transcript or empty state. The scroll view is the navigation content itself so the
+            // transcript passes under the bar; see `trailheadTopBar` for why a VStack cannot.
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(spacing: TrailheadSpace.md) {
+                        if viewModel.turns.isEmpty {
+                            emptyStateHero
+                        } else {
+                            transcriptFlow
                         }
-                        .padding(.horizontal, TrailheadSpace.md)
-                        .padding(.vertical, TrailheadSpace.md)
+                        Color.clear.frame(height: 1).id("bottomAnchor")
                     }
-                    .onChange(of: viewModel.turns.count) { _, _ in
-                        withAnimation {
-                            proxy.scrollTo("bottomAnchor", anchor: .bottom)
-                        }
-                    }
-                    .onChange(of: viewModel.streamingSay) { _, _ in
+                    .padding(.horizontal, TrailheadSpace.md)
+                    .padding(.vertical, TrailheadSpace.md)
+                }
+                .onChange(of: viewModel.turns.count) { _, _ in
+                    withAnimation {
                         proxy.scrollTo("bottomAnchor", anchor: .bottom)
                     }
                 }
-
-                // Error banner if any
-                if let err = viewModel.errorMessage {
-                    HStack(spacing: TrailheadSpace.sm) {
-                        Image(systemName: "exclamationmark.circle.fill")
-                            .foregroundColor(TrailheadColors.danger)
-                        Text(err)
-                            .font(TrailheadType.caption)
-                            .foregroundColor(TrailheadColors.danger)
-                        Spacer()
-                        if viewModel.canRetryTurn {
-                            Button("Retry") {
-                                Task {
-                                    await viewModel.retryTurn()
-                                }
-                            }
-                            .font(TrailheadType.caption.bold())
-                            .foregroundColor(TrailheadColors.accent)
-                            .accessibilityIdentifier("planner.retry")
-                        }
-                    }
-                    .padding(TrailheadSpace.sm)
-                    .background(TrailheadColors.danger.opacity(0.1))
+                .onChange(of: viewModel.streamingSay) { _, _ in
+                    proxy.scrollTo("bottomAnchor", anchor: .bottom)
                 }
-
-                // Composer bar
-                composerBar
+                // Named because the growing composer is a text view, i.e. a second scroll view
+                // in the tree; a test's "first scroll view" must not land on it.
+                .accessibilityIdentifier("planner.transcript")
+            }
+            .trailheadTopBar { headerBar }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                VStack(spacing: 0) {
+                    if let err = viewModel.errorMessage {
+                        errorBanner(err)
+                    }
+                    composerBar
+                }
             }
             .background(TrailheadColors.background.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        onOpenSettings()
-                    } label: {
-                        Image(systemName: "gearshape")
-                            .foregroundColor(TrailheadColors.inkMuted)
-                    }
-                }
+                // No gear here: Settings is a persistent tab one tap away, and a second door to
+                // it read as clutter (audit, 2026-09-16) — the same call as the My Drives shortcut.
                 ToolbarItem(placement: .principal) {
                     Text("Skipper")
                         .font(TrailheadType.wordmark)
@@ -170,6 +142,31 @@ struct PlannerView: View {
         .padding(.vertical, TrailheadSpace.xs)
     }
 
+    // MARK: - Error Banner
+
+    private func errorBanner(_ message: String) -> some View {
+        HStack(spacing: TrailheadSpace.sm) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .foregroundColor(TrailheadColors.danger)
+            Text(message)
+                .font(TrailheadType.caption)
+                .foregroundColor(TrailheadColors.danger)
+            Spacer()
+            if viewModel.canRetryTurn {
+                Button("Retry") {
+                    Task {
+                        await viewModel.retryTurn()
+                    }
+                }
+                .font(TrailheadType.caption.bold())
+                .foregroundColor(TrailheadColors.accent)
+                .accessibilityIdentifier("planner.retry")
+            }
+        }
+        .padding(TrailheadSpace.sm)
+        .background(TrailheadColors.danger.opacity(0.1))
+    }
+
     // MARK: - Empty State
 
     private var emptyStateHero: some View {
@@ -233,14 +230,21 @@ struct PlannerView: View {
         ForEach(Array(viewModel.turns.enumerated()), id: \.offset) { index, turn in
             VStack(alignment: .leading, spacing: TrailheadSpace.sm) {
                 if turn.role == .rider {
+                    // The shipped client's rider bubble: a sunken well in ink, not a colored
+                    // slab. `accent` is a text/glyph role and is lifted at dusk so glyphs read
+                    // on night; as a fill under white it fails contrast (2026-09-16).
                     HStack {
                         Spacer(minLength: TrailheadSpace.xl)
                         Text(turn.text)
                             .font(TrailheadType.body)
-                            .foregroundColor(.white)
+                            .foregroundColor(TrailheadColors.ink)
                             .padding(TrailheadSpace.md)
-                            .background(TrailheadColors.accent)
+                            .background(TrailheadColors.surfaceSunken)
                             .clipShape(RoundedRectangle(cornerRadius: TrailheadSpace.radiusMd))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: TrailheadSpace.radiusMd)
+                                    .stroke(TrailheadColors.borderFaint, lineWidth: 1)
+                            )
                     }
                 } else {
                     HStack {
@@ -331,8 +335,13 @@ struct PlannerView: View {
                 .padding(.vertical, TrailheadSpace.sm)
                 .background(TrailheadColors.surfaceRaised)
             } else {
-                HStack(spacing: TrailheadSpace.sm) {
-                    TextField("Message Skipper…", text: $inputText)
+                // The send button hugs the field's last line as it grows, as in Messages.
+                HStack(alignment: .bottom, spacing: TrailheadSpace.sm) {
+                    // Grows with the draft instead of scrolling a single line sideways. Return
+                    // inserts a newline on a vertical-axis field, so only the button sends
+                    // (Messages does the same); a long ask stays readable while it is written.
+                    TextField("Message Skipper…", text: $inputText, axis: .vertical)
+                        .lineLimit(1...6)
                         .font(TrailheadType.body)
                         .padding(.horizontal, TrailheadSpace.md)
                         .padding(.vertical, TrailheadSpace.sm)
@@ -344,9 +353,6 @@ struct PlannerView: View {
                         )
                         .disabled(viewModel.isStreaming)
                         .accessibilityIdentifier("planner.input")
-                        .onSubmit {
-                            sendMessage()
-                        }
 
                     Button {
                         sendMessage()
@@ -359,6 +365,7 @@ struct PlannerView: View {
                                     : TrailheadColors.accent
                             )
                     }
+                    .accessibilityLabel("Send")
                     .accessibilityIdentifier("planner.send")
                     .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isStreaming || viewModel.selectedRegion == nil)
                 }
