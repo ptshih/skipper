@@ -1,6 +1,7 @@
 # Native iOS symbols through EAS
 
-**Status** — 2026-09-12: after independent Astra clearance, the release owner's single symbols-only
+**Status** — 2026-09-17: the generic remote failure recurred on the 1.2.0 (28) delivery — workflow `01a0ad28-73c6-7a4a-9b81-4f7e1f55d478` failed in the upload phase with `UPLOAD_EVIDENCE_INVALID` four seconds into the step, leaving only the 150-byte failure artifact; the very next run of the same pipeline (`01a0ad39-e311-7311-a726-d493045fae50`) uploaded and read back one arm64 dSYM (UUID `28E710FA-5815-3E9D-BE43-047546BCEEF3`, 32,242,668 bytes) and delivery completed. Two occurrences, two clean retries, zero diagnoses: the worker keeps the PostHog CLI's stdout/stderr out of the failure artifact, so the evidence that would explain this is discarded on every failure. The next change to the worker should carry the allowlisted, nonsecret CLI messages into `failure.json` the way the success receipt already does.
+**Previously** — 2026-09-12: after independent Astra clearance, the release owner's single symbols-only
 diagnostic passed actual PostHog upload, exact UUID/content readback, and authenticated EAS artifact
 verification using retained `9f6bc3d3` artifacts. No retry occurred. The earlier generic remote failure
 remains unresolved and was not reproduced. This proves the exercised upload/read capability, with

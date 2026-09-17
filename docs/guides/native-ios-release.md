@@ -1,6 +1,6 @@
 # Native iOS releases
 
-**Status**: Execution in progress, 2026-09-12. Independent review cleared the core pipeline, symbols integration, and XCTest evidence retention. The first native source retry passed root checks and all 339 native tests, then archived successfully. A retained-archive diagnostic proved manual distribution export with the existing team credentials; its first inspection exposed two checker false positives, now being corrected and independently reviewed. That diagnostic uses older source and is ineligible for delivery. The latest accepted source still requires a complete release run; cloud symbols and Apple delivery remain unverified. The shipped Expo baseline remains recorded in [release batches](../designs/release-batches.md).
+**Status**: DELIVERING, 2026-09-17. Two complete runs have now shipped through this pipeline: 1.2.0 (27) from `977cd1c5` on 2026-09-13 and 1.2.0 (28) from `ea815397` on 2026-09-17 (delivery UUID `2e5fc28f-97f1-4b49-b657-193bd3bd4650`, ASC `VALID` / `IN_BETA_TESTING`, symbols uploaded and read back). Both used the manual export options with the team's EAS distribution identity. Two traps met on the 28 delivery are recorded below: the distribution keychain (export fails in codesign with `errSecInternalComponent` when it is locked, and the 2026-09-12 keychain's stored password does not open it) and a second generic cloud-symbols failure that passed on retry. The shipped Expo baseline remains recorded in [release batches](../designs/release-batches.md).
 
 The native pipeline builds the tracked `apps/ios/Skipper.xcodeproj` with Xcode, exports an IPA, inspects it, and verifies Apple processing. The existing app identity stays `fm.skipper.app`, team `L24UJYJ5DK`, ASC app `6778946770`, and default Keychain group `L24UJYJ5DK.fm.skipper.app`. Native iOS requires iOS 17; the API remains compatible with older installed clients.
 
@@ -26,6 +26,8 @@ ASC key paths are made absolute before checkout creation. SDK and private creden
 When automatic export selects cloud signing that the API key cannot access, reuse the team's existing distribution certificate/private key and App Store profile. [Expo supports downloading existing EAS credentials](https://docs.expo.dev/app-signing/syncing-credentials/); [Apple supports local or manual signing](https://developer.apple.com/help/account/certificates/cloud-managed-certificates). Verify certificate validity, private-key correspondence, profile certificate membership, team, app ID and expiry before installing. Preserve existing identities and the default keychain, keep private files outside tracked source, and never expose passwords in command arguments or logs.
 
 The existing `--export-options /absolute/path/to/local-export.plist` option supports manual export without changing the Xcode project. Keep all default export options, change `signingStyle` to `manual`, set `signingCertificate` to the installed certificate SHA-1, and set `provisioningProfiles` to a dictionary mapping `fm.skipper.app` to its App Store profile UUID. Xcode's installed `xcodebuild -help` documents both selectors. The pipeline validates and freezes those exact plist bytes before checks; export still only writes a local IPA for subsequent inspection. Do not embed expiring credential selectors or private credential material in application source.
+
+⚠ **The keychain that holds that identity must be UNLOCKED when `xcodebuild -exportArchive` signs** (2026-09-16). It is a separate keychain under `.scratch/signing-recovery/eas-existing-20260912/`, it re-locks on its timeout, and a locked keychain fails export with `errSecInternalComponent` after the checks and archive have already run. The 2026-09-12 keychain's `keychain-password` file does NOT unlock it and the founder's own passwords never applied; `skipper-distribution-20260916.keychain-db` replaced it (same `distribution.p12`, password in `keychain-password-20260916`, now in the user search list in its place) — see the `README-20260916.md` beside them for the unlock one-liner. Never print the password; `security -i` reads it from stdin.
 
 On 2026-09-12, the diagnostic manual export used the already managed `L24UJYJ5DK` EAS distribution identity and its matching App Store profile. Automatic export still requested a cloud-managed certificate; manual export succeeded with local credentials. Its receipt is `.scratch/signing-recovery/manual-export-probe-01/probe-evidence.json`. The copied and original archive hashes matched before export and remained unchanged afterward. These old-source artifacts never qualify as the latest release's archive, IPA or symbols evidence.
 
@@ -71,7 +73,7 @@ ASC queries are read-only:
 
 ```bash
 dotenvx run -f .env.development -- bun .claude/skills/testflight/asc-builds.ts --latest-build
-dotenvx run -f .env.development -- bun .claude/skills/testflight/asc-builds.ts --wait --version 1.2.0 --build 27
+dotenvx run -f .env.development -- bun .claude/skills/testflight/asc-builds.ts --wait --version 1.2.0 --build 28
 ```
 
 ## Artifact checks

@@ -1,7 +1,7 @@
 # Native iOS development
 
 Read root `CLAUDE.md` and `docs/designs/native-ios-conversion.md`. This native client is
-implemented and available in TestFlight (build 27); physical device acceptance and cutover
+implemented and available in TestFlight (build 28, 2026-09-17); physical device acceptance and cutover
 remain pending. `apps/mobile` remains the shipped app until acceptance and coordinated cutover.
 
 - `Skipper.xcodeproj` is the tracked source of truth. Do not introduce a project generator.
