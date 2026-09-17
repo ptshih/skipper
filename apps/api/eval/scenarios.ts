@@ -300,6 +300,26 @@ export const SCENARIOS: Scenario[] = [
     ],
   },
   {
+    id: 'named-circuit-draws-without-the-two-questions',
+    about:
+      'THE NAMED-CIRCUIT EXCEPTION (docs/decisions/no-same-road-loops.md §9, founder 2026-09-16). A ' +
+      'rider who names a circuit the road already has a name for ("the ring around the lake", "the ' +
+      'Yosemite Valley loop") has supplied the geography in one breath, and the skipper takes the ' +
+      'turnaround and the way home from his own list instead of asking for them. The defect this ' +
+      'guards is the pre-refinement behaviour: the loop being deflected as road talk, or the rider ' +
+      'being walked through "where do you turn around?" and "which way home?" for a loop they just ' +
+      'named. The mechanism is the second turn: a bare yes can only land on a stated plan, so if the ' +
+      'first turn asked a question instead of saying the ring back, nothing draws here.',
+    turns: [
+      {
+        rider: 'I want to drive the whole ring around the lake, South Lake Tahoe back to South Lake Tahoe',
+        expect: 'hold',
+        note: 'a named circuit — the plan is said back with a turnaround and a way home he chose, then waited on',
+      },
+      { rider: 'yes', expect: 'draw', note: 'the yes lands only if the previous turn stated the ring, not a question' },
+    ],
+  },
+  {
     id: 'wrap-up-long-conversation',
     about:
       'Trips PLAN_WRAP_UP_AFTER_MESSAGES (16 messages = 9 rider turns here). The notice rides EVERY ' +

@@ -8,6 +8,9 @@
 > ⚠ **REFINED later the same day (founder): a loop is an EXPLICIT-ASK EXCEPTION and one-way is the voiced
 > default.** The planner never offers a loop. See §8, which supersedes §5's cost accounting — and which is
 > **VERIFIED on a paid eval arm**, not just reasoned: routing 0.93 → 1.00.
+> ⚠ **REFINED AGAIN 2026-09-16 (founder): a NAMED circuit is the rider supplying the geography in one
+> breath, and the model may take its turnaround and way home from the roster itself.** See §9 — **VERIFIED
+> on a paid eval arm the same day** (founder go): routing 1.00 on the new scenario and on both neighbours.
 
 ## 0. The complaint, and why it was not a selection bug
 
@@ -207,3 +210,78 @@ with only small spur loops off it, so an Arches "loop" measures near-100% and th
 the rule working rather than failing: Arches is an A→B drive, narrated on the way in. Confirm against the
 park's road network when the region is scoped, but plan for that shape — otherwise it gets filed as a bug.
 
+
+## 9. Refinement: a NAMED circuit is the rider supplying the geography (founder, 2026-09-16)
+
+> *"If I tell the planner I want to drive the Yosemite Valley loop, from Curry Village back to Curry
+> Village, it should allow me to do that."*
+
+**The complaint.** On the live Yosemite region the rider asked for exactly that — start at Curry Village,
+Northside Drive out, Southside Drive home, back to Curry Village — and got the road-talk deflection
+(*"Roads aren't mine to choose, friend"*) followed by *"Where do you want the far end of it?"*. Under §1
+that was the prompt working as written: the rider had named roads, not places, and a loop needs a
+turnaround and a way home the RIDER names. The rider read it as a refusal and left. §8 already names
+Yosemite Valley as one of the two real circuits the feature exists for, so a design that cannot draw it
+from its own name is failing its founding example.
+
+**What changed.** §2's rule — the model never picks the way home because it has no coordinates and no
+road graph — now has ONE exception: a circuit the road already has a NAME for (*"the Yosemite Valley
+loop"*, *"the ring around the lake"*, *"the valley loop, Curry Village back to Curry Village"*). That is
+not the §1 shrug. Naming a known circuit IS supplying the geography, just in one word instead of two
+places, and walking that rider through "where do you turn around?" and "which way home?" is pedantry.
+So for a circuit that is named and that the model knows, it takes the far end and the way home from the
+roster itself, says both back BY NAME in the read-back, and waits for the yes like any other plan.
+
+**Three things were chosen over this, and why they lost (founder, same day).**
+
+| alternative | why not |
+| --- | --- |
+| Curated named loops per region (an operator records name → turnaround → way home; the roster grows a "loops you know" section) | The grounded design, and the one recommended. Lost on cost: an additive column, an admin field plus its Reference entry, roster + prompt + tests, and a paid eval — for a handful of circuits the model can already name. Re-open this if the prompt-only version guesses wrong on a real region. |
+| Keep the two questions, fix the copy | Cheapest, and it does not meet the ask as phrased. |
+| Silent server-side pick | Rejected in §5 already; nothing here changes that reasoning. |
+
+**What keeps it honest — the guards §2 relied on are unchanged, one is added.**
+
+1. **The allowlist at the wire (§3, INV-1).** Both ids the model picks are re-checked against the region's
+   curated `places` before any billed call; a name it invents is a 400, never a route.
+2. **The retrace gate (§3).** A pick that is not a ring — the far end reached and left by the same road —
+   is refused on the free preview before any credit. `route_spend.retrace` still counts how often.
+3. **The read-back.** Both places are said back by name and a yes is waited for. This is the guard the
+   prompt-only route leans on hardest: a plausible-but-wrong pick (Tunnel View as the "valley"
+   turnaround — a viewpoint up a side road, not on the circuit) passes the retrace gate, so the rider's
+   eye on the read-back is what catches it. The prompt says so in as many words: *the two places have
+   to sit ON the circuit, not near it*.
+4. **It is only for a NAMED circuit the model KNOWS.** A name it cannot place gets the ordinary two
+   questions; a shrug still lands on the one-way default; the model still never RAISES a loop.
+
+⚠ **What this gives up, knowingly.** §2's structural argument — a model with no coordinates cannot know
+which anchors form a ring — is still true. The bet is that a circuit famous enough to have a name is one
+the model's own knowledge places correctly, and that the wire gate plus the read-back catch the rest. That
+is a claim about model behaviour, which is exactly the class of claim the eval panel exists to measure.
+
+| piece | home |
+| --- | --- |
+| the named-circuit paragraph, in `== Drawing it up ==` | `apps/api/src/planner-prompt.ts` |
+| `return_anchor_id` may now be "the one you took from your list and said back" | `PLAN_ROUTE_TOOL`, same file |
+| the replay that guards it | `apps/api/eval/scenarios.ts` → `named-circuit-draws-without-the-two-questions` |
+
+✅ **VERIFIED 2026-09-16 (founder go, $0.1923 across three scoped runs; raw turns under
+`apps/api/eval/.runs/2026-09-17T00-19-36-228Z-mem.json` and the two files after it).**
+
+| scenario | routing | voice | discipline | persona (advisory) |
+| --- | --- | --- | --- | --- |
+| `named-circuit-draws-without-the-two-questions` (new) | **1.00**, 0/2 flagged | 1.00 | 1.00 | 0.75, ship |
+| `loop-needs-a-way-home` (the two-question path must survive) | 1.00, 0/4 flagged | 1.00 | 1.00 | 0.68, ship |
+| `road-constraints` (the deflection this sits next to) | 1.00, 0/2 flagged | 1.00 | 1.00 | 0.75, ship |
+
+The mechanism, read from the raw turns rather than the score: on *"I want to drive the whole ring around
+the lake, South Lake Tahoe back to South Lake Tahoe"* the first turn was *"The ring around the lake — that
+one I know. South Lake Tahoe out to Tahoe City at the top end, and home around by Incline Village. That
+the drive?"* — both places taken from the roster, said back by name, no question asked — and the bare
+*"yes"* drew `start = South Lake Tahoe, end = Tahoe City, return = Incline Village, round_trip = true`.
+That is a real ring (west shore out, east shore home). The pre-refinement path is unchanged: a plain
+*"start at South Lake Tahoe and end up back there"* still gets asked for its turnaround and its way home.
+
+Not measured: a Yosemite roster (the eval's frozen fixture is Tahoe), and a circuit the model does NOT
+know — the *"a name you cannot place gets the ordinary two questions"* branch has no scenario yet. The
+first real-region check is the founder's own Curry Village loop on the live app.
