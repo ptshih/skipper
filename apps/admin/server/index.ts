@@ -61,7 +61,7 @@ import {
   type DriveSelection,
 } from '@skipper/db/schema'
 import { user } from '@skipper/db/auth-schema'
-import { CLAUDE_MODELS, classifyStoryEligibility } from '@skipper/shared'
+import { BEDROCK, CLAUDE_MODELS, classifyStoryEligibility } from '@skipper/shared'
 import { checkAccessPoint, checkSpeakableAnchor } from '@skipper/engine'
 import { groundingHash } from '@skipper/db/hash'
 import { requireAdmin, type AdminEnv } from './auth'
@@ -367,6 +367,10 @@ app.post('/admin/regions/bbox-lookup', async (c) => {
   const query = body.query?.trim()
   if (!query) return c.json({ error: 'query is required' }, 400)
   const refinements = Array.isArray(body.refinements) ? body.refinements : []
+  // Same shape the catch below returns, so the drawer renders it as an ordinary LLM miss. Without this
+  // a missing token surfaces as the SDK's credential-chain error text, which names nothing an operator
+  // can set.
+  if (!process.env[BEDROCK.tokenEnv]) return c.json({ llm: null, llmError: `${BEDROCK.tokenEnv} is not set.` })
 
   const BBOX_TOOL: import('@anthropic-ai/sdk').Anthropic.Tool = {
     name: 'bbox',
@@ -413,15 +417,16 @@ app.post('/admin/regions/bbox-lookup', async (c) => {
   }
 
   try {
-    // ⚠ EXPLICIT TIMEOUT + LOW maxRetries, and this is a rule, not a preference. A bare `new Anthropic()`
-    // takes the SDK defaults — verified in the installed 0.112.1 client: `DEFAULT_TIMEOUT = 600000`
-    // (10 minutes) and `maxRetries ?? 2`. That is up to THREE Opus turns and thirty minutes behind one
-    // operator click, inside a service whose own request budget is 300s — so two of those turns would
-    // bill after the browser has already been 504'd, with nobody to deliver the answer to. CLAUDE.md says
-    // it directly for a model call in a request path: "Low maxRetries (0-1) + an explicit timeout inside
-    // the Cloud Run budget — do NOT copy studio's maxRetries: 5, tuned for a batch run that already spent."
-    // 90s x 2 attempts stays inside this server's 240s idleTimeout as well as Cloud Run's 300s.
-    const client = new (await import('@anthropic-ai/sdk')).default({ maxRetries: 1, timeout: 90_000 })
+    // ⚠ EXPLICIT TIMEOUT + LOW maxRetries, and this is a rule, not a preference. A bare client takes
+    // the SDK defaults — `DEFAULT_TIMEOUT = 600000` (10 minutes) and `maxRetries ?? 2` in the installed
+    // core client, which the Bedrock client inherits. That is up to THREE Opus turns and thirty minutes
+    // behind one operator click, inside a service whose own request budget is 300s — so two of those
+    // turns would bill after the browser has already been 504'd, with nobody to deliver the answer to.
+    // CLAUDE.md says it directly for a model call in a request path: "Low maxRetries (0-1) + an explicit
+    // timeout inside the Cloud Run budget — do NOT copy studio's maxRetries: 5, tuned for a batch run
+    // that already spent." 90s x 2 attempts stays inside this server's 240s idleTimeout as well as Cloud
+    // Run's 300s. The token is read by the SDK from `BEDROCK.tokenEnv` (guarded at the top of the route).
+    const client = new (await import('@anthropic-ai/bedrock-sdk')).AnthropicBedrock({ maxRetries: 1, timeout: 90_000 })
     const msg = await client.messages.create({
       model: process.env.ADMIN_PROPOSE_MODEL ?? CLAUDE_MODELS.opus,
       max_tokens: 512,
@@ -715,7 +720,7 @@ const CURATE_CONCURRENCY = 6
 // POST /admin/places/draft { region } — LLM-draft this region's curated destinations with
 // Opus (forced tool). The REVIEWABLE preview: spends a few cents on ONE Opus call, makes NO Places calls
 // and writes NOTHING. The operator prunes the returned list, then POST /admin/places/curate resolves +
-// upserts the keepers. Founder-gated by IAP (+ the explicit button click). 503 if ANTHROPIC unset.
+// upserts the keepers. Founder-gated by IAP (+ the explicit button click). 503 if the Bedrock token is unset.
 app.post('/admin/places/draft', async (c) => {
   const body = await c.req.json<{ region?: string; target?: number }>().catch(() => ({}) as Record<string, never>)
   const slug = (body.region ?? '').trim()
@@ -729,8 +734,8 @@ app.post('/admin/places/draft', async (c) => {
   if (bbox.length === 0) {
     return c.json({ error: 'bbox_required', message: 'Set a valid region bbox before curating.' }, 400)
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return c.json({ error: 'anthropic_unconfigured', message: 'ANTHROPIC_API_KEY is not set.' }, 503)
+  if (!process.env[BEDROCK.tokenEnv]) {
+    return c.json({ error: 'anthropic_unconfigured', message: `${BEDROCK.tokenEnv} is not set.` }, 503)
   }
   // ⚠ THE CLAMP IS THE ONE AUTHORITY on this number — the panel's min/max are affordance, not a guard.
   // Coupled to two things, so do not raise it alone: (1) `max_tokens` on the draft call (the list is ONE

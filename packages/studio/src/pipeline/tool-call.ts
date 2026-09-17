@@ -143,7 +143,7 @@ export interface ToolCallArgs<T> {
   label: string
   requestOptions?: ToolCallRequestOptions
   /** Test seam. Defaults to the shared lazy singleton — and stays LAZY, so a test that injects never
-   *  needs `ANTHROPIC_API_KEY` and production still gets the one client `models.ts` promises. */
+   *  needs the Bedrock token and production still gets the one client `models.ts` promises. */
   client?: ToolCallClient
 }
 

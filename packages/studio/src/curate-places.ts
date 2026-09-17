@@ -40,7 +40,7 @@ import { runJob } from './pipeline/job-progress'
 import { withRetry, sleep } from './pipeline/http'
 import { isAddressLike, isBusinessLike, isParkingLike, nameDisagrees, resolveCuratedPlaceInBboxes, type CuratedPlace, type PlacesBbox } from './pipeline/places'
 import { ENRICH_MODELS, getAnthropic, type EnrichModelChoice } from './models'
-import { llmSpendLines, llmSpentUsd, recordModelUsage, usageUsd } from '@skipper/shared'
+import { BEDROCK, llmSpendLines, llmSpentUsd, recordModelUsage, usageUsd } from '@skipper/shared'
 import { ANTHROPIC_READY, GOOGLE_READY, requireEnv } from './config'
 
 /** The draft call's pre-run estimate, priced through the SAME `usageUsd` the real tally uses rather
@@ -330,7 +330,7 @@ async function main(): Promise<void> {
   }
 
   // --apply spends. Fail LOUD + EARLY on missing creds rather than deep inside the draft/resolve.
-  if (!ANTHROPIC_READY()) throw new Error('ANTHROPIC_API_KEY is not set — `curate-places --apply` needs it.')
+  if (!ANTHROPIC_READY()) throw new Error(`${BEDROCK.tokenEnv} is not set — \`curate-places --apply\` needs it.`)
   if (!GOOGLE_READY()) throw new Error('GOOGLE_MAPS_API_KEY is not set — `curate-places --apply` needs Places (New) enabled on it.')
   const apiKey = requireEnv('GOOGLE_MAPS_API_KEY')
   if (estUsd > maxCostUsd) {

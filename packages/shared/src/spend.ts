@@ -36,6 +36,16 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   // guard exists to prevent, and why that guard now iterates every CLAUDE_MODELS value rather than a
   // hand-maintained list.
   'claude-opus-5': { inputPerMTok: 5, outputPerMTok: 25 },
+  // Opus 4.6 on Amazon Bedrock, GLOBAL inference profile — EVERY CLAUDE_MODELS key since 2026-09-17,
+  // the live planner included (so the rider-triggered warning above now applies to this row).
+  // ⚠ Priced at the Anthropic LIST rate ($5/$25/MTok, platform.claude.com pricing table, fetched
+  // 2026-09-17). Bedrock is partner-billed and its pricing page is the authority; the `global.` profile
+  // carries no regional premium, but a switch to the `us.` profile would bill +10% and this row would
+  // then UNDER-count by exactly that. Cache multipliers are the same 0.1x read / 1.25x write.
+  // ⚠ Keyed by the id the code SENDS (`BEDROCK.opus46`), not the echo in `response.model` — Bedrock
+  // echoes `claude-opus-4-6` (probed 2026-09-17), which would never match a lookup and would tally $0
+  // silently.
+  'global.anthropic.claude-opus-4-6-v1': { inputPerMTok: 5, outputPerMTok: 25 },
 }
 
 const CACHE_READ_MULT = 0.1

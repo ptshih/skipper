@@ -53,7 +53,7 @@ decisions, specs, and ideas live in `docs/` (indexed in `docs/README.md`).
 - **TypeScript 6 + Bun** for backend/tooling workspaces; **Swift + Xcode** for native iOS
 - **Backend:** Hono (served natively by bun) · **DB:** Neon + Drizzle · **Auth:** Better Auth (freemium) · **Audio:** Cloudflare R2 (private; presigned URLs) via `@skipper/storage`
 - **Routing:** Google Routes (A→B route materialization) via `@skipper/routing`
-- **AI:** Anthropic `claude-opus-4-8` (narration) · Google Cloud Text-to-Speech — Gemini-TTS voice "Charon" (OAuth/ADC, no API key; AAC-LC 48 kbps .m4a — LINEAR16 from TTS, then ffmpeg loudnorm + AAC encode)
+- **AI:** Claude Opus 4.6 via Amazon Bedrock (narration, judges, the live planner — [decision](docs/decisions/bedrock-opus-4-6.md)) · Google Cloud Text-to-Speech — Gemini-TTS voice "Charon" (OAuth/ADC, no API key; AAC-LC 48 kbps .m4a — LINEAR16 from TTS, then ffmpeg loudnorm + AAC encode)
 - **iOS:** SwiftUI/Observation, iOS 17+, native Google Maps, AVFoundation/MediaPlayer and Core Location. The Expo client is retained until native acceptance; future Android is separate. CarPlay remains deferred.
 
 ## Layout

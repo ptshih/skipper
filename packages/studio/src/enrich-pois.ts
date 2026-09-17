@@ -48,7 +48,7 @@ import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { ENRICH_MODELS, type EnrichModelChoice } from './models'
 import { ANTHROPIC_READY, GEOLOGY_ENRICHMENT, SCOUT_CONCURRENCY, WIKIDATA_ENRICHMENT } from './config'
-import { llmSpendLines, llmSpentUsd } from '@skipper/shared'
+import { BEDROCK, llmSpendLines, llmSpentUsd } from '@skipper/shared'
 import { classifyStoryEligibility } from '@skipper/shared'
 
 /** Soft narration length the fact sheet is sized for — the LONG-FORM end of the register bands, since the
@@ -216,10 +216,10 @@ async function main(): Promise<void> {
   }
 
   // --apply spends Anthropic. Fail LOUD + EARLY on a missing key, rather than letting every per-POI
-  // buildCorpusFactSheet throw (getAnthropic throws when ANTHROPIC_API_KEY is unset) and get swallowed as a silent
+  // buildCorpusFactSheet throw (getAnthropic throws when the Bedrock token is unset) and get swallowed as a silent
   // per-place "deferred" — which would report a SUCCEEDED run that enriched NOTHING (review #6).
   if (!ANTHROPIC_READY()) {
-    throw new Error('ANTHROPIC_API_KEY is not set — `enrich --apply` needs it. Run via dotenvx (see the usage header).')
+    throw new Error(`${BEDROCK.tokenEnv} is not set — \`enrich --apply\` needs it. Run via dotenvx (see the usage header).`)
   }
 
   if (estUsd > maxCostUsd) {

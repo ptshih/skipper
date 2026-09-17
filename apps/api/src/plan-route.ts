@@ -217,7 +217,7 @@ type DegradedReason =
    *  HTTP 200 and an in-persona line, so `/health` and every 5xx alert stay green with the product
    *  broken. That is the exact condition this event was created to make countable.
    *
-   *  `not_configured` is a MISSING ANTHROPIC_API_KEY on the deployed service: every rider on the
+   *  `not_configured` is a MISSING Bedrock token (`BEDROCK.tokenEnv`) on the deployed service: every rider on the
    *  instance hears VOICE.down, forever, and the only other trace is one unstructured `console.error`
    *  that lands in Cloud Logging's `textPayload` where no log-based metric can read it. A non-zero count
    *  of this is a deploy fault, not traffic.
@@ -274,7 +274,7 @@ type DegradedReason =
  * the identical choice and answered it the other way. Setting the field is the DOCUMENTED lever, so it
  * is set, and the stream is chosen to agree with it rather than contradict it.
  *
- * ⚠ ONE REASON IS GENUINELY OURS AND GENUINELY BROKEN: `not_configured` is a missing ANTHROPIC_API_KEY
+ * ⚠ ONE REASON IS GENUINELY OURS AND GENUINELY BROKEN: `not_configured` is a missing Bedrock token
  * on a live deploy — every rider on that instance hears the outage line, forever, while /health and
  * every 5xx alert stay green. That is an ERROR by any reading, and flattening this to a single
  * severity would either bury it or promote the healthy beats alongside it. `bad_transcript` stays a

@@ -37,7 +37,7 @@ import { resolveStoryGrounding } from './pipeline/select'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { ANTHROPIC_READY, NARRATION_CONCURRENCY, NARRATION_FALLBACK_CHARS } from './config'
-import { llmSpendLines, llmSpentUsd } from '@skipper/shared'
+import { BEDROCK, llmSpendLines, llmSpentUsd } from '@skipper/shared'
 import { JUDGMENT_MODEL } from './models'
 import { buildGroundingWell, evaluateGrounding } from './eval/grounding'
 import { charmEvaluator } from './eval/charm'
@@ -217,7 +217,7 @@ async function main(): Promise<FinishOutcome> {
   // wrote "every released clip is ungrounded" into the audit's system of record. Same guard
   // `enrich-pois` and `curate-places` already put on their --apply branch.
   if (!ANTHROPIC_READY()) {
-    throw new Error('ANTHROPIC_API_KEY is not set — `audit-corpus --apply` needs it to run the judges.')
+    throw new Error(`${BEDROCK.tokenEnv} is not set — \`audit-corpus --apply\` needs it to run the judges.`)
   }
 
   // Pre-flight spend guard — abort BEFORE any Opus call if the estimate already exceeds the cap.

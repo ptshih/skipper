@@ -8,6 +8,7 @@
 // resolved row is stored, so the runtime picker makes zero live Places calls. Needs Places API (New)
 // enabled on GOOGLE_MAPS_API_KEY (Routes enablement alone is not enough).
 
+import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk'
 import Anthropic from '@anthropic-ai/sdk'
 import type { BboxCorners } from './bbox'
 
@@ -458,15 +459,15 @@ export async function draftCuratedPlaces(
   boxes: readonly BboxCorners[],
   opts: { targetN: number; model: string },
 ): Promise<PlaceDraft[]> {
-  // ⚠ EXPLICIT TIMEOUT + LOW maxRetries, and this is a rule, not a preference. A bare `new Anthropic()`
-  // takes the SDK defaults — verified in the installed 0.112.1 client: `DEFAULT_TIMEOUT = 600000`
-  // (10 minutes) and `maxRetries ?? 2`. That is up to THREE Opus turns and thirty minutes behind one
+  // ⚠ EXPLICIT TIMEOUT + LOW maxRetries, and this is a rule, not a preference. A bare client takes
+  // the SDK defaults — `DEFAULT_TIMEOUT = 600000` (10 minutes) and `maxRetries ?? 2` in the installed
+  // core client, which the Bedrock client inherits. That is up to THREE Opus turns and thirty minutes behind one
   // operator click, inside a service whose own request budget is 300s — so two of those turns would
   // bill after the browser has already been 504'd, with nobody to deliver the answer to. CLAUDE.md says
   // it directly for a model call in a request path: "Low maxRetries (0-1) + an explicit timeout inside
   // the Cloud Run budget — do NOT copy studio's maxRetries: 5, tuned for a batch run that already spent."
   // 90s x 2 attempts stays inside this server's 240s idleTimeout as well as Cloud Run's 300s.
-  const client = new Anthropic({ maxRetries: 1, timeout: 90_000 })
+  const client = new AnthropicBedrock({ maxRetries: 1, timeout: 90_000 })
   // ⚠ STREAMED, and the reason is `max_tokens`, not progress reporting — nothing consumes the deltas.
   // A NON-streaming request cannot safely ask for much more than ~16k output tokens: the SDK's own HTTP
   // timeout is what bites, not the model, so the old ceiling here was an artifact of HOW the call was

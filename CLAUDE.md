@@ -182,11 +182,16 @@ Authorized replacement in progress: [native iOS conversion](docs/designs/native-
   to transpile `app.config.ts`; under 7 `expo prebuild`/`export` die with `ModuleKind` undefined, and
   `tsc --noEmit` alone passes and HIDES it. zod 4 (`z.enum`, top-level `z.uuid()`/`z.url()`); drizzle
   (neon-http, stateless — no interactive transactions; use `db.batch`).
+- **Claude runs on AMAZON BEDROCK — Opus 4.6 for EVERY tier (founder, 2026-09-17).** Client =
+  `AnthropicBedrock` (`@anthropic-ai/bedrock-sdk`); model id = the `global.` INFERENCE PROFILE (the bare id
+  400s); auth = a Bedrock API key (bearer) in the env var named ONCE as `BEDROCK.tokenEnv` (`@skipper/shared`)
+  — `ANTHROPIC_API_KEY` is read by NOTHING. ⚠ 4.6: thinking must be REQUESTED (omit = off); cache minimum
+  4096 tokens; the eval gate is still CALIBRATED ON OPUS 5. `docs/decisions/bedrock-opus-4-6.md`.
 - **The live planner runs a model IN THE REQUEST PATH** — configured unlike a batch call. Model id from a
-  named constant in `@skipper/shared`; **thinking stays ON** (disabling it on Opus 5 can emit a tool call as
+  named constant in `@skipper/shared`; **thinking stays ON** (with it off the model can emit a tool call as
   plain TEXT — turn succeeds, no error, call never runs — and can leak `<thinking>` tags); LOW effort is the
   latency lever; stream. **Low `maxRetries` (0–1)** + an explicit timeout inside the Cloud Run budget — do
-  NOT copy studio's `maxRetries: 5`, tuned for a batch run that already spent. `ANTHROPIC_API_KEY` is now a
+  NOT copy studio's `maxRetries: 5`, tuned for a batch run that already spent. The Bedrock token is a
   RUNTIME requirement of `apps/api`. ⚠ Never log a request body; never persist a transcript (a
   `conversations` table is new personal data `purgeUserData` must chase — needs a founder call).
 - **TTS = Google Cloud Text-to-Speech via REST** (no SDK — raw `fetch` to `…/v1/text:synthesize`), model

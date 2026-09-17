@@ -18,6 +18,7 @@
 // The model call is INJECTED (ExciseModelCall), so the build/extract logic is unit-tested with a
 // deterministic fake and zero API spend. Mirrors classify-register.ts / grounding.ts.
 
+import type { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk'
 import Anthropic from '@anthropic-ai/sdk'
 import { NARRATION_MODEL } from '../models'
 import { recordModelUsage } from '@skipper/shared'
@@ -106,8 +107,8 @@ export async function exciseUngrounded(
   return typeof edited === 'string' && edited.trim().length > 0 ? edited.trim() : script
 }
 
-/** The real Haiku-free Anthropic call backing exciseUngrounded (forced tool_choice → always a script). */
-export function makeExciseCall(getAnthropic: () => Anthropic): ExciseModelCall {
+/** The real model call backing exciseUngrounded (forced tool_choice → always a script). */
+export function makeExciseCall(getAnthropic: () => Pick<AnthropicBedrock, 'messages'>): ExciseModelCall {
   return async ({ system, tools, messages }) => {
     const response = await getAnthropic().messages.create({
       model: NARRATION_MODEL,

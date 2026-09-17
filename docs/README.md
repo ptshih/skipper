@@ -112,6 +112,7 @@ the document itself, so this index does not maintain a second account of them.
 - [Location permission priming (explainer before the OS prompt)](decisions/location-permission-priming.md)
 - [Upstream source errors: poi_overrides + the veracity eval + the durable eval record](decisions/fact-overrides-and-veracity.md)
 - [Riders are real — the post-launch storage & wire posture](decisions/riders-are-real-posture.md)
+- [Claude via Amazon Bedrock — Opus 4.6 for everything](decisions/bedrock-opus-4-6.md)
 
 ### designs/
 

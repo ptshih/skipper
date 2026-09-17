@@ -25,7 +25,7 @@
 // explicit id list, plus --limit), so the ids you already have in hand from `audit-corpus` /
 // `audit-loudness` feed straight in. (founder call 2026-08-02: repoint it at the corpus, don't retire it.)
 //
-// Usage (env via dotenvx — R2_* to presign the audio; ANTHROPIC_API_KEY for the --apply judge).
+// Usage (env via dotenvx — R2_* to presign the audio; the Bedrock token for the --apply judge).
 // Prefer --out over a shell redirect: the SOP preamble prints on stdout, so `> file.md` captures it too.
 //   dotenvx run -f .env.development -- bun packages/studio/src/judge-voice.ts --out=/tmp/voice.md
 //   ... --apply                  also run the Opus charm judge over the writing (SPENDS $)
@@ -37,7 +37,7 @@
 import { and, eq, inArray, isNotNull, or, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, poiClusters, pois } from '@skipper/db/schema'
-import { MODEL_PRICING } from '@skipper/shared'
+import { BEDROCK, MODEL_PRICING } from '@skipper/shared'
 import { announce, numericFlag, parseFlags } from './pipeline/ops'
 import { clusterIdsInBbox, poiIdsInBbox } from './pipeline/diversity-context'
 import { requireRegionBboxes, requireRegionKey, resolveRegion } from './pipeline/region'
@@ -286,7 +286,7 @@ async function main() {
     // Fail fast on a missing key rather than after the selection query, and refuse a batch the judge
     // can only answer by truncating (JUDGE_BATCH_MAX) — both BEFORE anything bills.
     if (!ANTHROPIC_READY())
-      throw new Error('ANTHROPIC_API_KEY is not set — `judge-voice --apply` needs it to run the charm judge.')
+      throw new Error(`${BEDROCK.tokenEnv} is not set — \`judge-voice --apply\` needs it to run the charm judge.`)
     if (clips.length > JUDGE_BATCH_MAX)
       throw new Error(
         `⛔ ${clips.length} clips exceeds the ${JUDGE_BATCH_MAX}-clip judge batch — one call cannot score them ` +

@@ -17,6 +17,7 @@
 // every drive that reuses it (like `kind`). Empirical grounding (2026-06-19 probe of the 460 enriched POIs):
 // 460/460 resolve to a Wikidata entity, only 21 lack P31 (→ fallback), 48 are multi-P31 (→ tie-break).
 
+import type { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk'
 import Anthropic from '@anthropic-ai/sdk'
 import { CLAUDE_MODELS, type DeliveryRegister } from '@skipper/shared'
 import { recordModelUsage } from '@skipper/shared'
@@ -198,8 +199,9 @@ export async function classifyRegisterLLM(
   return 'story'
 }
 
-/** The real Haiku call backing classifyRegisterLLM (forced tool_choice so every reply classifies). */
-export function makeRegisterCall(getAnthropic: () => Anthropic): RegisterModelCall {
+/** The real model call backing classifyRegisterLLM (forced tool_choice so every reply classifies).
+ *  `CLAUDE_MODELS.haiku` is the SUMMARY/classifier tier, not necessarily Haiku — see @skipper/shared. */
+export function makeRegisterCall(getAnthropic: () => Pick<AnthropicBedrock, 'messages'>): RegisterModelCall {
   return async ({ system, tools, messages }) => {
     const response = await getAnthropic().messages.create({
       model: CLAUDE_MODELS.haiku,

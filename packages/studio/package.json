@@ -14,7 +14,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.112.1",
+    "@anthropic-ai/bedrock-sdk": "^0.33.6",
+    "@anthropic-ai/sdk": "^0.126.0",
     "@skipper/db": "workspace:*",
     "@skipper/engine": "workspace:*",
     "@skipper/routing": "workspace:*",

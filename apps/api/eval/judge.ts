@@ -9,8 +9,9 @@
 // ⚠ THE JUDGE IS INJECTABLE so the verdict→TurnEval mapping is unit-tested with no spend. Same seam,
 // and same reason, as `CharmJudge` in the narration panel.
 
+import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk'
 import Anthropic from '@anthropic-ai/sdk'
-import { CLAUDE_MODELS, recordModelUsage, usageUsd } from '@skipper/shared'
+import { BEDROCK, CLAUDE_MODELS, recordModelUsage, usageUsd } from '@skipper/shared'
 import type { PlannerScorecard, TurnEval, TurnOutcome } from './types'
 
 /** A turn below this (1-10) is "the man is not in the room" — flagged, never blocking. */
@@ -120,9 +121,9 @@ export type PersonaJudge = (outcomes: readonly TurnOutcome[]) => Promise<Persona
  * returns, and a malformed report must not also lose the charge — the exact bug that made the
  * narration charm judge bill invisibly until 2026-08-02. */
 export async function judgePersona(outcomes: readonly TurnOutcome[]): Promise<PersonaVerdict> {
-  const key = process.env.ANTHROPIC_API_KEY
-  if (!key) throw new Error('ANTHROPIC_API_KEY is not set — the persona judge needs it')
-  const client = new Anthropic({ apiKey: key })
+  const key = process.env[BEDROCK.tokenEnv]
+  if (!key) throw new Error(`${BEDROCK.tokenEnv} is not set — the persona judge needs it`)
+  const client = new AnthropicBedrock({ apiKey: key })
 
   const body = outcomes
     .map((o) => `[${o.scenarioId} #${o.index}]\nThem: ${o.rider}\nYou: ${o.say}${o.routeKey ? '\n(a route was drawn)' : ''}`)

@@ -12,19 +12,20 @@
     "test": "bun test --pass-with-no-tests"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.112.1",
+    "@anthropic-ai/bedrock-sdk": "^0.33.6",
+    "@anthropic-ai/sdk": "^0.126.0",
     "@neondatabase/serverless": "^1.1.0",
     "@skipper/db": "workspace:*",
     "@skipper/engine": "workspace:*",
     "@skipper/shared": "workspace:*",
+    "@skipper/sim": "workspace:*",
     "@skipper/storage": "workspace:*",
     "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-router": "^1.170.18",
     "@vis.gl/react-google-maps": "^1.9.0",
     "drizzle-orm": "^0.45.2",
     "google-auth-library": "^10.9.0",
-    "hono": "^4.12.30",
-    "@skipper/sim": "workspace:*"
+    "hono": "^4.12.30"
   },
   "devDependencies": {
     "@radix-ui/react-dialog": "^1.1.19",

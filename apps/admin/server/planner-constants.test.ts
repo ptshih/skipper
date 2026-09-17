@@ -77,7 +77,9 @@ describe('console copies of the planner-facing numbers', () => {
     const places = read('apps/admin/server/places.ts')
     expect(places).toContain('client.messages.stream({')
     expect(places).toContain('stream.finalMessage()')
-    expect(places).toMatch(/new Anthropic\(\{ maxRetries: 1, timeout: 90_000 \}\)/)
+    // The Bedrock client inherits the core SDK's defaults (10-minute timeout, 2 retries), so the
+    // explicit pair is asserted on it exactly as it was on the first-party client.
+    expect(places).toMatch(/new AnthropicBedrock\(\{ maxRetries: 1, timeout: 90_000 \}\)/)
   })
 
   test('the draft count is NOT AN INPUT — no field, no wire param, no clamp (founder, 2026-08-04)', () => {

@@ -1,14 +1,19 @@
-// The LIVE PLANNER's model call — the ONE place `apps/api` talks to Anthropic (1.1 step 6, D9/D10).
+// The LIVE PLANNER's model call — the ONE place `apps/api` talks to Claude (1.1 step 6, D9/D10),
+// through Amazon Bedrock since 2026-09-17 (founder call; the provider rationale, the bearer-token auth
+// and the inference-profile gotcha live on `BEDROCK` in @skipper/shared, not here).
 //
 // The rider plans a drive by TALKING to the Skipper. This module owns exactly one turn of that
 // conversation: transcript + the region's curated anchor list in, a rider-visible `say` plus (maybe)
 // an unvalidated route object out. It resolves nothing else — no DB, no Routes call, no Zod, no HTTP.
 //
-// ⚠ WHY THE SDK IMPORT IS QUARANTINED HERE. This is the ONLY module in the plan path that imports
-// `@anthropic-ai/sdk`, so a test can `mock.module('../src/planner', …)` and still exercise the REAL
-// handler, the real caps and the real route ordering with no network and no spend. That property dies
-// the moment a second module imports the SDK — or the moment this one constructs its client at import
-// time (see `plannerClient` below). The anchor read is the other impure seam and stubs separately.
+// ⚠ WHY THE SDK IMPORTS ARE QUARANTINED HERE. This is the ONLY module in the plan path that imports
+// `@anthropic-ai/sdk` or `@anthropic-ai/bedrock-sdk`, so a test can `mock.module('../src/planner', …)`
+// and still exercise the REAL handler, the real caps and the real route ordering with no network and
+// no spend. That property dies the moment a second module imports either SDK — or the moment this one
+// constructs its client at import time (see `plannerClient` below). The anchor read is the other
+// impure seam and stubs separately. (`@anthropic-ai/sdk` is still imported for the TYPES and the
+// error classes — the Bedrock client extends its base and throws its `APIError` family, so one core
+// SDK copy in the install is what keeps every `instanceof` below true.)
 //
 // ⚠ INV-13 — A TRANSCRIPT IS TRANSIENT RIDER CONTENT. Nothing in this file logs a request body, the
 // prompt, the roster, `say`, thinking, or a tool input, and nothing throws an error carrying upstream
@@ -20,8 +25,9 @@
 // `@skipper/studio`'s persona (fact sheets, "the card", stop kinds); never copy the deflection back the
 // other way. Same voice, different job, separate review.
 
+import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk'
 import Anthropic from '@anthropic-ai/sdk'
-import { CLAUDE_MODELS, recordModelUsage, usageUsd, type UsageLike } from '@skipper/shared'
+import { BEDROCK, CLAUDE_MODELS, recordModelUsage, usageUsd, type UsageLike } from '@skipper/shared'
 import { byAnchorRank, flatten } from './anchor-format'
 import { MAX_PLAN_ANCHORS, PLANNER_MAX_TOKENS, PLANNER_TIMEOUT_MS } from './limits'
 // ⚠ The tool comes from ./planner-prompt, not from here. Its name and every field description are prose
@@ -165,7 +171,7 @@ export interface PlannerModelArgs {
    *  rider's "yes" turns into a drive could never be exercised without spending money. Anything
    *  structurally compatible with `messages.stream()` is enough — the tests pass a hand-rolled double,
    *  not a real SDK instance. */
-  client?: Pick<Anthropic, 'messages'>
+  client?: Pick<AnthropicBedrock, 'messages'>
 }
 
 /**
@@ -253,27 +259,30 @@ export class PlannerTurnError extends Error {
 /* The client — lazy, and that is not a style preference.                       */
 /* -------------------------------------------------------------------------- */
 
-let client: Anthropic | null = null
+let client: AnthropicBedrock | null = null
 
 /**
  * ⚠ NEVER CONSTRUCT AT MODULE SCOPE. Two reasons, and the second is the real one:
- *  - `apps/api` must keep booting env-free. `GET /health` and `/version` have no business needing an
- *    Anthropic key, and auth.ts is already the one hard throw-at-load this app tolerates.
- *  - `new Anthropic()` with no key does not throw — it kicks off a credential-chain resolution that
- *    reads `~/.config/anthropic/`. At module scope that is a filesystem probe on import, and the first
- *    rider request fails with the SDK's generic "could not resolve authentication method" instead of
- *    naming the variable an operator has to set.
- * Passing `apiKey` explicitly short-circuits that chain, so no disk I/O ever happens in the request path.
+ *  - `apps/api` must keep booting env-free. `GET /health` and `/version` have no business needing a
+ *    Bedrock token, and auth.ts is already the one hard throw-at-load this app tolerates.
+ *  - `new AnthropicBedrock()` with no token does not throw — with no bearer it falls through to the
+ *    AWS credential-provider chain, which probes `~/.aws`, the env and the instance metadata service.
+ *    At module scope that is a filesystem/network probe on import, and the first rider request then
+ *    fails deep in SigV4 signing with a credential error instead of naming the variable an operator
+ *    has to set.
+ * Passing `apiKey` (the bearer) explicitly is what short-circuits that chain (verified in the installed
+ * client: `authToken` set ⇒ no signing, no provider chain), so no disk I/O ever happens in the request
+ * path. ⚠ It is read by the NAME `BEDROCK.tokenEnv`, the same name every other readiness check uses.
  */
-function plannerClient(): Anthropic {
+function plannerClient(): AnthropicBedrock {
   if (client) return client
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const apiKey = process.env[BEDROCK.tokenEnv]
   if (!apiKey) {
     // Actionable server-side; the rider gets the in-persona outage line and never this text.
-    console.error('[planner] ANTHROPIC_API_KEY is not set — POST /drives/plan cannot run')
+    console.error(`[planner] ${BEDROCK.tokenEnv} is not set — POST /drives/plan cannot run`)
     throw new PlannerTurnError('not_configured')
   }
-  client = new Anthropic({ apiKey, maxRetries: PLANNER_MAX_RETRIES, timeout: PLANNER_TIMEOUT_MS })
+  client = new AnthropicBedrock({ apiKey, maxRetries: PLANNER_MAX_RETRIES, timeout: PLANNER_TIMEOUT_MS })
   return client
 }
 
@@ -444,13 +453,17 @@ export async function runPlannerTurn(args: PlannerModelArgs): Promise<PlannerTur
 
   const messages = toModelMessages(args.turns)
   // ⚠ The injected client wins when present (tests); production omits it and pays the lazy
-  // construction below, which is what keeps ANTHROPIC_API_KEY off the module-load path.
+  // construction below, which is what keeps the Bedrock token off the module-load path.
   const anthropic = args.client ?? plannerClient()
 
   // Three system blocks, breakpoint on the SECOND. Render order is tools -> system -> messages, so a
   // breakpoint there caches the tool definition AND the persona AND the region's roster as one prefix
-  // — one entry per region, comfortably over this model's 512-token cache minimum. Block three is the
-  // volatile slot and must stay after it.
+  // — one entry per region. ⚠ Opus 4.6's minimum cacheable prefix is 4096 TOKENS (it was 512 on Opus
+  // 5 — the minimum is not monotonic across generations). A prefix under it does not error; it just
+  // silently bills full price every turn, forever, on this anonymous path. The Tahoe roster clears it
+  // by a wide margin (`logPlanSpend` prints cache write/read per turn — a region whose turns never
+  // show a cache read is one whose roster is too small to cache). Block three is the volatile slot
+  // and must stay after it.
   const system: Anthropic.TextBlockParam[] = [
     { type: 'text', text: PLANNER_SYSTEM_PROMPT },
     {
@@ -483,12 +496,13 @@ export async function runPlannerTurn(args: PlannerModelArgs): Promise<PlannerTur
       model: CLAUDE_MODELS.planner,
       // ⚠ Bounds THINKING PLUS visible output in ONE budget. Too low does not raise — see PLANNER_EFFORT.
       max_tokens: PLANNER_MAX_TOKENS,
-      // ⚠ INV-8: THINKING STAYS ON. With it disabled this model can write a tool call into VISIBLE TEXT
-      // instead of a tool_use block — the turn succeeds, no error is raised, the route never reaches the
-      // map — and can leak <thinking> tags into rider-facing prose. For a planner whose entire contract
-      // is emitting a structured route, that is a silent wrong answer. `display: 'omitted'` is stated
-      // rather than assumed: the SDK's own docstring claims a 'summarized' default that is stale here,
-      // and rider-facing text must never carry reasoning.
+      // ⚠ INV-8: THINKING STAYS ON — and on Opus 4.6 that means REQUESTED, since omitting `thinking`
+      // on this generation runs without it (Opus 5 had it on by default; 4.6 does not). With it off
+      // this model can write a tool call into VISIBLE TEXT instead of a tool_use block — the turn
+      // succeeds, no error is raised, the route never reaches the map — and can leak <thinking> tags
+      // into rider-facing prose. For a planner whose entire contract is emitting a structured route,
+      // that is a silent wrong answer. `display: 'omitted'` is stated rather than assumed: on 4.6 the
+      // default is 'summarized', and rider-facing text must never carry reasoning.
       thinking: { type: 'adaptive', display: 'omitted' },
       output_config: { effort: args.effort ?? PLANNER_EFFORT },
       system,

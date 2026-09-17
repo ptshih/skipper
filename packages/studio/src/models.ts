@@ -5,82 +5,89 @@
 // Each id below cites where it came from; re-verify against the linked source
 // before bumping.
 
-import Anthropic from '@anthropic-ai/sdk'
-import { AUDIO_LOUDNESS, CLAUDE_MODELS, type DeliveryRegister } from '@skipper/shared'
+import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk'
+import { AUDIO_LOUDNESS, BEDROCK, CLAUDE_MODELS, type DeliveryRegister } from '@skipper/shared'
 
 // Re-export the shared HAIKU id so the in-job summarizer (pipeline/job-output.ts) sources it from
 // studio/models.ts alongside the other model ids, while @skipper/shared stays the single source.
 export const SUMMARY_MODEL = CLAUDE_MODELS.haiku
 
 // ---------------------------------------------------------------------------
-// Shared Anthropic client — ONE lazily-built singleton for every call site.
+// Shared Bedrock client — ONE lazily-built singleton for every call site.
 // ---------------------------------------------------------------------------
-// Lazily build the Anthropic client on first use, so importing this module stays
-// side-effect-free (ANTHROPIC_API_KEY is required only when a model call runs) —
-// mirrors the lazy @skipper/db client. Every studio/eval module shares this one
-// instance via getAnthropic(); `label` is a per-call-site descriptive parenthetical
-// woven into the missing-key error so the message still names what needed the key.
-let _anthropic: Anthropic | null = null
-export function getAnthropic(label = 'a model call needs it'): Anthropic {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error(`ANTHROPIC_API_KEY is not set (${label}).`)
+// Lazily build the client on first use, so importing this module stays side-effect-free (the
+// Bedrock token is required only when a model call runs) — mirrors the lazy @skipper/db client.
+// Every studio/eval module shares this one instance via getAnthropic(); `label` is a per-call-site
+// descriptive parenthetical woven into the missing-token error so the message still names what
+// needed it. ⚠ The NAME `getAnthropic` is kept on purpose: ~15 call sites and their tests spell it,
+// and the client it returns speaks the same Messages surface — only the provider behind it moved
+// (Amazon Bedrock, founder call 2026-09-17; see BEDROCK in @skipper/shared for the why and the auth).
+// ⚠ The guard reads `BEDROCK.tokenEnv` rather than trusting the SDK's own env read, because the
+// SDK's failure mode for a missing token is to fall through to the AWS credential chain and die deep
+// inside a paid run with a signing error — after earlier stops already billed.
+let _anthropic: AnthropicBedrock | null = null
+export function getAnthropic(label = 'a model call needs it'): AnthropicBedrock {
+  if (!process.env[BEDROCK.tokenEnv]) {
+    throw new Error(`${BEDROCK.tokenEnv} is not set (${label}).`)
   }
   // maxRetries 5 (SDK default is 2): narration is the most expensive call, so survive a
-  // SUSTAINED Anthropic overload (429/529) rather than fail a run that already spent on earlier
-  // stops. The SDK backs off exponentially + honors Retry-After.
-  return (_anthropic ??= new Anthropic({ maxRetries: 5 }))
+  // SUSTAINED overload (429/5xx — Bedrock throttles per account, not per key) rather than fail a run
+  // that already spent on earlier stops. The SDK backs off exponentially + honors Retry-After.
+  return (_anthropic ??= new AnthropicBedrock({ maxRetries: 5 }))
 }
 
 // ---------------------------------------------------------------------------
-// Narration — Anthropic Messages API
+// Narration — Anthropic Messages API (via Amazon Bedrock since 2026-09-17)
 // ---------------------------------------------------------------------------
-// The spec wants the MOST CAPABLE model for narration quality. Claude Fable 5 was
-// the pick (a tier above Opus; switched 2026-06-09 at founder request), but on
-// 2026-06-14 it began returning 404 "Claude Fable 5 is not available. Please use
-// Opus 4.8." account-wide (req_011Cc2MhTY66A8XhQ1A29VBd) — so narration WENT back to
-// Opus 4.8, then to Opus 5 (below). (Re-point here if
-// Fable access returns; this constant is the single switch.)
+// ⚠ NOW OPUS 4.6 ON BEDROCK (founder call, 2026-09-17: "Opus 4.6 for everything") — `CLAUDE_MODELS.opus`
+// resolves to `BEDROCK.opus46` in @skipper/shared, which is where the provider rationale, the auth and
+// the inference-profile gotcha live. The history below is retained because it is WHY this constant
+// exists as a single switch, and because the Opus 5 calibration numbers are the last ones this repo
+// has — they describe a model it no longer runs, and the gate should be re-calibrated on 4.6
+// (`eval/calibrate.ts`, a separate paid go) before a grounding/charm score on 4.6 is trusted.
 //
-// ⚠ NOW OPUS 5 (founder call, 2026-08-04 — `CLAUDE_MODELS.opus` was bumped 4.8 → 5 in place, against
-// the standing warning on that constant; the warning is kept there for the next bump). The Fable
-// history above is retained because it is WHY this constant exists as a single switch.
+// The spec wants the MOST CAPABLE model for narration quality. Claude Fable 5 was the pick (a tier
+// above Opus; switched 2026-06-09 at founder request), but on 2026-06-14 it began returning 404
+// "Claude Fable 5 is not available. Please use Opus 4.8." account-wide (req_011Cc2MhTY66A8XhQ1A29VBd)
+// — so narration WENT back to Opus 4.8, then to Opus 5 (founder, 2026-08-04), then to Opus 4.6 on
+// Bedrock. (Re-point in @skipper/shared if the tier should move again; this constant is the single
+// studio-side switch.)
 //
-// Request surface, VERIFIED on claude-opus-5 before the bump (one probe each, ~3¢ total) rather than
-// assumed — the Fable-era failure was exactly a 5-series model refusing a request shape:
+// Request surface, VERIFIED on the model in use before each move rather than assumed — the Fable-era
+// failure was exactly a 5-series model refusing a request shape:
 //   · forced `tool_choice: {type:'tool', name}` — ✅ (every judge depends on this; Fable REJECTED it,
 //     which is the whole reason JUDGMENT_MODEL is a separate constant)
 //   · `tool_choice: {type:'any'}` — ✅ (pipeline/scout.ts's agentic fetch-or-finalize loop)
 //   · `thinking: {type:'adaptive'}` with no tools — ✅ (this call, narrate.ts)
 //   · forced tool + adaptive thinking together — ✅ (nothing uses it today; recorded as available)
-// ⚠ `budget_tokens` is rejected on this model (see the planner note in @skipper/shared's models.ts);
-// depth is `output_config.effort`. `temperature`/`top_p`/`top_k` were rejected on 4.8 and are NOT
-// re-verified on 5 — nothing here sends them, so treat that line as history, not as a current claim.
+// Re-probed on Bedrock/Opus 4.6 2026-09-17 (docs/decisions/bedrock-opus-4-6.md has the per-shape
+// results). ⚠ On 4.6 `budget_tokens` is deprecated rather than rejected — still never send it; depth
+// is `output_config.effort` (4.6 has no `xhigh`). `temperature`/`top_p`/`top_k` are ALLOWED on 4.6
+// (they were rejected on 4.8/5) — nothing here sends them, so treat that as a fact, not a lever.
 //
-// COST: unchanged. Opus 5 is $5/$25 per MTok, identical to 4.8 (MODEL_PRICING in @skipper/shared), so
-// the bump is cost-neutral and a regen bills what it did before.
-// ✅ CALIBRATED on the bump, 2026-08-04 (`eval/calibrate.ts`, 54 Opus calls): verdict agreement 16/18,
+// COST: unchanged per token. Opus 4.6 is $5/$25 per MTok at list (MODEL_PRICING in @skipper/shared),
+// identical to Opus 5, and the older tokenizer bills ~30% FEWER tokens for the same text — so a regen
+// bills what it did before or less.
+// ✅ LAST CALIBRATION (Opus 5, 2026-08-04, `eval/calibrate.ts`, 54 calls): verdict agreement 16/18,
 // violation recall 8/8, false positives 4 claims across 2/10 clean cases. Recall is the FAIL-CLOSED axis
-// and it is perfect — the bump did not make the gate leakier. The drift is in the COST axis only, exactly
-// where calibrate.ts says to expect it. ⚠ Two clean cases now over-flag, and `grounding-inverse-relation`
-// is a RETURNED regression: grounding.ts spells that carve-out out with that very example ("hired by his
-// aunt X" grounds "he was X's nephew") and the golden case exists because it was a live false positive in
-// June. ✅ ACCEPTED AS-IS by the founder 2026-08-04 — 4 false positives across 10 clean cases costs some
-// excision rounds and trims a little supported writing, and it never ships a hallucination, so it is not
-// worth touching the fail-closed gate's prompt on the day the model changed. Re-raise only if a later
-// calibration shows the precision number MOVING, which is the drift this runner exists to watch.
+// and it was perfect on THAT model. ⚠ Two clean cases over-flagged, and `grounding-inverse-relation`
+// was a RETURNED regression: grounding.ts spells that carve-out out with that very example ("hired by
+// his aunt X" grounds "he was X's nephew") and the golden case exists because it was a live false
+// positive in June. ✅ ACCEPTED AS-IS by the founder 2026-08-04 — it costs some excision rounds and
+// trims a little supported writing, and never ships a hallucination. Re-raise only if a calibration
+// on the CURRENT model shows the precision number MOVING, which is the drift this runner exists to watch.
 //
-// Source: Anthropic model catalog (claude-api skill — "Current Models" table); the id literal is
-// single-sourced in @skipper/shared (CLAUDE_MODELS).
+// Source: the id literal is single-sourced in @skipper/shared (CLAUDE_MODELS / BEDROCK).
 export const NARRATION_MODEL = CLAUDE_MODELS.opus
 
 // JUDGMENT tier — the structured-report / spot-check judges (eval/charm.ts, eval/grounding.ts,
 // eval/veracity.ts): the NON-narration calls that need the calibration tier. (The enrichment
-// scout is a SEPARATE ENRICH tier, Sonnet by default — see ENRICH_MODELS below.) Opus 5 since
-// 2026-08-04. It still COINCIDES with NARRATION_MODEL — but it stays a SEPARATE constant on purpose,
-// for two reasons that outlive the coincidence:
-//   (a) Most of them FORCE tool use (tool_choice {type:'tool'} or {type:'any'}); Opus 5 accepts both
-//       (verified 2026-08-04 — see the narration block above), but it's a hard requirement the
-//       narration model must also meet if the two ever diverge again (Fable, e.g., rejected it).
+// scout is a SEPARATE ENRICH tier — see ENRICH_MODELS below.) Opus 4.6 on Bedrock since 2026-09-17
+// (Opus 5 before that, from 2026-08-04). It still COINCIDES with NARRATION_MODEL — but it stays a
+// SEPARATE constant on purpose, for two reasons that outlive the coincidence:
+//   (a) Most of them FORCE tool use (tool_choice {type:'tool'} or {type:'any'}); Opus 4.6 on Bedrock
+//       accepts both (probed 2026-09-17 — see the narration block above), but it's a hard requirement
+//       the narration model must also meet if the two ever diverge again (Fable, e.g., rejected it).
 //   (b) The judge rubrics/score thresholds were calibrated against Opus-tier judging — moving
 //       this would silently shift every score (re-run eval/calibrate.ts after any bump).
 // Upgraded Sonnet→Opus 2026-06-09 at founder request (the old NARRATION_MODEL_ALTERNATES
@@ -98,11 +105,12 @@ export const JUDGMENT_MODEL = CLAUDE_MODELS.opus
 
 // ENRICH tier — the corpus `enrich` step's fact-sheet builder (pipeline/scout.ts buildCorpusFactSheet).
 // The fact-sheet builder SELECTS verbatim spans + grounded bundles; that is an easier call than narration
-// judgment AND it runs corpus-scale (~hundreds of POIs, once per region), so the DEFAULT is Sonnet 4.6 ($3/$15
-// per MTok — half Opus's input, ~⅗ its output) to keep the one-time bill modest. Opus stays available
-// (`enrich-pois --model opus`) for an A/B against the calibration tier on a sample. Both ACCEPT a
-// forced tool_choice {type:'any'} (the fact-sheet builder forces it every turn) — only Fable rejected that,
-// so either is safe (re-verified on opus-5 2026-08-04: `{type:'any'}` accepted). Sources: claude-api skill.
+// judgment AND it runs corpus-scale (~hundreds of POIs, once per region), which is why the DEFAULT used to
+// be Sonnet 4.6 ($3/$15 per MTok) to keep the one-time bill modest. ⚠ Since 2026-09-17 BOTH choices
+// resolve to Opus 4.6 on Bedrock ("Opus 4.6 for everything" — founder) and bill at Opus rates; the
+// `--model sonnet|opus` switch is kept so the tier can be re-split by editing `CLAUDE_MODELS.sonnet`
+// alone, but today it selects nothing. Both ACCEPT a forced tool_choice {type:'any'} (the fact-sheet
+// builder forces it every turn) — only Fable rejected that (re-probed on Bedrock/Opus 4.6 2026-09-17).
 export const ENRICH_MODELS = {
   sonnet: CLAUDE_MODELS.sonnet,
   opus: JUDGMENT_MODEL, // CLAUDE_MODELS.opus ('claude-opus-5' since 2026-08-04)

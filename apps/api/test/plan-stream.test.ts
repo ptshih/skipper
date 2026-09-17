@@ -986,11 +986,11 @@ describe('POST /drives/plan — plan_degraded', () => {
 
   // ⚠ THE THROW PATH, AND IT IS THE HALF THAT WAS INVISIBLE. These two reasons are raised by ../src/planner
   // BEFORE the model call, so `logPlanSpend` never runs — no `plan_spend` line either — while the rider
-  // still gets HTTP 200 and an in-persona apology. A missing ANTHROPIC_API_KEY on a deployed revision was
+  // still gets HTTP 200 and an in-persona apology. A missing Bedrock token on a deployed revision was
   // therefore countable by nothing: `/health` green, no 5xx, one unstructured stderr line that no
   // log-based metric can read. That is the exact condition this event exists for.
   const thrownReasons: ['not_configured' | 'bad_transcript', string][] = [
-    ['not_configured', 'a deploy with no ANTHROPIC_API_KEY'],
+    ['not_configured', 'a deploy with no Bedrock token (BEDROCK.tokenEnv)'],
     ['bad_transcript', 'a caller sending a shape the vendor would reject'],
   ]
   test.each(thrownReasons)('%s is COUNTED (%s)', async (reason) => {
@@ -1014,7 +1014,7 @@ describe('POST /drives/plan — plan_degraded', () => {
     }
     const { lines } = await runTurn(accept)
     // ⚠ THE ONE REASON IN THIS SET THAT IS ERROR, and the counterpart to the WARNING pinned above. A
-    // missing ANTHROPIC_API_KEY on a live deploy means every rider on that instance hears the outage
+    // missing Bedrock token on a live deploy means every rider on that instance hears the outage
     // line while /health and every 5xx alert stay green — the exact condition this event exists to make
     // visible. If it is ever flattened to the same severity as the healthy beats, it stops being
     // findable among them.

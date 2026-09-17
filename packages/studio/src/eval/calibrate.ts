@@ -21,7 +21,7 @@
 // always-on unit tests (test/eval-tts.test.ts, test/eval-advisory.test.ts); this is the periodic
 // calibration check. Exits non-zero if the judge disagrees with any verdict label.
 //
-// Usage (ANTHROPIC_API_KEY via dotenvx):
+// Usage (the Bedrock token via dotenvx):
 //   dotenvx run -f .env.development -- bun packages/studio/src/eval/calibrate.ts
 
 import { GROUNDING_VOTE_SAMPLES } from '../config'

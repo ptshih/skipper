@@ -7,6 +7,7 @@
 //   dotenvx run -f .env.development -- bun packages/studio/src/generate-narrations.ts
 
 import { existsSync } from 'node:fs'
+import { BEDROCK } from '@skipper/shared'
 
 /** Read a required env var or throw a clear, actionable error. */
 export function requireEnv(name: string): string {
@@ -30,7 +31,9 @@ export function hasEnv(name: string): boolean {
 
 // --- Provider readiness (lets --dry-run skip TTS/R2 cleanly) ----------------
 
-export const ANTHROPIC_READY = (): boolean => hasEnv('ANTHROPIC_API_KEY')
+// Claude calls go through Amazon Bedrock; the credential is the bearer token named by
+// `BEDROCK.tokenEnv` (@skipper/shared) — ONE name, so this gate and getAnthropic() can never disagree.
+export const ANTHROPIC_READY = (): boolean => hasEnv(BEDROCK.tokenEnv)
 // Cloud TTS readiness. We always need the billing/quota project. For OAuth creds
 // there are two honest paths, and the gate verifies the one in use actually works:
 //   - ADC / workload identity: set GOOGLE_TTS_USE_ADC=true — creds come from the
