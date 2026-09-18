@@ -8,14 +8,11 @@ truth for Claude and Codex; keep doctrine there rather than duplicating it here.
   [native instructions](apps/ios/CLAUDE.md) and [design system](apps/ios/DESIGN.md).
 - `apps/mobile` remains intact pending native acceptance. If explicitly assigned a legacy
   change, read that workspace's CLAUDE.md and DESIGN.md; preserve installed-client compatibility.
-- Inspect `git status --short` before editing. The tree and index are shared;
-  preserve other agents' work and use explicit paths. Follow CLAUDE.md's git rules.
+- Follow CLAUDE.md's STOP list and git rules; the tree and index are shared.
 - Use Bun and the scripts in `package.json`. Run root `bun run check` before
   finishing; native changes also require relevant `bun run ios:check` coverage. Full native
   acceptance requires the complete suite and separate upgrade/device/release evidence.
   Explicit changes to the retained Expo client still require its workspace check.
-- Before implementing external library/API features, search Context7 for current
-  documentation; use official vendor documentation if Context7 has no coverage.
 
 Project skills are shared through `.agents/skills`, a symlink to `.claude/skills`.
 Read the relevant `SKILL.md` when a task calls for it; edit the canonical Claude
@@ -25,6 +22,5 @@ skill names a Claude-specific tool; never invent tool access or results.
 
 Codex hooks live in `.codex/hooks.json`; see [setup and limitations](README.md#coding-agents).
 The STOP rules apply even when hooks are unavailable or awaiting trust. In
-particular, a paid operator run still needs an explicit founder go. Shell behavior
-notes about Claude's persistent Bash cwd and `CLAUDECODE` are Claude-specific;
-in Codex, set the command working directory explicitly when needed.
+particular, a paid operator run still needs an explicit founder go. Use absolute
+paths and explicit working directories in every harness.

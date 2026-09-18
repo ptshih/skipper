@@ -16,7 +16,7 @@ const STATUS_WINDOW_LINES = 12
 // only shrank the file ~10 lines. Absorbing them by compressing prose was making the sentences worse,
 // which defeats the point of a file agents must read correctly. Raise it again only for the same
 // reason: a NEW rule that prevents breakage or spend — never to park an essay here.
-const CLAUDE_MD_CEILING = 340
+const CLAUDE_MD_CEILING = 320
 
 const errors: string[] = []
 

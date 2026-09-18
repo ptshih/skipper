@@ -4,11 +4,9 @@ A toy/lifestyle project: an AI-narrated, GPS-triggered driving audio tour with a
 persona, played as phone audio (CarPlay later). **Optimize for charm, not scale — the persona is the
 product.** When a choice trades polish-for-the-builder against scale-for-a-market, pick polish.
 
-🚀 **1.1.0 is LIVE ON THE APP STORE (released 2026-08-20; `READY_FOR_SALE`, build 25) — real riders are
-now possible, so treat prod DB/R2/API changes accordingly.** Roam is REMOVED (git is the archive);
-Create-a-Drive IS a conversation. The live record is **`docs/guides/app-store-submission.md`** — its Status
-block has the canonical listing URL; §13's go-live (site `APP_STORE_URL` + Apple badge) SHIPPED 2026-08-20;
-§15/§14 the review rounds; `bun run asc:state` reads the state. RISK-1's real drive: still not recorded done.
+🚀 **1.1.0 is LIVE ON THE APP STORE (2026-08-20) — real riders exist, so treat prod DB/R2/API changes
+accordingly.** Create-a-Drive IS a conversation. The live release record is
+**`docs/guides/app-store-submission.md`** (`bun run asc:state` reads the state).
 `docs/designs/drives-first-1-1.md` is the build truth — read it before touching `apps/api` or `apps/mobile`.
 Authorized replacement in progress: [native iOS conversion](docs/designs/native-ios-conversion.md), including orchestration continuity; `apps/mobile` remains the shipped Expo client until cutover.
 
@@ -33,8 +31,7 @@ Authorized replacement in progress: [native iOS conversion](docs/designs/native-
   one `git stash` pockets all of it), and NEVER `git add -A` / `.` / `commit -a`. Commit ATOMICALLY by
   explicit path (`git commit path/a path/b`) at the very end — never leave changes staged; re-check the
   file is still SOLELY yours first (`git diff --stat path/a path/b`) and leave a now-mixed file for its
-  owner. No repo-wide auto-fixers (`prettier --write .`, `eslint --fix`, codemods). ⚠ 1.1 orders a
-  "repo-wide simplification sweep" — that means **by explicit path, atomic commits**, never a codemod.
+  owner. No repo-wide auto-fixers (`prettier --write .`, `eslint --fix`, codemods).
   This bullet and the spend rules above are ENFORCED, not merely documented: a `PreToolUse` hook
   (`scripts/guard-hook.ts`) hard-denies the NEVER list and prompts on spend. `/guard` is the
   cheat-sheet — read it before working around a block, and every rule must trace back to a line here.
@@ -70,8 +67,8 @@ Authorized replacement in progress: [native iOS conversion](docs/designs/native-
 - **Hand-authored tours are DEFERRED; the ONE rider artifact is the user-owned DRIVE.** Auth is Better
   Auth (anonymous → free account; there is NO paid tier — premium is bought as CREDITS, a comp is a large
   admin grant; `docs/decisions/cut-tiers.md`). The open anonymous front door is the **PLANNER**:
-  `POST /drives/plan`, `POST /drives/propose`, and ONE presigned preview clip from the rider's own route
-  (`GET /sample` DELETED 2026-08-05). The wall lands at `POST /drives` — "Make this drive". A **DRIVE is user-OWNED**
+  `POST /drives/plan`, `POST /drives/propose`, and ONE presigned preview clip from the rider's own route.
+  The wall lands at `POST /drives` — "Make this drive". A **DRIVE is user-OWNED**
   (`drives.user_id`, never a shared content table). ⚠ `requireAccount` is **per-ROUTE, never on the
   `driveRoutes.use('*', …)` mount** — re-mounting it there silently re-walls the whole preview. Free
   credits are an append-only `credit_entries` ledger (a `FREE_DRIVE_CAP` grant at SIGNUP + lazy backstop;
@@ -150,23 +147,21 @@ Authorized replacement in progress: [native iOS conversion](docs/designs/native-
 - **`@skipper/shared` (Zod DTOs) vs `@skipper/db/schema` (Drizzle rows) can collide by NAME at different
   SHAPES** (enforced: `bun run lint:types`). Use Zod types at boundaries; import a DB ROW type only from the
   `@skipper/db/schema` subpath, ALIASED (`import type { Region as RegionRow }`); never `export *` from both
-  in one barrel. Today's only live collision is `Region`.
+  in one barrel.
 - **`@skipper/db` import is side-effect-free** — the client is lazy (`getDb()` / the `db` proxy build on
   first query), so importing it never requires `DATABASE_URL`; env-free routes like `GET /health` keep booting.
 
 ## Two principles that govern the architecture
 
 1. **Fetch FACTS once per place; the NARRATION is the shared atom; ASSEMBLE per drive.** `pois` is the facts
-   cache (deduped by QID, re-fetched on a TTL — `facts_fetched_at` is the clock; refresh is operator-run via
-   `refetch_facts`/re-sweep). Each place has ONE shared telling: a `narrations` row. **A DRIVE reuses those
-   tellings pre-ordered along its route** — content resolves LIVE via subject id, so a regenerated telling
-   auto-improves every saved drive. When a re-fetch materially changes a poi's facts (`pois.facts_hash`),
-   every narration grounded on them is stale and must regenerate. The corpus pipeline is
-   **`discover` → `enrich` → `generate`**: a free sweep populates `pois` for a region bbox
-   (`discover-pois.ts`); a PAID `enrich` (`enrich-pois.ts`) scouts each story poi into a curated verbatim
-   fact sheet (`pois.fact_sheet`) that drives ground on. A STORY telling REQUIRES a sheet — an un-enriched
-   POI is downgraded to scenic. Drives are user-created at runtime (`POST /drives` → `buildDrive`). See
-   `docs/decisions/region-corpus-discovery.md` + `corpus-enrichment.md`.
+   cache (deduped by QID, re-fetched on a TTL — `facts_fetched_at` is the clock; refresh is operator-run).
+   Each place has ONE shared telling: a `narrations` row. **A DRIVE reuses those tellings pre-ordered along
+   its route** — content resolves LIVE via subject id, so a regenerated telling auto-improves every saved
+   drive; when a re-fetch materially changes a poi's facts (`pois.facts_hash`), every narration grounded on
+   them is stale and must regenerate. The corpus pipeline is **`discover` (free sweep of a region bbox) →
+   `enrich` (PAID: a curated verbatim fact sheet, `pois.fact_sheet`, per story poi) → `generate`**; a STORY
+   telling REQUIRES a sheet — an un-enriched POI is downgraded to scenic. Drives are user-created at runtime
+   (`POST /drives` → `buildDrive`). See `docs/decisions/region-corpus-discovery.md` + `corpus-enrichment.md`.
 2. **The route is the rails; generation is everything inside.** A drive's route is materialized from the
    rider's A→B (Google Routes) and frozen — the LLM resolves ONLY the ROUTE (endpoints as anchor ids, `via`,
    round-trip, duration target); the SELECTION of which narrations ride it is deterministic (`buildDrive`).
@@ -194,20 +189,18 @@ Authorized replacement in progress: [native iOS conversion](docs/designs/native-
   NOT copy studio's `maxRetries: 5`, tuned for a batch run that already spent. The Bedrock token is a
   RUNTIME requirement of `apps/api`. ⚠ Never log a request body; never persist a transcript (a
   `conversations` table is new personal data `purgeUserData` must chase — needs a founder call).
-- **TTS = Google Cloud Text-to-Speech via REST** (no SDK — raw `fetch` to `…/v1/text:synthesize`), model
-  `gemini-3.1-flash-tts-preview`, Gemini-TTS voice **"Charon"** (a fixed function of persona;
-  `TTS_MODEL`/`SKIPPER_VOICE_ID` in `models.ts`), OAuth/ADC via `google-auth-library`, NO API key. Output is
-  **AAC-LC `.m4a`** (bitrate = `AAC_BITRATE` in `pipeline/loudnorm.ts` — ONE home): TTS returns LINEAR16,
-  then ONE ffmpeg pass (`pipeline/loudnorm.ts` `normalizeAndEncode`) does loudnorm + the single AAC encode.
-  **ffmpeg is REQUIRED on ship paths** (the encoder, not just QA — throws if absent; Cloud Run carries it).
-  `docs/decisions/audio-compression-spike.md`.
+- **TTS = Google Cloud Text-to-Speech via REST** (no SDK — raw `fetch` to `…/v1/text:synthesize`; OAuth/ADC
+  via `google-auth-library`, NO API key). Model and voice are constants in `models.ts` (`TTS_MODEL`,
+  `SKIPPER_VOICE_ID` — the voice is a fixed function of persona). Output is **AAC-LC `.m4a`**: TTS returns
+  LINEAR16, then ONE ffmpeg pass (`pipeline/loudnorm.ts` `normalizeAndEncode`, which also owns `AAC_BITRATE`)
+  does loudnorm + the single AAC encode. **ffmpeg is REQUIRED on ship paths** (the encoder, not just QA —
+  throws if absent; Cloud Run carries it). `docs/decisions/audio-compression-spike.md`.
 - **R2 = Bun's native `S3Client`** (no `@aws-sdk`; `region: "auto"`); studio tsconfig needs `types: ["node","bun"]`.
 - **Auth = Better Auth** (`apps/api/src/auth.ts`). It needs interactive transactions, so it runs on its OWN
   `drizzle-orm/neon-serverless` Pool client (`apps/api/src/auth-db.ts`) while the rest stays on neon-http.
   Tables live in the `@skipper/db/auth-schema` subpath (CLI-generated: `bunx @better-auth/cli generate`, then
-  `db:generate` + `db:migrate`). There is NO `user.tier` column — premium is CREDITS, not a plan
-  (`docs/decisions/cut-tiers.md`); `accessTier` ('anonymous'|'free') is the derived per-request access
-  level in `@skipper/shared` (`free` = any signed-in account).
+  `db:generate` + `db:migrate`). `accessTier` ('anonymous'|'free') is the derived per-request access level
+  in `@skipper/shared` (`free` = any signed-in account); there is no tier column (see the credits invariant).
 - **Secrets via dotenvx.** `.env.development`/`.env.production` are committed ENCRYPTED; private keys live
   only in gitignored `.env.keys` (onboarding = get it from a teammate — if `dotenvx` can't decrypt, you're
   missing it; stop and ask). Root scripts wrap commands with `dotenvx run -f .env.development`; edit a value
@@ -221,11 +214,6 @@ Authorized replacement in progress: [native iOS conversion](docs/designs/native-
 - **Local dev servers stay UP** (the human runs them) — ports: API `bun run dev:api`; admin `bun run dev:admin`
   = vite client **:5173** proxying `/admin`+`/health` → Hono admin-api **:8788** (`ADMIN_DEV_BYPASS=1` skips
   IAP locally); site `bun run dev:site`.
-- **Shell is zsh and `~/.zshrc` rides every Bash command** — an unmatched glob ABORTS the command and
-  interactive aliases apply. A `CLAUDECODE`-gated guard in the founder's `~/.zshrc` neutralizes both, but
-  it is MACHINE-LOCAL: prefer Read/Grep/Glob over shell, guard globs (`2>/dev/null`, `find`), absolute
-  paths — ⚠ the Bash **cwd PERSISTS between calls**, so one `cd` silently re-roots every later relative
-  path and a grep/`git diff -- path` then matches NOTHING and reads as "clean". Cost two false results.
 - **There are TWO skipper prompts and they are NOT interchangeable.** (1) The **narration** prompt
   (`packages/studio/src/persona/skipper.ts`) governs baked audio, is written around the fact sheet and stop
   kinds, and is enforced by the fail-closed eval gate — still the highest-leverage prose in the repo, iterate
@@ -242,12 +230,11 @@ Authorized replacement in progress: [native iOS conversion](docs/designs/native-
   when a cheap heuristic would save a few dollars (don't keep an arbitrary char-count pre-filter ahead of a
   paid `enrich` — let the enricher decide). This governs DESIGN; *running* a paid job still needs the founder
   OK (STOP).
-- **RIDERS ARE REAL (founder, 2026-08-20): 1.1.0 is LIVE, and the break-freely era is OVER.** The
-  2026-07-31 "storage is break-freely" call is VOID — its premise ("1.0 will probably never be released")
-  died at release (`docs/decisions/riders-are-real-posture.md`). Migrations default to ADDITIVE; anything
-  destructive (drops, truncates, `db:push` against a changed schema) needs an explicit founder go PLUS a
-  fresh snapshot — and rider rows (`user`, `drives`, `credit_entries`) are NOT in the corpus snapshot, so
-  destructive work there risks real people's paid-for state. ⚠ Unchanged and now sharper:
+- **RIDERS ARE REAL (founder, 2026-08-20): 1.1.0 is LIVE, and the break-freely era is OVER**
+  (`docs/decisions/riders-are-real-posture.md`). Migrations default to ADDITIVE; anything destructive
+  (drops, truncates, `db:push` against a changed schema) needs an explicit founder go PLUS a fresh
+  snapshot — and rider rows (`user`, `drives`, `credit_entries`) are NOT in the corpus snapshot, so
+  destructive work there risks real people's paid-for state. ⚠
   **`.env.development` and `.env.production` point at the SAME Neon DB and R2** — there is no staging;
   `db:push` and `dev:admin` (`ADMIN_DEV_BYPASS=1`, full delete authority) aim at PRODUCTION despite the
   label. The **wire contract now owes the shipped 1.1.0 client** — breaking it strands live apps; the
@@ -284,18 +271,13 @@ Authorized replacement in progress: [native iOS conversion](docs/designs/native-
 
 ## Milestones
 
-(The ladder is ONE artifact: the user-owned DRIVE. Roam removed in 1.1; hand-authored tours stay DEFERRED.
-The phone-player bet is unchanged — the artifact is a region's shared `narrations` corpus, reused in order.)
-
-0–2. **BUILT** — Tahoe corpus, the phone player (offline → simulated drive → speed-adaptive triggering +
-   debounce → audio + lock-screen Now Playing), the conversational planner, and `apps/api`
-   (`/regions`, `/drives/plan`, `/drives/propose` anonymous+capped; the rest of `/drives*` behind PER-ROUTE
-   `requireAccount`; signed R2 URLs). CarPlay stays deferred past the MVP — the phone plays via
-   mount/Bluetooth. ⚠ **The one step still owed is the one that was always the point: drive it once for
-   real** (RISK-1 — see the sweep guide's §0).
-3. **Breadth:** more regions' corpora; live break-stop Places data.
-4. **Earn the machinery:** `route_sig` dedup + caching, human-review/feedback, more regions
-   (Yosemite → Moab; mind seasons).
+The ladder is ONE artifact: the user-owned DRIVE (Roam removed in 1.1 — git is the archive; hand-authored
+tours stay DEFERRED; the artifact is a region's shared `narrations` corpus, reused in order). **0–2 are
+BUILT** — Tahoe corpus, the phone player, the conversational planner, `apps/api` — with CarPlay deferred past
+the MVP (the phone plays via mount/Bluetooth). ⚠ **The one step still owed is the one that was always the
+point: drive it once for real** (RISK-1 — see the sweep guide's §0). **3 Breadth:** more regions' corpora;
+live break-stop Places data. **4 Earn the machinery:** `route_sig` dedup + caching, human-review/feedback,
+more regions (Yosemite → Moab; mind seasons).
 
 ## Deferred — DO NOT build in v1
 
@@ -312,17 +294,15 @@ stays advisory (no auto-judge for world-truth). `docs/decisions/automated-ground
 
 ## In-car player landmines (when you get there)
 
-- **Triggering:** do NOT rely on fixed-radius background polling — the OS throttles background GPS and a car
-  sails through a 350 m geofence at 60 mph. Use a continuous high-rate foreground service + speed-adaptive
-  lead time; `trigger_radius_m` is a floor. Heading gate only above ~5 mph.
-- **Audio:** native AVFoundation/MediaPlayer with ONE process-wide exclusive audio owner. Narration,
-  soundtrack and pre-drive previews share that owner; do not mix with or duck the rider's other audio.
-  Stop audio before explicit sign-out/purge; verify interruptions and lock-screen controls on a device.
-  See `docs/decisions/drive-audio-exclusive-focus.md`; legacy Expo behavior remains compatibility evidence.
+- **Triggering:** never fixed-radius background polling (the OS throttles background GPS; a car sails
+  through a geofence at speed) — a continuous foreground service + speed-adaptive lead time, per
+  `docs/designs/gps-player-spec.md`.
+- **Audio:** ONE process-wide exclusive audio owner shared by narration, soundtrack and previews; never mix
+  with or duck the rider's other audio; stop audio before sign-out/purge; verify interruptions on a device.
+  `docs/decisions/drive-audio-exclusive-focus.md`.
 - **Offline-first:** the store is keyed by NARRATION SUBJECT ID and filled from the `DriveManifest` the app
-  already holds (create/open/refresh all return one). ⚠ **Only a drive's own manifest is authoritative for
-  that drive** — no bbox-level eligibility rule can guarantee coverage of a selection frozen under a
-  different rule, which is why there is no region pack. `docs/designs/offline-region-packs.md`.
+  already holds. ⚠ **Only a drive's own manifest is authoritative for that drive** — which is why there is
+  no region pack. `docs/designs/offline-region-packs.md`.
 
 ## Where truth lives
 
@@ -333,7 +313,6 @@ stays advisory (no auto-judge for world-truth). `docs/decisions/automated-ground
 - **`docs/` = durable records**, foldered by KIND with a dated **Status** line: `decisions/` (why,
   append-only), `designs/` (future truth at any maturity — the Status line carries idea → build-ready →
   built, not the folder), `research/`, `guides/`. Index: `docs/README.md`. A post-MVP idea defaults to NOT
-  scheduled, but **a doc's own Status line wins** — one a greenlit spec pulled in is in scope. North-star
-  delighter: **"Ask the Skipper"** (live, grounded, in-persona voice Q&A mid-drive).
+  scheduled, but **a doc's own Status line wins** — one a greenlit spec pulled in is in scope.
 - **Code = the rest of current truth** — a doc that disagrees with the code is wrong; fix the doc. Handoff
   docs are ephemeral (deleted once consumed).
