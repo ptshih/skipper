@@ -131,6 +131,12 @@ skipper-api or skipper-admin in the 20 minutes after the deploy (baseline: none 
 exercised on prod: the admin helpers (behind IAP; same forced-call shape as the drafts proven locally) and
 a studio job run (paid, and nothing to run).
 
+**Second canary, after the always-HIGH push (`4590e705`):** api/admin/studio builds SUCCESS;
+`skipper-api-00170-rt9 → 00171-64p` at 100%; `/health` 200 in 0.26 s; zero ERROR lines on api or admin.
+The same real `POST /drives/plan`: 200 in **12.9 s** (was 6.3 s at MEDIUM) — prod's `plan_spend` on
+`00171-64p`: `stop_reason: STOP`, 11,394 in / 1,616 out (**1,597 thinking**), **$0.016066**. That is the
+HIGH trade in one line: roughly twice the wait and ~40% more per turn, no truncation.
+
 ## Hardened after an independent review (same day)
 
 - `LEAKED_TOOL_CALL` (apps/api/src/tool-call-leak.ts) only knew CLAUDE's leak shape (`<invoke …>`); it now
