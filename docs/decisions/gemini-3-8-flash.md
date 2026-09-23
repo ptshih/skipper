@@ -139,6 +139,11 @@ The same real `POST /drives/plan`: 200 in **12.9 s** (was 6.3 s at MEDIUM) — p
 `00171-64p`: `stop_reason: STOP`, 11,394 in / 1,616 out (**1,597 thinking**), **$0.016066**. That is the
 HIGH trade in one line: roughly twice the wait and ~40% more per turn, no truncation.
 
+**Third canary, after the LOW-planner push (`4e5c2ff0`):** api/admin/studio builds SUCCESS;
+`00171-64p → 00172-8st` at 100%; `/health` 200; zero ERROR lines. Two real `POST /drives/plan`: 200 in
+**3.7 s and 2.9 s** (HIGH was 12.9 s), same in-persona read-back; prod `plan_spend`: `STOP`, 269–289
+thinking tokens, $0.0106 and $0.0047 (the second read part of its prompt from the implicit cache).
+
 ## Hardened after an independent review (same day)
 
 - `LEAKED_TOOL_CALL` (apps/api/src/tool-call-leak.ts) only knew CLAUDE's leak shape (`<invoke …>`); it now
