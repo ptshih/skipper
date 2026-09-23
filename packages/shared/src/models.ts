@@ -51,13 +51,23 @@ export type ThinkingLevelName = 'LOW' | 'MEDIUM' | 'HIGH'
 
 /** THE thinking level for every Gemini call in the repo — founder rule, 2026-09-23: "always run gemini
  *  on high", given after listening to HIGH-vs-MEDIUM narration samples. ONE constant, read by every
- *  call site (narration, every judge, enrich, curate, the admin helpers, the live planner and the
- *  release audio judge), so the rule cannot drift one call site at a time; `packages/shared/test/
- *  thinking-level.test.ts` fails if a call site hard-codes another level.
+ *  call site (narration, every judge, enrich, curate, the admin helpers and the release audio judge) —
+ *  the live planner is the one named exception, PLANNER_THINKING_LEVEL below — so the rule cannot drift
+ *  one call site at a time; `packages/shared/test/thinking-level.test.ts` fails if a call site hard-codes
+ *  another level.
  *  ⚠ The consequence every site had to absorb: HIGH spends far more thinking (measured 2026-09-23 —
  *  narration 6k–15k tokens, the planner 0.5k–3.2k), and on Gemini the output cap bounds thinking PLUS
  *  output. Each site's cap is sized for HIGH; lowering one is a truncation waiting to happen. */
 export const LLM_THINKING_LEVEL: ThinkingLevelName = 'HIGH'
+
+/** The ONE founder-approved exception to LLM_THINKING_LEVEL (2026-09-23): the LIVE PLANNER runs LOW.
+ *  It is the only call a person waits on in real time, and its thinking is silent dead air before the
+ *  first word. MEASURED on the real 132-anchor Tahoe roster — first word ~2 s at LOW (1.7–6.1), ~3.5 s at
+ *  MEDIUM (3.3–13), ~9 s at HIGH (6–21) — and on the 59-turn planner eval LOW matched MEDIUM and HIGH on
+ *  every gate (routing 1.00, voice 1.00, persona 0/59, judge 8/10 ship), with the fewest repeated phrases
+ *  of the three (9 vs 23/17); 56 of 59 turns used no thinking at all. Read ONLY by apps/api/src/planner.ts
+ *  (the thinking-level test pins that), so the exception cannot spread to a batch call. */
+export const PLANNER_THINKING_LEVEL: ThinkingLevelName = 'LOW'
 
 /** THE output cap for every Gemini call — the model's own ceiling (65,536 for gemini-3.8-flash, and for
  *  the release judge's gemini-3.1-pro-preview; Google's model pages, 2026-09-23). Founder, 2026-09-23:
@@ -102,7 +112,7 @@ export const LLM_MODELS = {
    *  coinciding in studio/models.ts and staying separate anyway.)
    *
    *  ⚠ Thinking is always on for this model family (INV-8's requirement is now structural rather than a
-   *  flag someone can drop), and its depth is LLM_THINKING_LEVEL (HIGH), bounded together with visible
-   *  output by `PLANNER_MAX_TOKENS` (apps/api/src/limits.ts). */
+   *  flag someone can drop), and its depth is PLANNER_THINKING_LEVEL (LOW — the one exception to
+   *  always-HIGH), bounded together with visible output by `PLANNER_MAX_TOKENS` (apps/api/src/limits.ts). */
   planner: VERTEX.flash38,
 } as const

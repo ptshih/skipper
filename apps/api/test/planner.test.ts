@@ -563,8 +563,10 @@ describe('the model call this route bills', () => {
     lastStreamParams = null
     await runPlannerTurn(baseArgs(fakeClient({ finish: 'STOP', parts: [textPart('hi')] })))
     const thinking = lastCallParams().config?.thinkingConfig
-    // Founder rule (2026-09-23): always HIGH — read through the shared constant, not a planner knob.
-    expect(thinking?.thinkingLevel).toBe(ThinkingLevel.HIGH)
+    // The ONE exception to the founder's always-HIGH rule (2026-09-23): the planner runs LOW — measured
+    // equal on every eval gate and 2-4x faster to the first word. Read through the shared
+    // PLANNER_THINKING_LEVEL, so the exception lives in one named place.
+    expect(thinking?.thinkingLevel).toBe(ThinkingLevel.LOW)
     expect(thinking?.includeThoughts).not.toBe(true)
   })
 

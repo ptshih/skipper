@@ -28,7 +28,8 @@ const APPLY = args.includes('--apply')
 const NO_JUDGE = args.includes('--no-judge')
 const ONLY = args.includes('--only') ? args[args.indexOf('--only') + 1] : null
 /** ⚠ A MEASUREMENT LEVER, not a config. Sweeps reasoning depth so a defect can be attributed rather than
- *  guessed at; production ALWAYS runs the shared LLM_THINKING_LEVEL (HIGH, founder rule 2026-09-23). */
+ *  guessed at; production ALWAYS runs PLANNER_THINKING_LEVEL (@skipper/shared — LOW, the founder-approved
+ *  planner exception to the always-HIGH rule, 2026-09-23). */
 const EFFORTS = ['low', 'medium', 'high'] as const
 const effortArg = args.includes('--effort') ? args[args.indexOf('--effort') + 1] : undefined
 // ⚠ Validated, not cast: an unknown value (a Claude-era `max`, a typo) would otherwise map to no thinking

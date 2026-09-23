@@ -47,11 +47,13 @@ call site at a time. (The first cut of this migration had mixed LOW/MEDIUM/HIGH;
 On Gemini the cap bounds thinking + output together (probed: a 150-token cap on HIGH spent 143 on
 thought), so the full ceiling is what makes HIGH safe everywhere. What bounds a call now is its CLOCK:
 
-- **the live planner** — `PLANNER_MAX_TOKENS` 4,096 → **65,536** (founder call; limits.ts keeps its own
-  literal and a test pins it equal to the shared one). Measured at HIGH on the real roster: 485–3,237
-  thinking tokens, **6–21 s to the first word** (MEDIUM: ~5–7 s) — the round-the-lake ask used 3,268 of
-  the old 4,096. The 45 s `PLANNER_TIMEOUT_MS` ends a runaway turn near ~11k tokens (~$0.05); typical
-  turns cost $0.011–0.02. The silent thinking before the first token is the accepted trade.
+- **the live planner — the ONE exception: `PLANNER_THINKING_LEVEL = 'LOW'`** (founder, same day, after
+  asking whether the planner should think less to be faster; read only by `planner.ts`, pinned by the
+  thinking-level test). Measured on the real 132-anchor roster, time to the first word — LOW ~2 s
+  (1.7–6.1), MEDIUM ~3.5 s (3.3–13), HIGH ~9 s (6–21); prod served 12.9 s at HIGH. The 59-turn eval
+  matched on every gate at all three levels (LOW below). `PLANNER_MAX_TOKENS` 4,096 → **65,536** stays
+  (founder "bump caps"; limits.ts keeps its own literal, pinned equal to the shared one) — at LOW it is
+  pure headroom, and the 45 s `PLANNER_TIMEOUT_MS` still bounds a runaway turn near ~$0.05.
 - **the admin curated-places draft** — measured at HIGH for 120 places: 80.7 s, and one run's first 90 s
   attempt timed out (billed anyway) before the retry finished at 155.8 s. It now gets ONE 220 s attempt
   (`ADMIN_DRAFT_HTTP`), inside the server's 240 s idleTimeout; the quick bbox proposal keeps 90 s × 2.
@@ -159,6 +161,14 @@ now 2 of 4 full-suite runs of that turn; the two isolated re-runs passed). Wheth
 a word match is the founder's call; the check was left as it is. `repeats` 17 (MEDIUM: 23), `durations` 1
 ("Two hours noted!" — the known noise shape). Thinking p50 646 / max 1,735 tokens, every turn `STOP`,
 mean $0.0068 / max $0.0125 a turn. Raw: `apps/api/eval/.runs/2026-09-23T23-04-49-010Z-mem.json`.
+
+**Planner eval at LOW (2026-09-23, $0.27) — the setting that shipped.** Routing 1.00, voice 1.00,
+persona 0/59 flagged (0.76), judge 8/10 — ship; discipline 1/59 → GATE FAIL on a different one-off: asked
+for Squaw Valley the skipper recited the prompt's own example line "Don't know that one, and I won't
+pretend I do." (the parrot detector) while correctly offering real places — two isolated re-runs of that
+scenario passed. The "mileage" flag did not appear. The best repetition numbers of the three levels:
+`repeats` 9 (MEDIUM 23, HIGH 17), echoes 5/59 (9 at the others); 56/59 turns used ZERO thinking tokens
+(max 672), every turn `STOP`, mean $0.0038 a turn. Raw: `apps/api/eval/.runs/2026-09-23T23-21-55-783Z-mem-low.json`.
 
 ## Deploy prerequisites
 

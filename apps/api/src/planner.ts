@@ -37,7 +37,7 @@ import {
 import {
   geminiUsage,
   LLM_MODELS,
-  LLM_THINKING_LEVEL,
+  PLANNER_THINKING_LEVEL,
   recordModelUsage,
   usageUsd,
   VERTEX,
@@ -57,19 +57,20 @@ import { PLAN_ROUTE_TOOL, PLANNER_SYSTEM_PROMPT } from './planner-prompt'
 /* clear it. What is left here only means something at this one call site.      */
 /* -------------------------------------------------------------------------- */
 
-/** Thinking DEPTH: the shared LLM_THINKING_LEVEL — HIGH, by the founder's rule (2026-09-23, "always run
- *  gemini on high"). History that still matters: 'low' → 'medium' was an explicit founder call on
- *  2026-08-04 (the `route_wordless` shape, see `effort` below), and medium → high came with the Gemini
- *  move. MEASURED at HIGH on the real 132-anchor Tahoe roster, 2026-09-23: 485–3,237 thinking tokens and
- *  6–21 s to the first word (MEDIUM was ~5–7 s) — the round-the-lake ask was the slow one.
- *  ⚠ The latency is NOT hidden by streaming: thoughts are never requested (`includeThoughts` stays off),
- *  so the wire is silent for the whole thinking phase — dead air in a chat bubble before the first
- *  token. That is the accepted trade. What bounds it is PLANNER_TIMEOUT_MS, and what bounds the spend
- *  is PLANNER_MAX_TOKENS — both in ./limits, which is why no cap lives here.
- *  ⚠ WHAT TO WATCH, all already logged by `logPlanSpend`: `stop_reason` (MAX_TOKENS would mean the cap is
- *  somehow too tight), `thinking`, and `out`/`usd`; a `failed` line with `err: timeout` is the latency
- *  tail reaching the wall clock. */
-const PLANNER_THINKING = ThinkingLevel[LLM_THINKING_LEVEL]
+/** Thinking DEPTH: PLANNER_THINKING_LEVEL (@skipper/shared) — LOW, the one founder-approved exception to
+ *  the always-HIGH rule (2026-09-23), because this is the only call a person waits on in real time.
+ *  History that still matters: 'low' → 'medium' on Claude (founder, 2026-08-04, the `route_wordless`
+ *  shape — see `effort` below), medium → high with the always-HIGH rule, then high → LOW on measurement.
+ *  MEASURED on the real 132-anchor Tahoe roster: first word ~2 s at LOW, ~3.5 s at MEDIUM, ~9 s at HIGH
+ *  (the round-the-lake ask: 6 / 13 / 21 s); the 59-turn eval matched on every gate at all three levels.
+ *  ⚠ WHY `route_wordless` DOES NOT COME BACK AT LOW: on Claude, low effort produced draw turns with the
+ *  tool JSON and no line. Here `say` is a REQUIRED field of the call, and VALIDATED mode enforces
+ *  required fields — the line rides the call whatever the depth.
+ *  ⚠ The latency is still NOT hidden by streaming: thoughts are never requested, so any thinking is
+ *  silent dead air before the first token — which is exactly why this call runs shallow.
+ *  ⚠ WHAT TO WATCH, all already logged by `logPlanSpend`: `stop_reason`, `thinking`, and `out`/`usd`; the
+ *  route and voice gates of `apps/api/eval` are the quality check if this ever moves. */
+const PLANNER_THINKING = ThinkingLevel[PLANNER_THINKING_LEVEL]
 
 /** The eval seam's vocabulary → Gemini 3's depth enum. Production never goes through this map. */
 const THINKING_LEVEL = { low: ThinkingLevel.LOW, medium: ThinkingLevel.MEDIUM, high: ThinkingLevel.HIGH } as const
@@ -159,7 +160,7 @@ export interface PlannerModelArgs {
    *  decision about D9 and about Google's caching terms — not a refactor. */
   extraSystem?: string
   /** Reasoning depth override — an EVAL-ONLY measurement lever. Omitted in production, which always uses
-   *  the shared LLM_THINKING_LEVEL (HIGH, founder rule).
+   *  the shared PLANNER_THINKING_LEVEL (LOW, the founder-approved planner exception).
    *
    *  ⚠ IT EXISTS FOR THE EVAL PANEL AND FOR ONE MEASURED QUESTION (apps/api/eval). On Claude, lower
    *  effort was documented as making the model proceed to action WITHOUT PREAMBLE and make fewer tool

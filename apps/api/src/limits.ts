@@ -154,9 +154,9 @@ export const MAX_PLAN_MESSAGE_CHARS = 2_000
  *  nothing, which the handler classifies as `truncated` and the rider hears as the retry line.
  *
  *  ⚠ RAISED 4_096 → 65_536 BY AN EXPLICIT FOUNDER CALL, 2026-09-23 ("you can significantly bump caps,
- *  because i have a lot of GCP credits"), together with HIGH thinking on every call (founder, same day).
- *  At HIGH on the real Tahoe roster a round-the-lake ask spent 3,268 of the old 4,096 — one harder turn
- *  from truncating. 65,536 is the model's own ceiling and equals LLM_MAX_OUTPUT_TOKENS in
+ *  because i have a lot of GCP credits"), while the planner briefly ran HIGH thinking — at which a
+ *  round-the-lake ask on the real Tahoe roster spent 3,268 of the old 4,096. The planner now runs LOW
+ *  (PLANNER_THINKING_LEVEL — thinking p50 0, max 672 over 59 eval turns), so the cap is pure headroom. 65,536 is the model's own ceiling and equals LLM_MAX_OUTPUT_TOKENS in
  *  @skipper/shared (a planner test pins them equal, since this file imports nothing).
  *  ⚠ WHAT NOW BOUNDS THE WORST-CASE SPEND IS PLANNER_TIMEOUT_MS, NOT THIS: Gemini emits a few hundred
  *  tokens a second, so a 45 s wall clock ends a runaway turn near ~11k output tokens (~$0.05 at the us
