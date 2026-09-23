@@ -22,6 +22,19 @@ import { keyFilename } from './jobs'
  */
 export const ADMIN_MODEL_HTTP = { timeout: 90_000, retryOptions: { attempts: 2 } } as const
 
+/**
+ * The curated-places DRAFT's budget — ONE long attempt instead of two short ones.
+ *
+ * ⚠ MEASURED at HIGH thinking (founder rule, 2026-09-23), 120 places: 80.7 s on one run; on another the
+ * first 90 s attempt timed out and the retry finished at 155.8 s total. Under ADMIN_MODEL_HTTP that is a
+ * coin flip between a slow success and a failure — and a timed-out attempt is STILL BILLED (the Gen AI
+ * SDK documents abort as client-only; the service finishes the generation). One 220 s attempt clears the
+ * measured tail and stays inside this server's 240 s idleTimeout and Cloud Run's 300 s; the trade is that
+ * a transient 429 is not retried — the operator clicks Draft again, which is what the retry would have
+ * done, minus a second paid generation racing the first.
+ */
+export const ADMIN_DRAFT_HTTP = { timeout: 220_000, retryOptions: { attempts: 1 } } as const
+
 /** Whether the model calls can run at all — the project is the one env var they need by name. */
 export function adminModelConfigured(): boolean {
   return Boolean(process.env[VERTEX.projectEnv])

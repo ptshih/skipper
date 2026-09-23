@@ -9,7 +9,8 @@
 // enabled on GOOGLE_MAPS_API_KEY (Routes enablement alone is not enough).
 
 import { FunctionCallingConfigMode, ThinkingLevel } from '@google/genai'
-import { ADMIN_MODEL_HTTP, adminGemini } from './gemini'
+import { LLM_MAX_OUTPUT_TOKENS, LLM_THINKING_LEVEL } from '@skipper/shared'
+import { ADMIN_DRAFT_HTTP, adminGemini } from './gemini'
 import type { BboxCorners } from './bbox'
 
 const AUTOCOMPLETE_URL = 'https://places.googleapis.com/v1/places:autocomplete'
@@ -463,23 +464,22 @@ export async function draftCuratedPlaces(
   // request could not ask for much more than ~16k output tokens — that SDK's own HTTP timeout bit, not
   // the model — so streaming was how this call reached a large ceiling. The Gen AI SDK has no such rule,
   // and a forced call's args arrive whole in one chunk anyway, so there is nothing to stream.
-  // ⚠ WHAT BOUNDS THIS ROUTE IS STILL THE CLOCK: ADMIN_MODEL_HTTP's explicit 90s per attempt (./gemini)
-  // — the SDK sets no timeout of its own, so dropping it would park a request past the point anyone is
-  // waiting, billing to completion. MAX_DRAFT_TARGET is pinned by that clock — see the note beside it.
+  // ⚠ WHAT BOUNDS THIS ROUTE IS STILL THE CLOCK: ADMIN_DRAFT_HTTP's one explicit 220 s attempt (./gemini,
+  // measured at HIGH) — the SDK sets no timeout of its own, so dropping it would park a request past the
+  // point anyone is waiting, billing to completion. MAX_DRAFT_TARGET is pinned by that clock.
   const res = await adminGemini().models.generateContent({
     model: opts.model,
     contents: [{ role: 'user', parts: [{ text: `Draft the curated places for ${regionName}.` }] }],
     config: {
       systemInstruction: draftSystem(regionName, boxes, opts.targetN),
-      // Headroom, deliberately generous: the largest draft the route's clamp allows is 120 places (each a
-      // name + Places query + rationale), which fit inside the old 16k, PLUS the MEDIUM thinking that
-      // shares this cap. A ceiling is not a charge — only tokens actually emitted are billed — while too
-      // little truncates the list and burns the whole call. Gemini 3.8's own ceiling is 65,536.
-      maxOutputTokens: 64_000,
-      thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
+      // The shared level + ceiling (founder rule, 2026-09-23): the largest draft the route allows is 120
+      // places (each a name + Places query + rationale) PLUS the HIGH thinking that shares this cap. Too
+      // little truncates the list and burns the whole call (caught below as MAX_TOKENS).
+      maxOutputTokens: LLM_MAX_OUTPUT_TOKENS,
+      thinkingConfig: { thinkingLevel: ThinkingLevel[LLM_THINKING_LEVEL] },
       tools: [{ functionDeclarations: [{ name: DRAFT_TOOL.name, description: DRAFT_TOOL.description, parametersJsonSchema: DRAFT_TOOL.parameters }] }],
       toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.ANY, allowedFunctionNames: [DRAFT_TOOL.name] } },
-      httpOptions: ADMIN_MODEL_HTTP,
+      httpOptions: ADMIN_DRAFT_HTTP,
     },
   })
   const candidate = res.candidates?.[0]

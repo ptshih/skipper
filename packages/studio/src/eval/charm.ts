@@ -128,10 +128,6 @@ export async function judgeCharm(stops: CharmStop[]): Promise<CharmVerdict> {
     model: JUDGMENT_MODEL,
     system: CHARM_SYSTEM,
     user: `Every narrated stop on the tour, in order:\n\n${userMessage}`,
-    // Thinking + the per-stop report share this cap. The report alone ran well under the old 8k on
-    // Claude, which did not think here; MEDIUM thinking on a whole tour needs room on top of it.
-    maxTokens: 16_000,
-    thinkingLevel: 'MEDIUM',
     tool: { name: REPORT_TOOL.name, description: REPORT_TOOL.description },
     schema: CHARM_VERDICT,
     inputSchema: REPORT_TOOL.input_schema,

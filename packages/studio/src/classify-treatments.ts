@@ -177,10 +177,6 @@ async function classify(group: Row[]): Promise<Verdict | null> {
       getGemini('treatment classify').models.generateContent(
         forcedToolRequest({
           model: JUDGMENT_MODEL,
-          // The verdict JSON alone fit in 900 on Claude, which did not think here; the rest is room for
-          // MEDIUM thinking, which shares this cap on Gemini 3.
-          maxTokens: 4_096,
-          thinkingLevel: 'MEDIUM',
           system: SYSTEM,
           tool: TOOL,
           user: `${group.length} places within ${Math.round(spread)} m of each other:\n\n${body}`,

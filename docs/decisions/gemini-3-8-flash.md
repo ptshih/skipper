@@ -36,12 +36,29 @@ Call-site translation, one line each (the code comments carry the why):
 | `stop_reason` | `finishReason` — ⚠ a reply carrying a function call finishes `STOP` (there is no `tool_use`); `MAX_TOKENS`, safety finishes, `MALFORMED_FUNCTION_CALL`, and `promptFeedback.blockReason` (no candidate at all) | planner classifier, narration, grounding, curate |
 | `Anthropic.APIError` / `APIUserAbortError` | `ApiError` (`.status`; `.message` IS the raw body — never logged) / a reason-less `AbortError` for rider, deadline and per-attempt timeout alike | planner |
 
-Thinking levels chosen: narration **HIGH** (Claude ran high-effort adaptive thinking); the calibrated
-judges, excise, curate, the admin helpers and the planner **MEDIUM**; the scout, register classifier and
-job summarizer **LOW**. Every output cap that was sized for a no-thinking Claude call was raised, because
-on Gemini the cap bounds thinking + output together (probed: a 150-token cap on HIGH spent 143 on thought).
-The planner's `PLANNER_MAX_TOKENS` (4,096) was NOT raised — it is a rider-spend cap, and the measured
-draw turn used ~1,070 of it.
+**Thinking: HIGH on every call, output cap: the model's ceiling — both founder rules, 2026-09-23**
+("always run gemini on high", after listening to HIGH-vs-MEDIUM narration samples on three Tahoe places;
+then "you can significantly bump caps, because i have a lot of GCP credits"). Each is ONE constant in
+`@skipper/shared` — `LLM_THINKING_LEVEL = 'HIGH'`, `LLM_MAX_OUTPUT_TOKENS = 65_536` — read by every call
+site (narration, every judge, excise, enrich, curate, the admin helpers, the planner, the planner-eval
+judge and the release AUDIO judge). `forcedToolRequest` accepts no level and no cap, and
+`packages/shared/test/thinking-level.test.ts` fails on any hard-coded level, so the rule cannot drift one
+call site at a time. (The first cut of this migration had mixed LOW/MEDIUM/HIGH; that is superseded.)
+On Gemini the cap bounds thinking + output together (probed: a 150-token cap on HIGH spent 143 on
+thought), so the full ceiling is what makes HIGH safe everywhere. What bounds a call now is its CLOCK:
+
+- **the live planner** — `PLANNER_MAX_TOKENS` 4,096 → **65,536** (founder call; limits.ts keeps its own
+  literal and a test pins it equal to the shared one). Measured at HIGH on the real roster: 485–3,237
+  thinking tokens, **6–21 s to the first word** (MEDIUM: ~5–7 s) — the round-the-lake ask used 3,268 of
+  the old 4,096. The 45 s `PLANNER_TIMEOUT_MS` ends a runaway turn near ~11k tokens (~$0.05); typical
+  turns cost $0.011–0.02. The silent thinking before the first token is the accepted trade.
+- **the admin curated-places draft** — measured at HIGH for 120 places: 80.7 s, and one run's first 90 s
+  attempt timed out (billed anyway) before the retry finished at 155.8 s. It now gets ONE 220 s attempt
+  (`ADMIN_DRAFT_HTTP`), inside the server's 240 s idleTimeout; the quick bbox proposal keeps 90 s × 2.
+- **the job summarizer** — its per-request timeout went 20 s → 120 s.
+- **the release audio judge** moved MEDIUM → HIGH WITHOUT a `RELEASE_ASSESSMENT_POLICY` bump: the rubric
+  is unchanged, and a bump would hide every existing assessment from the publication gate and force a
+  paid re-judge. Assessments before 2026-09-23 ran at MEDIUM.
 
 ## What was probed before it landed (founder: "spend as much as you want without further approval")
 
@@ -125,6 +142,17 @@ a studio job run (paid, and nothing to run).
 - The studio client gained a 10-minute per-attempt timeout (the Gen AI SDK sets none; Anthropic's did).
 - `apps/api/eval/run.ts --effort` rejects anything but low/medium/high instead of silently running at the
   default depth under the wrong label.
+
+**Re-measured at HIGH (2026-09-23, after the always-HIGH rule).** Grounding calibration ($0.45 — 2.8×
+the MEDIUM run): **agreement 16/18, recall 8/8, false positives 3 claims across 2/10 clean cases**
+(`grounding-ambient-ok` 2, `grounding-callback-ambient` 1). Recall — the fail-closed axis — stays perfect;
+precision dipped by one clean case, which costs excision rounds, never a shipped hallucination. Planner
+eval ($0.44): **routing 1.00, voice 1.00, persona 0/59 flagged (0.77), judge 8/10 — ship; discipline 1/59
+→ GATE FAIL on the SAME "I don't keep the mileage in my head" deflection** (the `mile` substring ban —
+now 2 of 4 full-suite runs of that turn; the two isolated re-runs passed). Whether to narrow that ban to
+a word match is the founder's call; the check was left as it is. `repeats` 17 (MEDIUM: 23), `durations` 1
+("Two hours noted!" — the known noise shape). Thinking p50 646 / max 1,735 tokens, every turn `STOP`,
+mean $0.0068 / max $0.0125 a turn. Raw: `apps/api/eval/.runs/2026-09-23T23-04-49-010Z-mem.json`.
 
 ## Deploy prerequisites
 

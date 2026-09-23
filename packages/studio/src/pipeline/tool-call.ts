@@ -34,7 +34,7 @@
 
 import { FunctionCallingConfigMode, ThinkingLevel, type Content, type GenerateContentParameters, type GenerateContentResponse } from '@google/genai'
 import { z } from 'zod'
-import { geminiUsage, recordModelUsage, type ThinkingLevelName } from '@skipper/shared'
+import { geminiUsage, LLM_MAX_OUTPUT_TOKENS, LLM_THINKING_LEVEL, recordModelUsage } from '@skipper/shared'
 import { getGemini } from '../models'
 
 /* -------------------------------------------------------------------------- */
@@ -173,10 +173,6 @@ export interface ForcedToolCallArgs {
   system: string
   /** The conversation. A string is one user turn — the shape every one-shot judge sends. */
   user: string | Content[]
-  /** Caps thinking PLUS the call's JSON in one budget (see ThinkingLevelName). */
-  maxTokens: number
-  /** Required, never defaulted: Gemini 3.8 always thinks, and depth is a per-site cost/quality call. */
-  thinkingLevel: ThinkingLevelName
   /** The function the model is FORCED to call. `description` is prompt surface — it is what the model
    *  reads to decide what belongs in each field, so it is worth writing properly. */
   tool: { name: string; description: string; parameters: ToolParameters }
@@ -188,16 +184,19 @@ export interface ForcedToolCallArgs {
 }
 
 /** Build the request for ONE forced function call. Exported so a site that must own its call (a retry
- *  wrapper, a vote loop) sends byte-for-byte what `callTool` would. */
+ *  wrapper, a vote loop) sends byte-for-byte what `callTool` would.
+ *  ⚠ NO thinking level and NO cap are accepted — founder rule (2026-09-23): every call thinks at
+ *  LLM_THINKING_LEVEL (HIGH) with the model's full output ceiling. A parameter here would be the one
+ *  place a "this call is simple" edit could quietly undo that. */
 export function forcedToolRequest(args: Omit<ForcedToolCallArgs, 'label' | 'client'>): GenerateContentParameters {
-  const { model, system, user, maxTokens, thinkingLevel, tool, requestOptions } = args
+  const { model, system, user, tool, requestOptions } = args
   return {
     model,
     contents: typeof user === 'string' ? [{ role: 'user', parts: [{ text: user }] }] : user,
     config: {
       systemInstruction: system,
-      maxOutputTokens: maxTokens,
-      thinkingConfig: { thinkingLevel: ThinkingLevel[thinkingLevel] },
+      maxOutputTokens: LLM_MAX_OUTPUT_TOKENS,
+      thinkingConfig: { thinkingLevel: ThinkingLevel[LLM_THINKING_LEVEL] },
       tools: [{ functionDeclarations: [{ name: tool.name, description: tool.description, parametersJsonSchema: tool.parameters }] }],
       // ANY + one allowed name = "call exactly this function" — Claude's `tool_choice: {type:'tool'}`.
       toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.ANY, allowedFunctionNames: [tool.name] } },

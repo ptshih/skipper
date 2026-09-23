@@ -148,28 +148,22 @@ export const MAX_PLAN_MESSAGE_CHARS = 2_000
 /** Hard ceiling on the planner's model call.
  *  ⚠ On this model that bounds THINKING PLUS visible output in one budget — there is no separate
  *  thinking budget to size against, and thinking stays ON (INV-8). Visible output is deterministic and
- *  tiny (one short `say` plus a small typed route object, ~200 tok); the rest is headroom for thinking.
+ *  tiny (one short `say` plus a small typed route object, ~30–140 tok measured); the rest is thinking.
  *  ⚠ TOO LOW IS THE DANGEROUS DIRECTION AND DOES NOT RAISE AN ERROR: the call returns HTTP 200 with
- *  stop_reason 'max_tokens' and either a truncated tool_use block or none at all — a paid call that
- *  silently produced nothing, indistinguishable from "the planner chose not to route this turn". The
- *  step-6 handler must branch on stop_reason explicitly.
- *  Raising it costs nothing unless the model actually generates the tokens: max_tokens is a ceiling, not
- *  a reservation. Tighten only after logging real p99 output.
+ *  finish MAX_TOKENS and either a truncated call or none at all — a paid call that silently produced
+ *  nothing, which the handler classifies as `truncated` and the rider hears as the retry line.
  *
- *  ⚠ RAISED 2_048 → 4_096 BY AN EXPLICIT FOUNDER CALL, 2026-08-04, and it is the REQUIRED other half of
- *  moving `PLANNER_EFFORT` to 'medium' in the same change — not an independent tuning. At 'low' the model
- *  chose ZERO thinking tokens on all 54 eval turns, so the ~10x headroom this cap appeared to have was
- *  measured in a regime where thinking never engaged. 'medium' engages it, and thinking is billed inside
- *  THIS budget. Shipping the effort change alone would have spent the headroom on reasoning and surfaced
- *  as `stop_reason: 'max_tokens'` → the handler's `truncated` → the rider hearing the retry line.
- *  ⚠ WHY 4_096 AND NOT MORE: visible output is the deterministic half and peaks at ~209 tokens observed,
- *  so the doubling is entirely thinking headroom. It also keeps the worst-case bound legible — 4_096
- *  output tokens is ~$0.10 a turn at this model's rate, against ~$0.05 before. That bound is what INV-11
- *  names as a guard, so the number is a founder's to move and this one was.
- *  ⚠ UNMEASURED ON PURPOSE — the founder chose to ship rather than run the eval arm first. What makes
- *  that safe to watch rather than guess at: `plan_spend` already logs `stop_reason` and `thinking` per
- *  call, so a truncation regression is one Cloud Logging filter away and needs no new instrumentation. */
-export const PLANNER_MAX_TOKENS = 4_096
+ *  ⚠ RAISED 4_096 → 65_536 BY AN EXPLICIT FOUNDER CALL, 2026-09-23 ("you can significantly bump caps,
+ *  because i have a lot of GCP credits"), together with HIGH thinking on every call (founder, same day).
+ *  At HIGH on the real Tahoe roster a round-the-lake ask spent 3,268 of the old 4,096 — one harder turn
+ *  from truncating. 65,536 is the model's own ceiling and equals LLM_MAX_OUTPUT_TOKENS in
+ *  @skipper/shared (a planner test pins them equal, since this file imports nothing).
+ *  ⚠ WHAT NOW BOUNDS THE WORST-CASE SPEND IS PLANNER_TIMEOUT_MS, NOT THIS: Gemini emits a few hundred
+ *  tokens a second, so a 45 s wall clock ends a runaway turn near ~11k output tokens (~$0.05 at the us
+ *  rate in MODEL_PRICING) long before this cap. The Opus-era worst case was ~$0.18 a turn. Typical HIGH
+ *  turns measured $0.011–0.02. INV-11 still names this cap as a guard; moving it is a founder's call and
+ *  this one was. */
+export const PLANNER_MAX_TOKENS = 65_536
 
 /** How long `POST /drives/plan` may reuse a region's cached name + anchor roster (./roster-cache).
  *

@@ -190,7 +190,7 @@ const RUN_KINDS: RunKind[] = [
   {
     kind: 'Generate Narration',
     does: 'Narrate + synthesize the one shared narration for every enriched, story-grade POI in the region.',
-    cost: <span>LLM per narration (~$0.12); <span className="text-foreground">TTS</span> per narration (when applied).</span>,
+    cost: <span>LLM per narration (~$0.15); <span className="text-foreground">TTS</span> per narration (when applied).</span>,
     safe: 'Preview — shows the queue + cost estimate, makes no model calls.',
   },
   {
@@ -202,7 +202,7 @@ const RUN_KINDS: RunKind[] = [
   {
     kind: 'Scenic call-outs',
     does: "⚠ CLI-ONLY TODAY — this is the one run kind with NO console control: it is wired server-side (jobs.ts SCRIPTS) and dispatchable by `bun packages/studio/src/generate-scenic-narrations.ts`, but nothing on any page launches it, so the “take one kind at a time” guidance below describes CLI flags, not buttons. Kept here because the run exists and its cost/eligibility rules are what an operator needs before running it. Write a SHORT call-out (~20s) for a place that has NO facts — the beaches, points, bays and peaks a driver looks at during the quiet. These are the places a story can never cover: a story REQUIRES a fact sheet, and roughly 925 named POIs in the corpus have none, so before this they were simply silent. The clip says the place's NAME and its KIND and nothing else — it is a glance, not a story, and the narrator is explicitly forbidden from asserting anything the name IMPLIES (no history, no size or depth, no “famous”, no character). Eligibility is strict and each clause is a refusal: no existing telling, no facts, not excluded, not in a cluster, HAS a kind, and HAS a road-snapped anchor. The kind requirement is not fussiness — without it the narrator infers the kind from the name (“Cathedral Peak” becomes “a peak out there”, asserting something it was never given), and the grounding gate CANNOT catch that class because the claim traces to the name. The anchor requirement is so the call-out fires where you can actually see the thing. ⚠ Take ONE KIND at a time with a small limit at first: six of the same kind is the worst case for the clips all sounding alike, and it is the only run that tests it.",
-    cost: <span>LLM per call-out (~$0.10 — the sheet is two fields, but narration thinks hard either way); <span className="text-foreground">TTS</span> on apply.</span>,
+    cost: <span>LLM per call-out (~$0.12 — the sheet is two fields, but every call thinks at HIGH); <span className="text-foreground">TTS</span> on apply.</span>,
     safe: 'Preview — lists the queue + estimate, makes NO model calls and costs nothing (unlike Fuse clusters, whose preview spends). A scenic clip lands STAGED and goes public with the region release. ⚠ A drive will not PLAY these until the glance-fill selection ships — they are selected in a separate pass from stops, because a 20s call-out loses every pacing window to a 90s telling.',
   },
   {
@@ -214,7 +214,7 @@ const RUN_KINDS: RunKind[] = [
   {
     kind: 'Re-score corpus',
     does: 'Re-score the EXISTING story narrations (grounding / tts / diversity always; charm + veracity opt-in) WITHOUT regenerating or re-synthesizing — a quality read on what is already shipped. Records an offline_audit run; its scores show on the Evals page. Read-only on narrations.',
-    cost: <span>LLM grounding per clip (~$0.015, when applied); charm = one batch call; veracity web-checks each clip (pricier — its Google Search queries bill separately past the monthly free allowance). Free tts + diversity run in Preview.</span>,
+    cost: <span>LLM grounding per clip (~$0.03, when applied); charm = one batch call; veracity web-checks each clip (pricier — its Google Search queries bill separately past the monthly free allowance). Free tts + diversity run in Preview.</span>,
     safe: 'Preview — counts the narrations + estimates the spend, makes no model calls.',
   },
   {

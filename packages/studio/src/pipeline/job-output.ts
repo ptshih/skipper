@@ -117,15 +117,14 @@ export async function synthesizeJobOutput(kind: string, log: string): Promise<Jo
       model: SUMMARY_MODEL,
       system: SYSTEM,
       user: `Job kind: ${kind}\n\nLogs:\n${truncated}\n\nCall the report tool.`,
-      // The report alone fit 1k on Claude; LOW thinking shares this cap on Gemini 3.
-      maxTokens: 4_096,
-      thinkingLevel: 'LOW',
       tool: { name: 'report', description: 'Report the plain-English summary and the extracted metrics.' },
       schema: REPORT,
       label: 'job output synthesis',
       // Per-request, so this short leash wins over the shared client's 6 attempts — that default is
       // tuned for narration surviving a sustained overload, which is the wrong trade for a settling job.
-      requestOptions: { timeout: 20_000, retries: 1 },
+      // 120 s, not the 20 s it was on Claude: at HIGH thinking a summary of a long log is no longer a
+      // few-second call, and a timeout here only buys the "synthesis failed" fallback.
+      requestOptions: { timeout: 120_000, retries: 1 },
     })
     return { summary: report.summary, data: report.data ?? {} }
   } catch (e) {

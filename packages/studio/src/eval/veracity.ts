@@ -23,7 +23,7 @@
 // unit-tested with a deterministic fake and zero API spend (test/eval-veracity.test.ts).
 
 import { ThinkingLevel } from '@google/genai'
-import { geminiUsage, recordModelUsage } from '@skipper/shared'
+import { geminiUsage, LLM_MAX_OUTPUT_TOKENS, LLM_THINKING_LEVEL, recordModelUsage } from '@skipper/shared'
 import { getGemini, JUDGMENT_MODEL } from '../models'
 import { finishReason, replyText, type ToolParameters } from '../pipeline/tool-call'
 import type { StopEval } from './types'
@@ -37,8 +37,8 @@ import type { StopEval } from './types'
 // response schema — probed 2026-09-23: it searched, then returned the report as schema-shaped JSON. So
 // the report is the reply itself, and the old pause_turn / nudge-turn machinery has nothing left to do.
 const VERACITY_MODEL = JUDGMENT_MODEL
-// Thinking + the JSON report share this cap; the report alone ran well inside Claude's 6k.
-const VERACITY_MAX_TOKENS = 16_000
+// Thinking + the JSON report share this cap — the shared model ceiling.
+const VERACITY_MAX_TOKENS = LLM_MAX_OUTPUT_TOKENS
 /** How many claims the prompt asks for. Gemini exposes no per-request search cap (Claude's `max_uses`),
  *  so this prompt number is now the only bound on searches — it was always the tighter of the two. */
 const VERACITY_MAX_SEARCHES = 4
@@ -164,7 +164,7 @@ export const geminiChecker: VeracityChecker = async (input) => {
     config: {
       systemInstruction: SYSTEM,
       maxOutputTokens: VERACITY_MAX_TOKENS,
-      thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
+      thinkingConfig: { thinkingLevel: ThinkingLevel[LLM_THINKING_LEVEL] },
       tools: [{ googleSearch: {} }],
       responseMimeType: 'application/json',
       responseJsonSchema: REPORT_SCHEMA,

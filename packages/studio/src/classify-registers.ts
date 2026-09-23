@@ -122,14 +122,14 @@ async function main(): Promise<void> {
   if (!apply) {
     console.log(
       `\nPREVIEW — no LLM calls, no writes. Re-run with --apply to classify the ${abstains.length} abstains ` +
-        `(model ≈ $${(abstains.length * 0.001).toFixed(2)}) and write all ${pending.length} registers.`,
+        `(model ≈ $${(abstains.length * 0.008).toFixed(2)}) and write all ${pending.length} registers.`,
     )
     return
   }
 
   // --max-cost ceiling: abort before any spend if the estimate exceeds the cap. The model tail is the
-  // only paid step (~$0.001/abstain) — tiny, but keeps this CLI consistent with enrich/generate.
-  const estUsd = abstains.length * 0.001
+  // only paid step (~$0.008/abstain at HIGH thinking) — small, but keeps this CLI consistent with enrich/generate.
+  const estUsd = abstains.length * 0.008
   if (estUsd > maxCostUsd) {
     throw new Error(
       `⛔ Estimated model spend ~$${estUsd.toFixed(2)} exceeds --max-cost=$${maxCostUsd.toFixed(2)} — aborting. Raise --max-cost or narrow the corpus.`,

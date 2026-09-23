@@ -61,7 +61,7 @@ import {
   type DriveSelection,
 } from '@skipper/db/schema'
 import { user } from '@skipper/db/auth-schema'
-import { LLM_MODELS, VERTEX, classifyStoryEligibility } from '@skipper/shared'
+import { LLM_MAX_OUTPUT_TOKENS, LLM_MODELS, LLM_THINKING_LEVEL, VERTEX, classifyStoryEligibility } from '@skipper/shared'
 import { FunctionCallingConfigMode, ThinkingLevel, type Content } from '@google/genai'
 import { ADMIN_MODEL_HTTP, adminGemini, adminModelConfigured } from './gemini'
 import { checkAccessPoint, checkSpeakableAnchor } from '@skipper/engine'
@@ -427,9 +427,9 @@ app.post('/admin/regions/bbox-lookup', async (c) => {
       model: process.env.ADMIN_PROPOSE_MODEL ?? LLM_MODELS.quality,
       contents,
       config: {
-        // The box is ~60 tokens of JSON; the rest is MEDIUM thinking, which shares this cap.
-        maxOutputTokens: 4_096,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
+        // The shared level + ceiling (founder rule, 2026-09-23): HIGH thinking shares this cap.
+        maxOutputTokens: LLM_MAX_OUTPUT_TOKENS,
+        thinkingConfig: { thinkingLevel: ThinkingLevel[LLM_THINKING_LEVEL] },
         tools: [{ functionDeclarations: [{ name: BBOX_TOOL.name, description: BBOX_TOOL.description, parametersJsonSchema: BBOX_TOOL.parameters }] }],
         toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.ANY, allowedFunctionNames: [BBOX_TOOL.name] } },
         // The operator-click budget (./gemini): explicit timeout, one retry.
@@ -686,13 +686,12 @@ app.post('/admin/places', async (c) => {
 // ⚠ THIS IS DELIBERATELY LOWER THAN THE CLI's 250 (packages/studio/src/curate-places.ts), and the gap
 // is NOT drift — the two are bound by different things and must not be "unified" (founder, 2026-08-04).
 // The CLI is a batch process with no clock over it, so it drafts deep. This is a REQUEST PATH, and what
-// binds it is the CLOCK: a 90s model timeout inside this server's 240s idleTimeout, and the route still
-// has to answer inside that.
-// ⚠ IT IS NO LONGER A TOKEN BOUND (2026-08-04). This cap used to be justified partly by `max_tokens`,
-// which sat at the ~16k ceiling a NON-STREAMING call can safely ask for; the draft call now streams, so
-// the token ceiling is the model's own (128k) and no longer the thing pinning this number. What is left
-// is the clock, which streaming does NOT change — the model is not faster, the response merely arrives
-// incrementally. So this stays 120 until someone MEASURES where the wall-clock actually lands.
+// binds it is the CLOCK: the draft's one 220s model attempt (ADMIN_DRAFT_HTTP, ./gemini) inside this
+// server's 240s idleTimeout, and the route still has to answer inside that.
+// ⚠ IT IS NO LONGER A TOKEN BOUND. The output cap is the model's own ceiling (LLM_MAX_OUTPUT_TOKENS), so
+// what pins this number is the clock. MEASURED 2026-09-23 at HIGH thinking: 120 places took 80.7 s, and
+// on another run a first attempt ran past 90 s — so 120 fits the 220 s attempt with room, but raising it
+// is a re-measurement, not an edit.
 // So: deep, store-everything runs are a CLI job; this route stays the reviewable desk-sized preview it
 // was built to be.
 const MAX_DRAFT_TARGET = 120

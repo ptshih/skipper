@@ -13,7 +13,7 @@
 
 import { afterEach, beforeEach, describe, expect, setSystemTime, spyOn, test } from 'bun:test'
 import { ApiError, FunctionCallingConfigMode, ThinkingLevel } from '@google/genai'
-import { LLM_MODELS } from '@skipper/shared'
+import { LLM_MAX_OUTPUT_TOKENS, LLM_MODELS } from '@skipper/shared'
 import { PLAN_ROUTE_TOOL, PLANNER_SYSTEM_PROMPT, PLANNER_WRAP_UP_NOTICE } from '../src/planner-prompt'
 import { MAX_ROUTE_VIA } from '@skipper/shared'
 import {
@@ -549,6 +549,12 @@ describe('the model call this route bills', () => {
     expect(params.config?.maxOutputTokens).toBe(PLANNER_MAX_TOKENS)
   })
 
+  // limits.ts imports nothing on purpose, so the planner's cap is its own literal — and it must still be
+  // the shared model ceiling every other call uses (founder, 2026-09-23: "significantly bump caps").
+  test('the planner cap is the shared model ceiling, not a smaller hand-kept number', () => {
+    expect(PLANNER_MAX_TOKENS).toBe(LLM_MAX_OUTPUT_TOKENS)
+  })
+
   // ⚠ INV-8. On Claude this pinned "thinking present AND not disabled", because with thinking off the
   // model could write a tool call into VISIBLE TEXT — a silent wrong answer no classifier test can see.
   // Gemini 3.8 has no "off", so what remains to pin is that a depth IS set (the production value, not an
@@ -557,7 +563,8 @@ describe('the model call this route bills', () => {
     lastStreamParams = null
     await runPlannerTurn(baseArgs(fakeClient({ finish: 'STOP', parts: [textPart('hi')] })))
     const thinking = lastCallParams().config?.thinkingConfig
-    expect(thinking?.thinkingLevel).toBe(ThinkingLevel.MEDIUM)
+    // Founder rule (2026-09-23): always HIGH — read through the shared constant, not a planner knob.
+    expect(thinking?.thinkingLevel).toBe(ThinkingLevel.HIGH)
     expect(thinking?.includeThoughts).not.toBe(true)
   })
 

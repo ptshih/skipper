@@ -1,7 +1,7 @@
 import { requestAudioJudge } from './request'
 import { createHash } from 'node:crypto'
 import { GoogleAuth } from 'google-auth-library'
-import { RELEASE_ASSESSMENT_MODEL, RELEASE_ASSESSMENT_POLICY, releaseJudgment, releaseAssessmentCost,
+import { LLM_MAX_OUTPUT_TOKENS, LLM_THINKING_LEVEL, RELEASE_ASSESSMENT_MODEL, RELEASE_ASSESSMENT_POLICY, releaseJudgment, releaseAssessmentCost,
   type ReleaseAssessmentResult } from '@skipper/shared'
 
 let auth: GoogleAuth | undefined
@@ -52,7 +52,11 @@ export async function judgeReleaseAudio(input: { clip: unknown; notes: string; b
     body: JSON.stringify({ systemInstruction: { parts: [{ text: SYSTEM }] },
       contents: [{ role: 'user', parts: [{ text: context },
         { inlineData: { mimeType: 'audio/mp4', data: Buffer.from(input.bytes).toString('base64') } }] }],
-      generationConfig: { maxOutputTokens: 16384, responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: 'MEDIUM' } } }),
+      // The shared level + ceiling (founder rule, 2026-09-23: always HIGH). ⚠ Changed from MEDIUM WITHOUT a
+      // RELEASE_ASSESSMENT_POLICY bump on purpose: the rubric is unchanged, and a bump would hide every
+      // existing assessment from the publication gate (admin publication.ts filters on it) and force a
+      // paid re-judge of the whole staged corpus. Assessments before 2026-09-23 ran at MEDIUM.
+      generationConfig: { maxOutputTokens: LLM_MAX_OUTPUT_TOKENS, responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: LLM_THINKING_LEVEL } } }),
     signal: AbortSignal.timeout(180000),
   })
   const body = await response.json() as any

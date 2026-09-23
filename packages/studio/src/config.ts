@@ -7,6 +7,7 @@
 //   dotenvx run -f .env.development -- bun packages/studio/src/generate-narrations.ts
 
 import { existsSync } from 'node:fs'
+import { LLM_MAX_OUTPUT_TOKENS } from '@skipper/shared'
 
 /** Read a required env var or throw a clear, actionable error. */
 export function requireEnv(name: string): string {
@@ -103,11 +104,10 @@ export const WIKIDATA_ENRICHMENT = (): boolean => process.env.SKIPPER_WIKIDATA !
 // gets a bit more output headroom.
 /** Max model turns per place — look (fetch geology/wikidata), then finalize. */
 export const ENRICH_MAX_TOOL_TURNS = 5
-/** Max output tokens per enrich turn — a finalize emits a kept-span-id LIST + a sentence of
- *  reason (numbers, not prose); 2k was tight on Claude, which did not think here. Gemini 3.8 always
- *  thinks (LOW in makeScoutCall) and thinking shares this cap, so it carries that headroom on top —
- *  a MAX_TOKENS stop yields no sheet (retryable), never a half-read span list. */
-export const ENRICH_MAX_TOKENS = 6_000
+/** Max output tokens per enrich turn — the shared model ceiling (LLM_MAX_OUTPUT_TOKENS). A finalize is
+ *  a kept-span-id list + a sentence, but it follows HIGH thinking, which shares this cap; a MAX_TOKENS
+ *  stop yields no sheet (retryable), never a half-read span list. */
+export const ENRICH_MAX_TOKENS = LLM_MAX_OUTPUT_TOKENS
 /** SOFT selection target: roughly how many verbatim spans the fact sheet should carry for a ~150s
  *  telling. GUIDANCE to the model (restraint is a feature), NOT a hard cap — the sheet's true
  *  bound is the enricher's judgment, never a char truncation (which would butcher a verbatim

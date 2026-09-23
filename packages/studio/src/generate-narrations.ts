@@ -381,15 +381,15 @@ async function main(): Promise<FinishOutcome | void> {
       `${SHARED_FACT_MIN_OTHERS} places (those get marked SHARED on the sheet).`,
   )
 
-  // Cost preview (MEASURED on Gemini 3.8 Flash, 2026-09-23 — MODEL_PRICING has the rate): one narration
-  // at HIGH thinking spent ~15k thinking tokens on a thin sheet, ~$0.07. The automated gate adds
-  // GROUNDING_VOTE_SAMPLES judge calls/clip at MEDIUM thinking (~$0.015 together) plus the odd bounded
-  // excision, so model ~$0.12/clip of LLM spend when the gate is on — deliberately on the high side,
-  // since this number is what `--max-cost` checks BEFORE anything bills. TTS cost is DOMINATED by audio tokens, which estimateTtsUsd derives from the WORD count
+  // Cost preview (MEASURED on Gemini 3.8 Flash at HIGH, 2026-09-23 — MODEL_PRICING has the rate): one
+  // narration spent 6k–15k thinking tokens, ~$0.07. The automated gate adds GROUNDING_VOTE_SAMPLES judge
+  // calls/clip at ~$0.008 each (calibration: $0.45 over 54 calls) plus the odd bounded excision, so model
+  // ~$0.15/clip of LLM spend when the gate is on — deliberately on the high side, since this number is
+  // what `--max-cost` checks BEFORE anything bills. TTS cost is DOMINATED by audio tokens, which estimateTtsUsd derives from the WORD count
   // (estSeconds = words / WORDS_PER_SECOND) — so the dummy clip must contain that many real WORDS. A
   // space-less char blob ('x'.repeat(n)) reads as ONE word and collapses the audio estimate ~100× (it
   // under-quoted a full-region run by ~$28 and silently defeated --max-cost). Model a target-length clip.
-  const llmUsdPerClip = GROUNDING_EVAL() ? 0.12 : 0.09
+  const llmUsdPerClip = GROUNDING_EVAL() ? 0.15 : 0.1
   // Per-clip TTS estimate uses each poi's REGISTER target (a story clip quotes longer than a landscape
   // glance); the dummy clip must carry that many real WORDS (estimateTtsUsd derives audio tokens from the
   // word count — a space-less blob reads as ONE word and collapses the audio estimate ~100×).

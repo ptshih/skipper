@@ -179,9 +179,9 @@ Authorized replacement in progress: [native iOS conversion](docs/designs/native-
   (neon-http, stateless — no interactive transactions; use `db.batch`).
 - **Every model call = GEMINI 3.8 FLASH on Vertex AI, `us` multi-region (founder, 2026-09-23).** Client =
   `GoogleGenAI` (`@google/genai`, Vertex mode); auth = ADC (a Cloud Run SA needs `roles/aiplatform.user`),
-  billed to the project named ONCE as `VERTEX.projectEnv`. ⚠ It ALWAYS thinks (the output cap bounds
-  thinking + output); a multi-step tool loop must echo the model's turn VERBATIM (thought signatures, else
-  400). Gate re-calibrated on it 2026-09-23. `docs/decisions/gemini-3-8-flash.md`.
+  billed to the project named ONCE as `VERTEX.projectEnv`. ⚠ EVERY call thinks at HIGH with the model's full
+  output cap (founder rules — `LLM_THINKING_LEVEL`, `LLM_MAX_OUTPUT_TOKENS`; never per-site); a tool loop must
+  echo the model's turn VERBATIM (thought signatures, else 400). `docs/decisions/gemini-3-8-flash.md`.
 - **The live planner runs a model IN THE REQUEST PATH** — configured unlike a batch call. Model id from a
   named constant in `@skipper/shared`; **thinking stays ON** (structural on Gemini 3 — and never request
   thoughts: rider text must not carry reasoning); `thinkingLevel` is the latency lever; stream. **One

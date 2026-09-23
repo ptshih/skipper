@@ -41,13 +41,33 @@ export const VERTEX = {
 } as const
 
 /** Gemini 3 thinking depth. Gemini 3.8 Flash ALWAYS thinks — there is no "off", and `MINIMAL` is
- *  rejected — so every call site picks one of these explicitly rather than inheriting the MEDIUM
- *  default by accident. ⚠ `maxOutputTokens` bounds thinking PLUS visible output in one budget (probed
+ *  rejected — and every call sends LLM_THINKING_LEVEL below explicitly rather than inheriting the
+ *  model's MEDIUM default by accident. ⚠ `maxOutputTokens` bounds thinking PLUS visible output in one budget (probed
  *  2026-09-23: a 150-token cap on HIGH spent 143 on thought and stopped MAX_TOKENS after three words),
  *  so raising a level without raising that site's cap buys a truncated answer, not a better one.
  *  String literals rather than the SDK enum so this package stays dependency-free; they are the
  *  SDK's `ThinkingLevel` values verbatim. */
 export type ThinkingLevelName = 'LOW' | 'MEDIUM' | 'HIGH'
+
+/** THE thinking level for every Gemini call in the repo — founder rule, 2026-09-23: "always run gemini
+ *  on high", given after listening to HIGH-vs-MEDIUM narration samples. ONE constant, read by every
+ *  call site (narration, every judge, enrich, curate, the admin helpers, the live planner and the
+ *  release audio judge), so the rule cannot drift one call site at a time; `packages/shared/test/
+ *  thinking-level.test.ts` fails if a call site hard-codes another level.
+ *  ⚠ The consequence every site had to absorb: HIGH spends far more thinking (measured 2026-09-23 —
+ *  narration 6k–15k tokens, the planner 0.5k–3.2k), and on Gemini the output cap bounds thinking PLUS
+ *  output. Each site's cap is sized for HIGH; lowering one is a truncation waiting to happen. */
+export const LLM_THINKING_LEVEL: ThinkingLevelName = 'HIGH'
+
+/** THE output cap for every Gemini call — the model's own ceiling (65,536 for gemini-3.8-flash, and for
+ *  the release judge's gemini-3.1-pro-preview; Google's model pages, 2026-09-23). Founder, 2026-09-23:
+ *  "you can significantly bump caps, because i have a lot of GCP credits." On Gemini the cap bounds
+ *  thinking PLUS output, so at LLM_THINKING_LEVEL a tight cap is a truncated (and still billed) answer;
+ *  a cap is a ceiling, not a reservation, so the headroom costs nothing until it is used.
+ *  ⚠ What still bounds a call is its CLOCK: the planner's PLANNER_TIMEOUT_MS, the admin's per-attempt
+ *  timeout, the studio client's 10 minutes. The live planner keeps its own literal in
+ *  apps/api/src/limits.ts (that file imports nothing on purpose) and it must match this one. */
+export const LLM_MAX_OUTPUT_TOKENS = 65_536
 
 export const LLM_MODELS = {
   /** ⚠ EVERY KEY BELOW RESOLVES TO THE SAME MODEL (founder, 2026-09-23: all calls to Gemini 3.8
@@ -60,9 +80,8 @@ export const LLM_MODELS = {
    *   · `planner` — the one RIDER-triggered call, below
    *
    *  What moving off Claude means, recorded so nobody reads an older calibration note as current:
-   *   · the fail-closed eval gate was last CALIBRATED on Opus 4.6 (2026-09-17). Those numbers describe
-   *     a model this repo no longer runs — re-run `eval/calibrate.ts` before trusting a grounding or
-   *     charm score from this one.
+   *   · the fail-closed eval gate is calibrated on THIS model at LLM_THINKING_LEVEL — the numbers are in
+   *     docs/decisions/gemini-3-8-flash.md; re-run `eval/calibrate.ts` after any model or level change.
    *   · the forced tool call every judge depends on is Gemini's function-calling mode `ANY` narrowed by
    *     `allowedFunctionNames`, and unlike Claude's non-strict tool use it ENFORCES the schema. The
    *     zod validation at each site stays anyway: it is also where the domain checks live.
@@ -83,7 +102,7 @@ export const LLM_MODELS = {
    *  coinciding in studio/models.ts and staying separate anyway.)
    *
    *  ⚠ Thinking is always on for this model family (INV-8's requirement is now structural rather than a
-   *  flag someone can drop), so the lever is DEPTH: `thinkingLevel`, bounded together with visible
+   *  flag someone can drop), and its depth is LLM_THINKING_LEVEL (HIGH), bounded together with visible
    *  output by `PLANNER_MAX_TOKENS` (apps/api/src/limits.ts). */
   planner: VERTEX.flash38,
 } as const

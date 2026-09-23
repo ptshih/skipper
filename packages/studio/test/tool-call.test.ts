@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { FunctionCallingConfigMode, ThinkingLevel, type GenerateContentParameters, type GenerateContentResponse } from '@google/genai'
 import { z } from 'zod'
-import { llmSpentUsd, resetSpendTally } from '@skipper/shared'
+import { LLM_MAX_OUTPUT_TOKENS, llmSpentUsd, resetSpendTally } from '@skipper/shared'
 import { callTool, parseToolReply, toolInputSchema, type ToolCallClient } from '../src/pipeline/tool-call'
 import { JUDGMENT_MODEL } from '../src/models'
 
@@ -55,8 +55,6 @@ const args = <T>(client: ToolCallClient, schema: z.ZodType<T>, extra: Record<str
   model: JUDGMENT_MODEL,
   system: 'sys',
   user: 'u',
-  maxTokens: 512,
-  thinkingLevel: 'LOW' as const,
   tool: { name: 'report', description: 'Report it.' },
   schema,
   label: 'test judge',
@@ -159,8 +157,10 @@ describe('callTool', () => {
     // Gemini's forced call: mode ANY narrowed to the one function — the equivalent of Claude's
     // `tool_choice: {type:'tool'}`, which every judge depends on.
     expect(bodies[0]?.config?.toolConfig?.functionCallingConfig).toEqual({ mode: FunctionCallingConfigMode.ANY, allowedFunctionNames: ['report'] })
-    expect(bodies[0]?.config?.thinkingConfig).toEqual({ thinkingLevel: ThinkingLevel.LOW })
-    expect(bodies[0]?.config?.maxOutputTokens).toBe(512)
+    // Founder rule (2026-09-23): every call thinks at HIGH with the model's full output ceiling — no
+    // call site can ask for less, because the helper takes no level or cap at all.
+    expect(bodies[0]?.config?.thinkingConfig).toEqual({ thinkingLevel: ThinkingLevel.HIGH })
+    expect(bodies[0]?.config?.maxOutputTokens).toBe(LLM_MAX_OUTPUT_TOKENS)
     expect(bodies[0]?.config?.systemInstruction).toBe('sys')
     expect(bodies[0]?.contents).toEqual([{ role: 'user', parts: [{ text: 'u' }] }])
     expect(llmSpentUsd()).toBeGreaterThan(0)

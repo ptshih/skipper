@@ -58,9 +58,9 @@ import { LLM_READY, GOOGLE_READY, requireEnv } from './config'
  *  costs money. */
 const EST_INPUT_TOKENS = 1_400
 const EST_TOKENS_PER_PLACE = 80
-/** Thinking bills as output and Gemini 3.8 always thinks (MEDIUM here); a flat allowance, generous for
- *  the same reason as the figures above. */
-const EST_THINKING_TOKENS = 8_000
+/** Thinking bills as output and every call thinks at HIGH; a flat allowance, generous for the same
+ *  reason as the figures above (HIGH measured 6k–15k on a narration). */
+const EST_THINKING_TOKENS = 20_000
 
 /** ⚠ FAILS CLOSED on an unpriced model. `usageUsd` returns 0 for one it does not recognise — honest
  *  for a post-hoc tally, but as a PRE-SPEND bound a $0 estimate silently clears every `--max-cost`,
@@ -262,12 +262,9 @@ async function draftCuratedPlaces(
   const response = await getGemini('curate-places needs it to draft the candidate set').models.generateContent(
     forcedToolRequest({
       model,
-      // Sized for the LARGEST draft the clamp allows (250 places, each a name + Places query + rank +
-      // rationale) PLUS the thinking that shares this cap, not for the default. A ceiling is not a
-      // charge — only tokens actually emitted are billed — so headroom here is free, while too little
-      // silently truncates the list. Gemini 3.8's output ceiling is 65,536.
-      maxTokens: 60_000,
-      thinkingLevel: 'MEDIUM',
+      // Thinking level + cap are the shared ones (HIGH, the model's full 65,536 ceiling): the largest
+      // draft the clamp allows (250 places) plus HIGH thinking must fit, and too little silently
+      // truncates the list — caught below as a MAX_TOKENS throw.
       system: draftSystem(regionName, bbox, targetN),
       tool: DRAFT_TOOL,
       user: `Draft the curated places for ${regionName}.`,

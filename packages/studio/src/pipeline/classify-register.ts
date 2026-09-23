@@ -197,9 +197,6 @@ export function makeRegisterCall(getClient: () => ToolCallClient): RegisterModel
         model: LLM_MODELS.summary,
         system,
         user,
-        // One enum word of output; LOW thinking is plenty for a four-way pick, and shares this cap.
-        maxTokens: 1_024,
-        thinkingLevel: 'LOW',
         tool: FALLBACK_TOOL,
       }),
     )

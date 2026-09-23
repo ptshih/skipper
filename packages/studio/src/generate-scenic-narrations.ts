@@ -232,10 +232,10 @@ async function main(): Promise<void> {
   // synthesis loop would bound nothing that had not already been billed.
   // ⚠ The TTS dummy must carry real WORDS — estimateTtsUsd derives audio tokens from the word count,
   // so a space-less blob reads as ONE word and collapses the estimate ~100×.
-  // Re-derived for Gemini 3.8 Flash (2026-09-23): narration runs at HIGH thinking even for a short
-  // call-out (~$0.07 measured on a thin story sheet), so the estimate errs high — the safe direction for a
-  // pre-spend cap.
-  const llmUsdPerClip = GROUNDING_EVAL() ? 0.1 : 0.08
+  // Re-derived for Gemini 3.8 Flash (2026-09-23): narration AND the grounding votes run at HIGH thinking
+  // even for a short call-out (~$0.07 measured for a narration, ~$0.008 a vote), so the estimate errs
+  // high — the safe direction for a pre-spend cap.
+  const llmUsdPerClip = GROUNDING_EVAL() ? 0.12 : 0.08
   const ttsPreEst = estimateTtsUsd(
     picked.map(() => Array(Math.round(SCENIC_TARGET_SECONDS * WORDS_PER_SECOND)).fill('word').join(' ')),
     persona.ttsStyle.length,

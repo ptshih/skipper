@@ -27,7 +27,7 @@ import {
   ENRICH_FACT_SHEET_TARGET_SPANS,
 } from '../config'
 import { ENRICH_MODELS, getGemini } from '../models'
-import { geminiUsage, recordModelUsage } from '@skipper/shared'
+import { geminiUsage, LLM_THINKING_LEVEL, recordModelUsage } from '@skipper/shared'
 import { finishReason, replyParts, type ToolParameters } from './tool-call'
 
 /** A function the builder may offer — a Gemini function declaration's fields, schema as JSON Schema. */
@@ -68,9 +68,7 @@ export function makeScoutCall(model: string, maxTokens: number): ScoutModelCall 
       config: {
         systemInstruction: system,
         maxOutputTokens: maxTokens,
-        // LOW: picking span ids off a numbered list is selection, not synthesis, and this runs
-        // corpus-scale. The old tier (Sonnet) ran it with no thinking at all.
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        thinkingConfig: { thinkingLevel: ThinkingLevel[LLM_THINKING_LEVEL] },
         tools: [{ functionDeclarations: tools.map((t) => ({ name: t.name, description: t.description, parametersJsonSchema: t.parameters })) }],
         toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.ANY } },
       },

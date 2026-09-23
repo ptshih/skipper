@@ -23,10 +23,8 @@ import { geminiUsage, recordModelUsage } from '@skipper/shared'
 import { finishReason, forcedToolRequest, toolArgs, type ReplyLike, type ToolCallClient, type ToolParameters } from '../pipeline/tool-call'
 
 // Editing is a forced-function turn on the NARRATION model — same model that wrote it, so the voice
-// stays consistent; a forced call guarantees a clean script back, never a preamble. A repaired script
-// is at most a narration's length (~1k tokens on Claude's 2k cap); the rest of this cap is room for the
-// MEDIUM thinking Gemini 3.8 does before it edits, which shares the budget.
-const EXCISE_MAX_TOKENS = 8_000
+// stays consistent; a forced call guarantees a clean script back, never a preamble. Thinking level and
+// output cap are the shared ones (forcedToolRequest).
 
 const SYSTEM = `You are EDITING a finished tour-narration script — not rewriting it. An auditor flagged some UNGROUNDED CLAIMS: statements the narrator was not entitled to make because the FACT SHEET (the only facts it was allowed to use) does not support them. Make each flagged claim grounded with the SMALLEST possible edit, and leave everything else exactly as written.
 
@@ -109,8 +107,6 @@ export function makeExciseCall(getClient: () => ToolCallClient): ExciseModelCall
         model: NARRATION_MODEL,
         system,
         user,
-        maxTokens: EXCISE_MAX_TOKENS,
-        thinkingLevel: 'MEDIUM',
         tool: REPAIR_TOOL,
       }),
     )

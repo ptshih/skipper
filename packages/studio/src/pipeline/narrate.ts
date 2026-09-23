@@ -20,23 +20,19 @@
 import { ThinkingLevel, type GenerateContentResponse } from '@google/genai'
 import type { StopType } from '@skipper/shared'
 import { getGemini, NARRATION_MODEL } from '../models'
-import { geminiUsage, recordModelUsage } from '@skipper/shared'
+import { geminiUsage, LLM_MAX_OUTPUT_TOKENS, LLM_THINKING_LEVEL, recordModelUsage } from '@skipper/shared'
 import { finishReason, replyText } from './tool-call'
 import { WORDS_PER_SECOND } from '../config'
 
 /**
- * Generous ceiling. A long-form story script (~2 min ≈ ~300 words ≈ ~450 output
- * tokens) leaves the rest as thinking headroom — and HIGH thinking is substantial on
- * this model: MEASURED 2026-09-23 on a THIN four-fact Vikingsholm sheet, 13.7k-15.5k
- * thinking tokens for a ~120-word script (82-94 s, ~$0.07). A rich sheet reasons longer.
- * A truncation throws (we never persist a half script) and wastes the whole call, so this
- * sits near the model's 65,536 output ceiling; the cap costs nothing until it is used.
- * ⚠ The same measurement at MEDIUM: 2.1k thinking, 16 s, a comparably grounded script —
- * one sample, not an ear test. HIGH is kept for parity with Claude's high-effort setting
- * until the founder A/Bs the two by ear; if MEDIUM wins, it is the one-word change at the
- * call below.
+ * The model's full output ceiling (LLM_MAX_OUTPUT_TOKENS). A long-form story script (~2 min ≈
+ * ~300 words ≈ ~450 output tokens) leaves the rest as thinking headroom — and HIGH thinking is
+ * substantial: MEASURED 2026-09-23, 6k-15k thinking tokens per script (41-94 s, ~$0.07). A
+ * truncation throws (we never persist a half script) and wastes the whole call; the cap costs
+ * nothing until it is used. HIGH is the founder's rule (2026-09-23, "always run gemini on high"),
+ * decided after an A/B of HIGH vs MEDIUM samples on three Tahoe places.
  */
-const NARRATION_MAX_TOKENS = 60_000
+const NARRATION_MAX_TOKENS = LLM_MAX_OUTPUT_TOKENS
 
 export interface NarrationRequest {
   /** e.g. "Lake Tahoe". Naming the region is allowed without the sheet — it's STABLE for every drive
@@ -554,9 +550,8 @@ async function runNarration(
     config: {
       systemInstruction: system,
       maxOutputTokens: NARRATION_MAX_TOKENS,
-      // HIGH: grounding adherence benefits from reasoning — the depth Claude ran here (adaptive
-      // thinking, whose effort defaulted to high).
-      thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
+      // The shared level (HIGH — founder rule): grounding adherence benefits from reasoning.
+      thinkingConfig: { thinkingLevel: ThinkingLevel[LLM_THINKING_LEVEL] },
     },
   })
   const usage = geminiUsage(response.usageMetadata)

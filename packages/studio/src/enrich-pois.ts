@@ -55,9 +55,8 @@ import { classifyStoryEligibility } from '@skipper/shared'
  *  sheet is shared and a shorter telling can always read fewer spans. Guidance to the builder, not a cap. */
 const ENRICH_TARGET_SECONDS = 150
 /** Rough USD per place, by tier (for the pre-run estimate only; the real tally prints after). Both tiers
- *  are Gemini 3.8 Flash since 2026-09-23 — re-derived from the Sonnet-era $0.04 at the new token rate,
- *  plus thinking. */
-const EST_USD_PER_POI: Record<EnrichModelChoice, number> = { sonnet: 0.015, opus: 0.015 }
+ *  are Gemini 3.8 Flash at HIGH thinking since 2026-09-23 — a few scout turns of ~$0.008 each. */
+const EST_USD_PER_POI: Record<EnrichModelChoice, number> = { sonnet: 0.03, opus: 0.03 }
 
 const flags = parseFlags(process.argv.slice(2), {
   valueFlags: ['region', 'limit', 'model', 'max-cost', 'source', 'query', 'include-ids', 'exclude-ids'],

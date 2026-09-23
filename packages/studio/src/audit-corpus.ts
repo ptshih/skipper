@@ -62,13 +62,13 @@ import type { FinishOutcome } from './pipeline/job-progress'
 //   comment here claimed.
 const ROUTE_AGNOSTIC_CORRIDOR = 'Free roam — an unplanned drive, no route'
 // Rough per-clip cost estimates (ONE forced-function model call each) for the preview + the pre-flight
-// cap check. ESTIMATES, not the bill — the --max-cost cap is the real guard. Re-derived for Gemini 3.8
-// Flash on 2026-09-23 from the Opus-era figures (~1/6.7 the token rate, plus the thinking it always
-// does). Veracity also bills per Google Search grounding QUERY past the monthly free allowance — a few
-// per clip, outside the token tally — so it's the priciest and opt-in.
-const GROUNDING_USD_PER_CLIP = 0.015
-const VERACITY_USD_PER_CLIP = 0.06
-const CHARM_USD_FLAT = 0.02 // one batch model call over the whole queue
+// cap check. ESTIMATES, not the bill — the --max-cost cap is the real guard. MEASURED for Gemini 3.8
+// Flash at HIGH thinking on 2026-09-23: a grounding judge call ~$0.008 (calibration, $0.45 / 54), and a
+// clip takes GROUNDING_VOTE_SAMPLES of them. Veracity also bills per Google Search grounding QUERY past
+// the monthly free allowance — a few per clip, outside the token tally — so it's the priciest and opt-in.
+const GROUNDING_USD_PER_CLIP = 0.03
+const VERACITY_USD_PER_CLIP = 0.08
+const CHARM_USD_FLAT = 0.04 // one batch model call over the whole queue
 
 const flags = parseFlags(process.argv.slice(2), {
   valueFlags: ['limit', 'region', 'max-cost', 'query', 'include-ids', 'exclude-ids'],

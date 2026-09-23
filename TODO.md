@@ -37,18 +37,6 @@ survives deleting the newest item. `/todo` takes the max of the two.
 > geometry measurements). Everything else deleted was a duplicate of a comment, a test, or a doc that
 > already said it.
 
-## Gemini 3.8 Flash cutover — what the push owes (2026-09-23)
-
-Every model call moved from Opus 4.6 on Bedrock to Gemini 3.8 Flash on Vertex AI
-([docs/decisions/gemini-3-8-flash.md](docs/decisions/gemini-3-8-flash.md)). Built, tested, calibrated and
-probed live; pushed as `00eef324` and canaried green the same day (the record's "Prod canary").
-
-- [ ] #83 (corpus, med, paid, founder) **Ear-test narration at HIGH vs MEDIUM thinking before the next
-      regen.** Measured on one thin sheet: HIGH spent ~14k thinking tokens, 82–94 s and ~$0.07 a clip; MEDIUM
-      2.1k, 16 s, a comparably grounded script. HIGH is live (parity with Claude's high effort) and makes a
-      full-region regen ~5× slower. Generate a handful of clips both ways and listen; if MEDIUM holds, it is
-      the one-word change in `packages/studio/src/pipeline/narrate.ts` `runNarration`.
-
 ## Planner eval — TWO PAID RUNS 2026-08-04. Run 2 after the duration change: routing 0.96, 2/57 flagged
 
 > ⚠ **RUN 4 (2026-09-23, `$0.3414`) — GEMINI 3.8 FLASH, the current model**

@@ -37,6 +37,7 @@ import {
 import {
   geminiUsage,
   LLM_MODELS,
+  LLM_THINKING_LEVEL,
   recordModelUsage,
   usageUsd,
   VERTEX,
@@ -56,37 +57,21 @@ import { PLAN_ROUTE_TOOL, PLANNER_SYSTEM_PROMPT } from './planner-prompt'
 /* clear it. What is left here only means something at this one call site.      */
 /* -------------------------------------------------------------------------- */
 
-/** Thinking DEPTH, sent as Gemini's `thinkingLevel` (see THINKING_LEVEL below). Deliberately paired
- *  with `PLANNER_MAX_TOKENS`, which bounds thinking PLUS visible output in ONE budget on this model too
- *  (probed 2026-09-23). ⚠ Raising this without raising that cap is the failure limits.ts warns about:
- *  higher effort against a small ceiling returns HTTP 200 with finish MAX_TOKENS and no usable call.
- *  That cap was raised to 4_096 in the SAME change for exactly this reason; the two move together or
- *  not at all.
- *
- *  ⚠ 'low' → 'medium' BY AN EXPLICIT FOUNDER CALL, 2026-08-04, shipped WITHOUT the eval arm that was
- *  offered. Recorded rather than deleted because the argument this replaces was not wrong, only partial:
- *  the ROUTING job really is small (pick two endpoints off a printed list) and depth buys it nothing.
- *  What that reading missed is that routing is not the whole turn — the same call has to carry the
- *  persona, and 'low' is documented as the setting that strips preamble and terses output. The measured
- *  `route_wordless` shape (draw turns emitting 160 tokens of tool JSON and NO text block at all, against
- *  34-42 on turns that spoke) is that description at its limit, and the open stamping/repetition defect
- *  is the same family one turn on. Whether depth actually fixes it is UNMEASURED — see the note below.
- *
- *  ⚠ WHAT TO WATCH, since nothing was measured first. Three numbers, all already logged by
- *  `logPlanSpend`, no new instrumentation: `stop_reason` (any MAX_TOKENS means the cap is too tight for
- *  this depth — that is the regression this pairing exists to prevent), `thinking`, and `out`/`usd`.
- *  ⚠ The latency cost is NOT hidden by streaming: thoughts are never requested (`includeThoughts` stays
- *  off), so the wire is silent for the whole thinking phase and depth here is dead air in a chat bubble
- *  before the first token, which is the one thing this surface cannot spend freely. If it reads slow on
- *  device, that is the trade, and 'low' is one word away. (Gemini 3.8 has no "off": LOW is the floor.)
- *
- *  ⚠ WHOLE-RUN ONLY, NEVER PER-TURN. The resolved effort value is rendered into the prompt, so changing
- *  it between requests invalidates the cached prefix and re-bills the whole ~6.9k roster block at full
- *  rate on an anonymous path (TODO #9). That is why this is a module constant and why `effort?:` on
- *  PlannerModelArgs is an eval seam that passes ONE value for a whole run. */
-const PLANNER_EFFORT = 'medium' as const
+/** Thinking DEPTH: the shared LLM_THINKING_LEVEL — HIGH, by the founder's rule (2026-09-23, "always run
+ *  gemini on high"). History that still matters: 'low' → 'medium' was an explicit founder call on
+ *  2026-08-04 (the `route_wordless` shape, see `effort` below), and medium → high came with the Gemini
+ *  move. MEASURED at HIGH on the real 132-anchor Tahoe roster, 2026-09-23: 485–3,237 thinking tokens and
+ *  6–21 s to the first word (MEDIUM was ~5–7 s) — the round-the-lake ask was the slow one.
+ *  ⚠ The latency is NOT hidden by streaming: thoughts are never requested (`includeThoughts` stays off),
+ *  so the wire is silent for the whole thinking phase — dead air in a chat bubble before the first
+ *  token. That is the accepted trade. What bounds it is PLANNER_TIMEOUT_MS, and what bounds the spend
+ *  is PLANNER_MAX_TOKENS — both in ./limits, which is why no cap lives here.
+ *  ⚠ WHAT TO WATCH, all already logged by `logPlanSpend`: `stop_reason` (MAX_TOKENS would mean the cap is
+ *  somehow too tight), `thinking`, and `out`/`usd`; a `failed` line with `err: timeout` is the latency
+ *  tail reaching the wall clock. */
+const PLANNER_THINKING = ThinkingLevel[LLM_THINKING_LEVEL]
 
-/** Gemini 3's depth enum, from the effort vocabulary this module and the eval speak. */
+/** The eval seam's vocabulary → Gemini 3's depth enum. Production never goes through this map. */
 const THINKING_LEVEL = { low: ThinkingLevel.LOW, medium: ThinkingLevel.MEDIUM, high: ThinkingLevel.HIGH } as const
 
 /** ⚠ NOT studio's 6 attempts — that number is tuned for a batch run that has already spent money and
@@ -173,7 +158,8 @@ export interface PlannerModelArgs {
    *  silently re-bill the cached prefix. If this ever gains a production producer, that is a founder
    *  decision about D9 and about Google's caching terms — not a refactor. */
   extraSystem?: string
-  /** Reasoning depth override. Omitted in production, which uses `PLANNER_EFFORT`.
+  /** Reasoning depth override — an EVAL-ONLY measurement lever. Omitted in production, which always uses
+   *  the shared LLM_THINKING_LEVEL (HIGH, founder rule).
    *
    *  ⚠ IT EXISTS FOR THE EVAL PANEL AND FOR ONE MEASURED QUESTION (apps/api/eval). On Claude, lower
    *  effort was documented as making the model proceed to action WITHOUT PREAMBLE and make fewer tool
@@ -548,14 +534,14 @@ export async function runPlannerTurn(args: PlannerModelArgs): Promise<PlannerTur
     contents,
     config: {
       systemInstruction: { parts: system },
-      // ⚠ Bounds THINKING PLUS visible output in ONE budget. Too low does not raise — see PLANNER_EFFORT.
+      // ⚠ Bounds THINKING PLUS visible output in ONE budget. Too low does not raise — see ./limits.
       maxOutputTokens: PLANNER_MAX_TOKENS,
       // ⚠ INV-8: THINKING STAYS ON — structurally now: Gemini 3.8 has no "off" (LOW is the floor, and
       // MINIMAL is a 400). The Claude-era failure it guards against — a tool call written into VISIBLE
       // TEXT, the turn succeeding with no route — is what `includeThoughts` staying unset and the
       // LEAKED_TOOL_CALL guard downstream (./plan-route) still cover. Thoughts are never requested, so
       // rider-facing text can never carry reasoning.
-      thinkingConfig: { thinkingLevel: THINKING_LEVEL[args.effort ?? PLANNER_EFFORT] },
+      thinkingConfig: { thinkingLevel: args.effort ? THINKING_LEVEL[args.effort] : PLANNER_THINKING },
       tools: [
         {
           functionDeclarations: [

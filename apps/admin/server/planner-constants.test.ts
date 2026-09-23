@@ -68,18 +68,26 @@ describe('console copies of the planner-facing numbers', () => {
     expect(Math.round((draftCap * 4) / 3)).toBeGreaterThan(draftCap)
   })
 
-  test('the draft call carries an explicit timeout and one retry — a big ceiling must not become an unbounded wait', () => {
+  test('every admin model call carries an explicit clock that fits inside the server\'s own idle timeout', () => {
     // On Claude this pinned STREAMING, because that SDK stretched its default timeout for a large
     // max_tokens and a long draft parked past the point anyone was waiting, billing to completion. The
-    // Gen AI SDK has NO default timeout at all and retries nothing unless asked — the same failure, and
-    // worse — so what is pinned now is the property streaming stood in for: the draft call passes the
-    // shared operator-click budget, and that budget is explicit.
+    // Gen AI SDK has NO default timeout and retries nothing unless asked — the same failure, and worse —
+    // so what is pinned is the property streaming stood in for: each call passes an explicit budget.
     const places = read('apps/admin/server/places.ts')
-    expect(places).toContain('httpOptions: ADMIN_MODEL_HTTP')
+    const index = read('apps/admin/server/index.ts')
     const gemini = read('apps/admin/server/gemini.ts')
+    expect(index).toContain('httpOptions: ADMIN_MODEL_HTTP')
+    expect(places).toContain('httpOptions: ADMIN_DRAFT_HTTP')
     expect(gemini).toMatch(/ADMIN_MODEL_HTTP = \{ timeout: 90_000, retryOptions: \{ attempts: 2 \} \}/)
-    // The bbox proposal is the other operator-click model call and must ride the same budget.
-    expect(read('apps/admin/server/index.ts')).toContain('httpOptions: ADMIN_MODEL_HTTP')
+    // ⚠ The draft runs at HIGH thinking and MEASURED 80–90+ s for 120 places (2026-09-23; one 90 s
+    // attempt timed out and was billed anyway — Gemini keeps generating after a client abort). So it gets
+    // ONE long attempt, and the whole budget must clear before the server drops the socket.
+    const draft = gemini.match(/ADMIN_DRAFT_HTTP = \{ timeout: ([\d_]+), retryOptions: \{ attempts: (\d+) \} \}/)
+    expect(draft).not.toBeNull()
+    const worstCaseMs = Number(draft![1]!.replaceAll('_', '')) * Number(draft![2])
+    const idleSec = Number(index.match(/^const IDLE_TIMEOUT_SEC = (\d+)$/m)?.[1])
+    expect(worstCaseMs).toBeGreaterThanOrEqual(150_000)
+    expect(worstCaseMs).toBeLessThan(idleSec * 1000)
   })
 
   test('the draft count is NOT AN INPUT — no field, no wire param, no clamp (founder, 2026-08-04)', () => {

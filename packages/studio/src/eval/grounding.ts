@@ -20,7 +20,7 @@ import type { Content } from '@google/genai'
 import type { StopType } from '@skipper/shared'
 import { GROUNDING_VOTE_SAMPLES } from '../config'
 import { getGemini, JUDGMENT_MODEL } from '../models'
-import { geminiUsage, recordModelUsage } from '@skipper/shared'
+import { geminiUsage, LLM_MAX_OUTPUT_TOKENS, recordModelUsage } from '@skipper/shared'
 import { finishReason, forcedToolRequest, toolArgs, type ReplyLike, type ToolParameters } from '../pipeline/tool-call'
 import type { ClaimStatus, ClaimVerdict, StopEval } from './types'
 
@@ -28,14 +28,11 @@ import type { ClaimStatus, ClaimVerdict, StopEval } from './types'
 // Grounding is the crown-jewel gate — a false negative lets a hallucination ship — so it
 // rides the judgment tier, as a forced function call. Re-run eval/calibrate.ts after any model change.
 const GROUNDING_MODEL = JUDGMENT_MODEL
-// MEDIUM, not LOW: recall is the fail-closed axis, and decomposing a script into atomic claims is the
-// reasoning step this gate rests on. Claude ran this call WITHOUT thinking (the calibrated setup);
-// Gemini 3.8 cannot, so the calibration has to be re-measured either way.
-const GROUNDING_THINKING = 'MEDIUM' as const
-// Thinking PLUS the claims JSON share this cap. The JSON alone fit Claude's 4k; the rest is thinking
-// room — a MAX_TOKENS stop THROWS below (fail-closed), so an undersized cap withholds clips, never
-// passes them, and the headroom is what keeps that from becoming the common case.
-const GROUNDING_MAX_TOKENS = 16_000
+// Thinking level and cap are the shared ones (forcedToolRequest: HIGH, the model's full ceiling). A
+// MAX_TOKENS stop THROWS below (fail-closed), so an undersized cap would withhold clips, never pass
+// them — the full ceiling is what keeps that from ever becoming the common case. Named here only for the
+// truncation message.
+const GROUNDING_MAX_TOKENS = LLM_MAX_OUTPUT_TOKENS
 
 /** One stop's narration + the EXACT well of facts it was permitted to draw from. */
 export interface GroundingInput {
@@ -338,8 +335,6 @@ export const anthropicDecomposer: ClaimDecomposer = async (input) => {
     const response = await getGemini('grounding eval needs it').models.generateContent(
       forcedToolRequest({
         model: GROUNDING_MODEL,
-        maxTokens: GROUNDING_MAX_TOKENS,
-        thinkingLevel: GROUNDING_THINKING,
         system: SYSTEM,
         tool: REPORT_TOOL,
         user,

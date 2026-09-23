@@ -11,7 +11,7 @@
 
 import { isAbsolute, resolve } from 'node:path'
 import { FunctionCallingConfigMode, GoogleGenAI, ThinkingLevel } from '@google/genai'
-import { geminiUsage, LLM_MODELS, recordModelUsage, usageUsd, VERTEX } from '@skipper/shared'
+import { geminiUsage, LLM_MAX_OUTPUT_TOKENS, LLM_MODELS, LLM_THINKING_LEVEL, recordModelUsage, usageUsd, VERTEX } from '@skipper/shared'
 import type { PlannerScorecard, TurnEval, TurnOutcome } from './types'
 
 /** A turn below this (1-10) is "the man is not in the room" — flagged, never blocking. */
@@ -33,9 +33,8 @@ export const PERSONA_PASS_THRESHOLD = 5
  * grading its own family.
  */
 const JUDGE_MODEL = LLM_MODELS.quality
-/** Thinking + the per-turn report share this cap; ~2,200 tokens of report at 57 turns on Claude, which
- *  did not think here. The rest is MEDIUM-thinking headroom. */
-const JUDGE_MAX_TOKENS = 16_000
+/** Thinking + the per-turn report share this cap — the shared model ceiling (founder, 2026-09-23). */
+const JUDGE_MAX_TOKENS = LLM_MAX_OUTPUT_TOKENS
 
 export interface PersonaTurnVerdict {
   scenarioId: string
@@ -144,7 +143,7 @@ export async function judgePersona(outcomes: readonly TurnOutcome[]): Promise<Pe
     config: {
       systemInstruction: PERSONA_SYSTEM,
       maxOutputTokens: JUDGE_MAX_TOKENS,
-      thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
+      thinkingConfig: { thinkingLevel: ThinkingLevel[LLM_THINKING_LEVEL] },
       tools: [{ functionDeclarations: [{ name: REPORT_TOOL.name, description: REPORT_TOOL.description, parametersJsonSchema: REPORT_TOOL.parameters }] }],
       // ANY + the one name = a forced call, Claude's `tool_choice: {type:'tool'}`.
       toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.ANY, allowedFunctionNames: [REPORT_TOOL.name] } },
