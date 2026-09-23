@@ -43,9 +43,6 @@ Every model call moved from Opus 4.6 on Bedrock to Gemini 3.8 Flash on Vertex AI
 ([docs/decisions/gemini-3-8-flash.md](docs/decisions/gemini-3-8-flash.md)). Built, tested, calibrated and
 probed live; pushed as `00eef324` and canaried green the same day (the record's "Prod canary").
 
-- [ ] #82 (ops, low, founder) **Unset the dead model secrets — the canary is green (2026-09-23)** —
-      `AWS_BEARER_TOKEN_BEDROCK`, `AWS_REGION`, `ANTHROPIC_API_KEY` in `.env.development` AND `.env.production`
-      (`dotenvx set --unset`). Read by nothing now; kept only so a `git revert` stays a one-step rollback.
 - [ ] #83 (corpus, med, paid, founder) **Ear-test narration at HIGH vs MEDIUM thinking before the next
       regen.** Measured on one thin sheet: HIGH spent ~14k thinking tokens, 82–94 s and ~$0.07 a clip; MEDIUM
       2.1k, 16 s, a comparably grounded script. HIGH is live (parity with Claude's high effort) and makes a

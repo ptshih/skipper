@@ -136,9 +136,10 @@ a studio job run (paid, and nothing to run).
    post-push canary is the proof.)
 2. ✅ DONE 2026-09-23: the same for `skipper-admin@…` (bbox proposal + curated-places draft).
    `skipper-studio@…` already had it (TTS and the release audio judge use Vertex).
-3. After a green canary: `dotenvx set --unset` (or leave) `AWS_BEARER_TOKEN_BEDROCK`, `AWS_REGION` and
-   `ANTHROPIC_API_KEY` in both env files — read by nothing now. Keeping them until the canary is green
-   keeps a `git revert` a one-step rollback.
+3. ✅ DECIDED 2026-09-23 (founder, after the green canary: "keep the keys"): `AWS_BEARER_TOKEN_BEDROCK`,
+   `AWS_REGION` and `ANTHROPIC_API_KEY` STAY in both encrypted env files. Nothing reads them; they are kept
+   on purpose so `git revert` of `00eef324` stays a one-step rollback to Bedrock. Do not "clean them up"
+   as dead config.
 
 ## Known trade-offs, recorded rather than re-litigated
 
