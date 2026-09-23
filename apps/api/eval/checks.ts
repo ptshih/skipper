@@ -210,12 +210,28 @@ export function parrotedSentences(say: string): string[] {
     .filter((s) => s.length >= PARROT_MIN_CHARS && PLANNER_SYSTEM_PROMPT.includes(s))
 }
 
+/**
+ * Does `say` contain the banned phrase — as WORDS, not as letters inside a longer word?
+ *
+ * ⚠ It was a plain substring match, and `banned: ['mile']` then failed the correct deflection "I don't
+ * keep the mileage in my head" in 2 of 4 full eval runs (2026-09-23): the gate was grading spelling, not
+ * the invented distance it exists to catch. So a phrase that STARTS with a word character must start at
+ * a word boundary, and one that ENDS with one must end at a boundary, allowing a plural `s` ("mile"
+ * still catches "12 miles"). Punctuation ends get no boundary, because `\b` beside `=` can never match —
+ * the prompt-section marker `== What you know ==` stays a plain substring ban.
+ */
+export function saysBannedPhrase(say: string, phrase: string): boolean {
+  const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const start = /^\w/.test(phrase) ? '\\b' : ''
+  const end = /\w$/.test(phrase) ? 's?\\b' : ''
+  return new RegExp(`${start}${escaped}${end}`, 'i').test(say)
+}
+
 export function disciplineCheck(o: TurnOutcome, turn: ScenarioTurn): TurnEval {
   const findings: string[] = []
-  const lower = o.say.toLowerCase()
 
   for (const b of turn.banned ?? []) {
-    if (lower.includes(b.toLowerCase())) findings.push(`said a banned phrase for this turn: ${JSON.stringify(b)}`)
+    if (saysBannedPhrase(o.say, b)) findings.push(`said a banned phrase for this turn: ${JSON.stringify(b)}`)
   }
   // ⚠ `assertedDurations` is deliberately NOT a finding here. It fires on legitimate readbacks that
   // carry the rider's own target without the word "you" ("Kings Beach out to Emerald Bay, a couple of

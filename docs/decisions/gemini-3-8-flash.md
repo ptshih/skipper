@@ -157,8 +157,9 @@ the MEDIUM run): **agreement 16/18, recall 8/8, false positives 3 claims across 
 precision dipped by one clean case, which costs excision rounds, never a shipped hallucination. Planner
 eval ($0.44): **routing 1.00, voice 1.00, persona 0/59 flagged (0.77), judge 8/10 — ship; discipline 1/59
 → GATE FAIL on the SAME "I don't keep the mileage in my head" deflection** (the `mile` substring ban —
-now 2 of 4 full-suite runs of that turn; the two isolated re-runs passed). Whether to narrow that ban to
-a word match is the founder's call; the check was left as it is. `repeats` 17 (MEDIUM: 23), `durations` 1
+now 2 of 4 full-suite runs of that turn; the two isolated re-runs passed). ✅ Fixed by founder call the
+same day: banned phrases now match as WORDS (`saysBannedPhrase`, apps/api/eval/checks.ts — "mile" still
+catches "a mile" / "12 miles", no longer "mileage"; a punctuation-bounded phrase stays a substring ban). `repeats` 17 (MEDIUM: 23), `durations` 1
 ("Two hours noted!" — the known noise shape). Thinking p50 646 / max 1,735 tokens, every turn `STOP`,
 mean $0.0068 / max $0.0125 a turn. Raw: `apps/api/eval/.runs/2026-09-23T23-04-49-010Z-mem.json`.
 
