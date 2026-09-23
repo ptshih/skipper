@@ -388,7 +388,7 @@ const port = Number(process.env.PORT ?? 8787)
 //
 // ⚠ `idleTimeout` IS LOAD-BEARING, NOT TUNING. Bun's default is 10 seconds and it fires WHILE A
 // HANDLER IS STILL RUNNING — so without this line POST /drives/plan is capped at ~12s wall clock
-// against a 45s model deadline: the socket closes, the rider sees a failure, and the Opus call keeps
+// against a 45s model deadline: the socket closes, the rider sees a failure, and the model call keeps
 // generating and billing to completion with nobody to deliver it to. Measured 2026-08-01: a 12s
 // handler returns 200, a 16s handler dies at ~12s, and the same handler under `idleTimeout: 60`
 // returns 200 at 25s. Nothing in the test suite can catch a regression here (an in-process

@@ -59,12 +59,12 @@ export interface JobOutputSynthesis {
   data: Record<string, unknown>
 }
 
-// ⚠ This module used to build its OWN `new Anthropic()`, which quietly made models.ts's promise of
+// ⚠ This module used to build its OWN model client, which quietly made models.ts's promise of
 // "ONE lazily-built singleton for every call site" false — two clients, two retry policies. It now goes
-// through `callTool`, i.e. the shared `getAnthropic()`, which is lazy for the same reason the local
-// client was: importing this module must not require a key, because sweep/refetch run without one
-// locally and a local CLI never synthesizes anyway (STUDIO_JOB_ID unset). A missing key now surfaces as
-// a thrown error inside the try below and lands in the same fallback an API failure does.
+// through `callTool`, i.e. the shared `getGemini()`, which is lazy for the same reason the local
+// client was: importing this module must not require credentials, because sweep/refetch run without
+// them locally and a local CLI never synthesizes anyway (STUDIO_JOB_ID unset). A missing project now
+// surfaces as a thrown error inside the try below and lands in the same fallback an API failure does.
 // ⚠ THE PROMPT NO LONGER ASKS FOR A `estimatedCostUsd` FIELD (2026-08-04), and the reason is a
 // single-home rule rather than an observed failure. `studio_jobs.cost_usd` is written from the exact
 // token tally ("costUsd defaults to the process LLM tally"), and the admin renders this `data` object
@@ -116,14 +116,16 @@ export async function synthesizeJobOutput(kind: string, log: string): Promise<Jo
     const report = await callTool({
       model: SUMMARY_MODEL,
       system: SYSTEM,
-      messages: [{ role: 'user', content: `Job kind: ${kind}\n\nLogs:\n${truncated}\n\nCall the report tool.` }],
-      maxTokens: 1024,
+      user: `Job kind: ${kind}\n\nLogs:\n${truncated}\n\nCall the report tool.`,
+      // The report alone fit 1k on Claude; LOW thinking shares this cap on Gemini 3.
+      maxTokens: 4_096,
+      thinkingLevel: 'LOW',
       tool: { name: 'report', description: 'Report the plain-English summary and the extracted metrics.' },
       schema: REPORT,
       label: 'job output synthesis',
-      // Per-request, so this short leash wins over the shared client's maxRetries: 5 — that default is
+      // Per-request, so this short leash wins over the shared client's 6 attempts — that default is
       // tuned for narration surviving a sustained overload, which is the wrong trade for a settling job.
-      requestOptions: { timeout: 20_000, maxRetries: 1 },
+      requestOptions: { timeout: 20_000, retries: 1 },
     })
     return { summary: report.summary, data: report.data ?? {} }
   } catch (e) {

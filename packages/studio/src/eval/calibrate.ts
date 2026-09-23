@@ -13,7 +13,7 @@
 // UNION-VOTES k samples (grounding.ts), so it is biased toward flagging BY CONSTRUCTION — meaning
 // precision is the axis expected to drift, slowly and in one direction, after a prompt or model change.
 //
-// ⚠ Costs GROUNDING_VOTE_SAMPLES Opus calls per case, not one: this runs the REAL production judge
+// ⚠ Costs GROUNDING_VOTE_SAMPLES judge calls per case, not one: this runs the REAL production judge
 // (`evaluateGrounding` with no decomposer override → the union-VOTING decomposer), which is the point —
 // calibrating a k=1 judge would measure something the gate never uses. The resolved fan-out is printed
 // before the first call so the operator sees the real bill; it is ON DEMAND, not CI, and has no
@@ -21,10 +21,11 @@
 // always-on unit tests (test/eval-tts.test.ts, test/eval-advisory.test.ts); this is the periodic
 // calibration check. Exits non-zero if the judge disagrees with any verdict label.
 //
-// Usage (the Bedrock token via dotenvx):
+// Usage (Google Cloud credentials via dotenvx):
 //   dotenvx run -f .env.development -- bun packages/studio/src/eval/calibrate.ts
 
 import { CALIBRATE_CONCURRENCY, GROUNDING_VOTE_SAMPLES } from '../config'
+import { JUDGMENT_MODEL } from '../models'
 import { mapLimit } from '../pipeline/concurrency'
 import { llmSpendLines, llmSpentUsd } from '@skipper/shared'
 import { GROUNDING_CASES, type GroundingCase } from './golden'
@@ -90,12 +91,12 @@ function scoreCase(c: GroundingCase, ev: StopEval): CaseResult {
 }
 
 async function main() {
-  // Print the resolved fan-out, not just the case count: the judge is union-voted, so the Opus bill is
+  // Print the resolved fan-out, not just the case count: the judge is union-voted, so the model bill is
   // cases × samples. Reading the case count alone is how this run gets budgeted at a third of its cost.
   const samples = GROUNDING_VOTE_SAMPLES()
   console.log(
     `Calibrating the grounding judge against ${GROUNDING_CASES.length} golden cases ` +
-      `(Opus, ${samples} vote sample(s) each → ${GROUNDING_CASES.length * samples} judge calls)...\n`,
+      `(${JUDGMENT_MODEL}, ${samples} vote sample(s) each → ${GROUNDING_CASES.length * samples} judge calls)...\n`,
   )
   // Bounded, not Promise.all: the provider throttles per account (CALIBRATE_CONCURRENCY has the number).
   const evals = await mapLimit(GROUNDING_CASES, CALIBRATE_CONCURRENCY(), (c) => evaluateGrounding(c.input))
@@ -140,7 +141,7 @@ async function main() {
   // so drift here is expected to be one-directional and slow — the shape that hides in a passing gate.
   if (verdictAgree < results.length) process.exitCode = 1
 
-  // ⚠ REPORT WHAT IT BILLED. This is a PAID run — GROUNDING_VOTE_SAMPLES Opus calls per case, 54 on the
+  // ⚠ REPORT WHAT IT BILLED. This is a PAID run — GROUNDING_VOTE_SAMPLES judge calls per case, 54 on the
   // 2026-08-04 run — and until then it printed no spend at all, so the operator learned the agreement
   // numbers and nothing about the cost. Doctrine is explicit: "a paid one reports what it BILLED, not
   // what it planned." Same defect fixed in classify-treatments.ts the same day; the tally already

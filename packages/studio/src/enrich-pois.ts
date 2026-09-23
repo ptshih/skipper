@@ -1,4 +1,4 @@
-// enrich-pois — the corpus ENRICH step. SPENDS $ (Anthropic only — no TTS/R2) + MUTATES DB on --apply.
+// enrich-pois — the corpus ENRICH step. SPENDS $ (model calls only — no TTS/R2) + MUTATES DB on --apply.
 //
 // The distinct PAID op between discovery and generation: `discover` (free sweep → pois.facts.extract)
 // → **`enrich` (paid, ONCE per place)** → `generate` (paid, per place). It scouts each eligible
@@ -18,10 +18,10 @@
 //
 // Usage:
 //   dotenvx run -f .env.development -- bun packages/studio/src/enrich-pois.ts
-//   ... --apply                  run it (spends Anthropic; writes pois.fact_sheet + facts_hash)
+//   ... --apply                  run it (spends model tokens; writes pois.fact_sheet + facts_hash)
 //   ... --limit 5                cap how many places to enrich (a smoke run)
 //   ... --force                  re-enrich places that already have a fact sheet
-//   ... --model opus             A/B the calibration tier vs the default (sonnet)
+//   ... --model opus             A/B the judgment tier vs the default (`sonnet` — a legacy tier LABEL; both are Gemini today)
 //   ... --region <slug>          enrich a region's corpus (REQUIRED unless --include-ids; resolves to its bbox)
 //   ... --source wikipedia       narrow to a POI source (faithfully resolves a table 'source' filter)
 //   ... --query "emerald"        substring match on name/source-id (a table search filter)
@@ -47,15 +47,17 @@ import { wikiUrlForPageId } from './pipeline/wikipedia'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
 import { ENRICH_MODELS, type EnrichModelChoice } from './models'
-import { ANTHROPIC_READY, GEOLOGY_ENRICHMENT, SCOUT_CONCURRENCY, WIKIDATA_ENRICHMENT } from './config'
-import { BEDROCK, llmSpendLines, llmSpentUsd } from '@skipper/shared'
+import { LLM_READY, GEOLOGY_ENRICHMENT, SCOUT_CONCURRENCY, WIKIDATA_ENRICHMENT } from './config'
+import { VERTEX, llmSpendLines, llmSpentUsd } from '@skipper/shared'
 import { classifyStoryEligibility } from '@skipper/shared'
 
 /** Soft narration length the fact sheet is sized for — the LONG-FORM end of the register bands, since the
  *  sheet is shared and a shorter telling can always read fewer spans. Guidance to the builder, not a cap. */
 const ENRICH_TARGET_SECONDS = 150
-/** Rough USD per place, by model (for the pre-run estimate only; the real tally prints after). */
-const EST_USD_PER_POI: Record<EnrichModelChoice, number> = { sonnet: 0.04, opus: 0.09 }
+/** Rough USD per place, by tier (for the pre-run estimate only; the real tally prints after). Both tiers
+ *  are Gemini 3.8 Flash since 2026-09-23 — re-derived from the Sonnet-era $0.04 at the new token rate,
+ *  plus thinking. */
+const EST_USD_PER_POI: Record<EnrichModelChoice, number> = { sonnet: 0.015, opus: 0.015 }
 
 const flags = parseFlags(process.argv.slice(2), {
   valueFlags: ['region', 'limit', 'model', 'max-cost', 'source', 'query', 'include-ids', 'exclude-ids'],
@@ -215,11 +217,11 @@ async function main(): Promise<void> {
     return
   }
 
-  // --apply spends Anthropic. Fail LOUD + EARLY on a missing key, rather than letting every per-POI
-  // buildCorpusFactSheet throw (getAnthropic throws when the Bedrock token is unset) and get swallowed as a silent
+  // --apply spends model tokens. Fail LOUD + EARLY on missing credentials, rather than letting every
+  // per-POI buildCorpusFactSheet throw (getGemini throws without a project) and get swallowed as a silent
   // per-place "deferred" — which would report a SUCCEEDED run that enriched NOTHING (review #6).
-  if (!ANTHROPIC_READY()) {
-    throw new Error(`${BEDROCK.tokenEnv} is not set — \`enrich --apply\` needs it. Run via dotenvx (see the usage header).`)
+  if (!LLM_READY()) {
+    throw new Error(`Google Cloud model credentials are not ready (${VERTEX.projectEnv} plus ADC or a key file) — \`enrich --apply\` needs them. Run via dotenvx (see the usage header).`)
   }
 
   if (estUsd > maxCostUsd) {

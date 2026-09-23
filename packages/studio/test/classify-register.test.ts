@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type Anthropic from '@anthropic-ai/sdk'
+import type { ReplyLike } from '../src/pipeline/tool-call'
 import {
   classifyFromMatches,
   classifyRegisterLLM,
@@ -43,8 +43,8 @@ describe('register anchors — the live-preview fixes are guarded', () => {
 })
 
 describe('classifyRegisterLLM — fallback over the fact sheet (injected call)', () => {
-  const toolReply = (register: string): Anthropic.Message =>
-    ({ content: [{ type: 'tool_use', name: 'register', id: 't', input: { register } }] }) as Anthropic.Message
+  const reply = (parts: unknown[]): ReplyLike => ({ candidates: [{ content: { role: 'model', parts }, finishReason: 'STOP' }] }) as ReplyLike
+  const toolReply = (register: string): ReplyLike => reply([{ functionCall: { id: 't', name: 'register', args: { register } } }])
 
   test('returns the register the model chose', async () => {
     const r = await classifyRegisterLLM({ name: 'Boca Dam', kind: 'dam', factSheet: '…' }, async () => toolReply('civic'))
@@ -54,7 +54,7 @@ describe('classifyRegisterLLM — fallback over the fact sheet (injected call)',
   test('defaults to story on a malformed / refused reply (the safe warm base)', async () => {
     const r = await classifyRegisterLLM(
       { name: 'X', kind: null, factSheet: '…' },
-      async () => ({ content: [{ type: 'text', text: 'no tool', citations: null }] }) as Anthropic.Message,
+      async () => reply([{ text: 'no tool' }]),
     )
     expect(r).toBe('story')
   })

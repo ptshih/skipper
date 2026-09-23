@@ -5,9 +5,11 @@
 //     const call = response.content.find((b) => b.type === 'tool_use')
 //     return call.input as CharmVerdict          // ← nothing checks this
 //
-// Anthropic tool schemas are NOT grammar-enforced unless `strict: true` is set, which studio sets
-// nowhere — and even under strict, `minimum`/`maximum`/`maxItems` are documented as unenforced. So the
-// schema is a REQUEST and the cast is a promise the model never made.
+// That was written on Claude, whose tool schemas are not grammar-enforced unless `strict: true` — so the
+// schema was a REQUEST and the cast a promise the model never made. Gemini's forced mode (`ANY`) does
+// enforce the schema, but the parse stays: it is where each site's DOMAIN checks live, it is what makes a
+// missing call (a MAX_TOKENS stop) a named error instead of `undefined`, and a provider switch is exactly
+// when "the vendor guarantees it" is least worth betting a fail-closed gate on.
 //
 // ⚠ READ THIS BEFORE "FIXING" ANY OTHER CALL SITE. A 2026-08-04 sweep first counted eight unvalidated
 // sites by grepping for `input as`. That count was WRONG, and the correction is the useful part: SIX of
@@ -30,18 +32,49 @@
 // Full assessment, including why an LLM framework was declined for this:
 // docs/designs/studio-structured-output-hardening.md.
 
-import type Anthropic from '@anthropic-ai/sdk'
+import { FunctionCallingConfigMode, ThinkingLevel, type Content, type GenerateContentParameters, type GenerateContentResponse } from '@google/genai'
 import { z } from 'zod'
-import { recordModelUsage } from '@skipper/shared'
-import { getAnthropic } from '../models'
+import { geminiUsage, recordModelUsage, type ThinkingLevelName } from '@skipper/shared'
+import { getGemini } from '../models'
 
 /* -------------------------------------------------------------------------- */
-/*  The parse — usable WITHOUT owning the call, and that is the whole point     */
+/*  Reading a reply — usable WITHOUT owning the call, and that is the whole point */
 /* -------------------------------------------------------------------------- */
+
+/** The slice of a Gemini reply these helpers read. Structural, so a test fake is a plain object and a
+ *  real `GenerateContentResponse` (a class with getters) satisfies it as-is. */
+export type ReplyLike = Pick<GenerateContentResponse, 'candidates'>
+
+/** The first candidate's parts — Gemini's equivalent of Claude's `content` blocks. Never throws. */
+export function replyParts(response: ReplyLike): NonNullable<NonNullable<Content['parts']>> {
+  return response.candidates?.[0]?.content?.parts ?? []
+}
+
+/** Why the reply stopped (`STOP`, `MAX_TOKENS`, `SAFETY`, `MALFORMED_FUNCTION_CALL`, …). ⚠ A reply that
+ *  CARRIES a function call still finishes `STOP` — Gemini has no `tool_use` stop reason (probed) — so a
+ *  site decides "did it call?" from the parts, and uses this only to explain an absence. */
+export function finishReason(response: ReplyLike): string {
+  return String(response.candidates?.[0]?.finishReason ?? 'NONE')
+}
+
+/** The named function call's ARGS, unvalidated — or undefined when the reply has none by that name.
+ *  For sites that validate by hand (see the header): they own the judgment, this only finds the call. */
+export function toolArgs(response: ReplyLike, toolName: string): unknown {
+  return replyParts(response).find((p) => p.functionCall?.name === toolName)?.functionCall?.args
+}
+
+/** The concatenated visible text of a reply. `thought` parts are excluded — they are never ours to use,
+ *  and on this API they only appear when explicitly requested, which nothing here does. */
+export function replyText(response: ReplyLike): string {
+  return replyParts(response)
+    .filter((p) => typeof p.text === 'string' && !p.thought)
+    .map((p) => p.text)
+    .join('')
+}
 
 export interface ParseToolReplyArgs<T> {
-  content: readonly Anthropic.ContentBlock[]
-  /** The forced tool's name. A block under any other name is ignored, not coerced. */
+  response: ReplyLike
+  /** The forced tool's name. A call under any other name is ignored, not coerced. */
   toolName: string
   schema: z.ZodType<T>
   /** Names the call site in the thrown error. */
@@ -49,23 +82,28 @@ export interface ParseToolReplyArgs<T> {
 }
 
 /**
- * Find the forced tool call in a reply and return its input VALIDATED against `schema`. Throws on a
+ * Find the forced tool call in a reply and return its args VALIDATED against `schema`. Throws on a
  * missing call or a shape mismatch.
  *
  * ⚠ THIS IS SPLIT OUT FROM `callTool` FOR A COST REASON, not a style one. `pipeline/http.ts`'s
  * `withRetry` retries EVERY error four times — its comment reasons that "a non-transient error just
  * fails ~a few seconds later, harmlessly", which is true of a free failure and false of a billed model
  * call. A site that wraps its own call in `withRetry` must therefore validate OUTSIDE the retry, or a
- * deterministic schema failure re-bills Opus four times, silently, per item. So: sites that own their
- * call (because they retry, loop, or return a graceful null) use this; a plain one-shot call uses
+ * deterministic schema failure re-bills the model four times, silently, per item. So: sites that own
+ * their call (because they retry, loop, or return a graceful null) use this; a plain one-shot call uses
  * `callTool` below, which cannot be wrapped wrong because it does not retry.
  */
 export function parseToolReply<T>(args: ParseToolReplyArgs<T>): T {
-  const { content, toolName, schema, label } = args
-  const call = content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === toolName)
-  if (!call) throw new Error(`${label}: model returned no ${toolName} tool call.`)
+  const { response, toolName, schema, label } = args
+  // ⚠ BEFORE the lookup: a call can survive a truncation with args that still validate — a report whose
+  // list was cut short reads as a smaller, cleaner verdict. The finish reason is the only witness.
+  if (finishReason(response) === 'MAX_TOKENS') {
+    throw new Error(`${label}: ${toolName} reply was truncated (finish MAX_TOKENS) — refusing a possibly partial answer.`)
+  }
+  const call = replyParts(response).find((p) => p.functionCall?.name === toolName)?.functionCall
+  if (!call) throw new Error(`${label}: model returned no ${toolName} tool call (finish ${finishReason(response)}).`)
 
-  const parsed = schema.safeParse(call.input)
+  const parsed = schema.safeParse(call.args)
   if (!parsed.success) {
     throw new Error(`${label}: ${toolName} reply did not match its schema.\n${z.prettifyError(parsed.error)}`)
   }
@@ -76,9 +114,15 @@ export function parseToolReply<T>(args: ParseToolReplyArgs<T>): T {
 /*  Schema derivation                                                          */
 /* -------------------------------------------------------------------------- */
 
-/** Derive Anthropic's `input_schema` from a Zod object schema.
+/** A function's parameter schema: plain JSON Schema, sent as Gemini's `parametersJsonSchema` (NOT the
+ *  OpenAPI-subset `parameters` field). Probed 2026-09-23: `additionalProperties`, `required`, `enum`,
+ *  integer bounds, `maxItems`, nested objects and `type: [x, 'null']` are all accepted as written, so
+ *  the hand-written judge schemas travel byte-for-byte. */
+export type ToolParameters = { type: 'object'; [k: string]: unknown }
+
+/** Derive a function's parameter schema from a Zod object schema.
  *
- *  `$schema` is stripped: it is a JSON Schema self-description, not part of a tool definition, and every
+ *  `$schema` is stripped: it is a JSON Schema self-description, not part of a declaration, and every
  *  byte here is prompt the model pays for. Everything studio hand-writes comes through already —
  *  `additionalProperties: false`, `required`, `.describe()` → `description`, enums, bounds.
  *
@@ -86,18 +130,17 @@ export function parseToolReply<T>(args: ParseToolReplyArgs<T>): T {
  *  2026-08-04: an integer renders as `{type:'integer', minimum:-9007199254740991, maximum:9007199254740991}`
  *  where the hand-written schemas carry a bare `{type:'integer'}` — and NO zod spelling avoids it
  *  (`z.int()` and `z.number().int()` both emit the bounds). The tool schema is part of the prompt, and
- *  `models.ts` warns that the judge rubrics were calibrated against Opus-tier judging: *"moving this
- *  would silently shift every score (re-run eval/calibrate.ts after any bump)."* So a calibrated site
- *  keeps its hand-written schema and validates the REPLY only — deriving the schema there is a
- *  re-calibration, not a refactor. */
-export function toolInputSchema(schema: z.ZodType): Anthropic.Tool['input_schema'] {
+ *  the judge rubrics are calibrated against it: *"moving this would silently shift every score (re-run
+ *  eval/calibrate.ts after any bump)."* So a calibrated site keeps its hand-written schema and validates
+ *  the REPLY only — deriving the schema there is a re-calibration, not a refactor. */
+export function toolInputSchema(schema: z.ZodType): ToolParameters {
   const { $schema: _dropped, ...json } = z.toJSONSchema(schema) as Record<string, unknown>
   if (json.type !== 'object') {
-    // Anthropic requires an object at the top level. Caught here rather than as a 400 mid-run, because a
-    // paid batch discovering this on item 300 has already spent on 299.
+    // A function's arguments are an object. Caught here rather than as a 400 mid-run, because a paid
+    // batch discovering this on item 300 has already spent on 299.
     throw new Error(`tool-call: input schema must be an object, got ${String(json.type)}.`)
   }
-  return json as Anthropic.Tool['input_schema']
+  return json as ToolParameters
 }
 
 /* -------------------------------------------------------------------------- */
@@ -105,11 +148,12 @@ export function toolInputSchema(schema: z.ZodType): Anthropic.Tool['input_schema
 /* -------------------------------------------------------------------------- */
 
 /** Per-request overrides handed straight to the SDK. Narrow on purpose — a per-request value beats the
- *  client default, which is how a caller keeps a short timeout without touching the shared client's
- *  `maxRetries: 5` (tuned for narration surviving a sustained overload, wrong for a settling job). */
+ *  client default, which is how a caller keeps a short leash without touching the shared client's
+ *  6-attempt retry (tuned for narration surviving a sustained overload, wrong for a settling job).
+ *  `retries` counts RE-tries: 1 means one extra attempt. */
 export interface ToolCallRequestOptions {
   timeout?: number
-  maxRetries?: number
+  retries?: number
 }
 
 /** The one method this helper uses, as a structural type — the seam that makes it testable.
@@ -119,32 +163,75 @@ export interface ToolCallRequestOptions {
  *  isolation poisons another, which is documented and has already cost a false 96-pass result. So the
  *  fake arrives as an argument rather than by patching the module graph. */
 export interface ToolCallClient {
-  messages: {
-    create(
-      body: Anthropic.MessageCreateParamsNonStreaming,
-      options?: ToolCallRequestOptions,
-    ): Promise<Anthropic.Message>
+  models: {
+    generateContent(params: GenerateContentParameters): Promise<GenerateContentResponse>
   }
 }
 
-export interface ToolCallArgs<T> {
+export interface ForcedToolCallArgs {
   model: string
-  system: string | Anthropic.TextBlockParam[]
-  messages: Anthropic.MessageParam[]
+  system: string
+  /** The conversation. A string is one user turn — the shape every one-shot judge sends. */
+  user: string | Content[]
+  /** Caps thinking PLUS the call's JSON in one budget (see ThinkingLevelName). */
   maxTokens: number
-  /** The tool the model is FORCED to call. `description` is prompt surface — it is what the model reads
-   *  to decide what belongs in each field, so it is worth writing properly. */
+  /** Required, never defaulted: Gemini 3.8 always thinks, and depth is a per-site cost/quality call. */
+  thinkingLevel: ThinkingLevelName
+  /** The function the model is FORCED to call. `description` is prompt surface — it is what the model
+   *  reads to decide what belongs in each field, so it is worth writing properly. */
+  tool: { name: string; description: string; parameters: ToolParameters }
+  label: string
+  requestOptions?: ToolCallRequestOptions
+  /** Test seam. Defaults to the shared lazy singleton — and stays LAZY, so a test that injects never
+   *  needs Google credentials and production still gets the one client `models.ts` promises. */
+  client?: ToolCallClient
+}
+
+/** Build the request for ONE forced function call. Exported so a site that must own its call (a retry
+ *  wrapper, a vote loop) sends byte-for-byte what `callTool` would. */
+export function forcedToolRequest(args: Omit<ForcedToolCallArgs, 'label' | 'client'>): GenerateContentParameters {
+  const { model, system, user, maxTokens, thinkingLevel, tool, requestOptions } = args
+  return {
+    model,
+    contents: typeof user === 'string' ? [{ role: 'user', parts: [{ text: user }] }] : user,
+    config: {
+      systemInstruction: system,
+      maxOutputTokens: maxTokens,
+      thinkingConfig: { thinkingLevel: ThinkingLevel[thinkingLevel] },
+      tools: [{ functionDeclarations: [{ name: tool.name, description: tool.description, parametersJsonSchema: tool.parameters }] }],
+      // ANY + one allowed name = "call exactly this function" — Claude's `tool_choice: {type:'tool'}`.
+      toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.ANY, allowedFunctionNames: [tool.name] } },
+      ...(requestOptions ? { httpOptions: httpOptionsFor(requestOptions) } : {}),
+    },
+  }
+}
+
+function httpOptionsFor(o: ToolCallRequestOptions): { timeout?: number; retryOptions?: { attempts: number } } {
+  return {
+    ...(o.timeout !== undefined ? { timeout: o.timeout } : {}),
+    ...(o.retries !== undefined ? { retryOptions: { attempts: o.retries + 1 } } : {}),
+  }
+}
+
+/**
+ * One forced function call, billed: send it, record what it cost, return the raw reply.
+ *
+ * For sites that validate by hand (grounding, excise, classify-register — see the header). Records
+ * BEFORE returning, so a reply the caller then rejects has still been charged.
+ */
+export async function forcedToolCall(args: ForcedToolCallArgs): Promise<GenerateContentResponse> {
+  const response = await (args.client ?? getGemini(args.label)).models.generateContent(forcedToolRequest(args))
+  recordModelUsage(args.model, geminiUsage(response.usageMetadata))
+  return response
+}
+
+export interface ToolCallArgs<T> extends Omit<ForcedToolCallArgs, 'tool'> {
   tool: { name: string; description: string }
   /** The shape the answer must have. Doubles as the wire schema unless `inputSchema` overrides it. */
   schema: z.ZodType<T>
   /** Escape hatch for a CALIBRATED site: send this schema verbatim and validate the reply only. See the
    *  byte-drift warning on `toolInputSchema`. */
-  inputSchema?: Anthropic.Tool['input_schema']
-  label: string
-  requestOptions?: ToolCallRequestOptions
-  /** Test seam. Defaults to the shared lazy singleton — and stays LAZY, so a test that injects never
-   *  needs the Bedrock token and production still gets the one client `models.ts` promises. */
-  client?: ToolCallClient
+  inputSchema?: ToolParameters
 }
 
 /**
@@ -160,25 +247,16 @@ export interface ToolCallArgs<T> {
  * it should own its call and use `parseToolReply` outside the retry.
  */
 export async function callTool<T>(args: ToolCallArgs<T>): Promise<T> {
-  const { model, system, messages, maxTokens, tool, schema, inputSchema, label, requestOptions } = args
-
-  const response = await (args.client ?? getAnthropic(label)).messages.create(
-    {
-      model,
-      max_tokens: maxTokens,
-      system,
-      tools: [{ name: tool.name, description: tool.description, input_schema: inputSchema ?? toolInputSchema(schema) }],
-      tool_choice: { type: 'tool', name: tool.name },
-      messages,
-    },
-    requestOptions,
-  )
+  const { tool, schema, inputSchema, label } = args
 
   // ⚠ RECORD BEFORE THE PARSE CAN THROW. The tokens are billed the moment the call returns, so a
   // malformed reply must not also lose the charge — the ordering eval/charm.ts learned on 2026-08-02,
-  // when the charm judge's share of every run read $0.00. Inside the helper, it cannot be forgotten at a
-  // call site; that is the property, not the two saved lines.
-  recordModelUsage(model, response.usage)
+  // when the charm judge's share of every run read $0.00. `forcedToolCall` records inside, so it cannot
+  // be forgotten at a call site; that is the property, not the two saved lines.
+  const response = await forcedToolCall({
+    ...args,
+    tool: { ...tool, parameters: inputSchema ?? toolInputSchema(schema) },
+  })
 
-  return parseToolReply({ content: response.content, toolName: tool.name, schema, label })
+  return parseToolReply({ response, toolName: tool.name, schema, label })
 }

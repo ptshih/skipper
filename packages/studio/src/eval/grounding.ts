@@ -14,21 +14,28 @@
 //
 // The model call (decompose) is INJECTED, so the scoring/aggregation logic is unit-tested
 // with a deterministic fake and zero API spend (see test/eval-grounding.test.ts). The real
-// implementation mirrors the sibling eval judges (e.g. ./charm.ts): lazy getAnthropic() client + forced tool-use structured output.
+// implementation mirrors the sibling eval judges (e.g. ./charm.ts): lazy getGemini() client + a forced function call.
 
-import Anthropic from '@anthropic-ai/sdk'
+import type { Content } from '@google/genai'
 import type { StopType } from '@skipper/shared'
 import { GROUNDING_VOTE_SAMPLES } from '../config'
-import { getAnthropic, JUDGMENT_MODEL } from '../models'
-import { recordModelUsage } from '@skipper/shared'
+import { getGemini, JUDGMENT_MODEL } from '../models'
+import { geminiUsage, recordModelUsage } from '@skipper/shared'
+import { finishReason, forcedToolRequest, toolArgs, type ReplyLike, type ToolParameters } from '../pipeline/tool-call'
 import type { ClaimStatus, ClaimVerdict, StopEval } from './types'
 
-// A well-scoped, once-per-stop entailment task on the shared JUDGMENT_MODEL (Opus).
+// A well-scoped, once-per-stop entailment task on the shared JUDGMENT_MODEL.
 // Grounding is the crown-jewel gate — a false negative lets a hallucination ship — so it
-// rides the strongest forced-tool-capable model. It's a forced-tool ({type:'tool'}) call,
-// so it pins JUDGMENT_MODEL (Opus 4.8). Re-run eval/calibrate.ts after any model change.
+// rides the judgment tier, as a forced function call. Re-run eval/calibrate.ts after any model change.
 const GROUNDING_MODEL = JUDGMENT_MODEL
-const GROUNDING_MAX_TOKENS = 4_000
+// MEDIUM, not LOW: recall is the fail-closed axis, and decomposing a script into atomic claims is the
+// reasoning step this gate rests on. Claude ran this call WITHOUT thinking (the calibrated setup);
+// Gemini 3.8 cannot, so the calibration has to be re-measured either way.
+const GROUNDING_THINKING = 'MEDIUM' as const
+// Thinking PLUS the claims JSON share this cap. The JSON alone fit Claude's 4k; the rest is thinking
+// room — a MAX_TOKENS stop THROWS below (fail-closed), so an undersized cap withholds clips, never
+// passes them, and the headroom is what keeps that from becoming the common case.
+const GROUNDING_MAX_TOKENS = 16_000
 
 /** One stop's narration + the EXACT well of facts it was permitted to draw from. */
 export interface GroundingInput {
@@ -133,10 +140,10 @@ Rules:
 
 Call the report tool with one entry per claim. If the script makes no factual place-claims at all, report an empty list.`
 
-const REPORT_TOOL: Anthropic.Tool = {
+const REPORT_TOOL: { name: string; description: string; parameters: ToolParameters } = {
   name: 'report',
   description: 'Report every factual place-claim the script makes and whether it is grounded.',
-  input_schema: {
+  parameters: {
     type: 'object',
     properties: {
       claims: {
@@ -217,7 +224,7 @@ export function normalizeClaims(raw: unknown): ClaimVerdict[] {
  * for the same reason: the fail-closed branches below could otherwise only be exercised by paying
  * for them, and non-deterministic model output could not prove they work even then.
  */
-export function claimsFromResponse(response: Anthropic.Message, seq: number): ClaimVerdict[] {
+export function claimsFromResponse(response: ReplyLike, seq: number): ClaimVerdict[] {
   // ⚠ A TRUNCATED audit must never read as a clean one. `max_tokens` cuts the forced tool call off
   // mid-JSON, so `claims` arrives absent or half-written — and `evaluateGrounding` below scores an
   // empty claim list `pass: true, score: 1`. That made the one response shape meaning "the judge
@@ -227,17 +234,19 @@ export function claimsFromResponse(response: Anthropic.Message, seq: number): Cl
   //
   // Throwing IS the fail-closed direction here — both generators catch a gate throw per clip and
   // record it as WITHHELD (generate-narrations.ts's fault-isolation block), so one truncated verdict
-  // costs one clip, never the run. The sibling model calls in this package already branch on
-  // stop_reason (narrate.ts, scout.ts, veracity.ts); the safety gate was the one that did not.
-  if (response.stop_reason === 'max_tokens') {
+  // costs one clip, never the run. The sibling model calls in this package already branch on the
+  // finish reason (narrate.ts, scout.ts, veracity.ts); the safety gate was the one that did not.
+  if (finishReason(response) === 'MAX_TOKENS') {
     throw new Error(
       `Grounding eval: judge response truncated at max_tokens (${GROUNDING_MAX_TOKENS}) for stop ${seq} — ` +
         'the verdict is incomplete; refusing to score it as clean.',
     )
   }
-  const call = response.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
-  if (!call) throw new Error(`Grounding eval: model returned no tool call for stop ${seq}.`)
-  const rawClaims = (call.input as { claims?: unknown }).claims
+  const args = toolArgs(response, REPORT_TOOL.name)
+  if (args === undefined) {
+    throw new Error(`Grounding eval: model returned no tool call for stop ${seq} (finish ${finishReason(response)}).`)
+  }
+  const rawClaims = (args as { claims?: unknown } | null)?.claims
   // An ABSENT `claims` key is not "no claims". The tool schema marks it required, so its absence means
   // a malformed or cut-short call — distinct from `claims: []`, which is a legitimate verdict (a clip
   // that speaks no place-claims) and still passes. Only the missing key fails closed.
@@ -283,13 +292,15 @@ export function claimsFromResponse(response: Anthropic.Message, seq: number): Cl
  *
  * ⚠ A RE-ASK, NEVER A RECOVERY. Reading "no claims found" as `[]` is precisely the false-pass this
  * whole branch exists to stop — an empty claim list scores a perfect 1.0. Each attempt is an
- * independent sample (Opus 4.8 rejects `temperature`, so there is no other lever), and a run of
+ * independent sample (there is no `temperature` lever — a 400 on Opus 4.8, ignored on Gemini 3), and a run of
  * attempts that all come back malformed still THROWS and withholds the clip. Fail-closed is preserved;
  * only the waste is removed.
  */
+// ⚠ Measured on Claude, whose tool schemas were not enforced. Gemini's forced mode ENFORCES the schema
+// (`claims` is an array there), so this path should now be unreachable — kept, because it costs nothing
+// when it never fires and it is a fail-closed gate's defence against the vendor changing its mind.
 const GROUNDING_SHAPE_RETRIES = 2
 
-/** The real, Anthropic-backed decomposer (tool-use structured output). */
 /**
  * The corrective turn appended after an unusable shape.
  *
@@ -309,28 +320,34 @@ const SHAPE_CORRECTION =
   'short scenic call-out that only names a place and reacts to the visible day — then return an ' +
   'EMPTY ARRAY: {"claims": []}. Do not describe your finding in prose. Call the tool again, correctly.'
 
-/** The real, Anthropic-backed decomposer (tool-use structured output). */
+/** The real, model-backed decomposer (a forced function call). ⚠ The export keeps its old name because
+ *  the generators, calibrate.ts and the tests all spell it; the provider behind it is Gemini now. */
 export const anthropicDecomposer: ClaimDecomposer = async (input) => {
   let lastErr: unknown
   for (let attempt = 0; attempt <= GROUNDING_SHAPE_RETRIES; attempt++) {
-    const response = await getAnthropic('grounding eval needs it').messages.create({
-      model: GROUNDING_MODEL,
-      max_tokens: GROUNDING_MAX_TOKENS,
-      system: SYSTEM,
-      tools: [REPORT_TOOL],
-      tool_choice: { type: 'tool', name: 'report' },
-      messages:
-        attempt === 0
-          ? [{ role: 'user', content: buildUserMessage(input) }]
-          : [
-              { role: 'user', content: buildUserMessage(input) },
-              { role: 'assistant', content: '(previous reply used the wrong shape)' },
-              { role: 'user', content: SHAPE_CORRECTION },
-            ],
-    })
+    const user: Content[] =
+      attempt === 0
+        ? [{ role: 'user', parts: [{ text: buildUserMessage(input) }] }]
+        : [
+            { role: 'user', parts: [{ text: buildUserMessage(input) }] },
+            // A text-only model turn needs no thought signature (Gemini enforces them on function
+            // calls only), so this stand-in for the discarded reply is legal to send.
+            { role: 'model', parts: [{ text: '(previous reply used the wrong shape)' }] },
+            { role: 'user', parts: [{ text: SHAPE_CORRECTION }] },
+          ]
+    const response = await getGemini('grounding eval needs it').models.generateContent(
+      forcedToolRequest({
+        model: GROUNDING_MODEL,
+        maxTokens: GROUNDING_MAX_TOKENS,
+        thinkingLevel: GROUNDING_THINKING,
+        system: SYSTEM,
+        tool: REPORT_TOOL,
+        user,
+      }),
+    )
     // ⚠ Recorded on EVERY attempt, including the discarded ones — a retry is billed, and a tally that
     // counted only the winning call would under-report the exact spend `--max-cost` bounds.
-    recordModelUsage(GROUNDING_MODEL, response.usage)
+    recordModelUsage(GROUNDING_MODEL, geminiUsage(response.usageMetadata))
     try {
       return claimsFromResponse(response, input.seq)
     } catch (e) {
@@ -352,10 +369,11 @@ export const anthropicDecomposer: ClaimDecomposer = async (input) => {
 /**
  * UNION-vote k independent decompositions into ONE fail-closed verdict: a claim flagged ungrounded
  * by ANY sample is ungrounded (deduped by claim text). Recall climbs toward 100% as k rises — the
- * only reliability lever left, since Opus 4.8 rejects `temperature` (400), so a single sample is
+ * only reliability lever left, since there is no `temperature` lever (a 400 on Opus 4.8, ignored on
+ * Gemini 3), so a single sample is
  * irreducibly stochastic (calibration 2026-06-20 saw recall swing 8/8 → 5/8 run-to-run, a blatant
  * superlative slipping on the bad draw). The first sample's grounded/ambient claims are kept for a
- * coherent score + detail (minus any the union flagged). Cost is k× Opus calls + a precision hit (a
+ * coherent score + detail (minus any the union flagged). Cost is k× judge calls + a precision hit (a
  * lone sample's over-flag becomes a finding) — the deliberate fail-closed trade: silence beats a
  * shipped hallucination, and excision recovers many over-flags. k ≤ 1 → the base decomposer, unchanged.
  */

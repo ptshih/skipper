@@ -71,5 +71,5 @@ ENV ADMIN_WEB_ROOT=./public
 EXPOSE 8788
 
 # dotenvx decrypts .env.production (needs DOTENV_PRIVATE_KEY_PRODUCTION); ADMIN_EMAIL,
-# GOOGLE_CLOUD_PROJECT, AWS_BEARER_TOKEN_BEDROCK (+ AWS_REGION), GOOGLE_MAPS_API_KEY, R2_* ride in it.
+# GOOGLE_CLOUD_PROJECT (also the Vertex AI project the model calls bill to), GOOGLE_MAPS_API_KEY, R2_* ride in it.
 ENTRYPOINT ["dotenvx", "run", "-f", ".env.production", "--", "bun", "run", "apps/admin/server/index.ts"]

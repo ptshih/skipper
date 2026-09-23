@@ -4,7 +4,7 @@
 // visitor is to name it out loud; 1 is most, blank sorts last). Break pitstops went with the roles and
 // return with live Places data in M3. Coords are resolved + STORED at curation, so the runtime picker
 // makes zero live Places calls. This page is the review/prune/rank + manual-add surface; the bulk seed
-// is the interactive Curate button (Opus draft → prune → Places resolve).
+// is the interactive Curate button (model draft → prune → Places resolve).
 // See docs/designs/places-endpoints-spec.md.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -581,17 +581,17 @@ function AccessPointDialog({ place, onClose, onSaved }: {
   )
 }
 
-/* ── CURATE (interactive: Opus draft → operator prunes → Places resolve → upsert) ── */
+/* ── CURATE (interactive: model draft → operator prunes → Places resolve → upsert) ── */
 
 // Two-step curate so the operator REVIEWS the LLM's picks before paying to resolve them:
-//  1. Draft  — one Opus call names the region's destinations, ranked (a few cents; writes nothing).
+//  1. Draft  — one model call names the region's destinations, ranked (a few cents; writes nothing).
 //  2. The operator unchecks anything they don't want.
 //  3. Resolve & add — the keepers are resolved against Google Places (bbox-bound) + upserted.
 // Re-runnable (upserts; it never deletes, so pruning is a separate delete). Both steps spend, so the
 // founder-gate is the explicit button click (this whole console is behind IAP). ⚠ There are no roles to
 // fine-tune afterward (2026-08-04) — what IS editable in the table is each row's RANK.
 //
-// Rendered INLINE on the page (not a modal): the Draft step is a long synchronous Opus call (~30s), and a
+// Rendered INLINE on the page (not a modal): the Draft step is a long synchronous model call (~30s), and a
 // modal that dismisses on a stray overlay-click / Esc is a footgun there — it reads as frozen and one
 // click throws the in-flight draft away. Inline, the wait is a normal section loading state and the only
 // way out is the explicit, always-live Cancel.
@@ -691,11 +691,11 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
       </div>
 
       <div className="space-y-3 p-4">
-        {/* INITIAL — the explicit spend gate (a paid Opus call; writes nothing). */}
+        {/* INITIAL — the explicit spend gate (a paid model call; writes nothing). */}
         {!hasDrafts && !drafting && !results && (
           <>
             <Callout variant="info" className="rounded-lg px-3 py-2 text-xs">
-              <span className="font-medium text-foreground">Draft</span> spends a few cents (one Opus call) and
+              <span className="font-medium text-foreground">Draft</span> spends a few cents (one model call) and
               writes nothing — review the picks first.{' '}
               <span className="font-medium text-foreground">Resolve &amp; add</span> spends a few cents of Google
               Places and writes the keepers. You can fine-tune each row’s rank in the table afterward.
@@ -717,11 +717,11 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
           </>
         )}
 
-        {/* DRAFTING — a long synchronous Opus call; show it's working, not frozen. */}
+        {/* DRAFTING — a long synchronous model call; show it's working, not frozen. */}
         {drafting && (
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Drafting this region’s destinations with Opus… this takes ~30s.
+              <Loader2 className="h-4 w-4 animate-spin" /> Drafting this region’s destinations… this takes ~30s.
             </div>
             <div className="space-y-0.5 rounded-lg border p-1.5" aria-hidden>
               {['w-40', 'w-52', 'w-32', 'w-48', 'w-36', 'w-44'].map((w, i) => (
@@ -782,7 +782,7 @@ function CuratePanel({ region, regionName, onClose, onCurated }: {
                 {keptCount} keeping · {droppedCount} dropped · {undecidedCount} undecided
               </SectionLabel>
               {/* ⚠ The honest reading of the spend, shown BEFORE it happens. Nothing in this panel has
-                  cost a Places call yet — the Opus draft is already paid for, the resolve is not. Two
+                  cost a Places call yet — the model draft is already paid for, the resolve is not. Two
                   billed calls per keeper is the rate the curate route actually runs at. */}
               <span className="ml-auto text-xs text-muted-foreground">
                 {keptCount === 0

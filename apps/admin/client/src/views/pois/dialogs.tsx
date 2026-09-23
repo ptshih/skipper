@@ -47,7 +47,7 @@ function scopeBody(sel: EnrichSelection): Record<string, unknown> {
 /* ── NARRATE (generate_narrations — re-script + re-synth, spends) ── */
 
 // Narrates + synthesizes a narration for every enriched, story-grade POI in the SELECTION. SPENDS
-// Anthropic + TTS per narration (gated — JobActionDialog adds confirm:true on apply). `force` re-generates
+// model + TTS per narration (gated — JobActionDialog adds confirm:true on apply). `force` re-generates
 // places that already have a narration (e.g. to fix a defect); without it, already-narrated places skip.
 export function NarrateDialog({ open, onOpenChange, scope, onSubmitted }: {
   open: boolean
@@ -63,7 +63,7 @@ export function NarrateDialog({ open, onOpenChange, scope, onSubmitted }: {
       onSubmitted={onSubmitted}
       icon={Zap}
       title="Generate narration"
-      description="Narrates + synthesizes a narration for every enriched, story-grade POI in the selection. Run after Discover, then Enrich. Spends Anthropic + TTS credits per narration."
+      description="Narrates + synthesizes a narration for every enriched, story-grade POI in the selection. Run after Discover, then Enrich. Spends model + TTS credits per narration."
       buildBody={() => ({ kind: 'generate_narrations', ...scopeBody(scope.selection), ...(force ? { force: true } : {}) })}
       applyLabel="Generate"
       applyIcon={Zap}
@@ -89,8 +89,8 @@ export function NarrateDialog({ open, onOpenChange, scope, onSubmitted }: {
 /* ── RE-SCORE CORPUS (offline_audit — read-only quality read on existing narrations) ── */
 
 // Re-score the EXISTING narration corpus without regenerating: scores each region story narration's
-// stored script for grounding (Opus) + tts + diversity and records an offline_audit eval_run, viewable
-// on the Evals page. READ-ONLY on narrations/R2; --apply spends one Opus grounding call per clip
+// stored script for grounding (model judge) + tts + diversity and records an offline_audit eval_run, viewable
+// on the Evals page. READ-ONLY on narrations/R2; --apply spends one model grounding call per clip
 // (gated like the other paid dialogs); the Preview is a free count + estimate.
 export function RescoreDialog({ open, onOpenChange, scope, onSubmitted }: {
   open: boolean
@@ -115,21 +115,21 @@ export function RescoreDialog({ open, onOpenChange, scope, onSubmitted }: {
         <>
           <span className="font-medium text-foreground">Preview</span> is free (counts the narrations +
           estimates the grounding spend); <span className="font-medium text-foreground">Re-score</span> spends
-          one Opus call per clip. Read-only — it never changes a narration.
+          one model call per clip. Read-only — it never changes a narration.
         </>
       }
     >
       <ScopeSummary scope={scope} />
 
       <div className="space-y-2">
-        <Label>Advisory judges (Opus, opt-in)</Label>
+        <Label>Advisory judges (opt-in)</Label>
         <label className="flex cursor-pointer items-start gap-2 text-sm">
           <Checkbox checked={charm} onCheckedChange={setCharm} aria-label="Score charm" />
-          <span><span className="font-medium text-foreground">Charm</span> — one Opus call over the batch (cheap). Persona &amp; delivery quality.</span>
+          <span><span className="font-medium text-foreground">Charm</span> — one model call over the batch (cheap). Persona &amp; delivery quality.</span>
         </label>
         <label className="flex cursor-pointer items-start gap-2 text-sm">
           <Checkbox checked={veracity} onCheckedChange={setVeracity} aria-label="Score veracity" />
-          <span><span className="font-medium text-foreground">Veracity</span> — web-checks each story's claims (Opus + search, <span className="text-foreground">per clip — pricier</span>).</span>
+          <span><span className="font-medium text-foreground">Veracity</span> — web-checks each story's claims (model + Google Search, <span className="text-foreground">per clip — pricier</span>).</span>
         </label>
       </div>
     </JobActionDialog>
@@ -140,7 +140,7 @@ export function RescoreDialog({ open, onOpenChange, scope, onSubmitted }: {
 
 // A focused Preview+apply dialog (shared JobActionDialog shell) for the corpus `enrich` step
 // (enrich_pois): acts on the table SELECTION, then Preview (free dry-run — NO model calls, prints the
-// count + a cost estimate) or Enrich (apply, SPENDS Anthropic; no TTS). THIS dialog is the paid-run gate:
+// count + a cost estimate) or Enrich (apply, SPENDS model tokens; no TTS). THIS dialog is the paid-run gate:
 // it names the scope + cost and needs an explicit Enrich click, so the server's confirm:true (added by
 // JobActionDialog for the apply) is already human-gated — no extra window.confirm. The fact sheet it
 // builds (pois.fact_sheet) is what the narration grounds on, so enrich ONCE between Discover and
@@ -152,8 +152,10 @@ export function EnrichDialog({ open, onOpenChange, scope, onSubmitted }: {
   scope: ScopeDescriptor
   onSubmitted: () => void
 }) {
-  // Advanced (collapsed): the model tier A/B + a smoke-test cap. The studio CLI defaults to sonnet
-  // (only the literal 'opus' selects opus); `limit` caps how many places enrich. Server forwards both.
+  // Advanced (collapsed): the model tier A/B + a smoke-test cap. The studio CLI defaults to the `sonnet`
+  // tier LABEL (only the literal 'opus' selects the judgment tier); both are Gemini 3.8 Flash since
+  // 2026-09-23, and the wire values keep their old names so the CLI flag never changed. `limit` caps
+  // how many places enrich. Server forwards both.
   const [advanced, setAdvanced] = useState(false)
   const [model, setModel] = useState<'sonnet' | 'opus'>('sonnet')
   const [limit, setLimit] = useState('')
@@ -180,7 +182,7 @@ export function EnrichDialog({ open, onOpenChange, scope, onSubmitted }: {
       description={
         <>
           Scouts each story POI ONCE into a curated, verbatim <strong>fact well</strong> on the shared corpus —
-          the narration grounds on it. Run after Discover, before generating. Spends Anthropic credits
+          the narration grounds on it. Run after Discover, before generating. Spends model credits
           (no TTS). A re-discover now PRESERVES wells; rebuild one with Enrich after a material article change.
         </>
       }
@@ -214,8 +216,8 @@ export function EnrichDialog({ open, onOpenChange, scope, onSubmitted }: {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="sonnet">Sonnet (default)</SelectItem>
-                  <SelectItem value="opus">Opus (calibration A/B)</SelectItem>
+                  <SelectItem value="sonnet">Enrich tier (default)</SelectItem>
+                  <SelectItem value="opus">Judgment tier (A/B)</SelectItem>
                 </SelectContent>
               </Select>
             </div>

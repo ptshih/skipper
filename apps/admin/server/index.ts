@@ -34,7 +34,7 @@ import { correctionSourcesFor, resolveCorrectionSource, type CorrectionIdentity 
 //   DELETE /admin/places/:id      -> remove a curated place
 //   POST /admin/places/resolve    -> live Google Places resolve of a typed name (manual-add candidate)
 //   POST /admin/places            -> add a manually-resolved place (upsert by place_id, role-tagged)
-//   POST /admin/places/draft      -> LLM-draft a region's curated set (Opus, no Places calls / no writes) — the reviewable preview
+//   POST /admin/places/draft      -> LLM-draft a region's curated set (model, no Places calls / no writes) — the reviewable preview
 //   POST /admin/places/curate     -> resolve the pruned drafts against Google Places + upsert role-tagged
 
 import { Hono } from 'hono'
@@ -61,7 +61,9 @@ import {
   type DriveSelection,
 } from '@skipper/db/schema'
 import { user } from '@skipper/db/auth-schema'
-import { BEDROCK, CLAUDE_MODELS, classifyStoryEligibility } from '@skipper/shared'
+import { LLM_MODELS, VERTEX, classifyStoryEligibility } from '@skipper/shared'
+import { FunctionCallingConfigMode, ThinkingLevel, type Content } from '@google/genai'
+import { ADMIN_MODEL_HTTP, adminGemini, adminModelConfigured } from './gemini'
 import { checkAccessPoint, checkSpeakableAnchor } from '@skipper/engine'
 import { groundingHash } from '@skipper/db/hash'
 import { requireAdmin, type AdminEnv } from './auth'
@@ -356,8 +358,8 @@ app.post('/admin/regions/:slug/release', async (c) => {
   }
 })
 
-// Bbox lookup — a Claude estimate the operator can refine conversationally (founder 2026-06-20:
-// dropped the Nominatim/OSM cross-check; Claude-only). Each refine round replays Claude's OWN prior
+// Bbox lookup — a model estimate the operator can refine conversationally (founder 2026-06-20:
+// dropped the Nominatim/OSM cross-check; model-only). Each refine round replays the model's OWN prior
 // estimate + the new instruction, so it EDITS the last box instead of starting over. Used by the
 // admin Regions drawer so the operator never has to hand-key coordinates.
 app.post('/admin/regions/bbox-lookup', async (c) => {
@@ -368,14 +370,13 @@ app.post('/admin/regions/bbox-lookup', async (c) => {
   if (!query) return c.json({ error: 'query is required' }, 400)
   const refinements = Array.isArray(body.refinements) ? body.refinements : []
   // Same shape the catch below returns, so the drawer renders it as an ordinary LLM miss. Without this
-  // a missing token surfaces as the SDK's credential-chain error text, which names nothing an operator
-  // can set.
-  if (!process.env[BEDROCK.tokenEnv]) return c.json({ llm: null, llmError: `${BEDROCK.tokenEnv} is not set.` })
+  // a missing project surfaces as SDK error text, which names nothing an operator can set.
+  if (!adminModelConfigured()) return c.json({ llm: null, llmError: `${VERTEX.projectEnv} is not set.` })
 
-  const BBOX_TOOL: import('@anthropic-ai/sdk').Anthropic.Tool = {
+  const BBOX_TOOL = {
     name: 'bbox',
     description: 'Return the bounding box for the named geographic area.',
-    input_schema: {
+    parameters: {
       type: 'object' as const,
       properties: {
         bbox: {
@@ -396,47 +397,48 @@ app.post('/admin/regions/bbox-lookup', async (c) => {
     },
   }
 
-  // Build the conversation: the base ask, then alternating (assistant prior-estimate / user refinement)
-  // turns. The forced tool only shapes the FINAL answer; historical assistant turns are plain text.
-  const messages: import('@anthropic-ai/sdk').Anthropic.MessageParam[] = [
+  // Build the conversation: the base ask, then alternating (model prior-estimate / user refinement)
+  // turns. The forced call only shapes the FINAL answer; historical model turns are plain text, which
+  // Gemini accepts without thought signatures (it enforces them on function-call parts only).
+  const contents: Content[] = [
     {
       role: 'user',
-      content: `What is the bounding box for "${query}"? Return as lng_min,lat_min,lng_max,lat_max. Prefer the tight boundary of the named feature (e.g. a national park boundary, not the broader county). For a drive corridor or road trip region, add ~20 km of buffer on each side.`,
+      parts: [
+        {
+          text: `What is the bounding box for "${query}"? Return as lng_min,lat_min,lng_max,lat_max. Prefer the tight boundary of the named feature (e.g. a national park boundary, not the broader county). For a drive corridor or road trip region, add ~20 km of buffer on each side.`,
+        },
+      ],
     },
   ]
   for (const ref of refinements) {
     const prior = (ref?.priorBbox ?? '').trim()
-    messages.push({
-      role: 'assistant',
-      content: prior ? `Bounding box: ${prior}. ${ref?.priorReasoning ?? ''}`.trim() : 'Bounding box estimated.',
+    contents.push({
+      role: 'model',
+      parts: [{ text: prior ? `Bounding box: ${prior}. ${ref?.priorReasoning ?? ''}`.trim() : 'Bounding box estimated.' }],
     })
-    messages.push({
+    contents.push({
       role: 'user',
-      content: `Refine that bounding box: ${(ref?.instruction ?? '').trim()}. Return the full updated lng_min,lat_min,lng_max,lat_max.`,
+      parts: [{ text: `Refine that bounding box: ${(ref?.instruction ?? '').trim()}. Return the full updated lng_min,lat_min,lng_max,lat_max.` }],
     })
   }
 
   try {
-    // ⚠ EXPLICIT TIMEOUT + LOW maxRetries, and this is a rule, not a preference. A bare client takes
-    // the SDK defaults — `DEFAULT_TIMEOUT = 600000` (10 minutes) and `maxRetries ?? 2` in the installed
-    // core client, which the Bedrock client inherits. That is up to THREE Opus turns and thirty minutes
-    // behind one operator click, inside a service whose own request budget is 300s — so two of those
-    // turns would bill after the browser has already been 504'd, with nobody to deliver the answer to.
-    // CLAUDE.md says it directly for a model call in a request path: "Low maxRetries (0-1) + an explicit
-    // timeout inside the Cloud Run budget — do NOT copy studio's maxRetries: 5, tuned for a batch run
-    // that already spent." 90s x 2 attempts stays inside this server's 240s idleTimeout as well as Cloud
-    // Run's 300s. The token is read by the SDK from `BEDROCK.tokenEnv` (guarded at the top of the route).
-    const client = new (await import('@anthropic-ai/bedrock-sdk')).AnthropicBedrock({ maxRetries: 1, timeout: 90_000 })
-    const msg = await client.messages.create({
-      model: process.env.ADMIN_PROPOSE_MODEL ?? CLAUDE_MODELS.opus,
-      max_tokens: 512,
-      tools: [BBOX_TOOL],
-      tool_choice: { type: 'any' },
-      messages,
+    const res = await adminGemini().models.generateContent({
+      model: process.env.ADMIN_PROPOSE_MODEL ?? LLM_MODELS.quality,
+      contents,
+      config: {
+        // The box is ~60 tokens of JSON; the rest is MEDIUM thinking, which shares this cap.
+        maxOutputTokens: 4_096,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
+        tools: [{ functionDeclarations: [{ name: BBOX_TOOL.name, description: BBOX_TOOL.description, parametersJsonSchema: BBOX_TOOL.parameters }] }],
+        toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.ANY, allowedFunctionNames: [BBOX_TOOL.name] } },
+        // The operator-click budget (./gemini): explicit timeout, one retry.
+        httpOptions: ADMIN_MODEL_HTTP,
+      },
     })
-    const tool = msg.content.find((b) => b.type === 'tool_use')
-    if (!tool || tool.type !== 'tool_use') return c.json({ llm: null, llmError: 'no tool call' })
-    const inp = tool.input as { bbox: string; reasoning: string; confidence: string }
+    const call = res.candidates?.[0]?.content?.parts?.find((p) => p.functionCall?.name === BBOX_TOOL.name)?.functionCall
+    if (!call?.args) return c.json({ llm: null, llmError: 'no tool call' })
+    const inp = call.args as { bbox: string; reasoning: string; confidence: string }
     return c.json({
       llm: { bbox: inp.bbox.trim(), reasoning: inp.reasoning, confidence: inp.confidence as 'high' | 'medium' | 'low' },
       llmError: null,
@@ -717,10 +719,11 @@ const MAX_CURATE_DRAFTS = Math.round((MAX_DRAFT_TARGET * 4) / 3)
  *  Raise it only with a real measurement of the quota in front of you. */
 const CURATE_CONCURRENCY = 6
 
-// POST /admin/places/draft { region } — LLM-draft this region's curated destinations with
-// Opus (forced tool). The REVIEWABLE preview: spends a few cents on ONE Opus call, makes NO Places calls
-// and writes NOTHING. The operator prunes the returned list, then POST /admin/places/curate resolves +
-// upserts the keepers. Founder-gated by IAP (+ the explicit button click). 503 if the Bedrock token is unset.
+// POST /admin/places/draft { region } — LLM-draft this region's curated destinations with the
+// judgment-tier model (forced call). The REVIEWABLE preview: spends a few cents on ONE model call, makes
+// NO Places calls and writes NOTHING. The operator prunes the returned list, then POST
+// /admin/places/curate resolves + upserts the keepers. Founder-gated by IAP (+ the explicit button
+// click). 503 if the Google Cloud project is unset.
 app.post('/admin/places/draft', async (c) => {
   const body = await c.req.json<{ region?: string; target?: number }>().catch(() => ({}) as Record<string, never>)
   const slug = (body.region ?? '').trim()
@@ -734,12 +737,12 @@ app.post('/admin/places/draft', async (c) => {
   if (bbox.length === 0) {
     return c.json({ error: 'bbox_required', message: 'Set a valid region bbox before curating.' }, 400)
   }
-  if (!process.env[BEDROCK.tokenEnv]) {
-    return c.json({ error: 'anthropic_unconfigured', message: `${BEDROCK.tokenEnv} is not set.` }, 503)
+  if (!adminModelConfigured()) {
+    return c.json({ error: 'model_unconfigured', message: `${VERTEX.projectEnv} is not set.` }, 503)
   }
   // ⚠ THE CLAMP IS THE ONE AUTHORITY on this number — the panel's min/max are affordance, not a guard.
-  // Coupled to two things, so do not raise it alone: (1) `max_tokens` on the draft call (the list is ONE
-  // forced tool call; a truncated one is a 200 carrying a half-parsed list — see draftCuratedPlaces),
+  // Coupled to two things, so do not raise it alone: (1) the output cap on the draft call (the list is ONE
+  // forced call; a truncated one is a 200 carrying a short list — see draftCuratedPlaces),
   // and (2) this route's own CLOCK, which is what actually binds it — see MAX_DRAFT_TARGET above.
   // ⚠ MAX_PLAN_ANCHORS (apps/api/src/limits.ts, 200) is NO LONGER a total this set must stay under; it
   // is the planner's SERVE cap and a region is now expected to hold more rows than it. Exceeding it is
@@ -747,7 +750,7 @@ app.post('/admin/places/draft', async (c) => {
   // ⚠ THE COUNT IS NOT AN INPUT (founder, 2026-08-04). It was a number the operator picked, it defaulted
   // to the maximum, and then the field went too — because there was only ever one right answer. The
   // rider-facing list a human once thumb-scrolled (`GET /drives/anchors`) was deleted end to end in 1.1,
-  // so this set is now the PLANNER's whole world, read whole from a cached prefix; every name missing
+  // so this set is now the PLANNER's whole world, read whole on every turn; every name missing
   // from it is an in-persona "do not know that one". The Places spend is decided by what the operator
   // PRUNES before "Resolve & add", never by this number, so asking for it bought nothing and cost a
   // decision on every run. What binds the value is the route's CLOCK — see MAX_DRAFT_TARGET.
@@ -758,7 +761,7 @@ app.post('/admin/places/draft', async (c) => {
   try {
     const drafts = await draftCuratedPlaces(region.displayName, bbox, {
       targetN: MAX_DRAFT_TARGET,
-      model: process.env.ADMIN_CURATE_MODEL ?? CLAUDE_MODELS.opus,
+      model: process.env.ADMIN_CURATE_MODEL ?? LLM_MODELS.quality,
     })
     return c.json({ drafts })
   } catch (e) {
@@ -2500,9 +2503,9 @@ const port = Number(process.env.PORT ?? 8788)
 // ⚠⚠ idleTimeout IS LOAD-BEARING HERE TOO, and this console needs it MORE than apps/api does.
 // Bun's default is 10 SECONDS and it fires WHILE A HANDLER IS STILL RUNNING (measured in apps/api on
 // 2026-08-01: a 16s handler had its socket closed at ~12s). Two admin routes structurally exceed that:
-//   • POST /admin/places/draft — one streamed Opus call for MAX_DRAFT_TARGET places. The
+//   • POST /admin/places/draft — one model call for MAX_DRAFT_TARGET places. The
 //     dialog's own copy says "this takes ~30s". It could therefore NEVER have completed: the socket
-//     died at ~12s, the operator saw a network error, and the Anthropic call billed to completion
+//     died at ~12s, the operator saw a network error, and the model call billed to completion
 //     regardless.
 //   • POST /admin/places/curate — 2 Google Places round-trips per draft, then a loop of upserts.
 //     Its failure mode is worse than a failed read: the handler is never aborted, so the writes still

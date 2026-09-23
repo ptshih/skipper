@@ -18,15 +18,15 @@
 // The model call is INJECTED (ExciseModelCall), so the build/extract logic is unit-tested with a
 // deterministic fake and zero API spend. Mirrors classify-register.ts / grounding.ts.
 
-import type { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk'
-import Anthropic from '@anthropic-ai/sdk'
 import { NARRATION_MODEL } from '../models'
-import { recordModelUsage } from '@skipper/shared'
+import { geminiUsage, recordModelUsage } from '@skipper/shared'
+import { finishReason, forcedToolRequest, toolArgs, type ReplyLike, type ToolCallClient, type ToolParameters } from '../pipeline/tool-call'
 
-// Editing is a forced-tool turn on the NARRATION model (Opus) — same model that wrote it, so the
-// voice stays consistent; a forced tool guarantees a clean script back, never a preamble. A repaired
-// script is at most a narration's length, so the cap is generous.
-const EXCISE_MAX_TOKENS = 2_000
+// Editing is a forced-function turn on the NARRATION model — same model that wrote it, so the voice
+// stays consistent; a forced call guarantees a clean script back, never a preamble. A repaired script
+// is at most a narration's length (~1k tokens on Claude's 2k cap); the rest of this cap is room for the
+// MEDIUM thinking Gemini 3.8 does before it edits, which shares the budget.
+const EXCISE_MAX_TOKENS = 8_000
 
 const SYSTEM = `You are EDITING a finished tour-narration script — not rewriting it. An auditor flagged some UNGROUNDED CLAIMS: statements the narrator was not entitled to make because the FACT SHEET (the only facts it was allowed to use) does not support them. Make each flagged claim grounded with the SMALLEST possible edit, and leave everything else exactly as written.
 
@@ -45,10 +45,10 @@ Hard rules — you may only REMOVE or GENERALIZE-TOWARD-THE-SHEET, never add:
 
 Return the edited script through the tool.`
 
-const REPAIR_TOOL: Anthropic.Tool = {
+const REPAIR_TOOL: { name: string; description: string; parameters: ToolParameters } = {
   name: 'repaired',
   description: 'Return the edited narration with each flagged claim removed or generalized to the sheet, nothing new added.',
-  input_schema: {
+  parameters: {
     type: 'object',
     properties: {
       script: {
@@ -62,11 +62,7 @@ const REPAIR_TOOL: Anthropic.Tool = {
 }
 
 /** One model turn — injectable for tests. */
-export type ExciseModelCall = (args: {
-  system: string
-  tools: Anthropic.Tool[]
-  messages: Anthropic.MessageParam[]
-}) => Promise<Anthropic.Message>
+export type ExciseModelCall = (args: { system: string; user: string }) => Promise<ReplyLike>
 
 /** The user message: the fact sheet (what a fix may generalize toward), the flagged claims, then the
  *  script to edit. Exported for tests. */
@@ -97,28 +93,28 @@ export async function exciseUngrounded(
   call: ExciseModelCall,
 ): Promise<string> {
   if (flagged.length === 0) return script
-  const response = await call({
-    system: SYSTEM,
-    tools: [REPAIR_TOOL],
-    messages: [{ role: 'user', content: buildExciseUser(script, flagged, well) }],
-  })
-  const toolUse = response.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
-  const edited = (toolUse?.input as { script?: unknown } | undefined)?.script
+  const response = await call({ system: SYSTEM, user: buildExciseUser(script, flagged, well) })
+  // ⚠ A truncated edit ends mid-sentence, and the grounding re-gate cannot see that — fewer claims only
+  // reads as CLEANER. So a MAX_TOKENS reply is the same no-op as a malformed one.
+  if (finishReason(response) === 'MAX_TOKENS') return script
+  const edited = (toolArgs(response, REPAIR_TOOL.name) as { script?: unknown } | undefined)?.script
   return typeof edited === 'string' && edited.trim().length > 0 ? edited.trim() : script
 }
 
-/** The real model call backing exciseUngrounded (forced tool_choice → always a script). */
-export function makeExciseCall(getAnthropic: () => Pick<AnthropicBedrock, 'messages'>): ExciseModelCall {
-  return async ({ system, tools, messages }) => {
-    const response = await getAnthropic().messages.create({
-      model: NARRATION_MODEL,
-      max_tokens: EXCISE_MAX_TOKENS,
-      system,
-      tools,
-      tool_choice: { type: 'tool', name: 'repaired' },
-      messages,
-    })
-    recordModelUsage(NARRATION_MODEL, response.usage)
+/** The real model call backing exciseUngrounded (a forced function call → always a script). */
+export function makeExciseCall(getClient: () => ToolCallClient): ExciseModelCall {
+  return async ({ system, user }) => {
+    const response = await getClient().models.generateContent(
+      forcedToolRequest({
+        model: NARRATION_MODEL,
+        system,
+        user,
+        maxTokens: EXCISE_MAX_TOKENS,
+        thinkingLevel: 'MEDIUM',
+        tool: REPAIR_TOOL,
+      }),
+    )
+    recordModelUsage(NARRATION_MODEL, geminiUsage(response.usageMetadata))
     return response
   }
 }

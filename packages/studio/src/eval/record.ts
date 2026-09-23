@@ -48,7 +48,7 @@ export interface EvalRunInput {
   withheld: number
   /** seq → the clip's stable identity, for the per-(poi × dimension) score rows. */
   identityBySeq?: Map<number, ClipIdentity>
-  /** Did the paid Opus grounding judge actually run this pass? FALSE nulls `grounding_score` — see
+  /** Did the paid model grounding judge actually run this pass? FALSE nulls `grounding_score` — see
    *  the field. Omitted means "assume it ran", which keeps `audit-corpus` (whose --apply branch always
    *  judges) unchanged. */
   groundingJudged?: boolean
@@ -96,11 +96,11 @@ function gitShaBestEffort(): string | null {
 }
 
 /**
- * The `grounding_score` trend value — NULL when the paid Opus judge was switched off, even though the
+ * The `grounding_score` trend value — NULL when the paid model judge was switched off, even though the
  * dimension has evals.
  *
  * ⚠ `evaluateLaterality` deliberately reports under dimension='grounding' (a side of the road the clip
- * cannot know IS an ungrounded place-claim) and runs UNCONDITIONALLY, while the Opus judge is gated on
+ * cannot know IS an ungrounded place-claim) and runs UNCONDITIONALLY, while the model judge is gated on
  * `GROUNDING_EVAL()`. So with the judge OFF the dimension still collects one clean laterality eval per
  * clip and rolls up to a confident 1.0 — a green grounding trend for a judge that never ran, which is
  * precisely the vacuous 1 that `dimensionRollupScore`'s own "no vacuous 1s in the trend columns" rule

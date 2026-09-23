@@ -20,8 +20,9 @@ const SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
 // package dir), so a relative path resolves to apps/admin/keys/… → ENOENT → no creds → the admin
 // "can't dispatch Cloud Run jobs" locally. Pin it to an absolute path off the repo root (this
 // file is apps/admin/server/jobs.ts → ../../.. is the root). Unset in prod (Cloud Run uses the
-// metadata-server runtime SA) → undefined → GoogleAuth's default ADC.
-function keyFilename(): string | undefined {
+// metadata-server runtime SA) → undefined → GoogleAuth's default ADC. Exported: the model client
+// (./gemini) authenticates with the same credentials and must resolve the same path.
+export function keyFilename(): string | undefined {
   const gac = process.env.GOOGLE_APPLICATION_CREDENTIALS
   if (!gac) return undefined
   return isAbsolute(gac) ? gac : resolve(import.meta.dir, '..', '..', '..', gac)
@@ -288,7 +289,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     if (body.model) args.push(`--model=${str(body.model)}`)
     pushPosNum(args, '--max-cost', body.maxCostUsd, 'maxCostUsd')
     if (apply) args.push('--apply')
-    // enrich SPENDS (Anthropic) on --apply → confirm gate; the dry run makes no model calls (free).
+    // enrich SPENDS (model tokens) on --apply → confirm gate; the dry run makes no model calls (free).
     // ⚠ targetId stays the CONSTANT 'region-corpus': enrich takes a GLOBAL lock, so only one runs at
     // a time. That is deliberate and unchanged. Only the DISPLAY becomes truthful — it used to
     // render as "whole corpus" even for three hand-picked places.
@@ -333,7 +334,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     // ⚠ spends: TRUE even on a dry run, unlike every other kind here. This CLI's own header says it:
     // "A preview is NOT free: it narrates and scores, so it costs an apply minus the TTS. Only the
     // persistence is gated." So the confirm gate must fire on Preview too — the operator is about to
-    // spend Anthropic money either way, and a gate that only guards `--apply` would wave that through.
+    // spend model money either way, and a gate that only guards `--apply` would wave that through.
     // ⚠ This kind hand-rolls the region derivation instead of calling `scopeTarget`, and that is how it
     // carried the SAME null-lock defect independently: with an id list, `clusterRegion` is undefined, so
     // `target_id` stored NULL and `studio_jobs_active_target_uq` could not fire (Postgres treats NULLs as
@@ -396,7 +397,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     if (body.charm) args.push('--charm')
     if (body.veracity) args.push('--veracity')
     if (apply) args.push('--apply')
-    // Re-score the EXISTING corpus: READ-ONLY on narrations/R2, but --apply runs Opus judges
+    // Re-score the EXISTING corpus: READ-ONLY on narrations/R2, but --apply runs model judges
     // (grounding always; charm/veracity opt-in, veracity also web-searches) → spends → confirm gate.
     // The dry preview makes no model calls (free).
     // Region run keys slug + lock on its region; a whole-corpus explicit-id run leaves them NULL ("All").
@@ -415,7 +416,7 @@ export function buildJobArgs(body: Record<string, unknown>): BuildResult {
     pushPosNum(args, '--target', body.target, 'target')
     pushPosNum(args, '--max-cost', body.maxCostUsd, 'maxCostUsd')
     if (apply) args.push('--apply')
-    // curate SPENDS (Anthropic draft + Google Places resolve) on --apply → confirm gate; the dry run
+    // curate SPENDS (model draft + Google Places resolve) on --apply → confirm gate; the dry run
     // makes no paid calls (free preview). Keys the lock per-region (matches the studio beginJob target).
     return { args, dryRun: !apply, spends: apply, targetId: curateRegion }
   }

@@ -217,7 +217,7 @@ type DegradedReason =
    *  HTTP 200 and an in-persona line, so `/health` and every 5xx alert stay green with the product
    *  broken. That is the exact condition this event was created to make countable.
    *
-   *  `not_configured` is a MISSING Bedrock token (`BEDROCK.tokenEnv`) on the deployed service: every rider on the
+   *  `not_configured` is a MISSING Google Cloud project (`VERTEX.projectEnv`) on the deployed service: every rider on the
    *  instance hears VOICE.down, forever, and the only other trace is one unstructured `console.error`
    *  that lands in Cloud Logging's `textPayload` where no log-based metric can read it. A non-zero count
    *  of this is a deploy fault, not traffic.
@@ -274,8 +274,8 @@ type DegradedReason =
  * the identical choice and answered it the other way. Setting the field is the DOCUMENTED lever, so it
  * is set, and the stream is chosen to agree with it rather than contradict it.
  *
- * ⚠ ONE REASON IS GENUINELY OURS AND GENUINELY BROKEN: `not_configured` is a missing Bedrock token
- * on a live deploy — every rider on that instance hears the outage line, forever, while /health and
+ * ⚠ ONE REASON IS GENUINELY OURS AND GENUINELY BROKEN: `not_configured` is a missing Google Cloud
+ * project on a live deploy — every rider on that instance hears the outage line, forever, while /health and
  * every 5xx alert stay green. That is an ERROR by any reading, and flattening this to a single
  * severity would either bury it or promote the healthy beats alongside it. `bad_transcript` stays a
  * WARNING: it counts forged or broken callers, not a fault of ours.
@@ -454,12 +454,14 @@ planRoutes.post('/', async (c) => {
     //
     // ⚠ SPREAD, so the key is ABSENT rather than `undefined` on a normal turn. ./planner branches on
     // truthiness so either would work today, but an absent key cannot be accidentally rendered as an
-    // empty third system block, which would cost the cache breakpoint's benefit for nothing.
+    // empty third system part, which would cost the stable prefix's benefit for nothing.
     ...(read.data.turns.length > PLAN_WRAP_UP_AFTER_MESSAGES ? { wrapUpNotice: PLANNER_WRAP_UP_NOTICE } : {}),
     // ⚠ The rider's connection, threaded all the way to the model call. This ONE line is the whole
-    // cancellation feature: without it, a rider who backgrounds the app bills Opus to completion on a
-    // turn nobody will read (INV-11). It is also exactly the kind of line a refactor drops silently,
-    // which is why there is a test asserting the planner received a live signal.
+    // cancellation feature: a rider who is already gone opens NO model call at all, and one who leaves
+    // mid-turn is logged as a cancellation rather than an outage (INV-11). ⚠ On Gemini it no longer stops
+    // spend already started — the SDK documents abort as client-only, the service finishes and bills the
+    // turn (docs/decisions/gemini-3-8-flash.md). It is also exactly the kind of line a refactor drops
+    // silently, which is why there is a test asserting the planner received a live signal.
     signal: c.req.raw.signal,
   }
 
@@ -496,7 +498,7 @@ planRoutes.post('/', async (c) => {
 
   // ⚠ NO `onError` ARGUMENT, EVER, AND THE CALLBACK MUST NOT THROW. hono runs this callback DETACHED,
   // so ./index.ts's app.onError catch-all can never see a throw from inside it. hono's own handler then
-  // either console.error()s the raw value — for an Anthropic.APIError that is the response body, which
+  // either console.error()s the raw value — for the Gen AI SDK's ApiError that is the response body, which
   // can quote the offending request field, i.e. rider text — or, if an onError IS passed, writes
   // `event: error / data: <message>` straight to the rider. Both are INV-13 violations, and neither is
   // in the frame contract. Total internal try/catch is the only safe shape here.

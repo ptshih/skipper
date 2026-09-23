@@ -7,7 +7,6 @@
 //   dotenvx run -f .env.development -- bun packages/studio/src/generate-narrations.ts
 
 import { existsSync } from 'node:fs'
-import { BEDROCK } from '@skipper/shared'
 
 /** Read a required env var or throw a clear, actionable error. */
 export function requireEnv(name: string): string {
@@ -31,9 +30,6 @@ export function hasEnv(name: string): boolean {
 
 // --- Provider readiness (lets --dry-run skip TTS/R2 cleanly) ----------------
 
-// Claude calls go through Amazon Bedrock; the credential is the bearer token named by
-// `BEDROCK.tokenEnv` (@skipper/shared) — ONE name, so this gate and getAnthropic() can never disagree.
-export const ANTHROPIC_READY = (): boolean => hasEnv(BEDROCK.tokenEnv)
 // Cloud TTS readiness. We always need the billing/quota project. For OAuth creds
 // there are two honest paths, and the gate verifies the one in use actually works:
 //   - ADC / workload identity: set GOOGLE_TTS_USE_ADC=true — creds come from the
@@ -50,6 +46,10 @@ export const GOOGLE_TTS_READY = (): boolean => {
   const keyPath = process.env.GOOGLE_APPLICATION_CREDENTIALS
   return Boolean(keyPath && existsSync(keyPath))
 }
+// Model calls (Gemini on Vertex AI) authenticate EXACTLY like Cloud TTS — the same project, the same ADC
+// or key file — so their readiness IS this check. One gate, so the two can never disagree about the same
+// credentials; getGemini() still throws on a missing project for callers that skip the gate.
+export const LLM_READY = (): boolean => GOOGLE_TTS_READY()
 export const GOOGLE_READY = (): boolean => hasEnv('GOOGLE_MAPS_API_KEY')
 // Credentials + bucket are always required; the endpoint comes from either an
 // explicit S3_ENDPOINT override (Tigris, B2, AWS S3) or the R2 account id.
@@ -104,8 +104,10 @@ export const WIKIDATA_ENRICHMENT = (): boolean => process.env.SKIPPER_WIKIDATA !
 /** Max model turns per place — look (fetch geology/wikidata), then finalize. */
 export const ENRICH_MAX_TOOL_TURNS = 5
 /** Max output tokens per enrich turn — a finalize emits a kept-span-id LIST + a sentence of
- *  reason (numbers, not prose), so more than the scout's 1k but still tight. */
-export const ENRICH_MAX_TOKENS = 2_000
+ *  reason (numbers, not prose); 2k was tight on Claude, which did not think here. Gemini 3.8 always
+ *  thinks (LOW in makeScoutCall) and thinking shares this cap, so it carries that headroom on top —
+ *  a MAX_TOKENS stop yields no sheet (retryable), never a half-read span list. */
+export const ENRICH_MAX_TOKENS = 6_000
 /** SOFT selection target: roughly how many verbatim spans the fact sheet should carry for a ~150s
  *  telling. GUIDANCE to the model (restraint is a feature), NOT a hard cap — the sheet's true
  *  bound is the enricher's judgment, never a char truncation (which would butcher a verbatim
@@ -123,9 +125,10 @@ function intKnob(raw: string | undefined, fallback: number): number {
  * siblings — cross-stop variety is enforced AFTER, by the diversity lint + regen pass in
  * generate.ts), so the draft phase is bounded by its SLOWEST stop instead of the sum. This is
  * the rate-limit dial: narration runs in its own phase with full TPM headroom, but it's the
- * largest-output Anthropic call, so drop it if a fan-out spikes 429s (the SDK retries them).
- * Default 12 (raised from 6, 2026-06-20): a full-region regen at 6 hit ZERO 429s, and 12 is
- * ~24–30 Opus RPM — still far under even Tier-1's 50 RPM / 500K ITPM (cache reads are free).
+ * largest-output model call, so drop it if a fan-out spikes 429s (the client retries them with
+ * backoff — models.ts). Default 12 (raised from 6, 2026-06-20, on Claude): a full-region regen at 6
+ * hit ZERO 429s. On Vertex Standard PayGo there is no fixed per-project quota for this model, so
+ * 429s mean shared capacity is tight; this dial is still the first thing to turn.
  * Override: SKIPPER_NARRATION_CONCURRENCY. */
 export const NARRATION_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_NARRATION_CONCURRENCY, 12)
 /** Concurrent TTS synth+upload calls on a full run. The clips are independent (scripts
@@ -137,31 +140,29 @@ export const NARRATION_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_N
  * under the 125–150 QPM of the fixed-quota Gemini-TTS siblings; drop it if 429s appear. */
 export const TTS_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_TTS_CONCURRENCY, 12)
 /** Concurrent scout agent runs — independent per stop (each reads only its OWN sheet and
- * stop-keyed tools). No prompt-cache interplay: scout calls carry no cache_control and
- * their prefix is under the Opus cacheable minimum. */
+ * stop-keyed tools). */
 export const SCOUT_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_SCOUT_CONCURRENCY, 4)
 /** Concurrent golden CASES in eval/calibrate.ts — each fans out GROUNDING_VOTE_SAMPLES judge calls of
- * its own, so in-flight Opus calls = this × samples. ⚠ BEDROCK THROTTLES PER ACCOUNT AND PER PROFILE:
- * measured 2026-09-17 on Opus 4.6, the `global.` profile 429'd at 16 concurrent and the `us.` profile
- * (the live one) at 36, with 24 clean (`docs/decisions/bedrock-opus-4-6.md`). The old `Promise.all`
- * over all 18 cases fired 54 at once and died on 429 through the SDK's five retries. 2 × 3 = 6 in
- * flight sits well under either ceiling; raise it to 6–8 on the `us.` profile if the run feels slow.
- * Override: SKIPPER_CALIBRATE_CONCURRENCY. */
+ * its own, so in-flight model calls = this × samples. It exists because the Bedrock run of 2026-09-17
+ * fired all 54 at once and died on 429s (docs/decisions/bedrock-opus-4-6.md). Vertex's Standard PayGo
+ * has no fixed per-project quota for this model — throughput is shared and 429s are possible under load
+ * — so the bound stays; raise it if the run feels slow and no 429s show. Override:
+ * SKIPPER_CALIBRATE_CONCURRENCY. */
 export const CALIBRATE_CONCURRENCY = (): number => intKnob(process.env.SKIPPER_CALIBRATE_CONCURRENCY, 2)
 
 // --- Eval panel + evaluator-optimizer (the in-pipeline flywheel) -------------
 
 // generate-narrations.ts runs the eval panel (src/eval/) DURING generation per clip and feeds
 // findings back through the evaluator-optimizer (eval/optimize.ts). V2 (2026-06-19) the gate is
-// AUTOMATED + FAIL-CLOSED: every clip is scored on grounding (Opus) + tts + laterality (gates) +
+// AUTOMATED + FAIL-CLOSED: every clip is scored on grounding (the judgment tier) + tts + laterality (gates) +
 // diversity (advisory); a failing clip is auto-retaken (bounded, accept-if-not-worse), and one
 // that still fails a GATE dimension is WITHHELD — never synthesized, never persisted — with the
 // verdict written to eval_scores. The founder reversed the old "human ear instead" deferral
 // (docs/decisions/automated-grounding-gate.md); grounding now blocks shipping, not just informs.
-/** Grounding eval (the Opus gate) is on by default; set SKIPPER_GROUNDING_EVAL=off to skip it. */
+/** Grounding eval (the model gate) is on by default; set SKIPPER_GROUNDING_EVAL=off to skip it. */
 export const GROUNDING_EVAL = (): boolean => process.env.SKIPPER_GROUNDING_EVAL !== 'off'
 /** Max targeted re-narrations for ONE stop that failed the grounding pass. Kept small: each
- * round costs an Opus regen + an Opus re-audit, and the ungrounded-claim avoid-notes land
+ * round costs a model regen + a model re-audit, and the ungrounded-claim avoid-notes land
  * the fix in round 1 almost always. This per-clip bound (via `optimize(maxRounds)`) PLUS the
  * `--max-cost` gate ARE the cost guardrail. (The old run-wide EVAL_MAX_PASSES / EVAL_REGEN_BUDGET /
  * GROUNDING_REGEN_BUDGET constants were removed 2026-06-20 — dead, zero consumers, leftover from the
@@ -170,10 +171,11 @@ export const GROUNDING_REGEN_MAX_ROUNDS = 3 // raised 2→3 (2026-06-20) — gro
 // (eval/excise.ts: trim the flagged lines) instead of re-narrating, so each round is a cheap, reliable
 // edit; the extra round is headroom for the rare case where smoothing a cut leaves a new claim to trim.
 /** Independent grounding-judge samples UNION-voted per clip (eval/grounding.ts makeVotingDecomposer):
- * a claim flagged ungrounded by ANY sample is ungrounded. Opus 4.8 rejects `temperature` (400), so the
+ * a claim flagged ungrounded by ANY sample is ungrounded. There is no `temperature` lever (a 400 on Opus
+ * 4.8, ignored on Gemini 3), so the
  * gate is irreducibly stochastic at single-sample — calibration (2026-06-20) measured per-clip recall
  * swing to 5/8 on a bad draw, letting a blatant superlative slip. Union voting drives the miss rate
- * toward the k-th power (a violation caught ~70% per sample clears ~97% at k=3), at k× the gate's Opus
+ * toward the k-th power (a violation caught ~70% per sample clears ~97% at k=3), at k× the gate's model
  * cost. Fail-closed trade: a lone sample's over-flag becomes a finding (excision recovers many; the
  * founder ear backstops the rest). 1 = the old single-sample gate. Override: SKIPPER_GROUNDING_VOTES. */
 export const GROUNDING_VOTE_SAMPLES = (): number => intKnob(process.env.SKIPPER_GROUNDING_VOTES, 3)

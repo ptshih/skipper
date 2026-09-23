@@ -24,9 +24,10 @@
 // PROMPT: the `v4` wording, chosen by measurement, not taste — four variants were scored over 3 runs
 // each (§4b). v2 scored better agreement (97% vs 95%) but had quietly reclassified Camp Richardson from
 // CLUSTER to DISTRICT because it told the model to ignore member count; v4 restores the naming-capacity
-// rule. ⚠ `temperature` is DEPRECATED on Opus 4.8 (the API 400s on it), so it is NOT a lever here.
+// rule. ⚠ `temperature` is ignored on Gemini 3 (it was a 400 on Opus 4.8), so it is NOT a lever here.
 //
-// Blast radius: SPENDS (one Opus call per multi-member group — measured ~$0.82 for 64 groups — plus one
+// Blast radius: SPENDS (one JUDGMENT-tier call per multi-member group — measured ~$0.82 for 64 groups on
+// Opus; Gemini 3.8 Flash bills a small fraction of that — plus one
 // per group the duplicate merge fuses) and MUTATES DB on --apply.
 // ⚠ PREVIEW SPENDS TOO. Unlike every other ops CLI, the no-flag run is not free: it CLASSIFIES and
 // reports, and only the DB write is gated on --apply. There is no way to see the verdicts without
@@ -40,7 +41,6 @@
 //   --force-regroup   re-baseline even when FUSED tellings exist for the clusters in scope. Without it
 //                     the run REFUSES: clearing cascades those narrations away and orphans paid audio.
 
-import type Anthropic from '@anthropic-ai/sdk'
 import { and, inArray, isNull, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { inAnyBbox } from '@skipper/db/bbox'
@@ -52,9 +52,9 @@ import { resolveRegion, requireRegionBboxes } from './pipeline/region'
 import { leaderGroups, mergeDuplicateGroups, metersBetween, pickSubject, type ClassifiedGroup } from './pipeline/clustering'
 import { isContainer } from './pipeline/containment'
 import { z } from 'zod'
-import { getAnthropic, JUDGMENT_MODEL } from './models'
-import { parseToolReply } from './pipeline/tool-call'
-import { llmSpendLines, llmSpentUsd, recordModelUsage } from '@skipper/shared'
+import { getGemini, JUDGMENT_MODEL } from './models'
+import { forcedToolRequest, parseToolReply, type ToolParameters } from './pipeline/tool-call'
+import { geminiUsage, llmSpendLines, llmSpentUsd, recordModelUsage } from '@skipper/shared'
 import { NARRATION_CONCURRENCY } from './config'
 
 /** Default grouping radius. ⚠ NOT derived — 600 m produces sane group diameters (leader grouping bounds
@@ -80,10 +80,10 @@ const REVIEW_MAX_CONFIDENCE = 0.85
 
 const TREATMENTS = ['SOLO', 'CLUSTER', 'DISTRICT'] as const
 
-const TOOL: Anthropic.Tool = {
+const TOOL: { name: string; description: string; parameters: ToolParameters } = {
   name: 'classify',
   description: 'Classify how a driver should experience this group of nearby places.',
-  input_schema: {
+  parameters: {
     type: 'object',
     // ⚠ `treatment` IS FIRST AND THE ORDER IS LOAD-BEARING — do not sort these alphabetically or move
     // it down. Tool input serializes in PROPERTY ORDER (the fact planner-prompt.ts measured when a long
@@ -94,7 +94,8 @@ const TOOL: Anthropic.Tool = {
     // deciding whether a shared subject EXISTS would pull the answer toward finding one — the same way
     // a required `biggestRisk` made the charm judge invent risks on clean runs (fixed 2026-08-04). Here
     // it cannot, purely because the verdict is emitted first. Reorder and the bias returns silently,
-    // with nothing in the tests to catch it.
+    // with nothing in the tests to catch it. (Measured on Claude. Gemini 3 also thinks before it emits
+    // the call, which commits the verdict earlier still — the order is kept anyway, since it costs nothing.)
     properties: {
       treatment: { type: 'string', enum: [...TREATMENTS] },
       title: { type: 'string', description: 'What a driver would call this place. 6 words or fewer.' },
@@ -173,14 +174,18 @@ async function classify(group: Row[]): Promise<Verdict | null> {
     .join('\n')
   const res = await withRetry(
     () =>
-      getAnthropic('treatment classify').messages.create({
-        model: JUDGMENT_MODEL,
-        max_tokens: 900,
-        system: SYSTEM,
-        tools: [TOOL],
-        tool_choice: { type: 'tool', name: 'classify' },
-        messages: [{ role: 'user', content: `${group.length} places within ${Math.round(spread)} m of each other:\n\n${body}` }],
-      }),
+      getGemini('treatment classify').models.generateContent(
+        forcedToolRequest({
+          model: JUDGMENT_MODEL,
+          // The verdict JSON alone fit in 900 on Claude, which did not think here; the rest is room for
+          // MEDIUM thinking, which shares this cap on Gemini 3.
+          maxTokens: 4_096,
+          thinkingLevel: 'MEDIUM',
+          system: SYSTEM,
+          tool: TOOL,
+          user: `${group.length} places within ${Math.round(spread)} m of each other:\n\n${body}`,
+        }),
+      ),
     { label: `classify(${group[0]!.name})` },
   )
   // ⚠ RECORD BEFORE the parse below can return null: the tokens are billed the moment the call
@@ -188,15 +193,15 @@ async function classify(group: Row[]): Promise<Verdict | null> {
   // learned on 2026-08-02 — and this CLI is where the SAME defect survived, so until now a run that
   // classified 64 groups reported nothing about what it billed. `--clear` makes no model calls, which
   // is why the reporter at the bottom is conditional rather than unconditional.
-  recordModelUsage(JUDGMENT_MODEL, res.usage)
+  recordModelUsage(JUDGMENT_MODEL, geminiUsage(res.usageMetadata))
   // ⚠ Validated OUTSIDE the `withRetry` above, and that placement is load-bearing: `withRetry` retries
-  // EVERY error four times, so validating inside it would re-bill this Opus call four times over a
+  // EVERY error four times, so validating inside it would re-bill this model call four times over a
   // deterministic schema failure — once per group, on a paid run. Returning null rather than throwing
   // preserves this function's existing contract (the caller treats a null verdict as "leave the group
   // alone"), so one unusable reply costs one group instead of aborting a run that has already spent on
   // every group before it — `mapLimit` fails fast.
   try {
-    return parseToolReply({ content: res.content, toolName: TOOL.name, schema: VERDICT, label: `classify(${group[0]!.name})` })
+    return parseToolReply({ response: res, toolName: TOOL.name, schema: VERDICT, label: `classify(${group[0]!.name})` })
   } catch (e) {
     console.warn(`  ⚠ ${(e instanceof Error ? e.message : String(e)).slice(0, 200)}`)
     return null

@@ -1,10 +1,11 @@
 # 1.1 — Drives first: remove roam, plan a drive by talking
 
 > **Status:** ✅ **BUILT AND SHIPPED TO PROD — steps 0–12's in-repo half is DONE and the push EXECUTED
-> 2026-08-02.** ⚠ **PROVIDER SUPERSEDED 2026-09-17 (founder):** every Claude call now runs on Amazon
-> Bedrock / Opus 4.6 — D33's `claude-opus-5` and every `ANTHROPIC_API_KEY` mention below are history;
-> the current ids and the token live in `@skipper/shared` (`BEDROCK`, `CLAUDE_MODELS`) and the record is
-> [../decisions/bedrock-opus-4-6.md](../decisions/bedrock-opus-4-6.md). Everything else here stands.
+> 2026-08-02.** ⚠ **PROVIDER SUPERSEDED TWICE (founder):** Amazon Bedrock / Opus 4.6 on 2026-09-17, then
+> **Gemini 3.8 Flash on Vertex AI on 2026-09-23** — D33's `claude-opus-5`, every `ANTHROPIC_API_KEY`
+> mention and every Claude-API detail below (tool_use blocks, cache breakpoints, stop_reason) are history;
+> the current ids and settings live in `@skipper/shared` (`VERTEX`, `LLM_MODELS`) and the record is
+> [../decisions/gemini-3-8-flash.md](../decisions/gemini-3-8-flash.md). Everything else here stands.
 > The push record: (`9dc3987..ecc30f7`, four builds green; the record and the template for the next push is
 > [../guides/1-1-cutover-runbook.md](../guides/1-1-cutover-runbook.md)). ⚠ **Deployed is not RELEASED**
 > — what remains is all outside the API: the native rebuild + TestFlight, **RISK-1 (drive one for real)**,

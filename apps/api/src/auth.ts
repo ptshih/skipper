@@ -131,8 +131,8 @@ function authSecret(): string {
  *
  * Checks the secret (throw) and the mailer (warn). Deliberately NOT DATABASE_URL — GET /health is
  * env-free by design and both DB clients are lazy to keep it that way — and deliberately not
- * the Bedrock token: ./planner records that auth is the one hard throw-at-load this app tolerates,
- * and a keyless deploy degrades to an in-persona apology on the first planner turn, not a crash.
+ * the Google Cloud project: ./planner records that auth is the one hard throw-at-load this app tolerates,
+ * and a project-less deploy degrades to an in-persona apology on the first planner turn, not a crash.
  */
 export function assertAuthEnv(): void {
   authSecret()

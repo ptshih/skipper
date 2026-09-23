@@ -8,19 +8,19 @@
 // Runs report drawer to read it. Answers "how grounded/clean is what I already shipped?" WITHOUT
 // paying to remake it.
 //
-// SPENDS $ on --apply (one Opus grounding call per clip); tts-cleanliness + cross-clip diversity are
+// SPENDS $ on --apply (one grounding-judge call per clip); tts-cleanliness + cross-clip diversity are
 // FREE/deterministic. It NEVER writes narrations/R2 — read-only on the corpus, write-only to the
 // eval_runs/eval_scores observability tables. SOP (ops-scripts-sop.md): PREVIEWS by default (counts
 // the queue + estimates the grounding spend, runs the free checks), scores + records only on --apply.
 //
 // Usage:
 //   dotenvx run -f .env.development -- bun packages/studio/src/audit-corpus.ts            # preview
-//   ... --apply                  score grounding (Opus) + record the audit eval_run
+//   ... --apply                  score grounding (model judge) + record the audit eval_run
 //   ... --region <slug>          a region's story corpus (REQUIRED unless --include-ids; → its bbox)
 //   ... --include-ids a,b,c      audit EXACTLY these poi ids
 //   ... --query <substr>         narrow to names/source-ids containing <substr>
-//   ... --charm                  add the advisory charm judge (ONE Opus call over the batch — cheap)
-//   ... --veracity               add the advisory veracity web-check (Opus + web_search, per clip — pricey)
+//   ... --charm                  add the advisory charm judge (ONE model call over the batch — cheap)
+//   ... --veracity               add the advisory veracity web-check (model + Google Search, per clip — pricier)
 //   ... --limit N                smoke a cheap N first   ... --max-cost <usd>   hard spend ceiling
 
 import { and, eq, inArray } from 'drizzle-orm'
@@ -36,8 +36,8 @@ import { regionLabel } from './pipeline/geo'
 import { resolveStoryGrounding } from './pipeline/select'
 import { withRetry } from './pipeline/http'
 import { mapLimit } from './pipeline/concurrency'
-import { ANTHROPIC_READY, NARRATION_CONCURRENCY, NARRATION_FALLBACK_CHARS } from './config'
-import { BEDROCK, llmSpendLines, llmSpentUsd } from '@skipper/shared'
+import { LLM_READY, NARRATION_CONCURRENCY, NARRATION_FALLBACK_CHARS } from './config'
+import { VERTEX, llmSpendLines, llmSpentUsd } from '@skipper/shared'
 import { JUDGMENT_MODEL } from './models'
 import { buildGroundingWell, evaluateGrounding } from './eval/grounding'
 import { charmEvaluator } from './eval/charm'
@@ -61,12 +61,14 @@ import type { FinishOutcome } from './pipeline/job-progress'
 //   deliberate divergence between the audit and the run it audits — not the "same framing" the old
 //   comment here claimed.
 const ROUTE_AGNOSTIC_CORRIDOR = 'Free roam — an unplanned drive, no route'
-// Rough per-clip cost estimates (ONE forced-tool Opus call each) for the preview + the pre-flight cap
-// check. ESTIMATES, not the bill — the --max-cost cap is the real guard. Veracity also bills per
-// web_search (a few per clip), so it's the priciest and opt-in.
-const GROUNDING_USD_PER_CLIP = 0.06
-const VERACITY_USD_PER_CLIP = 0.15
-const CHARM_USD_FLAT = 0.06 // one batch Opus call over the whole queue
+// Rough per-clip cost estimates (ONE forced-function model call each) for the preview + the pre-flight
+// cap check. ESTIMATES, not the bill — the --max-cost cap is the real guard. Re-derived for Gemini 3.8
+// Flash on 2026-09-23 from the Opus-era figures (~1/6.7 the token rate, plus the thinking it always
+// does). Veracity also bills per Google Search grounding QUERY past the monthly free allowance — a few
+// per clip, outside the token tally — so it's the priciest and opt-in.
+const GROUNDING_USD_PER_CLIP = 0.015
+const VERACITY_USD_PER_CLIP = 0.06
+const CHARM_USD_FLAT = 0.02 // one batch model call over the whole queue
 
 const flags = parseFlags(process.argv.slice(2), {
   valueFlags: ['limit', 'region', 'max-cost', 'query', 'include-ids', 'exclude-ids'],
@@ -181,7 +183,7 @@ async function main(): Promise<FinishOutcome> {
     return { ok: true }
   }
 
-  // FREE deterministic checks now (no Opus): tts-cleanliness per clip + cross-clip diversity over the
+  // FREE deterministic checks now (no model): tts-cleanliness per clip + cross-clip diversity over the
   // whole set (repeated openers/bows the per-clip generation pass can't see).
   const ttsEvals: StopEval[] = queue.map((c, i) => evaluateTts({ seq: i, script: c.script }))
   const divEvals = evaluateDiversity(queue.map((c, i) => ({ seq: i, stopType: 'story' as const, script: c.script })))
@@ -205,22 +207,22 @@ async function main(): Promise<FinishOutcome> {
     for (const e of divEvals.filter((x) => !x.pass).slice(0, 10))
       console.log(`  diversity · ${queue[e.seq]?.name}: ${e.findings.slice(0, 1).join('')}`)
     console.log(
-      `\nPaid judges on --apply: ${judgeList} (Opus${doVeracity ? ' + web_search' : ''}) ≈ ~$${spendEst.toFixed(2)} ` +
+      `\nPaid judges on --apply: ${judgeList} (model${doVeracity ? ' + Google Search' : ''}) ≈ ~$${spendEst.toFixed(2)} ` +
         `estimated (rough) over ${queue.length} clip(s). Add --charm / --veracity for the advisory judges. ` +
         `Run with --apply to score + record the audit eval_run.`,
     )
     return { ok: true }
   }
 
-  // Fail fast on a missing key rather than discovering it once per clip. Without this, `getAnthropic`
-  // throws inside the per-clip catch below, which records the miss as a GATE FAILURE — so a revoked key
+  // Fail fast on missing credentials rather than discovering them once per clip. Without this, the
+  // model client throws inside the per-clip catch below, which records the miss as a GATE FAILURE — so a revoked key
   // wrote "every released clip is ungrounded" into the audit's system of record. Same guard
   // `enrich-pois` and `curate-places` already put on their --apply branch.
-  if (!ANTHROPIC_READY()) {
-    throw new Error(`${BEDROCK.tokenEnv} is not set — \`audit-corpus --apply\` needs it to run the judges.`)
+  if (!LLM_READY()) {
+    throw new Error(`Google Cloud model credentials are not ready (${VERTEX.projectEnv} plus ADC or a key file) — \`audit-corpus --apply\` needs them to run the judges.`)
   }
 
-  // Pre-flight spend guard — abort BEFORE any Opus call if the estimate already exceeds the cap.
+  // Pre-flight spend guard — abort BEFORE any model call if the estimate already exceeds the cap.
   if (spendEst > maxCostUsd) {
     throw new Error(
       `⛔ Estimated spend (${judgeList} ≈ $${spendEst.toFixed(2)}) exceeds --max-cost=$${maxCostUsd.toFixed(2)}. ` +
@@ -228,7 +230,7 @@ async function main(): Promise<FinishOutcome> {
     )
   }
 
-  // PER-CLIP judges: grounding (always) + veracity (opt-in, web_search) — fault-isolated so one
+  // PER-CLIP judges: grounding (always) + veracity (opt-in, Google Search) — fault-isolated so one
   // failure can't abort the paid audit. The well is built once per clip and shared by both.
   console.log(`\nScoring ${judgeList} on ${queue.length} clip(s) (concurrency ${NARRATION_CONCURRENCY()})...`)
   let done = 0
@@ -284,7 +286,7 @@ async function main(): Promise<FinishOutcome> {
   }
   const grounded = perClip.flat()
 
-  // CHARM — ONE batch Opus call over the whole queue (advisory; a failure is non-fatal, skipped).
+  // CHARM — ONE batch model call over the whole queue (advisory; a failure is non-fatal, skipped).
   let charmEvals: StopEval[] = []
   if (doCharm) {
     try {

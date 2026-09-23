@@ -202,7 +202,7 @@ describe('cap relationships (drift guard)', () => {
   // never touches a socket, exactly as SERVER_MAX_BODY_BYTES notes. This relationship IS the whole
   // guard, and it is guarding a live defect that shipped: Bun's DEFAULT idleTimeout is 10 seconds and it
   // fires WHILE A HANDLER IS STILL RUNNING, so POST /drives/plan was killing the rider's connection at
-  // ~12 s while the Opus call it had already paid for kept generating (probe 2026-08-01). Both numbers
+  // ~12 s while the model call it had already paid for kept generating (probe 2026-08-01). Both numbers
   // live in limits.ts precisely so this assert can exist.
   //
   // The 1.5x margin is not arbitrary: the model call is not the only thing on the clock — the bounded

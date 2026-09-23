@@ -8,8 +8,8 @@
 // resolved row is stored, so the runtime picker makes zero live Places calls. Needs Places API (New)
 // enabled on GOOGLE_MAPS_API_KEY (Routes enablement alone is not enough).
 
-import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk'
-import Anthropic from '@anthropic-ai/sdk'
+import { FunctionCallingConfigMode, ThinkingLevel } from '@google/genai'
+import { ADMIN_MODEL_HTTP, adminGemini } from './gemini'
 import type { BboxCorners } from './bbox'
 
 const AUTOCOMPLETE_URL = 'https://places.googleapis.com/v1/places:autocomplete'
@@ -305,7 +305,7 @@ export async function resolvePlaceInBboxes(
 /*  Curate DRAFT — the cheap, reviewable LLM step (no Places calls, no writes)   */
 /* -------------------------------------------------------------------------- */
 // The /places "Curate" button drafts the region's curated set in TWO steps so the operator reviews the
-// LLM's picks BEFORE paying to resolve them: (1) this draft call — one forced-tool Anthropic call that
+// LLM's picks BEFORE paying to resolve them: (1) this draft call — one forced-call model request that
 // NAMES recognizable places (a few cents, writes nothing); the operator prunes the list; then (2) the
 // curate-resolve route resolves only the keepers against Google Places + upserts. This mirrors
 // packages/studio/src/curate-places.ts (DRAFT_TOOL + the system prompt are kept textually identical) —
@@ -321,11 +321,11 @@ export interface PlaceDraft {
   rationale?: string
 }
 
-const DRAFT_TOOL: Anthropic.Tool = {
+const DRAFT_TOOL = {
   name: 'draft_curated_places',
   description:
     'Return the curated set of real, recognizable DESTINATIONS for this region — places a drive can start at or finish at.',
-  input_schema: {
+  parameters: {
     type: 'object',
     properties: {
       places: {
@@ -451,63 +451,51 @@ Optimize for CHARM: every place intentional, recognizable, a real place a visito
 For each place give a precise Google Places \`query\` that uniquely identifies it (add the town/state when the name alone is ambiguous), so it resolves to the right pin. Do NOT invent coordinates — name the place, never a latitude or longitude; resolution happens separately.`
 }
 
-/** Draft a region's curated candidates with one forced-tool Anthropic call. Spends a few cents and
- *  writes nothing — the reviewable preview. Throws on a missing key / no tool call (the route maps it
- *  to 502). `model` is the caller's choice (the admin defaults to Opus, the house judgment tier). */
+/** Draft a region's curated candidates with one forced-call model request. Spends a few cents and
+ *  writes nothing — the reviewable preview. Throws on missing credentials / no tool call (the route maps
+ *  it to 502). `model` is the caller's choice (the admin defaults to the house judgment tier). */
 export async function draftCuratedPlaces(
   regionName: string,
   boxes: readonly BboxCorners[],
   opts: { targetN: number; model: string },
 ): Promise<PlaceDraft[]> {
-  // ⚠ EXPLICIT TIMEOUT + LOW maxRetries, and this is a rule, not a preference. A bare client takes
-  // the SDK defaults — `DEFAULT_TIMEOUT = 600000` (10 minutes) and `maxRetries ?? 2` in the installed
-  // core client, which the Bedrock client inherits. That is up to THREE Opus turns and thirty minutes behind one
-  // operator click, inside a service whose own request budget is 300s — so two of those turns would
-  // bill after the browser has already been 504'd, with nobody to deliver the answer to. CLAUDE.md says
-  // it directly for a model call in a request path: "Low maxRetries (0-1) + an explicit timeout inside
-  // the Cloud Run budget — do NOT copy studio's maxRetries: 5, tuned for a batch run that already spent."
-  // 90s x 2 attempts stays inside this server's 240s idleTimeout as well as Cloud Run's 300s.
-  const client = new AnthropicBedrock({ maxRetries: 1, timeout: 90_000 })
-  // ⚠ STREAMED, and the reason is `max_tokens`, not progress reporting — nothing consumes the deltas.
-  // A NON-streaming request cannot safely ask for much more than ~16k output tokens: the SDK's own HTTP
-  // timeout is what bites, not the model, so the old ceiling here was an artifact of HOW the call was
-  // made rather than anything about drafting places. Streaming lifts that, so the ceiling below is now
-  // the model's to give.
-  // ⚠ WHAT STREAMING DOES NOT BUY IS TIME. The model is no cheaper and no faster; the bytes merely
-  // arrive incrementally. The explicit 90s client timeout above is still the real bound on this route,
-  // and MAX_DRAFT_TARGET is still pinned by that clock — see the note beside it.
-  // ⚠ Keep the explicit timeout. The TS SDK silently scales its DEFAULT timeout up (to as much as an
-  // hour) for a large `max_tokens`; an unset timeout plus the ceiling below would park a request far
-  // past the point anyone is waiting for it, billing to completion with nobody to answer.
-  const stream = client.messages.stream({
+  // ⚠ NOT STREAMED ANY MORE, and the reason it once was does not carry over. On Claude, a non-streaming
+  // request could not ask for much more than ~16k output tokens — that SDK's own HTTP timeout bit, not
+  // the model — so streaming was how this call reached a large ceiling. The Gen AI SDK has no such rule,
+  // and a forced call's args arrive whole in one chunk anyway, so there is nothing to stream.
+  // ⚠ WHAT BOUNDS THIS ROUTE IS STILL THE CLOCK: ADMIN_MODEL_HTTP's explicit 90s per attempt (./gemini)
+  // — the SDK sets no timeout of its own, so dropping it would park a request past the point anyone is
+  // waiting, billing to completion. MAX_DRAFT_TARGET is pinned by that clock — see the note beside it.
+  const res = await adminGemini().models.generateContent({
     model: opts.model,
-    // Headroom, deliberately generous: the largest draft the route's clamp allows is 120 places (each a
-    // name + Places query + rationale), which fit inside the old 16k. A ceiling is not a charge — only
-    // tokens actually emitted are billed — so the cost of headroom is zero, while too little truncates
-    // the list and burns the whole call. Opus tops out far above this; 64k is simply well clear.
-    max_tokens: 64_000,
-    system: draftSystem(regionName, boxes, opts.targetN),
-    tools: [DRAFT_TOOL],
-    tool_choice: { type: 'tool', name: DRAFT_TOOL.name },
-    messages: [{ role: 'user', content: `Draft the curated places for ${regionName}.` }],
+    contents: [{ role: 'user', parts: [{ text: `Draft the curated places for ${regionName}.` }] }],
+    config: {
+      systemInstruction: draftSystem(regionName, boxes, opts.targetN),
+      // Headroom, deliberately generous: the largest draft the route's clamp allows is 120 places (each a
+      // name + Places query + rationale), which fit inside the old 16k, PLUS the MEDIUM thinking that
+      // shares this cap. A ceiling is not a charge — only tokens actually emitted are billed — while too
+      // little truncates the list and burns the whole call. Gemini 3.8's own ceiling is 65,536.
+      maxOutputTokens: 64_000,
+      thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
+      tools: [{ functionDeclarations: [{ name: DRAFT_TOOL.name, description: DRAFT_TOOL.description, parametersJsonSchema: DRAFT_TOOL.parameters }] }],
+      toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.ANY, allowedFunctionNames: [DRAFT_TOOL.name] } },
+      httpOptions: ADMIN_MODEL_HTTP,
+    },
   })
-  // The assembled Message — same shape the non-streaming call returned, so every check below is
-  // unchanged. (`finalMessage()` also surfaces stream errors, so there is no separate error path.)
-  const res = await stream.finalMessage()
-  // ⚠ CHECK THIS BEFORE READING THE TOOL BLOCK. The entire candidate list is ONE tool call, so a
-  // max_tokens stop leaves a half-written JSON list that the SDK still surfaces as a `tool_use` block —
-  // HTTP 200, no error, and a SHORTER list than asked for, which is indistinguishable from the model
-  // simply being selective. The operator would then prune and PAY to resolve a truncated set believing
-  // it was the whole draft. Surfaces as the route's 502 with this message.
-  if (res.stop_reason === 'max_tokens') {
+  const candidate = res.candidates?.[0]
+  // ⚠ CHECK THIS BEFORE READING THE CALL. The entire candidate list is ONE function call, so a
+  // MAX_TOKENS stop can leave a SHORTER list than asked for — HTTP 200, no error, indistinguishable from
+  // the model simply being selective. The operator would then prune and PAY to resolve a truncated set
+  // believing it was the whole draft. Surfaces as the route's 502 with this message.
+  if (candidate?.finishReason === 'MAX_TOKENS') {
     throw new Error(
-      `the draft was TRUNCATED at max_tokens (asked for ~${opts.targetN} places) — the list is incomplete, ` +
+      `the draft was TRUNCATED at max tokens (asked for ~${opts.targetN} places) — the list is incomplete, ` +
         `so nothing here is safe to resolve. Re-run the draft; if it truncates again, MAX_DRAFT_TARGET is too ` +
         `high for this region and has to come down in code (there is no longer a count to lower from the console).`,
     )
   }
-  const toolUse = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
-  if (!toolUse) throw new Error('the draft model returned no tool call')
-  const out = toolUse.input as { places?: PlaceDraft[] }
+  const call = candidate?.content?.parts?.find((p) => p.functionCall?.name === DRAFT_TOOL.name)?.functionCall
+  if (!call) throw new Error(`the draft model returned no tool call (finish ${candidate?.finishReason ?? 'none'})`)
+  const out = (call.args ?? {}) as { places?: PlaceDraft[] }
   return (out.places ?? []).filter((p) => p && p.name && p.query && typeof p.rank === 'number')
 }

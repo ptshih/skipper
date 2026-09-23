@@ -8,7 +8,7 @@
 // rule with no home; this is the home.
 //
 // ⚠ Pure + env-free, like ./example-anchors: no DB, no vendor SDK, no secret. ./planner imports
-// `@anthropic-ai/sdk`, so the arrow could only ever point this way.
+// `@google/genai`, so the arrow could only ever point this way.
 
 /** Collapse whitespace to single spaces and trim.
  *

@@ -213,7 +213,7 @@ describe('isBusinessLike', () => {
  * curate DIFFERENT SETS from one draft, which is exactly the failure the mirroring was supposed to
  * prevent and the one nothing was watching for.
  *
- * ✅ `draftSystem` (the Opus draft prompt) is mirrored the same way — server/places.ts vs
+ * ✅ `draftSystem` (the model draft prompt) is mirrored the same way — server/places.ts vs
  * packages/studio/src/curate-places.ts — and was the highest-value remaining gap until 2026-08-04. It
  * is now pinned at the bottom of this file, by TEXT comparison rather than by call, since both copies
  * are module-private.
@@ -258,7 +258,7 @@ describe('mirrored guard parity (admin ↔ studio)', () => {
 /**
  * ⚠ THE LAST MIRROR, AND THE ONE THE COMMENT ABOVE CALLED "the highest-value remaining gap".
  *
- * `draftSystem` — the Opus prompt that drafts a region's candidate places — is hand-copied into
+ * `draftSystem` — the model prompt that drafts a region's candidate places — is hand-copied into
  * apps/admin/server/places.ts AND packages/studio/src/curate-places.ts, and BOTH are live: an operator
  * curates from the console or from the CLI. What that prompt produces becomes the `places` set, which
  * IS the planner's wire-level allowlist. So a divergence means the two entry points draft DIFFERENT

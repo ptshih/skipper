@@ -7,13 +7,12 @@
 // writing+voice report CLI (judge-voice.ts) share ONE source (no duplicated rubric to drift).
 //
 // The judge call is INJECTABLE so the StopEval mapping is unit-tested with no spend; the real
-// judge is Opus (charm needs nuance) — one call per tour, so the eval CLI gates it behind
-// --charm to keep the default audit cheap (grounding Opus + free deterministic dims).
+// judge is the JUDGMENT tier (charm needs nuance) — one call per tour, so the eval CLI gates it behind
+// --charm to keep the default audit cheap (grounding + free deterministic dims).
 
-import type Anthropic from '@anthropic-ai/sdk'
 import { z } from 'zod'
 import { JUDGMENT_MODEL } from '../models'
-import { callTool } from '../pipeline/tool-call'
+import { callTool, type ToolParameters } from '../pipeline/tool-call'
 import type { StopEval } from './types'
 
 /** A stop below this charm score (1-10) is "the man is not in the room" — flag it (advisory). */
@@ -74,12 +73,12 @@ Use the FULL 1-10 scale, anchored as follows. Do NOT default high or low — pla
 For each stop give: a charm score 1-10, the single BEST beat (quote or tight paraphrase), and where it SAGS (the weakest beat — be specific). Then for the whole tour: an overall 1-10, an honest 2-3 sentence verdict, a recommendation, and the weakest stops — an EMPTY list if none of them drags. Add \`biggestRisk\` ONLY if something genuinely rises to a risk; omit it on a clean run rather than reaching for one. recommendation: "ship" = overall 7 or higher with no stop below 5; "tune" = good bones but at least one stop drags it down (one or more stops at 3-4, or overall 5-6); "rework" = overall 4 or lower, reads as competent AI, not the skipper. Score what is on the page, not what you wish were there. Call the report tool.`
 
 // ⚠ HAND-WRITTEN ON PURPOSE — do not derive this from CHARM_VERDICT. The tool schema is part of the
-// prompt, and this judge's thresholds were calibrated against Opus-tier judging (`models.ts`: "moving
+// prompt, and this judge's thresholds were calibrated against the judgment tier (`models.ts`: "moving
 // this would silently shift every score — re-run eval/calibrate.ts after any bump"). A derived schema is
 // NOT byte-identical: measured 2026-08-04, zod renders an integer with safe-integer `minimum`/`maximum`
 // where this carries a bare `{type:'integer'}`, and no zod spelling avoids it. So the schema goes over
 // the wire unchanged and only the REPLY is validated — deriving it here would be a re-calibration.
-const REPORT_TOOL: Anthropic.Tool = {
+const REPORT_TOOL: { name: string; description: string; input_schema: ToolParameters } = {
   name: 'report',
   description: 'Report per-stop charm scores and the tour-level verdict.',
   input_schema: {
@@ -113,7 +112,7 @@ const REPORT_TOOL: Anthropic.Tool = {
   },
 }
 
-/** The charm judge — one Opus call scoring every stop's writing.
+/** The charm judge — one JUDGMENT-tier call scoring every stop's writing.
  *
  *  Throws on a missing report OR one that does not match `CHARM_VERDICT`, and that is safe here because
  *  the only caller already treats this dimension as droppable: `audit-corpus.ts` wraps it in try/catch
@@ -128,9 +127,12 @@ export async function judgeCharm(stops: CharmStop[]): Promise<CharmVerdict> {
   return callTool({
     model: JUDGMENT_MODEL,
     system: CHARM_SYSTEM,
-    messages: [{ role: 'user', content: `Every narrated stop on the tour, in order:\n\n${userMessage}` }],
-    maxTokens: 8_000,
-    tool: { name: REPORT_TOOL.name, description: REPORT_TOOL.description ?? '' },
+    user: `Every narrated stop on the tour, in order:\n\n${userMessage}`,
+    // Thinking + the per-stop report share this cap. The report alone ran well under the old 8k on
+    // Claude, which did not think here; MEDIUM thinking on a whole tour needs room on top of it.
+    maxTokens: 16_000,
+    thinkingLevel: 'MEDIUM',
+    tool: { name: REPORT_TOOL.name, description: REPORT_TOOL.description },
     schema: CHARM_VERDICT,
     inputSchema: REPORT_TOOL.input_schema,
     label: 'Charm judge',

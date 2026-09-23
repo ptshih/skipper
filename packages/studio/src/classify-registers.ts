@@ -6,7 +6,7 @@
 //      rather than trusting a number here (it read 877/1393 on 2026-08-04, when the scope below was
 //      widened past enriched-only — the older "~75%" described the enriched population alone).
 //   2. LLM FALLBACK (paid, the tail): a POI whose P31 matched NO register or CONFLICTING ones is
-//      handed to a cheap Haiku call over its fact sheet.
+//      handed to a cheap SUMMARY-tier call over its fact sheet.
 // The register is a STABLE place property, classified ONCE and stored on `pois`, shared by every
 // drive that reuses the place. Conforms to docs/guides/ops-scripts-sop.md (SAFE BY DEFAULT): PREVIEW (the structural
 // distribution + the abstain count, NO LLM calls, NO writes) unless --apply.
@@ -24,7 +24,7 @@ import { announce, maxCostFlag, parseFlags } from './pipeline/ops'
 import { mapLimit } from './pipeline/concurrency'
 import { withRetry } from './pipeline/http'
 import { llmSpendLines, llmSpentUsd } from '@skipper/shared'
-import { getAnthropic } from './models'
+import { getGemini } from './models'
 import {
   classifyFromMatches,
   classifyRegisterLLM,
@@ -122,27 +122,27 @@ async function main(): Promise<void> {
   if (!apply) {
     console.log(
       `\nPREVIEW — no LLM calls, no writes. Re-run with --apply to classify the ${abstains.length} abstains ` +
-        `(Haiku ≈ $${(abstains.length * 0.001).toFixed(2)}) and write all ${pending.length} registers.`,
+        `(model ≈ $${(abstains.length * 0.001).toFixed(2)}) and write all ${pending.length} registers.`,
     )
     return
   }
 
-  // --max-cost ceiling: abort before any spend if the estimate exceeds the cap. The Haiku tail is the
+  // --max-cost ceiling: abort before any spend if the estimate exceeds the cap. The model tail is the
   // only paid step (~$0.001/abstain) — tiny, but keeps this CLI consistent with enrich/generate.
   const estUsd = abstains.length * 0.001
   if (estUsd > maxCostUsd) {
     throw new Error(
-      `⛔ Estimated Haiku spend ~$${estUsd.toFixed(2)} exceeds --max-cost=$${maxCostUsd.toFixed(2)} — aborting. Raise --max-cost or narrow the corpus.`,
+      `⛔ Estimated model spend ~$${estUsd.toFixed(2)} exceeds --max-cost=$${maxCostUsd.toFixed(2)} — aborting. Raise --max-cost or narrow the corpus.`,
     )
   }
 
-  // 2+3. CLASSIFY (the paid Haiku tail, abstains only) + WRITE, per-POI in ONE pass. Classifying and
-  // writing the SAME poi together means a crash never loses already-paid Haiku work between a classify
+  // 2+3. CLASSIFY (the paid model tail, abstains only) + WRITE, per-POI in ONE pass. Classifying and
+  // writing the SAME poi together means a crash never loses already-paid model work between a classify
   // pass and a separate write pass — each register lands the instant it's resolved. Structural (free)
   // registers write too. withRetry wraps the DB write like every other pipeline write.
-  const call = makeRegisterCall(() => getAnthropic('delivery-register fallback'))
+  const call = makeRegisterCall(() => getGemini('delivery-register fallback'))
   console.log(
-    `\nClassifying ${abstains.length} abstains via Haiku + writing ${pending.length} registers (concurrency 8)...`,
+    `\nClassifying ${abstains.length} abstains via the model + writing ${pending.length} registers (concurrency 8)...`,
   )
   let written = 0
   let llmDone = 0

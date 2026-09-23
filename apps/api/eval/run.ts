@@ -14,7 +14,7 @@
 // ⚠ NEVER wire this into `bun test` or `bun run check`. Those run unattended on every change, and an
 //   inferred paid run is the one thing the STOP list forbids outright.
 
-import { CLAUDE_MODELS, usageUsd } from '@skipper/shared'
+import { LLM_MODELS, usageUsd } from '@skipper/shared'
 import { runPlannerTurn, type PlannerTurnInput } from '../src/planner'
 import { PLANNER_WRAP_UP_NOTICE } from '../src/planner-prompt'
 import { PLAN_WRAP_UP_AFTER_MESSAGES } from '../src/limits'
@@ -29,9 +29,16 @@ const NO_JUDGE = args.includes('--no-judge')
 const ONLY = args.includes('--only') ? args[args.indexOf('--only') + 1] : null
 /** ⚠ A MEASUREMENT LEVER, not a config. Sweeps reasoning depth so the empty-say-on-draw defect can be
  *  attributed rather than guessed at; production keeps `PLANNER_EFFORT` until a founder moves it. */
-const EFFORT = args.includes('--effort')
-  ? (args[args.indexOf('--effort') + 1] as 'low' | 'medium' | 'high')
-  : undefined
+const EFFORTS = ['low', 'medium', 'high'] as const
+const effortArg = args.includes('--effort') ? args[args.indexOf('--effort') + 1] : undefined
+// ⚠ Validated, not cast: an unknown value (a Claude-era `max`, a typo) would otherwise map to no thinking
+// level at all, run at the model's DEFAULT depth, and still be saved under the name it was given — a
+// sweep silently attributed to a setting it never ran.
+if (effortArg !== undefined && !EFFORTS.includes(effortArg as (typeof EFFORTS)[number])) {
+  console.error(`--effort must be one of ${EFFORTS.join(' | ')} (Gemini 3.8 thinking levels); got ${JSON.stringify(effortArg)}`)
+  process.exit(2)
+}
+const EFFORT = effortArg as (typeof EFFORTS)[number] | undefined
 /** ⚠ THE EXPERIMENT ARM. Injects a HAND-WRITTEN drive-time table as a volatile block after the cache
  *  breakpoint — no matrix, no migration, no Routes call, no Google terms exposure. Run the suite with
  *  and without and compare THREE numbers: the routing gate (does it plan better?), `durations`
@@ -42,7 +49,7 @@ const SPATIAL = args.includes('--spatial')
 const NO_MEMORY = args.includes('--no-memory')
 
 /** Rough per-turn cost, for the preview only. ⚠ Never used in the report — that reads real usage. */
-const EST_USD_PER_TURN = 0.02
+const EST_USD_PER_TURN = 0.01
 
 /** Named so the report says what a "repeated phrase" actually is, rather than printing a bare count. */
 const PHRASE_LABEL = '6+ words verbatim'
@@ -92,7 +99,7 @@ async function replay(scenario: Scenario): Promise<TurnOutcome[]> {
       routeKey: routeKey(turn.rawRoute),
       outcome: turn.outcome,
       expect: t.expect,
-      usd: usageUsd(CLAUDE_MODELS.planner, turn.usage),
+      usd: usageUsd(LLM_MODELS.planner, turn.usage),
     })
 
     // Faithful to production: the client appends whatever came back, and `toModelMessages` filters an

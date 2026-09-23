@@ -1,6 +1,6 @@
 // Tests for the live planner (build step 6). Three things are worth pinning, and only three:
-// the prompt still says what makes it safe, the six-outcome classifier maps stop_reason correctly,
-// and the transcript caps hold.
+// the prompt still says what makes it safe, the six-outcome classifier maps the finish reason
+// correctly, and the transcript caps hold.
 //
 // ⚠ NONE OF THIS SPENDS. `runPlannerTurn` takes an injected client (the `client` field on
 // PlannerModelArgs) precisely so the classifier — the entire reason planner.ts exists — is reachable
@@ -11,9 +11,9 @@
 // unconditionally under NODE_ENV=test, which is every sanctioned invocation — so a test asserting a
 // 429 would assert nothing. The limiters are verified by probe instead (see limits.ts).
 
-import { describe, expect, spyOn, test } from 'bun:test'
-import Anthropic from '@anthropic-ai/sdk'
-import { CLAUDE_MODELS } from '@skipper/shared'
+import { afterEach, beforeEach, describe, expect, setSystemTime, spyOn, test } from 'bun:test'
+import { ApiError, FunctionCallingConfigMode, ThinkingLevel } from '@google/genai'
+import { LLM_MODELS } from '@skipper/shared'
 import { PLAN_ROUTE_TOOL, PLANNER_SYSTEM_PROMPT, PLANNER_WRAP_UP_NOTICE } from '../src/planner-prompt'
 import { MAX_ROUTE_VIA } from '@skipper/shared'
 import {
@@ -144,15 +144,15 @@ describe('plan_route tool', () => {
   // server's one fixed fallback instead of the Skipper saying their drive back. Required, not
   // optional: an optional field the model may omit reproduces exactly the defect it fixes.
   test('`say` is a REQUIRED field on the tool', () => {
-    const props = PLAN_ROUTE_TOOL.input_schema.properties as Record<string, { type: string }>
+    const props = PLAN_ROUTE_TOOL.parameters.properties as Record<string, { type: string }>
     expect(props.say?.type).toBe('string')
-    expect(PLAN_ROUTE_TOOL.input_schema.required).toContain('say')
+    expect(PLAN_ROUTE_TOOL.parameters.required).toContain('say')
   })
 
   test('every field the handler translates exists, and only the endpoints and the line are required', () => {
     // These names are the MODEL's vocabulary, deliberately not the wire DTO's camelCase — toPlannedRoute
     // (./plan-route) reads exactly these keys, so a rename here is a silently dropped route.
-    const props = PLAN_ROUTE_TOOL.input_schema.properties as Record<string, unknown>
+    const props = PLAN_ROUTE_TOOL.parameters.properties as Record<string, unknown>
     expect(Object.keys(props).sort()).toEqual(
       [
         'end_anchor_id',
@@ -167,7 +167,7 @@ describe('plan_route tool', () => {
     // Requiring round_trip or target_minutes would push the model to assert an intent the rider never
     // expressed just to satisfy the schema. `say` is different in kind — there is no honest default
     // for "what the Skipper said", and an optional one reproduces the wordless-draw defect.
-    expect(PLAN_ROUTE_TOOL.input_schema.required).toEqual(['say', 'start_anchor_id', 'end_anchor_id'])
+    expect(PLAN_ROUTE_TOOL.parameters.required).toEqual(['say', 'start_anchor_id', 'end_anchor_id'])
   })
 
   test('the via cap leaves room for the TWO waypoints the server APPENDS', () => {
@@ -176,7 +176,7 @@ describe('plan_route tool', () => {
     // still clear the shared wire cap. Otherwise toPlannedRoute drops the whole route and the rider
     // hears the retry line for a drive that was fine. It was `+ 1` while a loop appended only the
     // turnaround; the append grew and this bound has to grow with it.
-    const via = PLAN_ROUTE_TOOL.input_schema.properties as { via_anchor_ids: { maxItems: number } }
+    const via = PLAN_ROUTE_TOOL.parameters.properties as { via_anchor_ids: { maxItems: number } }
     expect(via.via_anchor_ids.maxItems + 2).toBeLessThanOrEqual(MAX_ROUTE_VIA)
   })
 
@@ -289,11 +289,16 @@ let lastStreamParams: StreamParams | null = null
  *  itself is cast through `unknown` anyway). */
 type StreamParams = {
   model?: unknown
-  max_tokens?: unknown
-  thinking?: { type?: unknown; display?: unknown }
-  /** The system blocks, in render order. ⚠ Captured for D12: WHERE the wrap-up notice sits relative to
-   *  the cache breakpoint is a cost property with no other observable — see the block at the bottom. */
-  system?: { text?: unknown; cache_control?: unknown }[]
+  config?: {
+    maxOutputTokens?: unknown
+    thinkingConfig?: { thinkingLevel?: unknown; includeThoughts?: unknown }
+    toolConfig?: { functionCallingConfig?: { mode?: unknown } }
+    tools?: { functionDeclarations?: { name?: unknown; parametersJsonSchema?: unknown }[] }[]
+    /** The system-instruction parts, in render order. ⚠ Captured for D12: WHERE the wrap-up notice sits
+     *  relative to the stable prefix is a cost property with no other observable — see the block at the
+     *  bottom. */
+    systemInstruction?: { parts?: { text?: unknown }[] }
+  }
 }
 
 /** Read the capture, or fail loudly if the model was never called.
@@ -309,27 +314,52 @@ function lastCallParams(): StreamParams {
   return lastStreamParams
 }
 
+/** What a scripted turn streams back, in Gemini's vocabulary: the reply's parts, its finish reason and
+ *  (optionally) a prompt-level block. */
+interface Scripted {
+  finish?: string
+  parts?: unknown[]
+  blockReason?: string
+  /** Defaults to 10 prompt / 3 visible / 2 thinking — non-zero so a dropped recording reads as $0. */
+  usage?: Record<string, number>
+}
+
+/** The chunks a real stream would deliver for `reply`: every text part in its own chunk first (so
+ *  streaming is actually exercised), then one closing chunk with the non-text parts, the finish reason
+ *  and the usage — which is where the live API puts usage (probed 2026-09-23: earlier chunks carry
+ *  `trafficType` only). */
+function chunksFor(reply: Scripted): unknown[] {
+  const parts = reply.parts ?? []
+  const texts = parts.filter((p) => typeof (p as { text?: unknown }).text === 'string')
+  const rest = parts.filter((p) => typeof (p as { text?: unknown }).text !== 'string')
+  // ⚠ DELIBERATELY NOT `LLM_MODELS.planner`. This is the vendor's ECHO, which the API is not bound to
+  // return verbatim as the id we asked for. A fixture where the two are equal makes "the pricing key and
+  // the echo are separate fields" unfalsifiable, which is exactly the conflation the cost line prevents.
+  const meta = { modelVersion: 'gemini-3.8-flash-001', responseId: 'resp_test' }
+  return [
+    ...texts.map((t) => ({ ...meta, candidates: [{ content: { role: 'model', parts: [t] } }], usageMetadata: { trafficType: 'ON_DEMAND' } })),
+    {
+      ...meta,
+      ...(reply.blockReason ? { promptFeedback: { blockReason: reply.blockReason } } : {}),
+      candidates: reply.blockReason ? [] : [{ content: { role: 'model', parts: rest }, ...(reply.finish ? { finishReason: reply.finish } : {}) }],
+      usageMetadata: reply.usage ?? { promptTokenCount: 10, candidatesTokenCount: 3, thoughtsTokenCount: 2 },
+    },
+  ]
+}
+
+async function* streamOf(chunks: unknown[]): AsyncGenerator<unknown> {
+  for (const c of chunks) yield c
+}
+
 /** A stand-in for the SDK's streaming client. Structurally compatible with what runPlannerTurn uses,
- *  which is the whole benefit of the injected seam being a `Pick<Anthropic,'messages'>` rather than a
- *  concrete class: no SDK instance, no key, no network. */
-function fakeClient(message: Record<string, unknown>) {
+ *  which is the whole benefit of the injected seam being a structural `PlannerClient` rather than a
+ *  concrete class: no SDK instance, no credentials, no network. */
+function fakeClient(reply: Scripted) {
   return {
-    messages: {
-      stream: (params: StreamParams) => {
+    models: {
+      generateContentStream: async (params: StreamParams) => {
         lastStreamParams = params
-        return {
-          on() {},
-          request_id: 'req_test',
-          finalMessage: async () => ({
-            // ⚠ DELIBERATELY NOT `CLAUDE_MODELS.planner`. This is the vendor's ECHO, which the API is
-            // not bound to return as the alias we asked for — it may resolve to a longer dated id. A
-            // fixture where the two are equal makes "the pricing key and the echo are separate fields"
-            // unfalsifiable, which is exactly the conflation the cost line exists to prevent.
-            model: 'claude-opus-5-99991231',
-            usage: { input_tokens: 10, output_tokens: 5 },
-            ...message,
-          }),
-        }
+        return streamOf(chunksFor(reply))
       },
     },
   } as unknown as NonNullable<PlannerModelArgs['client']>
@@ -342,24 +372,24 @@ const baseArgs = (client: NonNullable<PlannerModelArgs['client']>): PlannerModel
   client,
 })
 
-const textBlock = (text: string) => ({ type: 'text', text })
+const textPart = (text: string) => ({ text })
+const callPart = (name: string, args: unknown) => ({ functionCall: { id: 'call_1', name, args }, thoughtSignature: 'c2ln' })
 
 describe('planner outcome classification', () => {
-  test('text with no tool call is a normal conversational beat', async () => {
-    const turn = await runPlannerTurn(
-      baseArgs(fakeClient({ stop_reason: 'end_turn', content: [textBlock('Where are you starting?')] })),
-    )
+  test('text with no function call is a normal conversational beat', async () => {
+    const turn = await runPlannerTurn(baseArgs(fakeClient({ finish: 'STOP', parts: [textPart('Where are you starting?')] })))
     expect(turn.outcome).toBe('say')
     expect(turn.say).toBe('Where are you starting?')
     expect(turn.rawRoute).toBeNull()
   })
 
-  test('a tool call is the ONLY outcome that carries a route', async () => {
+  test('a function call is the ONLY outcome that carries a route', async () => {
     const turn = await runPlannerTurn(
       baseArgs(
         fakeClient({
-          stop_reason: 'tool_use',
-          content: [textBlock('Drawing that up.'), { type: 'tool_use', name: 'plan_route', input: { start_anchor_id: 'a', end_anchor_id: 'b' } }],
+          // Gemini finishes a reply that carries a call with STOP — there is no tool_use finish (probed).
+          finish: 'STOP',
+          parts: [textPart('Drawing that up.'), callPart('plan_route', { start_anchor_id: 'a', end_anchor_id: 'b' })],
         }),
       ),
     )
@@ -367,30 +397,25 @@ describe('planner outcome classification', () => {
     expect(turn.rawRoute).toEqual({ start_anchor_id: 'a', end_anchor_id: 'b' })
   })
 
-  // ⚠ THE WORDLESS-DRAW FIX. Measured 2026-08-03: on a draw turn this model emits the tool JSON and NO
-  // text block at all — every time, under the pre-rewrite prompt too — so the rider heard the server's
-  // one fixed fallback instead of their drive said back. `say` is now a required tool field and gets
-  // unwrapped here.
-  test('the line is unwrapped from the tool call when no text block came back', async () => {
+  // ⚠ THE WORDLESS-DRAW FIX. Measured 2026-08-03 on Claude, and the 2026-09-23 Gemini probe did the
+  // same: on a draw turn the model emits the call and NO text part at all, so the rider heard the
+  // server's one fixed fallback instead of their drive said back. `say` is a required tool field and
+  // gets unwrapped here.
+  test('the line is unwrapped from the call when no text part came back', async () => {
     const turn = await runPlannerTurn(
-      baseArgs(
-        fakeClient({
-          stop_reason: 'tool_use',
-          content: [{ type: 'tool_use', name: 'plan_route', input: { say: 'There she is.', start_anchor_id: 'a', end_anchor_id: 'b' } }],
-        }),
-      ),
+      baseArgs(fakeClient({ finish: 'STOP', parts: [callPart('plan_route', { say: 'There she is.', start_anchor_id: 'a', end_anchor_id: 'b' })] })),
     )
     expect(turn.outcome).toBe('route')
     expect(turn.say).toBe('There she is.')
   })
 
-  test('a REAL text block still wins over the tool field', async () => {
+  test('a REAL text part still wins over the tool field', async () => {
     // A model that speaks both ways must not have the streamed prose overridden by the call's copy.
     const turn = await runPlannerTurn(
       baseArgs(
         fakeClient({
-          stop_reason: 'tool_use',
-          content: [textBlock('Streamed line.'), { type: 'tool_use', name: 'plan_route', input: { say: 'Tool line.', start_anchor_id: 'a', end_anchor_id: 'b' } }],
+          finish: 'STOP',
+          parts: [textPart('Streamed line.'), callPart('plan_route', { say: 'Tool line.', start_anchor_id: 'a', end_anchor_id: 'b' })],
         }),
       ),
     )
@@ -398,64 +423,109 @@ describe('planner outcome classification', () => {
   })
 
   test('a non-string say reads as ABSENT rather than reaching the rider', async () => {
-    // `input` is model output. A cast here would put "[object Object]" in the bubble.
+    // `args` is model output. A cast here would put "[object Object]" in the bubble.
     const turn = await runPlannerTurn(
-      baseArgs(
-        fakeClient({
-          stop_reason: 'tool_use',
-          content: [{ type: 'tool_use', name: 'plan_route', input: { say: { oops: 1 }, start_anchor_id: 'a', end_anchor_id: 'b' } }],
-        }),
-      ),
+      baseArgs(fakeClient({ finish: 'STOP', parts: [callPart('plan_route', { say: { oops: 1 }, start_anchor_id: 'a', end_anchor_id: 'b' })] })),
     )
     expect(turn.say).toBe('')
   })
 
-  // ⚠ A tool block with the WRONG name is not a route. This is not hypothetical — writing these tests
-  // with a made-up tool name is exactly how it was found, and a renamed tool that still "worked" would
-  // mean the classifier was matching on shape rather than identity.
-  test('a tool block with an unrecognised name is not a route', async () => {
+  // ⚠ A call with the WRONG name is not a route. This is not hypothetical — writing these tests with a
+  // made-up tool name is exactly how it was found, and a renamed tool that still "worked" would mean the
+  // classifier was matching on shape rather than identity.
+  test('a call with an unrecognised name is not a route', async () => {
     const turn = await runPlannerTurn(
-      baseArgs(
-        fakeClient({
-          stop_reason: 'tool_use',
-          content: [textBlock('Hmm.'), { type: 'tool_use', name: 'something_else', input: { start_anchor_id: 'a' } }],
-        }),
-      ),
+      baseArgs(fakeClient({ finish: 'STOP', parts: [textPart('Hmm.'), callPart('something_else', { start_anchor_id: 'a' })] })),
     )
     expect(turn.rawRoute).toBeNull()
   })
 
-  // ⚠ THE ONE THAT MATTERS MOST. A truncated turn is HTTP 200 with a half-parsed tool call or none at
-  // all — byte-identical, from the caller's side, to "the planner chose not to route this turn". One is
-  // a normal chat beat; the other is a paid call that produced nothing. Conflating them is how a rider
-  // says yes and watches nothing happen.
-  test('max_tokens is TRUNCATED, not a route, even when a tool block is present', async () => {
+  // Gemini has no `disable_parallel_tool_use`, so two calls in one turn are possible. "The route" must
+  // still be exactly one, and deterministic.
+  test('two plan_route calls in one turn: the FIRST is the route', async () => {
     const turn = await runPlannerTurn(
       baseArgs(
         fakeClient({
-          stop_reason: 'max_tokens',
-          content: [textBlock('Alright, so we start at'), { type: 'tool_use', name: 'plan_route', input: { start_anchor_id: 'a' } }],
+          finish: 'STOP',
+          parts: [
+            callPart('plan_route', { say: 'First.', start_anchor_id: 'a', end_anchor_id: 'b' }),
+            callPart('plan_route', { say: 'Second.', start_anchor_id: 'c', end_anchor_id: 'd' }),
+          ],
+        }),
+      ),
+    )
+    expect(turn.rawRoute).toEqual({ say: 'First.', start_anchor_id: 'a', end_anchor_id: 'b' })
+  })
+
+  // ⚠ THE ONE THAT MATTERS MOST. A truncated turn is HTTP 200 with a half-formed call or none at all —
+  // byte-identical, from the caller's side, to "the planner chose not to route this turn". One is a
+  // normal chat beat; the other is a paid call that produced nothing. Conflating them is how a rider
+  // says yes and watches nothing happen.
+  test('MAX_TOKENS is TRUNCATED, not a route, even when a call is present', async () => {
+    const turn = await runPlannerTurn(
+      baseArgs(
+        fakeClient({
+          finish: 'MAX_TOKENS',
+          parts: [textPart('Alright, so we start at'), callPart('plan_route', { start_anchor_id: 'a' })],
         }),
       ),
     )
     expect(turn.outcome).toBe('truncated')
-    // The partial tool block is discarded unread — a half-drawn route must never reach the rider.
+    // The partial call is discarded unread — a half-drawn route must never reach the rider.
     expect(turn.rawRoute).toBeNull()
     // ...but the words the rider already watched stream are kept.
     expect(turn.say).toContain('Alright')
   })
 
-  test('a refusal is its own outcome and never carries the explanation', async () => {
-    const turn = await runPlannerTurn(
-      baseArgs(fakeClient({ stop_reason: 'refusal', stop_details: { explanation: 'do not echo me' }, content: [] })),
-    )
+  test('a safety finish is REFUSED and never carries an explanation', async () => {
+    const turn = await runPlannerTurn(baseArgs(fakeClient({ finish: 'SAFETY', parts: [] })))
     expect(turn.outcome).toBe('refused')
-    expect(turn.say).not.toContain('do not echo me')
+    expect(turn.say).toBe('')
+  })
+
+  // A prompt blocked before generation arrives with NO candidate at all — only a block reason. Reading
+  // it as "no finish" would call it an outage.
+  test('a blocked PROMPT is refused, not aborted', async () => {
+    const turn = await runPlannerTurn(baseArgs(fakeClient({ blockReason: 'PROHIBITED_CONTENT' })))
+    expect(turn.outcome).toBe('refused')
+  })
+
+  // Gemini's structured version of the leak ./tool-call-leak guards against in prose: the model TRIED to
+  // call and produced something unexecutable. Nothing in it is trustworthy, and the exact finish rides
+  // stopReason so it stays measurable in the cost line.
+  test('MALFORMED_FUNCTION_CALL is aborted, never a route', async () => {
+    const turn = await runPlannerTurn(
+      baseArgs(fakeClient({ finish: 'MALFORMED_FUNCTION_CALL', parts: [callPart('plan_route', { start_anchor_id: 'a', end_anchor_id: 'b' })] })),
+    )
+    expect(turn.outcome).toBe('aborted')
+    expect(turn.rawRoute).toBeNull()
+    expect(turn.stopReason).toBe('MALFORMED_FUNCTION_CALL')
+  })
+
+  test('a stream that ends with NO finish reason is aborted', async () => {
+    const turn = await runPlannerTurn(baseArgs(fakeClient({ parts: [textPart('And then we')] })))
+    expect(turn.outcome).toBe('aborted')
   })
 
   test('a clean end with neither text nor route is EMPTY, not a silent success', async () => {
-    const turn = await runPlannerTurn(baseArgs(fakeClient({ stop_reason: 'end_turn', content: [] })))
+    const turn = await runPlannerTurn(baseArgs(fakeClient({ finish: 'STOP', parts: [] })))
     expect(turn.outcome).toBe('empty')
+  })
+
+  // Text streams to the caller as it lands, chunk by chunk — and a sink that throws (an SSE write to a
+  // socket the rider just closed) must not turn a paid, finished turn into an "upstream" failure.
+  test('text streams through onSay, and a throwing sink does not fail the turn', async () => {
+    const seen: string[] = []
+    const turn = await runPlannerTurn({
+      ...baseArgs(fakeClient({ finish: 'STOP', parts: [textPart('Where '), textPart('to?')] })),
+      onSay: (d) => {
+        seen.push(d)
+        throw new Error('socket closed')
+      },
+    })
+    expect(seen).toEqual(['Where ', 'to?'])
+    expect(turn.outcome).toBe('say')
+    expect(turn.say).toBe('Where to?')
   })
 })
 
@@ -465,35 +535,49 @@ describe('planner outcome classification', () => {
 
 describe('the model call this route bills', () => {
   // ⚠ INV-11/INV-12: this call spends on EVERY anonymous request, forever, and its only in-code guards
-  // are the explicit model and `max_tokens`. Both were previously asserted nowhere — the fake discarded
-  // the request. ⚠ Read from the CONSTANTS, never their values: a test that hardcodes 2_048 turns a
-  // deliberate cap change into a test failure while a REPOINTED cap sails through.
+  // are the explicit model and `maxOutputTokens`. Both were previously asserted nowhere — the fake
+  // discarded the request. ⚠ Read from the CONSTANTS, never their values: a test that hardcodes 2_048
+  // turns a deliberate cap change into a test failure while a REPOINTED cap sails through.
   test('it bills the planner model at the capped token budget', async () => {
     lastStreamParams = null
-    await runPlannerTurn(baseArgs(fakeClient({ stop_reason: 'end_turn', content: [textBlock('hi')] })))
+    await runPlannerTurn(baseArgs(fakeClient({ finish: 'STOP', parts: [textPart('hi')] })))
     const params = lastCallParams()
 
-    // Not `CLAUDE_MODELS.opus` — that key is the studio pipeline's model, and repointing this one at it
+    // Not `LLM_MODELS.quality` — that key is the studio pipeline's model, and repointing this one at it
     // changes what a fail-closed eval gate is calibrated against as a side effect of a "constant edit".
-    expect(params.model).toBe(CLAUDE_MODELS.planner)
-    expect(params.max_tokens).toBe(PLANNER_MAX_TOKENS)
+    expect(params.model).toBe(LLM_MODELS.planner)
+    expect(params.config?.maxOutputTokens).toBe(PLANNER_MAX_TOKENS)
   })
 
-  // ⚠ INV-8, AND IT IS A SILENT FAILURE, NOT A LOUD ONE. With thinking disabled this model can write a
-  // tool call into VISIBLE TEXT instead of a tool_use block: the turn succeeds, no error is raised, the
-  // route never reaches the map. Nothing else in this file can catch that — every classifier test above
-  // feeds a hand-built response and would stay green. Asserted as "present AND not disabled" so BOTH
-  // ways of turning it off (deleting the field, or `{type:'disabled'}`) are red.
-  test('thinking stays ON, with reasoning withheld from rider-facing text (INV-8)', async () => {
+  // ⚠ INV-8. On Claude this pinned "thinking present AND not disabled", because with thinking off the
+  // model could write a tool call into VISIBLE TEXT — a silent wrong answer no classifier test can see.
+  // Gemini 3.8 has no "off", so what remains to pin is that a depth IS set (the production value, not an
+  // accidental default) and that thoughts are NEVER requested: rider-facing text must not carry reasoning.
+  test('thinking depth is set explicitly, and thoughts are never requested (INV-8)', async () => {
     lastStreamParams = null
-    await runPlannerTurn(baseArgs(fakeClient({ stop_reason: 'end_turn', content: [textBlock('hi')] })))
-    const params = lastCallParams()
+    await runPlannerTurn(baseArgs(fakeClient({ finish: 'STOP', parts: [textPart('hi')] })))
+    const thinking = lastCallParams().config?.thinkingConfig
+    expect(thinking?.thinkingLevel).toBe(ThinkingLevel.MEDIUM)
+    expect(thinking?.includeThoughts).not.toBe(true)
+  })
 
-    expect(params.thinking).toBeDefined()
-    expect(params.thinking?.type).not.toBe('disabled')
-    // Stated rather than defaulted: rider-facing prose must never carry reasoning, and the SDK's own
-    // docstring claims a 'summarized' default that is stale for this model.
-    expect(params.thinking?.display).toBe('omitted')
+  test('the effort seam maps onto thinking depth, one value per run', async () => {
+    lastStreamParams = null
+    await runPlannerTurn({ ...baseArgs(fakeClient({ finish: 'STOP', parts: [textPart('hi')] })), effort: 'low' })
+    expect(lastCallParams().config?.thinkingConfig?.thinkingLevel).toBe(ThinkingLevel.LOW)
+  })
+
+  // VALIDATED lets the model talk OR call (a forced call would invent route fields on a chat turn) and,
+  // unlike AUTO, enforces the schema and its required fields — `say` among them, which the wordless-draw
+  // fix depends on. The declaration must be the prompt module's tool verbatim (INV-10: it is prompt surface).
+  test('the route function is offered in VALIDATED mode, declared verbatim from the prompt module', async () => {
+    lastStreamParams = null
+    await runPlannerTurn(baseArgs(fakeClient({ finish: 'STOP', parts: [textPart('hi')] })))
+    const config = lastCallParams().config
+    expect(config?.toolConfig?.functionCallingConfig?.mode).toBe(FunctionCallingConfigMode.VALIDATED)
+    const decl = config?.tools?.[0]?.functionDeclarations?.[0]
+    expect(decl?.name).toBe(PLAN_ROUTE_TOOL.name)
+    expect(decl?.parametersJsonSchema).toBe(PLAN_ROUTE_TOOL.parameters)
   })
 })
 
@@ -520,11 +604,17 @@ function costLine(spy: { mock: { calls: unknown[][] } }): Record<string, unknown
 }
 
 describe('the plan_spend cost line', () => {
+  // ⚠ The rate below is Gemini 3.8 Flash's INTRODUCTORY one, which PRICE_CHANGES doubles on a published
+  // date. Pinning the clock keeps this test about the line's arithmetic instead of about today's date —
+  // a hard-coded rate plus a live clock is a test that goes red on New Year's Day for no reason.
+  beforeEach(() => setSystemTime(new Date('2026-09-23T12:00:00Z')))
+  afterEach(() => setSystemTime())
+
   test('a served turn emits ONE line of JSON carrying both model names', async () => {
     const info = spyOn(console, 'info')
     let line: Record<string, unknown>
     try {
-      await runPlannerTurn(baseArgs(fakeClient({ stop_reason: 'end_turn', content: [textBlock('hi')] })))
+      await runPlannerTurn(baseArgs(fakeClient({ finish: 'STOP', parts: [textPart('hi')] })))
       line = costLine(info) // ⚠ read BEFORE mockRestore, which clears .mock.calls
     } finally {
       info.mockRestore()
@@ -538,26 +628,29 @@ describe('the plan_spend cost line', () => {
     expect(line.outcome).toBe('served')
     expect(line.severity).toBe('INFO')
 
-    // ⚠ TWO FIELDS, TWO MEANINGS. `model` is the PRICING key — the alias MODEL_PRICING and the tally are
-    // both keyed on — and `served_by` is the vendor's echo, which may resolve to a longer id. Pricing
-    // the echo tallies $0 under a second, unpriced key, and the drift guard cannot catch it because it
-    // only validates the ids we REQUEST. The inequality is the assertion that keeps them separate.
-    expect(line.model).toBe(CLAUDE_MODELS.planner)
-    expect(line.served_by).toBe('claude-opus-5-99991231')
+    // ⚠ TWO FIELDS, TWO MEANINGS. `model` is the PRICING key — the id MODEL_PRICING and the tally are
+    // both keyed on — and `served_by` is the vendor's echo, which may differ. Pricing the echo tallies $0
+    // under a second, unpriced key, and the drift guard cannot catch it because it only validates the ids
+    // we REQUEST. The inequality is the assertion that keeps them separate.
+    expect(line.model).toBe(LLM_MODELS.planner)
+    expect(line.served_by).toBe('gemini-3.8-flash-001')
     expect(line.model).not.toBe(line.served_by)
 
-    expect(line.stop_reason).toBe('end_turn')
+    expect(line.stop_reason).toBe('STOP')
+    expect(line.usage_reported).toBe(true)
     expect(line.in).toBe(10)
+    // Thinking bills as output: 3 visible + 2 thinking.
     expect(line.out).toBe(5)
+    expect(line.thinking).toBe(2)
 
     // ⚠ A JSON NUMBER, NOT `"$0.000175"`. A distribution metric reads an already-numeric jsonPayload
     // field with no extractor regex; a currency-prefixed string needs one, and that regex starts
     // matching nothing the day someone tidies the prefix — the metric goes quiet, not red.
     expect(typeof line.usd).toBe('number')
-    // 10 in × $5.50/MTok + 5 out × $27.50/MTok — the `us.` Bedrock profile's rate (list +10%). Hard-coded
-    // rather than read off MODEL_PRICING so a repriced planner row is a red test here, not a silent shift.
-    // The line rounds to 6 decimals (micro-dollars), so compare at that precision: $0.0001925 → 0.000193.
-    expect(line.usd).toBe(Math.round((10 * 5.5e-6 + 5 * 27.5e-6) * 1e6) / 1e6)
+    // 10 in × $0.825/MTok + 5 out × $4.125/MTok — Gemini 3.8 Flash on the `us` multi-region (the
+    // non-global rate, +10%). Hard-coded rather than read off MODEL_PRICING so a repriced planner row is a
+    // red test here, not a silent shift. The line rounds to 6 decimals (micro-dollars).
+    expect(line.usd).toBe(Math.round((10 * 0.825e-6 + 5 * 4.125e-6) * 1e6) / 1e6)
   })
 
   // ⚠ INV-13, AND THIS IS THE FILE'S ONLY PROOF OF IT. Every field on the line is meant to be a count,
@@ -570,7 +663,7 @@ describe('the plan_spend cost line', () => {
     let raw = ''
     try {
       await runPlannerTurn({
-        ...baseArgs(fakeClient({ stop_reason: 'end_turn', content: [textBlock(SAY)] })),
+        ...baseArgs(fakeClient({ finish: 'STOP', parts: [textPart(SAY)] })),
         turns: [{ role: 'rider', text: RIDER }],
       })
       raw = info.mock.calls.flat().map(String).join('\n')
@@ -597,8 +690,8 @@ describe('rider cancellation', () => {
   function countingClient(streamImpl: () => unknown) {
     const calls = { n: 0 }
     const client = {
-      messages: {
-        stream: () => {
+      models: {
+        generateContentStream: async () => {
           calls.n++
           return streamImpl()
         },
@@ -606,6 +699,10 @@ describe('rider cancellation', () => {
     } as unknown as NonNullable<PlannerModelArgs['client']>
     return { client, calls }
   }
+
+  /** What the SDK throws when its fetch is aborted — for the rider, for our deadline, and for its own
+   *  per-attempt timeout alike: a bare `controller.abort()`, so a reason-less AbortError. */
+  const abortError = () => new DOMException('This operation was aborted', 'AbortError')
 
   // ⚠ THE "SPEND NOTHING" GUARANTEE, and the only test that proves it. The rider can hang up while the
   // region + anchor reads are still in flight; opening the model call at that point bills for a turn
@@ -623,23 +720,19 @@ describe('rider cancellation', () => {
     expect(calls.n).toBe(0)
   })
 
-  // The turn WAS billed — `message_start` landed, output accumulated — and then the rider left. That
-  // spend has to reach the tally, and it has to be logged as a cancellation rather than an outage.
-  test('a rider who leaves mid-stream is client_gone, and the partial spend is salvaged', async () => {
+  // The turn reported usage and then the rider left. That spend has to reach the tally, and it has to be
+  // logged as a cancellation rather than an outage.
+  test('a rider who leaves mid-stream is client_gone, and reported spend is salvaged', async () => {
     const ac = new AbortController()
-    const { client } = countingClient(() => {
-      // Abort AFTER the call is open, which is the real sequence: the composite signal is built first,
-      // then the request goes out, then the rider hits back.
-      ac.abort()
-      return {
-        on() {},
-        request_id: 'req_test',
-        currentMessage: { usage: { input_tokens: 10, output_tokens: 3 } },
-        finalMessage: async () => {
-          throw new Anthropic.APIUserAbortError()
-        },
-      }
-    })
+    const { client } = countingClient(() =>
+      (async function* () {
+        yield { candidates: [{ content: { role: 'model', parts: [{ text: 'Well now' }] } }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 3 } }
+        // Abort AFTER the call is open, which is the real sequence: the composite signal is built first,
+        // then the request goes out, then the rider hits back.
+        ac.abort()
+        throw abortError()
+      })(),
+    )
 
     const info = spyOn(console, 'info')
     const errSpy = spyOn(console, 'error')
@@ -662,15 +755,15 @@ describe('rider cancellation', () => {
     // Same event as a served turn, so a spend total is a SUM over one `evt` rather than a union of
     // three greps — which is exactly what a cancellation logged under its own wording used to force.
     expect(line.evt).toBe('plan_spend')
-    // The spend reached the line: `message_start` landed, output accumulated, then the rider left.
+    // The reported spend reached the line.
+    expect(line.usage_reported).toBe(true)
     expect(line.out).toBe(3)
     expect(typeof line.usd).toBe('number')
 
-    // ⚠ A RIDER CLOSING THE APP IS NOT AN OUTAGE, and this is the assertion that says so. It used to
-    // read `expect(logged).not.toContain('failed')`; the rule did not change when the format did, only
-    // where it is written down. An operator alerts on the failure bucket — by `outcome` and by the
-    // severity Cloud Logging lifts out of the payload — so a cancellation filed there is how a
-    // perfectly healthy service looks like it is on fire the day the app gets popular.
+    // ⚠ A RIDER CLOSING THE APP IS NOT AN OUTAGE, and this is the assertion that says so. An operator
+    // alerts on the failure bucket — by `outcome` and by the severity Cloud Logging lifts out of the
+    // payload — so a cancellation filed there is how a perfectly healthy service looks like it is on
+    // fire the day the app gets popular.
     expect(line.outcome).toBe('cancelled')
     expect(line.outcome).not.toBe('failed')
     expect(line.severity).toBe('INFO')
@@ -678,17 +771,39 @@ describe('rider cancellation', () => {
     expect(errCount).toBe(0)
   })
 
+  // ⚠ THE COMMON CASE ON GEMINI: usage arrives on the FINAL chunk only, so a turn cut off mid-stream has
+  // no counts to salvage. The line must say "unknown", never let zeros read as a free turn.
+  test('a cancellation with no reported usage is logged as unreported, not as free', async () => {
+    const ac = new AbortController()
+    const { client } = countingClient(() =>
+      (async function* () {
+        yield { candidates: [{ content: { role: 'model', parts: [{ text: 'Well now' }] } }], usageMetadata: { trafficType: 'ON_DEMAND' } }
+        ac.abort()
+        throw abortError()
+      })(),
+    )
+    const info = spyOn(console, 'info')
+    let line: Record<string, unknown> = {}
+    try {
+      await runPlannerTurn({ ...baseArgs(client), signal: ac.signal }).catch(() => null)
+      line = costLine(info)
+    } finally {
+      info.mockRestore()
+    }
+    expect(line.outcome).toBe('cancelled')
+    expect(line.usage_reported).toBe(false)
+    expect(line.usd).toBe(0)
+  })
+
   // ⚠ REGRESSION GUARD. Without this, the branch above can quietly swallow the REAL timeout path —
   // the two are told apart only by asking the rider's own signal whether it aborted.
   test('a genuine vendor timeout is still a timeout when the rider is still there', async () => {
-    const { client } = countingClient(() => ({
-      on() {},
-      request_id: 'req_test',
-      currentMessage: { usage: { input_tokens: 10, output_tokens: 3 } },
-      finalMessage: async () => {
-        throw new Anthropic.APIConnectionTimeoutError()
-      },
-    }))
+    const { client } = countingClient(() =>
+      (async function* () {
+        yield { candidates: [{ content: { role: 'model', parts: [{ text: 'Well' }] } }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 3 } }
+        throw abortError()
+      })(),
+    )
 
     const errSpy = spyOn(console, 'error')
     let err: unknown
@@ -712,8 +827,34 @@ describe('rider cancellation', () => {
     // which is the half that local log tails and this spy read.
     expect(line.severity).toBe('ERROR')
 
-    // The salvage applies here too: a turn that dies after message_start was billed for what it made.
+    // The salvage applies here too: a turn that reported usage before dying was billed for it.
     expect(line.out).toBe(3)
+  })
+
+  // ⚠ INV-13 on the failure path. `ApiError.message` IS the raw response body, JSON-stringified — it can
+  // quote the offending request field, i.e. rider text. Only the status and OUR class for it may land.
+  test('a vendor HTTP error logs its status class and never its body', async () => {
+    const LEAK = 'zqx-body-quoting-rider-text'
+    const { client } = countingClient(() => {
+      throw new ApiError({ message: JSON.stringify({ error: { message: LEAK } }), status: 429 })
+    })
+    const errSpy = spyOn(console, 'error')
+    let err: unknown
+    let raw = ''
+    let line: Record<string, unknown> = {}
+    try {
+      err = await runPlannerTurn(baseArgs(client)).catch((e: unknown) => e)
+      raw = errSpy.mock.calls.flat().map(String).join('\n')
+      line = costLine(errSpy)
+    } finally {
+      errSpy.mockRestore()
+    }
+    expect((err as PlannerTurnError).reason).toBe('upstream')
+    expect(line.err).toBe('rate_limited')
+    expect(line.status).toBe(429)
+    expect(line.usage_reported).toBe(false)
+    expect(raw).not.toContain(LEAK)
+    expect((err as Error).message).not.toContain(LEAK)
   })
 })
 
@@ -751,52 +892,53 @@ describe('transcript caps (INV-3)', () => {
 /* -------------------------------------------------------------------------- */
 
 // ⚠ THE FAILURE HERE IS INVISIBLE, exactly like planner-roster.test.ts's. The notice is volatile — it
-// appears only on the tail of a long conversation — so if it were ever rendered BEFORE the cache
-// breakpoint, or spliced into the prompt or the roster, the cached prefix would change on precisely the
-// turns it shows up. Every response stays byte-identical, every other test stays green, and the only
-// tell is `cr=0` in the cost line and the invoice. On an anonymous route that spends forever (INV-11),
-// that is the expensive kind of silence — so the ORDER is asserted, not just the presence.
-describe('D12: the wrap-up notice renders after the cache breakpoint', () => {
-  const say = { stop_reason: 'end_turn', content: [textBlock('Where are you starting?')] }
+// appears only on the tail of a long conversation — so if it were ever rendered BEFORE the stable prefix
+// ends, or spliced into the prompt or the roster, the prefix would change on precisely the turns it shows
+// up. Every response stays byte-identical, every other test stays green, and the only tell is
+// `cache_read: 0` in the cost line and the invoice. On an anonymous route that spends forever (INV-11),
+// that is the expensive kind of silence — so the ORDER is asserted, not just the presence. (Gemini's
+// cache is implicit — a common request PREFIX, no breakpoints — so order is the whole of the property.)
+describe('D12: the wrap-up notice renders after the stable prefix', () => {
+  const say = { finish: 'STOP', parts: [textPart('Where are you starting?')] }
+  const parts = () => lastCallParams().config?.systemInstruction?.parts ?? []
 
-  test('without a notice there are two blocks, and the LAST one carries the breakpoint', async () => {
+  test('without a notice there are two parts: the prompt, then the roster', async () => {
     lastStreamParams = null
     await runPlannerTurn(baseArgs(fakeClient(say)))
-    const system = lastCallParams().system ?? []
+    const system = parts()
     expect(system.length).toBe(2)
     expect(system[0]?.text).toBe(PLANNER_SYSTEM_PROMPT)
-    expect(system[0]?.cache_control).toBeUndefined()
-    expect(system[1]?.cache_control).toEqual({ type: 'ephemeral' })
+    expect(String(system[1]?.text)).toContain('Tahoe City')
   })
 
-  test('with a notice it is a THIRD block, after the breakpoint and uncached', async () => {
+  test('with a notice it is a THIRD part, after the stable prefix', async () => {
+    lastStreamParams = null
+    await runPlannerTurn(baseArgs(fakeClient(say)))
+    const plain = parts().map((p) => p.text)
     lastStreamParams = null
     await runPlannerTurn({ ...baseArgs(fakeClient(say)), wrapUpNotice: PLANNER_WRAP_UP_NOTICE })
-    const system = lastCallParams().system ?? []
+    const system = parts()
     expect(system.length).toBe(3)
 
-    // The prefix is UNCHANGED — the two blocks a normal turn sends are byte-identical here. This is the
+    // The prefix is UNCHANGED — the two parts a normal turn sends are byte-identical here. This is the
     // assertion that actually costs money to break: it is what makes the notice free of cache impact.
-    expect(system[0]?.text).toBe(PLANNER_SYSTEM_PROMPT)
-    expect(system[1]?.cache_control).toEqual({ type: 'ephemeral' })
+    expect(system.slice(0, 2).map((p) => p.text)).toEqual(plain)
 
-    // ...and the volatile block is LAST, and carries no breakpoint of its own (a second breakpoint on a
-    // per-turn-varying block is the same bug wearing a different hat).
+    // ...and the volatile part is LAST.
     expect(system[2]?.text).toBe(PLANNER_WRAP_UP_NOTICE)
-    expect(system[2]?.cache_control).toBeUndefined()
   })
 
   // ⚠ Guards the OTHER direction of the same mistake: interpolating the notice into the prompt or the
-  // roster instead of appending a block. That would satisfy "the model was told" while destroying the
-  // prefix, so presence alone is not enough — the first two blocks must not CONTAIN it either.
+  // roster instead of appending a part. That would satisfy "the model was told" while destroying the
+  // prefix, so presence alone is not enough — the first two parts must not CONTAIN it either.
   // ⚠ THE CANARY CANNOT BE "near its end". That phrase is SHARED: the prompt's `== Wrapping up ==`
   // section says "or you are told the conversation is near its end", which is the listener half of the
   // coupling the notice's opening line completes. An earlier draft of this test asserted on it and went
   // red against correct code. Assert on the whole notice, plus a fragment only the notice has.
-  test('the notice is never spliced into the cached prefix', async () => {
+  test('the notice is never spliced into the stable prefix', async () => {
     lastStreamParams = null
     await runPlannerTurn({ ...baseArgs(fakeClient(say)), wrapUpNotice: PLANNER_WRAP_UP_NOTICE })
-    const system = lastCallParams().system ?? []
+    const system = parts()
     for (const block of [system[0], system[1]]) {
       expect(String(block?.text)).not.toContain(PLANNER_WRAP_UP_NOTICE)
       expect(String(block?.text)).not.toContain('there was a clock')

@@ -384,7 +384,7 @@ function BboxLookup({ defaultQuery, onUse }: { defaultQuery: string; onUse: (bbo
   // Seed q from the display name — but ONLY until the operator touches the lookup field.
   // ⚠ Keyed on `rounds.length === 0` this re-fired on every keystroke in the Display-name input, so
   // anything typed into the lookup box was silently overwritten the moment that field was edited —
-  // and the next click spends a real Opus call on whatever query survived, with no cue that it
+  // and the next click spends a real model call on whatever query survived, with no cue that it
   // changed. `touched` is the honest guard: the operator's own text always wins.
   const [queryTouched, setQueryTouched] = useState(false)
   useEffect(() => {

@@ -228,11 +228,14 @@ async function main(): Promise<void> {
   }
 
   // ⚠ COST CEILING ABOVE THE GATING LOOP, like the fused path and unlike the poi one. A scored run
-  // spends on narration + the Opus grounding judge before any TTS, so a cap first checked inside the
+  // spends on narration + the model grounding judge before any TTS, so a cap first checked inside the
   // synthesis loop would bound nothing that had not already been billed.
   // ⚠ The TTS dummy must carry real WORDS — estimateTtsUsd derives audio tokens from the word count,
   // so a space-less blob reads as ONE word and collapses the estimate ~100×.
-  const llmUsdPerClip = GROUNDING_EVAL() ? 0.05 : 0.03
+  // Re-derived for Gemini 3.8 Flash (2026-09-23): narration runs at HIGH thinking even for a short
+  // call-out (~$0.07 measured on a thin story sheet), so the estimate errs high — the safe direction for a
+  // pre-spend cap.
+  const llmUsdPerClip = GROUNDING_EVAL() ? 0.1 : 0.08
   const ttsPreEst = estimateTtsUsd(
     picked.map(() => Array(Math.round(SCENIC_TARGET_SECONDS * WORDS_PER_SECOND)).fill('word').join(' ')),
     persona.ttsStyle.length,

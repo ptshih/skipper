@@ -19,7 +19,7 @@ import { PLANNER_SYSTEM_PROMPT } from '../src/planner-prompt'
 // had just been fixed for as CLEAN, on a run that spends real money to produce that score. A counter
 // blind to what its guard catches is worse than no counter.
 // ⚠ ../src/tool-call-leak imports NOTHING, which is what keeps this half runnable with no network, no
-// key and no spend — importing ../src/plan-route for the same constant would drag in the Anthropic SDK
+// key and no spend — importing ../src/plan-route for the same constant would drag in the model SDK
 // and @skipper/db and break exactly the property ../test/planner-eval.test.ts exists to protect.
 import { LEAKED_TOOL_CALL } from '../src/tool-call-leak'
 import type { PlannerDimension, ScenarioTurn, TurnEval, TurnOutcome } from './types'

@@ -19,15 +19,23 @@
 // The model call + the fetchers are INJECTED so the loop is unit-tested with zero network and zero
 // spend (fact-sheet-builder.test.ts).
 
-import Anthropic from '@anthropic-ai/sdk'
+import { FunctionCallingConfigMode, ThinkingLevel, type Content, type GenerateContentResponse, type Part } from '@google/genai'
 import type { AttributionSnapshot, FactSheetEntry } from '@skipper/db/schema'
 import {
   ENRICH_MAX_TOKENS,
   ENRICH_MAX_TOOL_TURNS,
   ENRICH_FACT_SHEET_TARGET_SPANS,
 } from '../config'
-import { ENRICH_MODELS, getAnthropic } from '../models'
-import { recordModelUsage } from '@skipper/shared'
+import { ENRICH_MODELS, getGemini } from '../models'
+import { geminiUsage, recordModelUsage } from '@skipper/shared'
+import { finishReason, replyParts, type ToolParameters } from './tool-call'
+
+/** A function the builder may offer — a Gemini function declaration's fields, schema as JSON Schema. */
+export interface ScoutTool {
+  name: string
+  description: string
+  parameters: ToolParameters
+}
 
 /** A sourced fact bundle exactly as a fetcher returned it (facts verbatim + provenance). */
 export interface SourcedFacts {
@@ -35,35 +43,39 @@ export interface SourcedFacts {
   attribution: AttributionSnapshot
 }
 
-const TOOL_WIKIDATA: Anthropic.Tool = {
+const TOOL_WIKIDATA: ScoutTool = {
   name: 'fetch_wikidata',
   description:
     "Fetch this place's discrete verified facts (inception, elevation, named-after, heritage designation) from Wikidata.",
-  input_schema: { type: 'object', properties: {}, additionalProperties: false },
+  parameters: { type: 'object', properties: {}, additionalProperties: false },
 }
 
-/** One model turn — injectable for tests (the real one is an ENRICH-tier, Sonnet by default, messages.create). */
-export type ScoutModelCall = (params: {
-  system: string
-  tools: Anthropic.Tool[]
-  messages: Anthropic.MessageParam[]
-}) => Promise<Anthropic.Message>
+/** The slice of a Gemini reply the loop reads. */
+export type ScoutReply = Pick<GenerateContentResponse, 'candidates' | 'usageMetadata'>
+
+/** One model turn — injectable for tests (the real one is an ENRICH-tier generateContent). */
+export type ScoutModelCall = (params: { system: string; tools: ScoutTool[]; contents: Content[] }) => Promise<ScoutReply>
 
 /** A model-call factory: binds a model id + token cap into a ScoutModelCall. The corpus fact-sheet
- *  builder passes the operator-chosen ENRICH model (Sonnet by default). It forces tool_choice
- *  {type:'any'} so every turn acts (fetch or finalize) — no free prose. recordModelUsage tallies
- *  real calls only (test fakes don't). */
+ *  builder passes the operator-chosen ENRICH model. It forces function calling (`mode: ANY`, no name
+ *  narrowing) so every turn acts (fetch or finalize) — no free prose. recordModelUsage tallies real
+ *  calls only (test fakes don't). */
 export function makeScoutCall(model: string, maxTokens: number): ScoutModelCall {
-  return async ({ system, tools, messages }) => {
-    const response = await getAnthropic('the enrichment scout needs it').messages.create({
+  return async ({ system, tools, contents }) => {
+    const response = await getGemini('the enrichment scout needs it').models.generateContent({
       model,
-      max_tokens: maxTokens,
-      system,
-      tools,
-      tool_choice: { type: 'any' },
-      messages,
+      contents,
+      config: {
+        systemInstruction: system,
+        maxOutputTokens: maxTokens,
+        // LOW: picking span ids off a numbered list is selection, not synthesis, and this runs
+        // corpus-scale. The old tier (Sonnet) ran it with no thinking at all.
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        tools: [{ functionDeclarations: tools.map((t) => ({ name: t.name, description: t.description, parametersJsonSchema: t.parameters })) }],
+        toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.ANY } },
+      },
     })
-    recordModelUsage(model, response.usage)
+    recordModelUsage(model, geminiUsage(response.usageMetadata))
     return response
   }
 }
@@ -128,17 +140,17 @@ How to judge:
 
 Always END by calling finalize_fact_sheet with the kept span ids and a one-sentence reason. Never include what you did not fetch.`
 
-const TOOL_ENRICH_GEOLOGY: Anthropic.Tool = {
+const TOOL_ENRICH_GEOLOGY: ScoutTool = {
   name: 'fetch_geology',
   description:
     'Fetch the sourced bedrock facts (lithology + age) for this place (its centroid) from geologic maps.',
-  input_schema: { type: 'object', properties: {}, additionalProperties: false },
+  parameters: { type: 'object', properties: {}, additionalProperties: false },
 }
 
-const TOOL_FINALIZE_SHEET: Anthropic.Tool = {
+const TOOL_FINALIZE_SHEET: ScoutTool = {
   name: 'finalize_fact_sheet',
   description: 'Commit the curated fact sheet for this place. Always call this last.',
-  input_schema: {
+  parameters: {
     type: 'object',
     properties: {
       keepSpanIds: {
@@ -188,29 +200,31 @@ export async function buildCorpusFactSheet(
 ): Promise<EnrichResult | null> {
   if (input.spans.length === 0) return null
   const call = opts.call ?? makeScoutCall(opts.model ?? ENRICH_MODELS.sonnet, ENRICH_MAX_TOKENS)
-  const offered: Anthropic.Tool[] = [
+  const offered: ScoutTool[] = [
     ...(tools.geologyAt ? [TOOL_ENRICH_GEOLOGY] : []),
     ...(tools.wikidataFacts ? [TOOL_WIKIDATA] : []),
     TOOL_FINALIZE_SHEET,
   ]
 
   const fetched = new Map<string, SourcedFacts | null>()
-  const messages: Anthropic.MessageParam[] = [{ role: 'user', content: buildEnrichMessage(input) }]
+  const contents: Content[] = [{ role: 'user', parts: [{ text: buildEnrichMessage(input) }] }]
   let toolCalls = 0
   const usage = { inputTokens: 0, outputTokens: 0 }
 
   for (let turn = 0; turn < ENRICH_MAX_TOOL_TURNS; turn++) {
-    const response = await call({ system: ENRICH_SYSTEM, tools: offered, messages })
-    usage.inputTokens += response.usage.input_tokens
-    usage.outputTokens += response.usage.output_tokens
+    const response = await call({ system: ENRICH_SYSTEM, tools: offered, contents })
+    // Priced the way the tally prices it (thinking is output; cached input still counts as input).
+    const turnUsage = geminiUsage(response.usageMetadata)
+    usage.inputTokens += turnUsage.input_tokens + (turnUsage.cache_read_input_tokens ?? 0)
+    usage.outputTokens += turnUsage.output_tokens
     // A token-cap truncation can leave a PARTIAL finalize — treat it as the designed cap-failure
     // (no sheet, retryable) rather than acting on a half-written span list.
-    if (response.stop_reason === 'max_tokens') return null
-    const calls = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
+    if (finishReason(response) === 'MAX_TOKENS') return null
+    const calls = replyParts(response).flatMap((p) => (p.functionCall ? [p.functionCall] : []))
     if (calls.length === 0) return null // text-only / refusal — no sheet
 
     // Dispatch fetches first so a finalize batched in the same turn sees the bundles land.
-    const results: Anthropic.ToolResultBlockParam[] = []
+    const results: Part[] = []
     for (const c of calls) {
       if (c.name !== 'fetch_geology' && c.name !== 'fetch_wikidata') continue
       toolCalls++
@@ -219,16 +233,19 @@ export async function buildCorpusFactSheet(
       if (c.name === 'fetch_geology' && tools.geologyAt) bundle = await tools.geologyAt().catch(() => null)
       if (c.name === 'fetch_wikidata' && tools.wikidataFacts) bundle = await tools.wikidataFacts().catch(() => null)
       if (bundle || !fetched.get(key)) fetched.set(key, bundle)
+      // ⚠ One response per call, carrying the call's OWN id and name — Gemini 3 validates the match.
       results.push({
-        type: 'tool_result',
-        tool_use_id: c.id,
-        content: bundle ? bundle.facts.map((f) => `- ${f}`).join('\n') : '(nothing found for this place)',
+        functionResponse: {
+          id: c.id,
+          name: c.name,
+          response: { output: bundle ? bundle.facts.map((f) => `- ${f}`).join('\n') : '(nothing found for this place)' },
+        },
       })
     }
 
     const finalize = calls.find((c) => c.name === 'finalize_fact_sheet')
     if (finalize) {
-      const f = finalize.input as {
+      const f = (finalize.args ?? {}) as {
         keepSpanIds?: number[]
         includeGeology?: boolean
         includeWikidata?: boolean
@@ -283,7 +300,11 @@ export async function buildCorpusFactSheet(
       }
     }
 
-    messages.push({ role: 'assistant', content: response.content }, { role: 'user', content: results })
+    // ⚠ The model's turn goes back VERBATIM — never rebuilt from `calls`. Its parts carry the thought
+    // signature Gemini 3 requires on the next request (a stripped one is a 400, probed 2026-09-23).
+    const modelTurn = response.candidates?.[0]?.content
+    if (!modelTurn) return null
+    contents.push(modelTurn, { role: 'user', parts: results })
   }
 
   return null // turn cap without a finalize — no sheet (retryable)

@@ -10,7 +10,7 @@
 // So the guarantee is asserted as EXACT STRING EQUALITY under permutation, not as "the same anchors
 // come back". Anything weaker passes on the bug.
 //
-// ⚠ NO SECRET, NO DB, NO NETWORK. ../src/planner quarantines the Anthropic SDK but constructs its
+// ⚠ NO SECRET, NO DB, NO NETWORK. ../src/planner quarantines the model SDK but constructs its
 // client LAZILY (stated at that module's `plannerClient`), so importing it costs nothing and reaches
 // neither ./auth nor @skipper/db. If this file ever starts needing an env seed, that laziness
 // regressed and THAT is the bug.

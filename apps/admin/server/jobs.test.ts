@@ -31,7 +31,7 @@ describe('buildJobArgs — enrich_pois (the corpus enrich op)', () => {
     expect(r.targetId).toBe('region-corpus')
   })
 
-  test('--apply SPENDS (Anthropic) → confirm gate', () => {
+  test('--apply SPENDS (model tokens) → confirm gate', () => {
     const r = buildJobArgs({ kind: 'enrich_pois', region: 'lake-tahoe', apply: true })
     expect(r.dryRun).toBe(false)
     expect(r.spends).toBe(true)

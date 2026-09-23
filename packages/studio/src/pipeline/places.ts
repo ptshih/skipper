@@ -47,7 +47,7 @@ const BREAK_CATEGORIES: { textQuery: string; includedType: string }[] = [
  * the final 5xx Response rather than throwing, while Google's edge answers gateway failures with
  * HTML. So a Places outage surfaced as `SyntaxError: Unexpected token '<'`, the `!res.ok` branch that
  * would have named the status never ran, and an operator reading a PAID `curate-places --apply` log
- * (the Anthropic draft call is already billed by the time we get here) could not tell a transient 503
+ * (the model draft call is already billed by the time we get here) could not tell a transient 503
  * from a disabled Places API or a bad key. Text-first + a guarded JSON.parse keeps the status.
  * (Same shape, same reason as `wiki<T>()` in wikipedia.ts.)
  */

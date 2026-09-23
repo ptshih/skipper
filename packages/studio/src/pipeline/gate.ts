@@ -24,7 +24,7 @@
 // proven the two copies agreed.
 
 import { GROUNDING_EVAL, GROUNDING_REGEN_MAX_ROUNDS } from '../config'
-import { getAnthropic } from '../models'
+import { getGemini } from '../models'
 import { narrateStop, type NarrationRequest } from './narrate'
 import { evaluateGrounding } from '../eval/grounding'
 import { evaluateTts } from '../eval/tts'
@@ -61,7 +61,7 @@ export interface GateNarrationInput {
 export interface GateNarrationDeps {
   narrate?: typeof narrateStop
   judgeGrounding?: typeof evaluateGrounding
-  /** Whether to spend the one Opus grounding call. Defaults to the SKIPPER_GROUNDING_EVAL knob. */
+  /** Whether to spend the grounding-judge call. Defaults to the SKIPPER_GROUNDING_EVAL knob. */
   groundingEnabled?: () => boolean
   excise?: typeof exciseUngrounded
   maxRounds?: number
@@ -79,7 +79,7 @@ export interface GatedNarration {
  * Narrate one clip and run it through the panel until it stops improving.
  *
  * The panel is: tts-cleanliness + diversity + laterality + pacing (all free), plus GROUNDING (one
- * Opus call) when enabled. Diversity is scored against the REST of the region rather than against the
+ * model call) when enabled. Diversity is scored against the REST of the region rather than against the
  * clip alone — a single-element diversity check is a no-op by arithmetic, which is how one geology
  * sentence reached 17 released Tahoe clips before anyone noticed.
  *
@@ -137,7 +137,7 @@ export async function gateNarration(
     return evals
   }
 
-  const exciseCall = makeExciseCall(() => getAnthropic('grounding excision'))
+  const exciseCall = makeExciseCall(() => getGemini('grounding excision'))
   const regenerate = async (avoid: string[], prev: string): Promise<string> => {
     // collectAvoid prefers a finding's detail. Laterality supplies an instruction there,
     // not the prefix used by the paid claim judge. Include it in the SAME repair or an

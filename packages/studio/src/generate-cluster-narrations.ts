@@ -359,7 +359,7 @@ async function main(): Promise<void> {
   // where the poi generator puts its equivalent. That difference is the whole point: a fused PREVIEW
   // narrates and scores (only persistence is gated), so narration money is spent before the preview
   // ever returns. Until this landed, --max-cost bounded nothing on this path but TTS: the first cap
-  // check was inside the synthesis loop, so a capped run paid for every narration and its Opus
+  // check was inside the synthesis loop, so a capped run paid for every narration and its model
   // grounding judge first, then discovered the ceiling.
   //
   // The TTS dummy clip must carry real WORDS — estimateTtsUsd derives audio tokens from the word

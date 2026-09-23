@@ -23,7 +23,7 @@ the closing paren is the item, unchanged: a headline clause first, then as much 
 ⚠ **A section heading and its preamble are SHARED context for every item under it** — read the preamble
 before acting on an item, and put a new item under the section whose preamble already applies to it.
 
-**next-id: 81.** Ids are never reused, so this counter — not the highest id in the file — is what
+**next-id: 84.** Ids are never reused, so this counter — not the highest id in the file — is what
 survives deleting the newest item. `/todo` takes the max of the two.
 
 > ♻ **Re-baselined 2026-08-03: 2006 → ~700 lines.** Every finished build log was deleted per the rule
@@ -37,8 +37,33 @@ survives deleting the newest item. `/todo` takes the max of the two.
 > geometry measurements). Everything else deleted was a duplicate of a comment, a test, or a doc that
 > already said it.
 
+## Gemini 3.8 Flash cutover — what the push owes (2026-09-23)
+
+Every model call moved from Opus 4.6 on Bedrock to Gemini 3.8 Flash on Vertex AI
+([docs/decisions/gemini-3-8-flash.md](docs/decisions/gemini-3-8-flash.md)). Built, tested, calibrated and
+probed live from a laptop; NOT pushed. Cloud Run authenticates by service account, so the order matters.
+
+- [ ] #81 (ops, high, founder, doing) **Push, THEN canary — the IAM grant is DONE.** `roles/aiplatform.user`
+      was granted to `skipper-api` and `skipper-admin` on 2026-09-23, before the push. Without it every
+      `POST /drives/plan` is a 403 — `plan_spend` logs `err: permission_denied` and every rider hears the
+      outage line. Canary: one real `POST /drives/plan` on prod and read its `plan_spend` line
+      (`model: gemini-3.8-flash`, `usage_reported: true`); delete this item when it is green.
+- [ ] #82 (ops, low, founder, blocked: #81) **Unset the dead model secrets after a green canary** —
+      `AWS_BEARER_TOKEN_BEDROCK`, `AWS_REGION`, `ANTHROPIC_API_KEY` in `.env.development` AND `.env.production`
+      (`dotenvx set --unset`). Read by nothing now; kept only so a `git revert` stays a one-step rollback.
+- [ ] #83 (corpus, med, paid, founder) **Ear-test narration at HIGH vs MEDIUM thinking before the next
+      regen.** Measured on one thin sheet: HIGH spent ~14k thinking tokens, 82–94 s and ~$0.07 a clip; MEDIUM
+      2.1k, 16 s, a comparably grounded script. HIGH is live (parity with Claude's high effort) and makes a
+      full-region regen ~5× slower. Generate a handful of clips both ways and listen; if MEDIUM holds, it is
+      the one-word change in `packages/studio/src/pipeline/narrate.ts` `runNarration`.
+
 ## Planner eval — TWO PAID RUNS 2026-08-04. Run 2 after the duration change: routing 0.96, 2/57 flagged
 
+> ⚠ **RUN 4 (2026-09-23, `$0.3414`) — GEMINI 3.8 FLASH, the current model**
+> ([docs/decisions/gemini-3-8-flash.md](docs/decisions/gemini-3-8-flash.md) § Re-measured). Routing 1.00,
+> voice 1.00, persona 0/59 flagged, judge 8/10 — ship; discipline 1/59 → GATE FAIL, on a correct
+> deflection ("I don't keep the mileage in my head") that trips the `mile` substring ban — two re-runs of
+> that scenario passed. `repeats` 23, `durations` 1 (the known noise shape). Runs 1–3 below are Claude.
 > ⚠ **RUN 3 (2026-09-17, `$0.5713`, 15 scenarios / 59 turns + judge) — ON A DIFFERENT MODEL: Opus 4.6 via
 > Amazon Bedrock, the provider switch recorded in
 > [docs/decisions/bedrock-opus-4-6.md](docs/decisions/bedrock-opus-4-6.md) (its "Re-measured" section has
@@ -204,134 +229,17 @@ ever need measuring, the panel has to go through the route, not around it.
 healthy** — `cache_read` ~6.9k on every turn after the first of each scenario, `cache_write` only on the
 first, so the roster prefix is intact and the `cache_read: 0` regression is not present.
 
-## Planner vs. Anthropic's current docs — external pass 2026-08-04 (free, read-only)
+## Planner vs. Anthropic's current docs — SUPERSEDED 2026-09-23 (the planner is on Gemini now)
 
-Checked `apps/api/src/planner.ts` against `platform.claude.com/docs` (adaptive-thinking, effort,
-structured-outputs, prompt-caching) rather than against memory, per CLAUDE.md's grounding rule. **Most of
-the config is right and is confirmed below so nobody re-checks it.**
-
-- [ ] #9 (api, med, paid) **⚠ TRAP — RAISING `effort` ON THE DRAW TURN WOULD BREAK THE PROMPT CACHE. Read this BEFORE acting
-      on the either/or defect above.** The obvious fix to a routing beat the model keeps getting wrong is
-      "raise effort just for that turn". It is a cost regression: *"**The resolved effort value is
-      rendered into the prompt**, so changing it between requests invalidates cache breakpoints"* — and
-      the docs' own worked example shows a `high` → `medium` switch taking `cache_read` from 3546 to
-      **0**. On this path that means re-billing the whole ~6.9k roster prefix at full rate on the most
-      expensive turn of the conversation, forever, anonymously (INV-11).
-      ⚠ Two corollaries worth keeping: *"pick a thinking configuration and an effort level per
-      conversation and keep them"*; and **`effort` must not become per-request** — the `effort?:` field on
-      `PlannerModelArgs` is an eval seam that passes ONE value for a whole run, which is why it is safe
-      there and would not be safe in the handler.
-      ✅ **The cache-safe lever is PER-MESSAGE STEERING**, which the docs name explicitly: thinking is
-      promptable from the user turn, and *"guidance appended to the newest user message leaves earlier
-      cache breakpoints intact, where a configuration or effort change does not"*. The documented phrase
-      to encourage it is *"This task involves multistep reasoning. Think carefully before responding."*
-      ⚠ *"Steering effectiveness can be sensitive to exact wording"* — so measure, and expect to iterate
-      on phrasing. A whole-run `--effort medium` arm is still the cheaper first measurement of whether
-      depth is what the either/or defect is missing; only the PER-TURN version is the trap.
-- [ ] #10 (api, low) **The `drawn` / wrap-up system blocks reset the SECOND cache breakpoint — and there is now a
-      first-class API for exactly this.** `planner.ts` appends them as system blocks 3/4, after the
-      breakpoint on block 2, on the reasoning that anything volatile ahead of the breakpoint re-bills the
-      prefix. That reasoning is **correct but incomplete**: the prefix does survive, and the transcript
-      tail does not. Render order is tools → system → messages, so changing system bytes changes the
-      prefix of every message after them.
-      ✅ **Confirmed in the paid run's own numbers, not argued.** The cached system prefix reads 6897
-      tokens every turn. In `draw-then-pleasantry`, `cache_read` runs 6897 → 6988 → **6897** → 7133 →
-      7161: the drop back to exactly the prefix figure lands on the first turn carrying `drawn`, with
-      `cache_write` spiking to 236. `return-to-earlier-plan` — which draws **twice** — shows exactly
-      **two** such drops. One reset per draw, every time.
-      **The fix is documented and needs no beta header on this model:** send them as
-      `{ role: 'system', content: … }` entries in `messages[]` instead of top-level `system` — *"Preserves
-      the cached history prefix and is the prompt-injection-safe operator channel."* Available on Claude
-      Opus 5 / Opus 4.8 / Fable 5 / Mythos 5; ⚠ **NOT on Sonnet 5**, so it is model-gated and an
-      unsupported model 400s (`role 'system' is not supported on this model`).
-      ⚠ Placement rules bite here: such a message *"must follow a `role: "user"` message… and must be
-      either the last entry in `messages` or be followed by an `assistant` turn"* — our transcript always
-      ends on the rider, so appending is legal, **but the tail cache breakpoint currently sits on that
-      last rider turn and would need to move.** Cost saved is small in absolute terms (a few hundred
-      tokens per draw); the reason to do it is that it is the sanctioned channel and it makes the second
-      breakpoint actually hold.
-- [ ] #11 (api, med) **`strict: true` on `PLAN_ROUTE_TOOL` — a real but PARTIAL win with a latency cost. Judgment call,
-      not a slam dunk.** Strict tool use is **GA on Claude Opus 5 with no beta header**. What it would
-      buy: **`say` becomes structurally required** — retiring `route_wordless` at the source rather than
-      backstopping it server-side — and field types plus `additionalProperties: false` stop being
-      promises. What it would NOT buy, so don't over-claim it: **`maxItems` is not enforced**,
-      **`minimum`/`maximum` are not enforced** (so `target_minutes` 20–480 stays advisory), and
-      `format: uuid` is a semantic hint rather than reliably grammar-enforced. It also does **nothing**
-      for the roster check — a well-formed UUID that is not on the allowlist still passes, which is why
-      the plan-time drop and INV-1 both still matter.
-      ⚠ **The cost is on the latency-sensitive path:** *"The first time you use a specific schema, there
-      is additional latency while the grammar compiles"*, cached **24 hours from last use** and
-      invalidated by any schema-structure or tool-set change. On a rider-facing conversational route that
-      is a periodic first-request stall, and `PLANNER_TIMEOUT_MS` has to absorb it.
-      Also unstated in the docs: compatibility with `tool_choice: auto` + `disable_parallel_tool_use`.
-      Nothing suggests a conflict, but it is inference — prove it on one call before shipping.
-- [ ] #74 (api, low) **The cache TTL is the bare 5-minute default, and the pass above never checked it — it audited
-      breakpoint PLACEMENT (#10) and legality, not DURATION.** `planner.ts` sends
-      `cache_control: { type: 'ephemeral' }` with no `ttl`, so an entry expires 5 minutes after its last read.
-      What it governs is the ~6.9k-token system prefix measured in #10 — and the part that makes this worth a
-      look is that the prefix is **byte-identical for every rider in a region**, so it is a SHARED asset across
-      conversations and riders, not a per-rider one.
-      ⚠ **Within one conversation there is nothing to win and nothing broken.** A cache read REFRESHES the TTL
-      and turns arrive seconds apart, so an active conversation already stays warm at 5 minutes. The only
-      question is the GAP BETWEEN conversations: at the default, a quiet stretch means the next rider in that
-      region pays a fresh 1.25× write of the whole prefix. `ttl: '1h'` costs 2× on write, 0.1× on read, and
-      would collapse that to one write per hour per region.
-      ⚠ **It can LOSE, which is why this is a query and not a change.** Break-even against N conversations per
-      hour per region: `1.25N = 2 + 0.1N` → **N ≈ 1.7**. Below that you have swapped a 1.25× write for a 2× one
-      and bought nothing. Pre-launch that is a live possibility, so do not "optimize" this on the argument alone.
-      ✅ **The deciding number is ALREADY BEING LOGGED — no spend, no instrumentation, no model call.**
-      `logPlanSpend` emits `cache_read` and `cache_write` per turn as queryable `jsonPayload` fields. Sum both
-      over a window in Cloud Logging: writes dominating ⇒ adopt the 1h TTL; reads dominating ⇒ close this item
-      and record the number so nobody re-derives it.
-      ⚠ **Do not read every `cache_write` spike as TTL expiry.** #10 proves each DRAW resets the second
-      breakpoint and spikes `cache_write` mid-conversation, and #9's effort-change trap does the same thing for
-      a different reason. Filter to the FIRST turn of each conversation or the answer is noise.
-      Related and SEPARATE: a `max_tokens: 0` pre-warm at Cloud Run instance boot is the documented way to kill
-      the cold-start write — but that is **a new billed model call on an autoscaled service (INV-11 ⇒ founder)**,
-      so only raise it if the query says writes dominate.
-
-✅ **Confirmed CORRECT against current docs — do not re-audit these:**
-  - `thinking: { type: 'adaptive', display: 'omitted' }` — right shape; `omitted` IS the Opus 5 default,
-    so stating it is belt-and-braces, and it keeps reasoning off rider-facing text (INV-8).
-  - **Thinking produced ZERO tokens on all 54 eval turns at `effort: 'low'`** ⚠ **— HISTORICAL as of
-    2026-08-04: production now runs `medium`, so a fresh zero would be a finding, not a confirmation.**
-    Kept because it is the baseline the change is measured against. It was EXPECTED at 'low' —
-    *"Claude minimizes thinking. Skips thinking for simple tasks where speed matters most."* Picking two
-    endpoints off a printed list is that task. `display: 'omitted'` does NOT suppress or unbill thinking
-    and `thinking_tokens` is populated under it, so the 0 is a TRUE zero. ⚠ When streaming, that
-    breakdown appears only on the final `message_delta` event — which is where this code reads it.
-    ⚠ **This does NOT explain the 2026-08-03 tool-call-as-text leak.** That failure mode is documented
-    against `thinking: {type: 'disabled'}`, which this code never sends; the docs are silent on whether
-    adaptive-choosing-zero shares it. Treat it as an OPEN question, not a cause. The real explanation was
-    already in the repo — `PLAN_ROUTE_TOOL`'s `say`-field-last note (leading the tool object with a long
-    prose field measurably produced 2–3 leaks per replay vs 0 with ids first). ⚠ **Do NOT spend on an
-    `--effort medium` arm to chase INV-8**; that question is answered. Effort is worth measuring for the
-    either/or defect's sake only.
-  - `tool_choice: { type: 'auto', disable_parallel_tool_use: true }` — documented as valid together.
-  - **Two cache breakpoints is legal** (max 4 per request), and the ~6.9k prefix clears Opus 5's **512**-
-    token minimum with room to spare — that minimum halved from Opus 4.8's 1024, so the code comment
-    naming 512 is current.
-  - **The 20-block cache lookback is not a hazard here.** A breakpoint walks back at most 20 content
-    blocks; our turns add exactly 2 messages, so the tail breakpoint always finds the previous one.
-    `MAX_PLAN_MESSAGES = 24` looks like it should trip this and does not — the window is the DISTANCE
-    between breakpoints, not the transcript length.
-  - **TS SDK `timeout` is milliseconds**, so `timeout: PLANNER_TIMEOUT_MS` (45_000) is 45s as intended —
-    the units differ per SDK (Python/Ruby take seconds) and this one is right.
-  - `maxRetries: 1` against the SDK default of 2, with the documented wall-clock consequence
-    (`timeout × (maxRetries + 1)`) already written down in `limits.ts`.
-  - ⚠ **`max_tokens` — THAT MOMENT ARRIVED: raised 2048 → 4096 on 2026-08-04** alongside
-    `PLANNER_EFFORT` 'low' → 'medium' (explicit founder call, both in one change — the pairing is the
-    whole point, and this bullet is what predicted it). The docs recommend ~64000 for streaming requests
-    and warn that `max_tokens` caps *thinking plus text*; the old ~10× headroom was measured in a regime
-    where thinking never engaged, so it was never really 10×. Visible `out` still peaks at 209, so the
-    doubling is all thinking headroom. ⚠ **Shipped UNMEASURED** — the eval arm was offered and declined —
-    so the watch item is real: filter `plan_spend` for `stop_reason: 'max_tokens'` (surfaces to the rider
-    as `truncated` → the retry line) and for a `thinking` jump, which is the latency cost landing. Both
-    fields are already logged; no instrumentation is owed.
-  - **`fallbacks` is available and deliberately NOT adopted.** A refusal is answered in persona
-    (`VOICE.refused`), and a fallback is a SECOND billed model call on an anonymous route — adopting it is
-    a founder spend decision under INV-11, not a hardening default. Recorded so the omission reads as a
-    choice.
+The 2026-08-04 pass audited `planner.ts` against `platform.claude.com/docs`. The provider moved to Gemini
+3.8 Flash ([docs/decisions/gemini-3-8-flash.md](docs/decisions/gemini-3-8-flash.md)), so its four items were
+closed rather than carried: **#11** (`strict: true` to make `say` structurally required) is DONE by other
+means — the planner now calls in `VALIDATED` mode, which enforces the schema and its required fields;
+**#9** (effort-change breaks the cache), **#10** (the `drawn`/wrap-up blocks reset the second breakpoint)
+and the **api #74** (the 5-minute cache TTL — not the mobile postcard item that shares the id) were Claude cache-breakpoint mechanics with no Gemini equivalent —
+Gemini's cache is implicit prefix matching, no breakpoints and no TTL to set. The full text is in git
+history at `65aab3f7:TODO.md`. What still transfers: watch `plan_spend` for `stop_reason: MAX_TOKENS`
+(the 4,096 cap now bounds Gemini thinking + output) and for `cache_read` staying 0 on a region.
 
 ## Virtualize the chat transcript (step 8) — NEEDS A FOUNDER GO, and not yet justified
 

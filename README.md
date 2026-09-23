@@ -6,7 +6,7 @@
 [![skipper.fm](https://img.shields.io/website?url=https%3A%2F%2Fskipper.fm&label=skipper.fm&up_message=live&color=1f5f45)](https://skipper.fm)
 [![iOS: Swift + SwiftUI](https://img.shields.io/badge/iOS-Swift%20%2B%20SwiftUI-F05138?logo=swift&logoColor=white)](apps/ios)
 [![Backend: Bun + Hono](https://img.shields.io/badge/backend-Bun%20%2B%20Hono-000000?logo=bun&logoColor=white)](apps/api)
-[![Narration: Claude](https://img.shields.io/badge/narration-Claude-D97757?logo=claude&logoColor=white)](packages/studio)
+[![Narration: Gemini](https://img.shields.io/badge/narration-Gemini-4285F4?logo=googlegemini&logoColor=white)](packages/studio)
 [![Voice: Gemini TTS](https://img.shields.io/badge/voice-Gemini%20TTS-4285F4?logo=googlecloud&logoColor=white)](packages/studio)
 [![License: MIT](https://img.shields.io/github/license/ptshih/skipper?color=1f6feb)](LICENSE)
 
@@ -53,7 +53,7 @@ decisions, specs, and ideas live in `docs/` (indexed in `docs/README.md`).
 - **TypeScript 6 + Bun** for backend/tooling workspaces; **Swift + Xcode** for native iOS
 - **Backend:** Hono (served natively by bun) · **DB:** Neon + Drizzle · **Auth:** Better Auth (freemium) · **Audio:** Cloudflare R2 (private; presigned URLs) via `@skipper/storage`
 - **Routing:** Google Routes (A→B route materialization) via `@skipper/routing`
-- **AI:** Claude Opus 4.6 via Amazon Bedrock (narration, judges, the live planner — [decision](docs/decisions/bedrock-opus-4-6.md)) · Google Cloud Text-to-Speech — Gemini-TTS voice "Charon" (OAuth/ADC, no API key; AAC-LC 48 kbps .m4a — LINEAR16 from TTS, then ffmpeg loudnorm + AAC encode)
+- **AI:** Gemini 3.8 Flash on Vertex AI (narration, judges, the live planner — [decision](docs/decisions/gemini-3-8-flash.md)) · Google Cloud Text-to-Speech — Gemini-TTS voice "Charon" (OAuth/ADC, no API key; AAC-LC 48 kbps .m4a — LINEAR16 from TTS, then ffmpeg loudnorm + AAC encode)
 - **iOS:** SwiftUI/Observation, iOS 17+, native Google Maps, AVFoundation/MediaPlayer and Core Location. The Expo client is retained until native acceptance; future Android is separate. CarPlay remains deferred.
 
 ## Layout

@@ -82,7 +82,7 @@ export const SERVER_MAX_BODY_BYTES = 1024 * 1024
 /** The socket's patience, wired into the Bun server export in ./index.ts.
  *  ⚠ Bun's default is 10 SECONDS (bun-types serve.d.ts, `idleTimeout` @default 10) and it fires WHILE A
  *  HANDLER IS STILL RUNNING, not only between requests — which silently capped POST /drives/plan at ten
- *  seconds against a 45-second model wall clock, returning the rider a dead socket while the Opus call
+ *  seconds against a 45-second model wall clock, returning the rider a dead socket while the model call
  *  kept generating and billing to completion. VERIFIED by probe 2026-08-01: a 12 s handler returned 200,
  *  a 16 s handler had its socket closed at ~12 s, and the same handler under `idleTimeout: 60` returned
  *  200 at 25 s.

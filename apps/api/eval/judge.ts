@@ -9,9 +9,9 @@
 // ⚠ THE JUDGE IS INJECTABLE so the verdict→TurnEval mapping is unit-tested with no spend. Same seam,
 // and same reason, as `CharmJudge` in the narration panel.
 
-import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk'
-import Anthropic from '@anthropic-ai/sdk'
-import { BEDROCK, CLAUDE_MODELS, recordModelUsage, usageUsd } from '@skipper/shared'
+import { isAbsolute, resolve } from 'node:path'
+import { FunctionCallingConfigMode, GoogleGenAI, ThinkingLevel } from '@google/genai'
+import { geminiUsage, LLM_MODELS, recordModelUsage, usageUsd, VERTEX } from '@skipper/shared'
 import type { PlannerScorecard, TurnEval, TurnOutcome } from './types'
 
 /** A turn below this (1-10) is "the man is not in the room" — flagged, never blocking. */
@@ -20,16 +20,22 @@ export const PERSONA_PASS_THRESHOLD = 5
 /**
  * The judging tier.
  *
- * ⚠ `CLAUDE_MODELS.opus`, matching `JUDGMENT_MODEL` in packages/studio/src/models.ts — but a SEPARATE
+ * ⚠ `LLM_MODELS.quality`, matching `JUDGMENT_MODEL` in packages/studio/src/models.ts — but a SEPARATE
  * reference rather than an import, because `apps/api` does not depend on `@skipper/studio` and must
  * not start (the prompt this panel judges lives here precisely so it cannot reach studio's persona).
  * The shared constant is the common ground; this is the same VALUE, not a second opinion about it.
  *
- * ⚠ NOT `CLAUDE_MODELS.planner`. Judging output with the model that produced it teaches a panel to
+ * ⚠ NOT `LLM_MODELS.planner`. Judging output with the model that produced it teaches a panel to
  * like its own voice; and studio's note records the other half — the judge rubrics were calibrated at
- * Opus tier, so moving this silently shifts every score.
+ * the judgment tier, so moving this silently shifts every score. ⚠ Since 2026-09-23 the two keys hold
+ * the SAME model (Gemini 3.8 Flash for everything — founder), so the self-preference caveat above is
+ * live today, not hypothetical: this judge is advisory, and a persona score here is the planner's model
+ * grading its own family.
  */
-const JUDGE_MODEL = CLAUDE_MODELS.opus
+const JUDGE_MODEL = LLM_MODELS.quality
+/** Thinking + the per-turn report share this cap; ~2,200 tokens of report at 57 turns on Claude, which
+ *  did not think here. The rest is MEDIUM-thinking headroom. */
+const JUDGE_MAX_TOKENS = 16_000
 
 export interface PersonaTurnVerdict {
   scenarioId: string
@@ -76,10 +82,10 @@ Judge what is on the page. Do not go looking for a particular failure; if the co
 
 For each turn give: a 1-10, the best beat, where it sags, and \`canned\`. Then for the whole run: an overall 1-10, an honest 2-3 sentence verdict, and a recommendation. Add \`biggestRisk\` ONLY if something genuinely rises to a risk — omit it on a clean run rather than reaching for one. recommendation: "ship" = overall 7+ with nothing below 5; "tune" = good bones, something drags; "rework" = reads as a generic assistant wearing a hat. Score what is on the page. Call the report tool.`
 
-const REPORT_TOOL: Anthropic.Tool = {
+const REPORT_TOOL = {
   name: 'report',
   description: 'Report per-turn persona scores and the run-level verdict.',
-  input_schema: {
+  parameters: {
     type: 'object',
     additionalProperties: false,
     properties: {
@@ -121,28 +127,36 @@ export type PersonaJudge = (outcomes: readonly TurnOutcome[]) => Promise<Persona
  * returns, and a malformed report must not also lose the charge — the exact bug that made the
  * narration charm judge bill invisibly until 2026-08-02. */
 export async function judgePersona(outcomes: readonly TurnOutcome[]): Promise<PersonaVerdict> {
-  const key = process.env[BEDROCK.tokenEnv]
-  if (!key) throw new Error(`${BEDROCK.tokenEnv} is not set — the persona judge needs it`)
-  const client = new AnthropicBedrock({ apiKey: key })
+  const project = process.env[VERTEX.projectEnv]
+  if (!project) throw new Error(`${VERTEX.projectEnv} is not set — the persona judge needs it`)
+  const gac = process.env.GOOGLE_APPLICATION_CREDENTIALS
+  // Relative key paths resolve against the repo root (see VERTEX in @skipper/shared).
+  const keyFilename = gac ? (isAbsolute(gac) ? gac : resolve(import.meta.dir, '..', '..', '..', gac)) : undefined
+  const client = new GoogleGenAI({ vertexai: true, project, location: VERTEX.location, googleAuthOptions: { keyFilename } })
 
   const body = outcomes
     .map((o) => `[${o.scenarioId} #${o.index}]\nThem: ${o.rider}\nYou: ${o.say}${o.routeKey ? '\n(a route was drawn)' : ''}`)
     .join('\n\n')
 
-  const res = await client.messages.create({
+  const res = await client.models.generateContent({
     model: JUDGE_MODEL,
-    max_tokens: 8_000,
-    system: PERSONA_SYSTEM,
-    tools: [REPORT_TOOL],
-    tool_choice: { type: 'tool', name: 'report' },
-    messages: [{ role: 'user', content: `Every turn of the run, in order:\n\n${body}` }],
+    contents: [{ role: 'user', parts: [{ text: `Every turn of the run, in order:\n\n${body}` }] }],
+    config: {
+      systemInstruction: PERSONA_SYSTEM,
+      maxOutputTokens: JUDGE_MAX_TOKENS,
+      thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
+      tools: [{ functionDeclarations: [{ name: REPORT_TOOL.name, description: REPORT_TOOL.description, parametersJsonSchema: REPORT_TOOL.parameters }] }],
+      // ANY + the one name = a forced call, Claude's `tool_choice: {type:'tool'}`.
+      toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.ANY, allowedFunctionNames: [REPORT_TOOL.name] } },
+    },
   })
-  recordModelUsage(JUDGE_MODEL, res.usage)
+  const usage = geminiUsage(res.usageMetadata)
+  recordModelUsage(JUDGE_MODEL, usage)
   // ⚠ A TRUNCATED verdict must never read as a scored one, and this was the ONE model call in the repo
-  // that did not check. Its four siblings all branch on stop_reason (studio's narrate.ts, scout.ts,
+  // that did not check. Its four siblings all branch on the finish reason (studio's narrate.ts, scout.ts,
   // veracity.ts and grounding.ts, whose comment names the others); this judge never got the lesson, and
   // CLAUDE.md lists the outcome in its own doctrine: "a judge that never ran, and a truncated verdict
-  // scoring 1.0". `max_tokens` cuts the forced tool call off mid-JSON, so `turns` arrives absent or
+  // scoring 1.0". A MAX_TOKENS stop cuts the forced call off, so `turns` arrives absent or
   // half-written — and a SHORT turns array scores the run on the turns that survived, which reads as a
   // better run rather than an incomplete one.
   //
@@ -151,20 +165,21 @@ export async function judgePersona(outcomes: readonly TurnOutcome[]): Promise<Pe
   // dimension as passing, which is only honest alongside this line". So one truncation costs the
   // advisory dimension and nothing else — every gate still reports.
   //
-  // ⚠ Not urgent, deliberately recorded as such: ~2,200 of 8,000 tokens are used at 57 turns. It becomes
-  // live by growing the suite, which is exactly what keeps happening (54 → 57 in one day).
-  if (res.stop_reason === 'max_tokens') {
+  // ⚠ Not urgent, deliberately recorded as such: ~2,200 tokens of report at 57 turns (on Claude). It
+  // becomes live by growing the suite, which is exactly what keeps happening (54 → 57 in one day).
+  // Stashed FIRST so the runner adds the judge's own spend to what the run BILLED even when the throws
+  // below fire — the tokens are spent either way.
+  judgeSpendUsd += usageUsd(JUDGE_MODEL, usage)
+  const candidate = res.candidates?.[0]
+  if (candidate?.finishReason === 'MAX_TOKENS') {
     throw new Error(
-      `persona judge response truncated at max_tokens (8000) across ${outcomes.length} turns — ` +
+      `persona judge response truncated at max tokens (${JUDGE_MAX_TOKENS}) across ${outcomes.length} turns — ` +
         'the verdict is incomplete; refusing to score it.',
     )
   }
-  const call = res.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
-  if (!call) throw new Error('persona judge returned no structured report')
-  const verdict = call.input as PersonaVerdict
-  // Stashed so the runner can add the judge's own spend to what the run BILLED.
-  judgeSpendUsd += usageUsd(JUDGE_MODEL, res.usage)
-  return verdict
+  const call = candidate?.content?.parts?.find((p) => p.functionCall?.name === REPORT_TOOL.name)?.functionCall
+  if (!call?.args) throw new Error('persona judge returned no structured report')
+  return call.args as unknown as PersonaVerdict
 }
 
 /** What the judge itself billed this process. ⚠ The run's total must include it — a panel that

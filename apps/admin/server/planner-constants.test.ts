@@ -68,18 +68,18 @@ describe('console copies of the planner-facing numbers', () => {
     expect(Math.round((draftCap * 4) / 3)).toBeGreaterThan(draftCap)
   })
 
-  test('the draft call STREAMS — the token ceiling must not silently become a timeout again', () => {
-    // The 16k ceiling this replaced was an artifact of a NON-streaming call (the SDK's HTTP timeout,
-    // not the model), and it was propping up MAX_DRAFT_TARGET. If someone reverts to
-    // `messages.create` while leaving max_tokens high, the request does not error — the SDK stretches
-    // its default timeout instead, and a long draft parks past the point anyone is waiting for it and
-    // bills to completion. So: streaming and an explicit client timeout are asserted together.
+  test('the draft call carries an explicit timeout and one retry — a big ceiling must not become an unbounded wait', () => {
+    // On Claude this pinned STREAMING, because that SDK stretched its default timeout for a large
+    // max_tokens and a long draft parked past the point anyone was waiting, billing to completion. The
+    // Gen AI SDK has NO default timeout at all and retries nothing unless asked — the same failure, and
+    // worse — so what is pinned now is the property streaming stood in for: the draft call passes the
+    // shared operator-click budget, and that budget is explicit.
     const places = read('apps/admin/server/places.ts')
-    expect(places).toContain('client.messages.stream({')
-    expect(places).toContain('stream.finalMessage()')
-    // The Bedrock client inherits the core SDK's defaults (10-minute timeout, 2 retries), so the
-    // explicit pair is asserted on it exactly as it was on the first-party client.
-    expect(places).toMatch(/new AnthropicBedrock\(\{ maxRetries: 1, timeout: 90_000 \}\)/)
+    expect(places).toContain('httpOptions: ADMIN_MODEL_HTTP')
+    const gemini = read('apps/admin/server/gemini.ts')
+    expect(gemini).toMatch(/ADMIN_MODEL_HTTP = \{ timeout: 90_000, retryOptions: \{ attempts: 2 \} \}/)
+    // The bbox proposal is the other operator-click model call and must ride the same budget.
+    expect(read('apps/admin/server/index.ts')).toContain('httpOptions: ADMIN_MODEL_HTTP')
   })
 
   test('the draft count is NOT AN INPUT — no field, no wire param, no clamp (founder, 2026-08-04)', () => {

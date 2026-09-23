@@ -1,6 +1,9 @@
 # Claude via Amazon Bedrock — Opus 4.6 for everything
 
-> **Status:** ✅ DECIDED + BUILT + DEPLOYED 2026-09-17 (founder: "switch my model provider to use AWS
+> **Status:** ⛔ **SUPERSEDED 2026-09-23** by [gemini-3-8-flash.md](gemini-3-8-flash.md) (founder: every
+> model call moved to Gemini 3.8 Flash on Vertex AI). Kept as the record of the Bedrock week — its Opus 4.6
+> calibration and planner-eval numbers are the comparison baseline the Gemini record measures against.
+> Originally: ✅ DECIDED + BUILT + DEPLOYED 2026-09-17 (founder: "switch my model provider to use AWS
 > Bedrock using model Opus 4.6 for everything", then "make sure we are using the US profile"). Every
 > Claude call in the repo — narration, the eval judges, enrich, curate, the admin helpers and the LIVE
 > PLANNER — runs through Amazon Bedrock on Opus 4.6 via the **`us.` inference profile**. First commit

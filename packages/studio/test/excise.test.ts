@@ -1,11 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import type Anthropic from '@anthropic-ai/sdk'
 import { buildExciseUser, exciseUngrounded, type ExciseModelCall } from '../src/eval/excise'
+import type { ReplyLike } from '../src/pipeline/tool-call'
 
-const toolReply = (script: unknown): Anthropic.Message =>
-  ({ content: [{ type: 'tool_use', name: 'repaired', id: 't', input: { script } }] }) as Anthropic.Message
-const textReply = (): Anthropic.Message =>
-  ({ content: [{ type: 'text', text: 'no tool', citations: null }] }) as Anthropic.Message
+const reply = (parts: unknown[], finishReason = 'STOP'): ReplyLike => ({ candidates: [{ content: { role: 'model', parts }, finishReason }] }) as ReplyLike
+const toolReply = (script: unknown, finishReason = 'STOP'): ReplyLike =>
+  reply([{ functionCall: { id: 't', name: 'repaired', args: { script } } }], finishReason)
+const textReply = (): ReplyLike => reply([{ text: 'no tool' }])
 
 const WELL = ['The zoo housed big cats.']
 
@@ -65,5 +65,16 @@ describe('buildExciseUser — the fact sheet, then the flagged claims, then the 
   test('an empty well renders a placeholder, never a bare label', () => {
     const user = buildExciseUser('S', ['ungrounded place-claim: "A"'], [])
     expect(user).toContain('(empty')
+  })
+
+})
+
+describe('exciseUngrounded — a truncated edit', () => {
+  // ⚠ A truncated edit is a script that stops mid-sentence, and the grounding re-gate cannot see that —
+  // fewer claims only reads as CLEANER. So a MAX_TOKENS reply is a no-op, never an edit.
+  test('a TRUNCATED reply is a NO-OP even when it carries a script', async () => {
+    const original = 'Up ahead is Vikingsholm. It had forty rooms.'
+    const out = await exciseUngrounded(original, ['It had forty rooms.'], WELL, async () => toolReply('Up ahead is Vikings', 'MAX_TOKENS'))
+    expect(out).toBe(original)
   })
 })

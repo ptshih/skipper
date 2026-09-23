@@ -23,7 +23,7 @@ Authorized replacement in progress: [native iOS conversion](docs/designs/native-
   request, forever, anonymously, with no `--apply` and no human in the loop. Their only guards are:
   `max_tokens`, a bounded request body and the limiter's numbers — single-sourced in
   `apps/api/src/limits.ts`, which imports NOTHING on purpose, so the other two guards live where they
-  can: the pinned model id (`CLAUDE_MODELS.planner`, `@skipper/shared`) and the token tally
+  can: the pinned model id (`LLM_MODELS.planner`, `@skipper/shared`) and the token tally
   `planner.ts` records. **Adding a new rider-triggered paid call is
   itself a founder decision; weakening an existing cap is a cost regression, not a UX tweak.**
 - **🌳 The working tree AND git index are SHARED across agents.** NEVER `git stash` / `reset --hard` /
@@ -177,17 +177,17 @@ Authorized replacement in progress: [native iOS conversion](docs/designs/native-
   to transpile `app.config.ts`; under 7 `expo prebuild`/`export` die with `ModuleKind` undefined, and
   `tsc --noEmit` alone passes and HIDES it. zod 4 (`z.enum`, top-level `z.uuid()`/`z.url()`); drizzle
   (neon-http, stateless — no interactive transactions; use `db.batch`).
-- **Claude runs on AMAZON BEDROCK — Opus 4.6 for EVERY tier (founder, 2026-09-17).** Client =
-  `AnthropicBedrock` (`@anthropic-ai/bedrock-sdk`); model id = the `us.` INFERENCE PROFILE (the bare id
-  400s); auth = a Bedrock API key (bearer) in the env var named ONCE as `BEDROCK.tokenEnv` (`@skipper/shared`)
-  — `ANTHROPIC_API_KEY` is read by NOTHING. ⚠ 4.6: thinking must be REQUESTED (omit = off); cache minimum
-  4096 tokens; the eval gate is still CALIBRATED ON OPUS 5. `docs/decisions/bedrock-opus-4-6.md`.
+- **Every model call = GEMINI 3.8 FLASH on Vertex AI, `us` multi-region (founder, 2026-09-23).** Client =
+  `GoogleGenAI` (`@google/genai`, Vertex mode); auth = ADC (a Cloud Run SA needs `roles/aiplatform.user`),
+  billed to the project named ONCE as `VERTEX.projectEnv`. ⚠ It ALWAYS thinks (the output cap bounds
+  thinking + output); a multi-step tool loop must echo the model's turn VERBATIM (thought signatures, else
+  400). Gate re-calibrated on it 2026-09-23. `docs/decisions/gemini-3-8-flash.md`.
 - **The live planner runs a model IN THE REQUEST PATH** — configured unlike a batch call. Model id from a
-  named constant in `@skipper/shared`; **thinking stays ON** (with it off the model can emit a tool call as
-  plain TEXT — turn succeeds, no error, call never runs — and can leak `<thinking>` tags); LOW effort is the
-  latency lever; stream. **Low `maxRetries` (0–1)** + an explicit timeout inside the Cloud Run budget — do
-  NOT copy studio's `maxRetries: 5`, tuned for a batch run that already spent. The Bedrock token is a
-  RUNTIME requirement of `apps/api`. ⚠ Never log a request body; never persist a transcript (a
+  named constant in `@skipper/shared`; **thinking stays ON** (structural on Gemini 3 — and never request
+  thoughts: rider text must not carry reasoning); `thinkingLevel` is the latency lever; stream. **One
+  retry max** + an explicit timeout inside the Cloud Run budget — do NOT copy studio's 6 attempts, tuned
+  for a batch run that already spent. Google credentials (`roles/aiplatform.user` on the `skipper-api`
+  SA) are a RUNTIME requirement of `apps/api`. ⚠ Never log a request body; never persist a transcript (a
   `conversations` table is new personal data `purgeUserData` must chase — needs a founder call).
 - **TTS = Google Cloud Text-to-Speech via REST** (no SDK — raw `fetch` to `…/v1/text:synthesize`; OAuth/ADC
   via `google-auth-library`, NO API key). Model and voice are constants in `models.ts` (`TTS_MODEL`,

@@ -4,7 +4,7 @@
 // no compiler between the two ends of it. Every assertion below is either "the JSON path did not move"
 // or "these exact bytes still leave the server".
 //
-// ⚠ NONE OF THIS SPENDS. ../src/planner is the ONE module in this path that imports the Anthropic SDK
+// ⚠ NONE OF THIS SPENDS. ../src/planner is the ONE module in this path that imports the model SDK
 // (that quarantine is stated at the top of the file and is exactly what this test consumes), so mocking
 // it leaves the REAL handler, the REAL caps, the REAL negotiation branch and the REAL route translation
 // running with no network and no key.
@@ -660,7 +660,7 @@ describe('POST /drives/plan — a throw inside the stream', () => {
   // ⚠ THE INV-13 CANARY, AND THE MOST LOAD-BEARING TEST IN THIS FILE. hono runs the streamSSE callback
   // DETACHED, so index.ts's app.onError never sees a throw from inside it — hono's own handler either
   // console.error()s the raw value or, if an onError is passed, writes `event: error / data: <message>`
-  // straight to the rider. An Anthropic.APIError's body can quote the offending request field, i.e.
+  // straight to the rider. The SDK's ApiError body can quote the offending request field, i.e.
   // rider text. This test fails the moment either escape hatch is opened.
   test('a vendor error reaches neither the rider nor the log', async () => {
     const CANARY = 'CANARY-RIDER-TRANSCRIPT-FRAGMENT'
@@ -711,8 +711,8 @@ describe('POST /drives/plan — a throw inside the stream', () => {
 
 describe('POST /drives/plan — rider cancellation wiring', () => {
   // ⚠ This pins `signal: c.req.raw.signal` in the args literal — one line, no compiler enforcement,
-  // and exactly the kind of thing a refactor drops silently. Without it a rider who backgrounds the
-  // app bills Opus to completion on a turn nobody will ever read (INV-11).
+  // and exactly the kind of thing a refactor drops silently. Without it a rider who is already gone
+  // still opens a billed model call, and one who leaves mid-turn is logged as an outage (INV-11).
   test('the planner is handed the rider’s live connection', async () => {
     const ac = new AbortController()
     seen.args = null
@@ -986,11 +986,11 @@ describe('POST /drives/plan — plan_degraded', () => {
 
   // ⚠ THE THROW PATH, AND IT IS THE HALF THAT WAS INVISIBLE. These two reasons are raised by ../src/planner
   // BEFORE the model call, so `logPlanSpend` never runs — no `plan_spend` line either — while the rider
-  // still gets HTTP 200 and an in-persona apology. A missing Bedrock token on a deployed revision was
+  // still gets HTTP 200 and an in-persona apology. A missing Google Cloud project on a deployed revision was
   // therefore countable by nothing: `/health` green, no 5xx, one unstructured stderr line that no
   // log-based metric can read. That is the exact condition this event exists for.
   const thrownReasons: ['not_configured' | 'bad_transcript', string][] = [
-    ['not_configured', 'a deploy with no Bedrock token (BEDROCK.tokenEnv)'],
+    ['not_configured', 'a deploy with no Google Cloud project (VERTEX.projectEnv)'],
     ['bad_transcript', 'a caller sending a shape the vendor would reject'],
   ]
   test.each(thrownReasons)('%s is COUNTED (%s)', async (reason) => {
@@ -1014,7 +1014,7 @@ describe('POST /drives/plan — plan_degraded', () => {
     }
     const { lines } = await runTurn(accept)
     // ⚠ THE ONE REASON IN THIS SET THAT IS ERROR, and the counterpart to the WARNING pinned above. A
-    // missing Bedrock token on a live deploy means every rider on that instance hears the outage
+    // missing Google Cloud project on a live deploy means every rider on that instance hears the outage
     // line while /health and every 5xx alert stay green — the exact condition this event exists to make
     // visible. If it is ever flattened to the same severity as the healthy beats, it stops being
     // findable among them.

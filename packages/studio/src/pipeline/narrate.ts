@@ -1,4 +1,4 @@
-// Skipper narration — the Anthropic (claude-opus-4-8) call.
+// Skipper narration — the model call (Gemini 3.8 Flash on Vertex AI; NARRATION_MODEL).
 //
 // The SYSTEM message is the static, hardened SKIPPER_SYSTEM_PROMPT. For each stop
 // we send ONE user message: the grounded FACT SHEET plus the region/corridor
@@ -9,27 +9,34 @@
 // (story stops). Scenic and break stops carry NO place-facts by construction —
 // naming a peak/town/business is itself a fact the model was not given.
 //
-// Model constraints (Opus 4.8): adaptive thinking only — NO temperature / top_p /
-// top_k / budget_tokens (all 400). We pass adaptive below. Output is modest (a story stop now targets a
-// Shaka-length ~2 min telling, ~300 spoken words ≈ ~450 output tokens), so a single
-// non-streaming messages.create is right; max_tokens is generous because adaptive
-// thinking tokens count against it AND a long-form grounded telling reasons harder.
-// A refusal or a max_tokens truncation is a HARD failure — we never persist a
-// truncated or empty script (quality invariant), so size for the worst case.
+// Model constraints (Gemini 3): thinking is always on and its depth is `thinkingLevel`;
+// `temperature` / `top_p` / `top_k` are ignored and the penalty params are a 400, so none is
+// sent. Output is modest (a story stop now targets a Shaka-length ~2 min telling, ~300 spoken
+// words ≈ ~450 output tokens), so a single non-streaming generateContent is right; the cap is
+// generous because thinking tokens count against it AND a long-form grounded telling reasons
+// harder. A refusal or a truncation is a HARD failure — we never persist a truncated or empty
+// script (quality invariant), so size for the worst case.
 
-import Anthropic from '@anthropic-ai/sdk'
+import { ThinkingLevel, type GenerateContentResponse } from '@google/genai'
 import type { StopType } from '@skipper/shared'
-import { getAnthropic, NARRATION_MODEL } from '../models'
-import { recordModelUsage } from '@skipper/shared'
+import { getGemini, NARRATION_MODEL } from '../models'
+import { geminiUsage, recordModelUsage } from '@skipper/shared'
+import { finishReason, replyText } from './tool-call'
 import { WORDS_PER_SECOND } from '../config'
 
 /**
  * Generous ceiling. A long-form story script (~2 min ≈ ~300 words ≈ ~450 output
- * tokens) leaves the rest as adaptive-thinking headroom — and high-effort thinking
- * on a rich, grounded fact sheet can be substantial. A truncation throws (we never
- * persist a half script), so we size well above the worst plausible thinking+output.
+ * tokens) leaves the rest as thinking headroom — and HIGH thinking is substantial on
+ * this model: MEASURED 2026-09-23 on a THIN four-fact Vikingsholm sheet, 13.7k-15.5k
+ * thinking tokens for a ~120-word script (82-94 s, ~$0.07). A rich sheet reasons longer.
+ * A truncation throws (we never persist a half script) and wastes the whole call, so this
+ * sits near the model's 65,536 output ceiling; the cap costs nothing until it is used.
+ * ⚠ The same measurement at MEDIUM: 2.1k thinking, 16 s, a comparably grounded script —
+ * one sample, not an ear test. HIGH is kept for parity with Claude's high-effort setting
+ * until the founder A/Bs the two by ear; if MEDIUM wins, it is the one-word change at the
+ * call below.
  */
-const NARRATION_MAX_TOKENS = 16000
+const NARRATION_MAX_TOKENS = 60_000
 
 export interface NarrationRequest {
   /** e.g. "Lake Tahoe". Naming the region is allowed without the sheet — it's STABLE for every drive
@@ -524,47 +531,59 @@ export function buildFactSheet(req: NarrationRequest): string {
   return lines.join('\n')
 }
 
+/** Finish reasons that mean a SAFETY system declined the content (Gemini's analogue of Claude's
+ *  `refusal`). Named so the error says "refused", not just "ended oddly". */
+const BLOCKED_FINISHES = new Set(['SAFETY', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII', 'RECITATION'])
+
 /**
  * Shared narration call — a system prompt + ONE user message → the script. Throws on
- * refusal, truncation, or empty output (callers must NEVER persist a bad script). The
- * system prompt is cached (cache_control) so a run's later calls read it cheaply.
+ * refusal, truncation, any other abnormal finish, or empty output (callers must NEVER
+ * persist a bad script). The system prompt leads the request so Gemini's IMPLICIT prefix
+ * cache can serve a run's later calls — best-effort (it hit on a real planner prompt and missed on
+ * synthetic probes, 2026-09-23), so nothing here depends on it.
  */
 async function runNarration(
   system: string,
   userMessage: string,
   label: string,
 ): Promise<NarrationResult> {
-  const client = getAnthropic('run via dotenvx -f .env.development')
-  const response = await client.messages.create({
+  const client = getGemini('run via dotenvx -f .env.development')
+  const response: GenerateContentResponse = await client.models.generateContent({
     model: NARRATION_MODEL,
-    max_tokens: NARRATION_MAX_TOKENS,
-    thinking: { type: 'adaptive' }, // grounding adherence benefits from reasoning; effort defaults to high
-    system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
-    messages: [{ role: 'user', content: userMessage }],
+    contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+    config: {
+      systemInstruction: system,
+      maxOutputTokens: NARRATION_MAX_TOKENS,
+      // HIGH: grounding adherence benefits from reasoning — the depth Claude ran here (adaptive
+      // thinking, whose effort defaulted to high).
+      thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
+    },
   })
-  recordModelUsage(NARRATION_MODEL, response.usage)
+  const usage = geminiUsage(response.usageMetadata)
+  recordModelUsage(NARRATION_MODEL, usage)
 
-  if (response.stop_reason === 'refusal') {
-    throw new Error(`Narration refused for ${label}: ${JSON.stringify(response.stop_details ?? {})}`)
+  // A prompt blocked before generation has NO candidate — only `promptFeedback.blockReason`.
+  const blockedPrompt = response.promptFeedback?.blockReason
+  if (blockedPrompt) throw new Error(`Narration refused for ${label}: prompt blocked (${blockedPrompt}).`)
+  const finish = finishReason(response)
+  if (BLOCKED_FINISHES.has(finish)) throw new Error(`Narration refused for ${label}: finish ${finish}.`)
+  if (finish === 'MAX_TOKENS') {
+    throw new Error(`Narration hit max tokens (truncated) for ${label} — raise NARRATION_MAX_TOKENS.`)
   }
-  if (response.stop_reason === 'max_tokens') {
-    throw new Error(`Narration hit max_tokens (truncated) for ${label} — raise NARRATION_MAX_TOKENS.`)
-  }
+  // Anything else that is not a clean STOP (OTHER, MALFORMED_FUNCTION_CALL, a missing finish) is not a
+  // script this pipeline can vouch for.
+  if (finish !== 'STOP') throw new Error(`Narration ended abnormally for ${label} (finish ${finish}).`)
 
-  const script = response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-    .map((b) => b.text)
-    .join('')
-    .trim()
+  const script = replyText(response).trim()
 
   if (!script) {
-    throw new Error(`Narration produced no text for ${label} (stop_reason=${response.stop_reason}).`)
+    throw new Error(`Narration produced no text for ${label} (finish ${finish}).`)
   }
 
   return {
     script,
-    stopReason: response.stop_reason,
-    usage: { inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens },
+    stopReason: finish,
+    usage: { inputTokens: usage.input_tokens + (usage.cache_read_input_tokens ?? 0), outputTokens: usage.output_tokens },
   }
 }
 

@@ -1,11 +1,11 @@
 // INV-8's failure mode, as ONE pattern: did the model serialize a TOOL CALL into rider-visible prose
-// instead of emitting a tool_use block?
+// instead of emitting a real function call?
 //
 // ⚠ WHY THIS IS ITS OWN FILE. There are two readers and they must never disagree: ./plan-route
 // SUPPRESSES a leak in production, and ../eval/checks COUNTS one — "a suppressed defect an eval cannot
 // see is a defect that silently grows". They cannot share the pattern by importing each other: the
 // eval's pure half is required to run under `bun test` with no network, no key and no spend
-// (../test/planner-eval.test.ts states that outright), and ./plan-route drags in @anthropic-ai/sdk and
+// (../test/planner-eval.test.ts states that outright), and ./plan-route drags in @google/genai and
 // @skipper/db. So the rule lives here, importing NOTHING, and both sides read it.
 //
 // ⚠ THEY HAD ALREADY DRIFTED, WHICH IS WHY THIS EXISTS. The eval carried `/<(invoke|function_calls|
@@ -35,5 +35,14 @@
  * also catches a rider being shown a legitimate object. On the serving side that case degrades to
  * `route_untranslatable` (no tool_use block ⇒ no route), which is the correct outcome — ugly prose, but
  * never a wrong drive.
+ *
+ * ⚠ TWO MODEL FAMILIES, TWO SHAPES. The XML alternative is CLAUDE's leak (the 2026-08-03 observation
+ * above). Since 2026-09-23 the planner runs on Gemini, whose leak is a Python-style call on its
+ * `default_api` namespace, often fenced as `tool_code` — which the XML alternative scored CLEAN. Both are
+ * kept: the second family's shape was added before any leak was seen (0 in the first 67 Gemini eval
+ * turns), because a guard blind to the model it guards is the defect this file exists to prevent. Same
+ * narrowness rule: keyed on the NAMESPACE (`default_api.` + an opening paren) and the fence, never on
+ * words a rider-facing line could contain.
  */
-export const LEAKED_TOOL_CALL = /<\/?(?:[a-z][\w.-]*:)?(?:invoke|function_calls|parameter)\b/i
+export const LEAKED_TOOL_CALL =
+  /<\/?(?:[a-z][\w.-]*:)?(?:invoke|function_calls|parameter)\b|\bdefault_api\.[a-z_]\w*\s*\(|```\s*tool_code\b/i

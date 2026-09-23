@@ -10,9 +10,8 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@anthropic-ai/bedrock-sdk": "^0.33.6",
-    "@anthropic-ai/sdk": "^0.126.0",
     "@better-auth/expo": "^1.6.23",
+    "@google/genai": "^2.24.0",
     "@neondatabase/serverless": "^1.1.0",
     "@skipper/db": "workspace:*",
     "@skipper/engine": "workspace:*",

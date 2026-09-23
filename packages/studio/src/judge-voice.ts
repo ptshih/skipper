@@ -1,6 +1,6 @@
 // Voice & charm worksheet — the "is the persona actually charming?" pass over the LIVE corpus.
 //
-// Blast radius: SPENDS $ on --apply (LLM — one Opus charm-judge call per run), READ-ONLY otherwise.
+// Blast radius: SPENDS $ on --apply (LLM — one charm-judge call per run), READ-ONLY otherwise.
 // It never mutates: it selects from `narrations`, writes nothing but a local markdown file, and
 // touches no R2 bytes. SOP (docs/guides/ops-scripts-sop.md): it now PREVIEWS by default like
 // everything else — the no-flag run counts the queue, presigns every clip and emits the whole by-ear
@@ -8,7 +8,7 @@
 //
 // "THE PERSONA IS THE PRODUCT," and this is the only thing in the repo that puts both halves of that
 // judgment in one document:
-//   1. WRITING (automated, --apply) — an LLM charm-judge (Opus) scores every selected clip's SCRIPT
+//   1. WRITING (automated, --apply) — an LLM charm-judge (the judgment tier) scores every selected clip's SCRIPT
 //      for charm and flags where it sags. Charm only; grounding is a separate gate.
 //   2. VOICE (your ears, always) — each clip is paired with a playable presigned link + a blank
 //      rating line, because a script can be charming on the page and the TTS can flatten it. Only a
@@ -25,10 +25,10 @@
 // explicit id list, plus --limit), so the ids you already have in hand from `audit-corpus` /
 // `audit-loudness` feed straight in. (founder call 2026-08-02: repoint it at the corpus, don't retire it.)
 //
-// Usage (env via dotenvx — R2_* to presign the audio; the Bedrock token for the --apply judge).
+// Usage (env via dotenvx — R2_* to presign the audio; Google Cloud credentials for the --apply judge).
 // Prefer --out over a shell redirect: the SOP preamble prints on stdout, so `> file.md` captures it too.
 //   dotenvx run -f .env.development -- bun packages/studio/src/judge-voice.ts --out=/tmp/voice.md
-//   ... --apply                  also run the Opus charm judge over the writing (SPENDS $)
+//   ... --apply                  also run the charm judge over the writing (SPENDS $)
 //   ... --region <slug>          a region's clips (REQUIRED unless --include-ids; → its bbox)
 //   ... --include-ids a,b,c      EXACTLY these subjects — poi ids and/or cluster ids
 //   ... --query <substr>         narrow to names containing <substr>
@@ -37,12 +37,12 @@
 import { and, eq, inArray, isNotNull, or, sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { narrations, poiClusters, pois } from '@skipper/db/schema'
-import { BEDROCK, MODEL_PRICING } from '@skipper/shared'
+import { pricingFor, VERTEX } from '@skipper/shared'
 import { announce, numericFlag, parseFlags } from './pipeline/ops'
 import { clusterIdsInBbox, poiIdsInBbox } from './pipeline/diversity-context'
 import { requireRegionBboxes, requireRegionKey, resolveRegion } from './pipeline/region'
 import { withRetry } from './pipeline/http'
-import { ANTHROPIC_READY } from './config'
+import { LLM_READY } from './config'
 import { JUDGMENT_MODEL } from './models'
 import { presignGet } from './pipeline/storage'
 import { judgeCharm, type CharmVerdict } from './eval/charm'
@@ -73,8 +73,9 @@ const LINK_TTL_SEC = 2 * 60 * 60
  */
 const JUDGE_BATCH_MAX = 60
 
-// Rough output budget per judged clip, for the preview's spend estimate only.
-const JUDGE_OUTPUT_TOKENS_PER_CLIP = 90
+// Rough output budget per judged clip, for the preview's spend estimate only. Includes a share of the
+// judge's thinking, which bills as output and which Gemini 3.8 always does (the report alone was ~90).
+const JUDGE_OUTPUT_TOKENS_PER_CLIP = 250
 // The usual English approximation. This is an ESTIMATE for the preview line, never the bill.
 const CHARS_PER_TOKEN = 4
 
@@ -124,12 +125,12 @@ const RECO_LABEL: Record<CharmVerdict['recommendation'], string> = {
   rework: '🔁 REWORK — reads as competent AI, not the skipper',
 }
 
-/** Estimate the ONE judge call, priced from MODEL_PRICING so the $/MTok rate keeps its single home.
+/** Estimate the ONE judge call, priced from the shared table (`pricingFor`) so the $/MTok rate keeps its single home.
  *  Null = the judgment model has no priced row (honestly unpriced rather than silently guessed). The
- *  shared rubric also rides the input, but at Opus rates a fixed system prompt is noise next to the
+ *  shared rubric also rides the input, but a fixed system prompt is noise next to the
  *  scripts, so it isn't modelled here. */
 function estimateJudgeUsd(clips: Clip[]): number | null {
-  const pricing = MODEL_PRICING[JUDGMENT_MODEL]
+  const pricing = pricingFor(JUDGMENT_MODEL)
   if (!pricing) return null
   const inTok = clips.reduce((n, c) => n + c.script.length, 0) / CHARS_PER_TOKEN
   const outTok = clips.length * JUDGE_OUTPUT_TOKENS_PER_CLIP
@@ -146,7 +147,7 @@ function buildReport(clips: Clip[], scope: string, verdict: CharmVerdict | null)
   out.push('')
   out.push('## The bet: is the persona charming enough to build the player on?')
   if (verdict) {
-    out.push(`**Judge — the writing (Opus):** ${verdict.overall}/10 · ${RECO_LABEL[verdict.recommendation]}`)
+    out.push(`**Judge — the writing (model):** ${verdict.overall}/10 · ${RECO_LABEL[verdict.recommendation]}`)
     out.push(`> ${verdict.verdict}`)
     out.push(`- Weakest clips: ${verdict.weakestStops.length ? verdict.weakestStops.join(', ') : '—'}`)
     // ⚠ ABSENT is the honest answer on a clean run, not a hole to fill — the judge is now told to omit
@@ -156,7 +157,7 @@ function buildReport(clips: Clip[], scope: string, verdict: CharmVerdict | null)
   } else {
     const est = estimateJudgeUsd(clips)
     out.push(
-      `**Judge — the writing (Opus):** not run. Re-run with \`--apply\` to score the writing ` +
+      `**Judge — the writing (model):** not run. Re-run with \`--apply\` to score the writing ` +
         `(${est === null ? 'cost unpriced for this model' : `~$${est.toFixed(2)} estimated`}).`,
     )
   }
@@ -285,8 +286,8 @@ async function main() {
   if (apply) {
     // Fail fast on a missing key rather than after the selection query, and refuse a batch the judge
     // can only answer by truncating (JUDGE_BATCH_MAX) — both BEFORE anything bills.
-    if (!ANTHROPIC_READY())
-      throw new Error(`${BEDROCK.tokenEnv} is not set — \`judge-voice --apply\` needs it to run the charm judge.`)
+    if (!LLM_READY())
+      throw new Error(`Google Cloud model credentials are not ready (${VERTEX.projectEnv} plus ADC or a key file) — \`judge-voice --apply\` needs them to run the charm judge.`)
     if (clips.length > JUDGE_BATCH_MAX)
       throw new Error(
         `⛔ ${clips.length} clips exceeds the ${JUDGE_BATCH_MAX}-clip judge batch — one call cannot score them ` +
@@ -294,7 +295,7 @@ async function main() {
       )
     const est = estimateJudgeUsd(clips)
     console.error(
-      `Judging the charm of ${clips.length} clip(s) — one Opus call, ` +
+      `Judging the charm of ${clips.length} clip(s) — one model call, ` +
         `${est === null ? 'cost unpriced for this model' : `~$${est.toFixed(2)} estimated (not the bill)`}...`,
     )
     verdict = await judgeCharm(
@@ -319,7 +320,7 @@ async function main() {
     const est = estimateJudgeUsd(clips)
     console.error(
       `\nDRY RUN — the by-ear worksheet is complete and nothing was spent. Add --apply to also score the ` +
-        `WRITING with the Opus charm judge (${est === null ? 'cost unpriced for this model' : `~$${est.toFixed(2)} estimated`}).`,
+        `WRITING with the charm judge (${est === null ? 'cost unpriced for this model' : `~$${est.toFixed(2)} estimated`}).`,
     )
   }
 }

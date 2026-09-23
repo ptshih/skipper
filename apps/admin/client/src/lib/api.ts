@@ -497,7 +497,7 @@ export const api = {
     primaryType?: string | null
     rank?: number
   }) => req<{ place: PlaceRow }>('/admin/places', { method: 'POST', body: JSON.stringify(body) }),
-  // Curate (interactive): draft the region's set (Opus, no writes), then resolve the pruned keepers.
+  // Curate (interactive): draft the region's set (model, no writes), then resolve the pruned keepers.
   draftPlaces: (body: { region: string }) =>
     req<{ drafts: PlaceDraft[] }>('/admin/places/draft', { method: 'POST', body: JSON.stringify(body) }),
   curatePlaces: (body: { region: string; drafts: PlaceDraft[] }) =>

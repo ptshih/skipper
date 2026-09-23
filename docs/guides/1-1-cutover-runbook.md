@@ -1,9 +1,10 @@
 # The 1.1 cutover — the first push
 
 **Status:** ✅ **EXECUTED 2026-08-02** — `9dc3987..ecc30f7`, all four builds SUCCESS, every endpoint
-below verified green. ⚠ **Reusing this as the template? The model secret moved 2026-09-17:** step 4's
-`ANTHROPIC_API_KEY` is now `AWS_BEARER_TOKEN_BEDROCK` (+ `AWS_REGION`), set in `.env.production` via
-dotenvx — see [../decisions/bedrock-opus-4-6.md](../decisions/bedrock-opus-4-6.md). Written 2026-08-02 against `main` at `3db599d` with 49 commits unpushed; executed
+below verified green. ⚠ **Reusing this as the template? The model secret is GONE (2026-09-23):** step 4's
+`ANTHROPIC_API_KEY` (later `AWS_BEARER_TOKEN_BEDROCK`) is replaced by NO key at all — model calls use
+Google Cloud ADC against `GOOGLE_CLOUD_PROJECT`, and each Cloud Run service account needs
+`roles/aiplatform.user` — see [../decisions/gemini-3-8-flash.md](../decisions/gemini-3-8-flash.md). Written 2026-08-02 against `main` at `3db599d` with 49 commits unpushed; executed
 18 commits later at `ecc30f7`. Kept as the record of the first push and the template for the next.
 Where this and the code disagree, the code wins.
 

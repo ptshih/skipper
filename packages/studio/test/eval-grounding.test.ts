@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type Anthropic from '@anthropic-ai/sdk'
+import type { ReplyLike } from '../src/pipeline/tool-call'
 import {
   buildGroundingWell,
   claimsFromResponse,
@@ -289,12 +289,11 @@ describe('buildScorecard — rollup + the gate', () => {
 // two used to be the same shape. These pin the distinction. A throw is the fail-closed direction —
 // both generators catch a gate throw per clip and record it WITHHELD.
 describe('claimsFromResponse — a truncated audit is never a clean audit', () => {
-  const toolCall = (input: unknown, stop: string | null = 'tool_use'): Anthropic.Message =>
+  // Gemini finishes a function-call reply with STOP (there is no tool_use stop reason — probed).
+  const toolCall = (args: unknown, finish = 'STOP'): ReplyLike =>
     ({
-      content: [{ type: 'tool_use', id: 't1', name: 'report', input }],
-      stop_reason: stop,
-      usage: { input_tokens: 10, output_tokens: 10 },
-    }) as unknown as Anthropic.Message
+      candidates: [{ content: { role: 'model', parts: [{ functionCall: { id: 't1', name: 'report', args } }] }, finishReason: finish }],
+    }) as ReplyLike
 
   test('a well-formed verdict passes through and normalizes', () => {
     const out = claimsFromResponse(
@@ -314,11 +313,11 @@ describe('claimsFromResponse — a truncated audit is never a clean audit', () =
     expect(e.score).toBe(1)
   })
 
-  test('stop_reason max_tokens THROWS — a cut-off verdict must not score 1.0', () => {
-    expect(() => claimsFromResponse(toolCall({ claims: [] }, 'max_tokens'), 7)).toThrow(/truncated/i)
+  test('finish MAX_TOKENS THROWS — a cut-off verdict must not score 1.0', () => {
+    expect(() => claimsFromResponse(toolCall({ claims: [] }, 'MAX_TOKENS'), 7)).toThrow(/truncated/i)
     // ...even when the partial call still carries some claims: the rest of them are unknown.
     expect(() =>
-      claimsFromResponse(toolCall({ claims: [{ claim: 'x', status: 'grounded' }] }, 'max_tokens'), 7),
+      claimsFromResponse(toolCall({ claims: [{ claim: 'x', status: 'grounded' }] }, 'MAX_TOKENS'), 7),
     ).toThrow(/truncated/i)
   })
 
@@ -330,10 +329,8 @@ describe('claimsFromResponse — a truncated audit is never a clean audit', () =
 
   test('no tool call at all still throws', () => {
     const textOnly = {
-      content: [{ type: 'text', text: 'I think it is fine' }],
-      stop_reason: 'end_turn',
-      usage: { input_tokens: 1, output_tokens: 1 },
-    } as unknown as Anthropic.Message
+      candidates: [{ content: { role: 'model', parts: [{ text: 'I think it is fine' }] }, finishReason: 'STOP' }],
+    } as ReplyLike
     expect(() => claimsFromResponse(textOnly, 1)).toThrow(/no tool call/)
   })
 

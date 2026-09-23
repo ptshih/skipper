@@ -1,101 +1,101 @@
 // AI model identifiers for @skipper/studio.
 //
 // Constants only — this file is the single source of truth for model ids so the
-// narration (Anthropic) and TTS (Google Cloud TTS) call sites never hard-code a string.
+// narration (Gemini on Vertex AI) and TTS (Google Cloud TTS) call sites never hard-code a string.
 // Each id below cites where it came from; re-verify against the linked source
 // before bumping.
 
-import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk'
-import { AUDIO_LOUDNESS, BEDROCK, CLAUDE_MODELS, type DeliveryRegister } from '@skipper/shared'
+import { isAbsolute, resolve } from 'node:path'
+import { GoogleGenAI } from '@google/genai'
+import { AUDIO_LOUDNESS, LLM_MODELS, VERTEX, type DeliveryRegister } from '@skipper/shared'
 
-// Re-export the shared HAIKU id so the in-job summarizer (pipeline/job-output.ts) sources it from
+// Re-export the shared SUMMARY id so the in-job summarizer (pipeline/job-output.ts) sources it from
 // studio/models.ts alongside the other model ids, while @skipper/shared stays the single source.
-export const SUMMARY_MODEL = CLAUDE_MODELS.haiku
+export const SUMMARY_MODEL = LLM_MODELS.summary
 
 // ---------------------------------------------------------------------------
-// Shared Bedrock client — ONE lazily-built singleton for every call site.
+// Shared Gemini client — ONE lazily-built singleton for every call site.
 // ---------------------------------------------------------------------------
-// Lazily build the client on first use, so importing this module stays side-effect-free (the
-// Bedrock token is required only when a model call runs) — mirrors the lazy @skipper/db client.
-// Every studio/eval module shares this one instance via getAnthropic(); `label` is a per-call-site
-// descriptive parenthetical woven into the missing-token error so the message still names what
-// needed it. ⚠ The NAME `getAnthropic` is kept on purpose: ~15 call sites and their tests spell it,
-// and the client it returns speaks the same Messages surface — only the provider behind it moved
-// (Amazon Bedrock, founder call 2026-09-17; see BEDROCK in @skipper/shared for the why and the auth).
-// ⚠ The guard reads `BEDROCK.tokenEnv` rather than trusting the SDK's own env read, because the
-// SDK's failure mode for a missing token is to fall through to the AWS credential chain and die deep
-// inside a paid run with a signing error — after earlier stops already billed.
-let _anthropic: AnthropicBedrock | null = null
-export function getAnthropic(label = 'a model call needs it'): AnthropicBedrock {
-  if (!process.env[BEDROCK.tokenEnv]) {
-    throw new Error(`${BEDROCK.tokenEnv} is not set (${label}).`)
+// Lazily build the client on first use, so importing this module stays side-effect-free (Google
+// credentials are required only when a model call runs) — mirrors the lazy @skipper/db client.
+// Every studio/eval module shares this one instance via getGemini(); `label` is a per-call-site
+// descriptive parenthetical woven into the missing-config error so the message still names what
+// needed it. Provider rationale + auth: VERTEX in @skipper/shared and docs/decisions/gemini-3-8-flash.md.
+// ⚠ The guard reads `VERTEX.projectEnv` itself rather than trusting the SDK's env fallback, because a
+// Vertex client with no project fails deep inside a paid run — after earlier stops already billed.
+let _gemini: GoogleGenAI | null = null
+export function getGemini(label = 'a model call needs it'): GoogleGenAI {
+  const project = process.env[VERTEX.projectEnv]
+  if (!project) {
+    throw new Error(`${VERTEX.projectEnv} is not set (${label}).`)
   }
-  // maxRetries 5 (SDK default is 2): narration is the most expensive call, so survive a
-  // SUSTAINED overload (429/5xx — Bedrock throttles per account, not per key) rather than fail a run
-  // that already spent on earlier stops. The SDK backs off exponentially + honors Retry-After.
-  return (_anthropic ??= new AnthropicBedrock({ maxRetries: 5 }))
+  // 6 attempts = the first call + 5 retries on 408/429/5xx, with the SDK's exponential backoff (it
+  // honors no Retry-After, so the backoff is the whole defence). Narration is the most expensive call,
+  // so survive a SUSTAINED overload rather than fail a run that already spent on earlier stops.
+  // ⚠ Retries are OFF in the SDK unless `retryOptions` is passed — it is not a default to lean on.
+  // ⚠ So is the TIMEOUT: the Gen AI SDK sets none, where the Anthropic SDK defaulted to 10 minutes, so a
+  // stalled socket in a paid batch would otherwise wait out the whole Cloud Run task. 10 minutes per
+  // ATTEMPT restores that bound and clears the slowest measured call (HIGH-thinking narration, ~94 s)
+  // many times over. A per-request `httpOptions` still overrides it key by key (job-output's 20 s).
+  return (_gemini ??= new GoogleGenAI({
+    vertexai: true,
+    project,
+    location: VERTEX.location,
+    googleAuthOptions: { keyFilename: credentialsPath() },
+    httpOptions: { timeout: 600_000, retryOptions: { attempts: 6 } },
+  }))
+}
+
+/** GOOGLE_APPLICATION_CREDENTIALS resolved against the REPO ROOT when relative. `.env.development`
+ *  names `./keys/…`, which only resolves when the process runs from the root — and a `bun --filter`
+ *  script runs from packages/studio. Unset on Cloud Run (the runtime service account answers
+ *  through the metadata server), so this returns undefined there and the SDK takes its default ADC. */
+function credentialsPath(): string | undefined {
+  const path = process.env.GOOGLE_APPLICATION_CREDENTIALS
+  if (!path) return undefined
+  return isAbsolute(path) ? path : resolve(import.meta.dir, '..', '..', '..', path)
 }
 
 // ---------------------------------------------------------------------------
-// Narration — Anthropic Messages API (via Amazon Bedrock since 2026-09-17)
+// Narration — Gemini 3.8 Flash on Vertex AI (since 2026-09-23)
 // ---------------------------------------------------------------------------
-// ⚠ NOW OPUS 4.6 ON BEDROCK (founder call, 2026-09-17: "Opus 4.6 for everything") — `CLAUDE_MODELS.opus`
-// resolves to `BEDROCK.opus46` in @skipper/shared, which is where the provider rationale, the auth and
-// the inference-profile gotcha live. The history below is retained because it is WHY this constant
-// exists as a single switch, and because the Opus 5 calibration numbers are the last ones this repo
-// has — they describe a model it no longer runs, and the gate should be re-calibrated on 4.6
-// (`eval/calibrate.ts`, a separate paid go) before a grounding/charm score on 4.6 is trusted.
+// The spec wants the MOST CAPABLE model for narration quality; the founder chose Gemini 3.8 Flash for
+// every tier on 2026-09-23 (`LLM_MODELS.quality` in @skipper/shared). History, kept because it is WHY
+// this constant exists as a single switch: Claude Fable 5 (2026-06-09) → Opus 4.8 after Fable began
+// 404ing account-wide (2026-06-14) → Opus 5 (2026-08-04) → Opus 4.6 on Bedrock (2026-09-17) → here.
 //
-// The spec wants the MOST CAPABLE model for narration quality. Claude Fable 5 was the pick (a tier
-// above Opus; switched 2026-06-09 at founder request), but on 2026-06-14 it began returning 404
-// "Claude Fable 5 is not available. Please use Opus 4.8." account-wide (req_011Cc2MhTY66A8XhQ1A29VBd)
-// — so narration WENT back to Opus 4.8, then to Opus 5 (founder, 2026-08-04), then to Opus 4.6 on
-// Bedrock. (Re-point in @skipper/shared if the tier should move again; this constant is the single
-// studio-side switch.)
+// Request surface, VERIFIED on the live model before the switch rather than assumed — the Fable-era
+// failure was exactly a model refusing a request shape (docs/decisions/gemini-3-8-flash.md has the
+// per-shape probe results):
+//   · forced function call (`mode: ANY` + `allowedFunctionNames: [name]`) — ✅ (every judge depends on
+//     it), and it ENFORCES the JSON schema, which Claude's non-strict tool use never did
+//   · `mode: ANY` over several functions — ✅ (pipeline/scout.ts's agentic fetch-or-finalize loop), but
+//     only when the model's turn is sent back VERBATIM: a stripped thought signature is a 400
+//   · plain text generation at `thinkingLevel: HIGH` — ✅ (this call, narrate.ts)
+//   · Google Search grounding together with a JSON response schema — ✅ (eval/veracity.ts)
+// `temperature`/`top_p`/`top_k` are ignored on Gemini 3 and nothing here sends them.
 //
-// Request surface, VERIFIED on the model in use before each move rather than assumed — the Fable-era
-// failure was exactly a 5-series model refusing a request shape:
-//   · forced `tool_choice: {type:'tool', name}` — ✅ (every judge depends on this; Fable REJECTED it,
-//     which is the whole reason JUDGMENT_MODEL is a separate constant)
-//   · `tool_choice: {type:'any'}` — ✅ (pipeline/scout.ts's agentic fetch-or-finalize loop)
-//   · `thinking: {type:'adaptive'}` with no tools — ✅ (this call, narrate.ts)
-//   · forced tool + adaptive thinking together — ✅ (nothing uses it today; recorded as available)
-// Re-probed on Bedrock/Opus 4.6 2026-09-17 (docs/decisions/bedrock-opus-4-6.md has the per-shape
-// results). ⚠ On 4.6 `budget_tokens` is deprecated rather than rejected — still never send it; depth
-// is `output_config.effort` (4.6 has no `xhigh`). `temperature`/`top_p`/`top_k` are ALLOWED on 4.6
-// (they were rejected on 4.8/5) — nothing here sends them, so treat that as a fact, not a lever.
+// COST: $0.825/$4.125 per MTok on the `us` multi-region (MODEL_PRICING in @skipper/shared, introductory
+// through 2026 — PRICE_CHANGES doubles it on the published date). Thinking bills as output, and Gemini
+// 3.8 always thinks.
+// ⚠ THE LAST CALIBRATION DESCRIBES CLAUDE, NOT THIS MODEL. Opus 4.6, 2026-09-17: verdict agreement
+// 17/18, violation recall 8/8, 1 false positive across 1/10 clean cases (Opus 5 before it: 16/18, 8/8,
+// 4 FPs across 2/10, accepted as-is by the founder 2026-08-04). Recall is the FAIL-CLOSED axis. Re-run
+// `eval/calibrate.ts` on Gemini before trusting a grounding/charm score, and re-raise only if its
+// numbers MOVE — that drift is what the runner exists to watch.
 //
-// COST: Opus 4.6 is $5/$25 per MTok at list, +10% on the `us.` Bedrock profile the founder chose
-// ($5.50/$27.50 — MODEL_PRICING in @skipper/shared), and the older tokenizer bills ~30% FEWER tokens for
-// the same text than Opus 5 — net, a regen bills about what it did before or less.
-// ⚠ BEDROCK THROTTLES PER ACCOUNT: the `us.` profile returned 429s at ~36 concurrent requests (24 was
-// clean; measured 2026-09-17). NARRATION_CONCURRENCY (12) × the 3-vote grounding gate can reach that.
-// The maxRetries: 5 backoff above is what absorbs it; if a regen logs sustained 429s, lower
-// SKIPPER_NARRATION_CONCURRENCY before anything else. Details: docs/decisions/bedrock-opus-4-6.md.
-// ✅ LAST CALIBRATION (Opus 5, 2026-08-04, `eval/calibrate.ts`, 54 calls): verdict agreement 16/18,
-// violation recall 8/8, false positives 4 claims across 2/10 clean cases. Recall is the FAIL-CLOSED axis
-// and it was perfect on THAT model. ⚠ Two clean cases over-flagged, and `grounding-inverse-relation`
-// was a RETURNED regression: grounding.ts spells that carve-out out with that very example ("hired by
-// his aunt X" grounds "he was X's nephew") and the golden case exists because it was a live false
-// positive in June. ✅ ACCEPTED AS-IS by the founder 2026-08-04 — it costs some excision rounds and
-// trims a little supported writing, and never ships a hallucination. Re-raise only if a calibration
-// on the CURRENT model shows the precision number MOVING, which is the drift this runner exists to watch.
-//
-// Source: the id literal is single-sourced in @skipper/shared (CLAUDE_MODELS / BEDROCK).
-export const NARRATION_MODEL = CLAUDE_MODELS.opus
+// Source: the id literal is single-sourced in @skipper/shared (LLM_MODELS / VERTEX).
+export const NARRATION_MODEL = LLM_MODELS.quality
 
 // JUDGMENT tier — the structured-report / spot-check judges (eval/charm.ts, eval/grounding.ts,
 // eval/veracity.ts): the NON-narration calls that need the calibration tier. (The enrichment
-// scout is a SEPARATE ENRICH tier — see ENRICH_MODELS below.) Opus 4.6 on Bedrock since 2026-09-17
-// (Opus 5 before that, from 2026-08-04). It still COINCIDES with NARRATION_MODEL — but it stays a
-// SEPARATE constant on purpose, for two reasons that outlive the coincidence:
-//   (a) Most of them FORCE tool use (tool_choice {type:'tool'} or {type:'any'}); Opus 4.6 on Bedrock
-//       accepts both (probed 2026-09-17 — see the narration block above), but it's a hard requirement
-//       the narration model must also meet if the two ever diverge again (Fable, e.g., rejected it).
-//   (b) The judge rubrics/score thresholds were calibrated against Opus-tier judging — moving
-//       this would silently shift every score (re-run eval/calibrate.ts after any bump).
-// Upgraded Sonnet→Opus 2026-06-09 at founder request (the old NARRATION_MODEL_ALTERNATES
-// catalog is gone with them).
+// scout is a SEPARATE ENRICH tier — see ENRICH_MODELS below.) It COINCIDES with NARRATION_MODEL — but it
+// stays a SEPARATE constant on purpose, for two reasons that outlive the coincidence:
+//   (a) Most of them FORCE a function call; Gemini 3.8 Flash accepts it (probed 2026-09-23), but it's a
+//       hard requirement the narration model must also meet if the two ever diverge again (Fable, e.g.,
+//       rejected Claude's equivalent).
+//   (b) The judge rubrics/score thresholds are calibrated against THIS tier's judging — moving it would
+//       silently shift every score (re-run eval/calibrate.ts after any bump).
 //
 // ⚠ AND THE COINCIDENCE ITSELF IS A KNOWN RISK, not just an accident of availability: a judge running
 // the same model that wrote the text is the documented setting for SELF-PREFERENCE BIAS, whose
@@ -105,19 +105,17 @@ export const NARRATION_MODEL = CLAUDE_MODELS.opus
 // verifiable check rather than a preference, so it is far less exposed. Sources + the cheap probe that
 // would settle it: docs/research/llm-judge-bias-and-prompt-optimization.md. Pointing THIS constant at
 // another family is the one-line mitigation if that probe ever shows the bias is real here.
-export const JUDGMENT_MODEL = CLAUDE_MODELS.opus
+export const JUDGMENT_MODEL = LLM_MODELS.quality
 
 // ENRICH tier — the corpus `enrich` step's fact-sheet builder (pipeline/scout.ts buildCorpusFactSheet).
 // The fact-sheet builder SELECTS verbatim spans + grounded bundles; that is an easier call than narration
-// judgment AND it runs corpus-scale (~hundreds of POIs, once per region), which is why the DEFAULT used to
-// be Sonnet 4.6 ($3/$15 per MTok) to keep the one-time bill modest. ⚠ Since 2026-09-17 BOTH choices
-// resolve to Opus 4.6 on Bedrock ("Opus 4.6 for everything" — founder) and bill at Opus rates; the
-// `--model sonnet|opus` switch is kept so the tier can be re-split by editing `CLAUDE_MODELS.sonnet`
-// alone, but today it selects nothing. Both ACCEPT a forced tool_choice {type:'any'} (the fact-sheet
-// builder forces it every turn) — only Fable rejected that (re-probed on Bedrock/Opus 4.6 2026-09-17).
+// judgment AND it runs corpus-scale (~hundreds of POIs, once per region), which is why it once had a
+// cheaper default tier. ⚠ Since 2026-09-23 BOTH choices resolve to Gemini 3.8 Flash. The `--model
+// sonnet|opus` operator switch keeps its old tier LABELS so admin jobs and runbooks keep working: `sonnet`
+// = `LLM_MODELS.enrich`, `opus` = the judgment tier. Editing either shared key re-splits them.
 export const ENRICH_MODELS = {
-  sonnet: CLAUDE_MODELS.sonnet,
-  opus: JUDGMENT_MODEL, // CLAUDE_MODELS.opus ('claude-opus-5' since 2026-08-04)
+  sonnet: LLM_MODELS.enrich,
+  opus: JUDGMENT_MODEL,
 } as const
 export type EnrichModelChoice = keyof typeof ENRICH_MODELS
 

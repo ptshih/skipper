@@ -4,7 +4,7 @@
 // never run unattended, so the logic that decides PASS/FAIL is deliberately pure and lives in
 // ./checks — and it is only trustworthy if something exercises it for free. That is here.
 //
-// ⚠ WHAT THIS FILE DOES NOT DO: call a model. Nothing in it touches Anthropic, needs a key, or reads
+// ⚠ WHAT THIS FILE DOES NOT DO: call a model. Nothing in it touches a model, needs credentials, or reads
 // the database. If a future edit makes this test need either, that edit moved logic out of the pure
 // half and IS the bug.
 
@@ -131,8 +131,25 @@ describe('voice gate', () => {
     expect(r.findings.join(' ')).toContain('TOOL CALL leaked')
   })
 
+  // ⚠ The pattern above was written from a CLAUDE leak. Gemini (the planner's model since 2026-09-23)
+  // leaks in its own vocabulary — Python-style calls on its `default_api` namespace, fenced as
+  // `tool_code` — and a guard that only knows the old family's markup scores the new family's leak clean.
+  // None was observed in the first 67 Gemini eval turns; this is the blind spot named before it bites.
+  test('a Gemini-shaped leaked call fails too', () => {
+    for (const leaked of [
+      'default_api.plan_route(start_anchor_id="a1", end_anchor_id="b2", say="There she is.")',
+      'Drawing it up.\n```tool_code\nprint(default_api.plan_route(start_anchor_id="a1"))\n```',
+    ]) {
+      const r = voiceCheck(outcome({ say: leaked }))
+      expect(r.pass).toBe(false)
+      expect(r.findings.join(' ')).toContain('TOOL CALL leaked')
+    }
+  })
+
   test('an ordinary short line passes', () => {
     expect(voiceCheck(outcome({ say: "Kings Beach out to Incline, and back around. Want me to draw that up?" })).pass).toBe(true)
+    // Prose near the new shapes must stay clean — the guard keys on the NAMESPACE and the fence.
+    expect(voiceCheck(outcome({ say: 'The default route runs the west shore, and the tool shed is closed.' })).pass).toBe(true)
   })
 })
 

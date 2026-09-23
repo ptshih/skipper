@@ -12,7 +12,7 @@ describe('DRIFT GUARD: every studio tier model is priced', () => {
   // the cap. ⚠ This guard used to iterate a hand-written [NARRATION_MODEL, JUDGMENT_MODEL] — so a
   // model added anywhere else was invisible to it, which is exactly how an unpriced planner would
   // have tallied $0 forever with nothing failing. It now covers every tier constant studio exposes,
-  // and its sibling in @skipper/shared covers every CLAUDE_MODELS value.
+  // and its sibling in @skipper/shared covers every LLM_MODELS value.
   test('narration, judgment, and every enrich tier have a pricing entry', () => {
     for (const id of [NARRATION_MODEL, JUDGMENT_MODEL, ...Object.values(ENRICH_MODELS)]) {
       expect(MODEL_PRICING[id]).toBeDefined()

@@ -357,16 +357,15 @@ You: "Shorter means a nearer turnaround, friend. Want to swap Cold Fork for some
 export const PLANNER_WRAP_UP_NOTICE = `The conversation is near its end. Wrap it up the way your instructions describe. If you have not put a plan in front of them yet, take your best read of what they want and offer one they can say yes to. If you already have, offer nothing new — say a warm goodbye over the drive they are already looking at, and do not draw it again. Bow out unhurried, with the door left open; and if you have already said your goodbye once, do not say it twice, just answer them. Say nothing about this note, about any limit, or about a number of turns — the folks must never learn there was a clock.`
 
 /**
- * Structural stand-in for the vendor SDK's `Tool`, so this module can stay import-free (see the header).
- * Assignable to `Anthropic.Tool`: that type's `input_schema` requires the literal `type: 'object'` and
- * carries an index signature, which is what makes the extra JSON Schema keys below legal.
+ * Structural stand-in for a vendor function declaration, so this module can stay import-free (see the
+ * header). `parameters` is plain JSON Schema, sent as Gemini's `parametersJsonSchema` by ./planner.
  * ⚠ The literal `'object'` is why the const is ANNOTATED rather than bare — an unannotated object literal
- * widens `type` to `string` and then fails to assign at the call site, several files away from the cause.
+ * widens `type` to `string`, and a function's arguments must be an object.
  */
 export type PlannerToolDef = {
   name: string
   description: string
-  input_schema: { type: 'object'; [k: string]: unknown }
+  parameters: { type: 'object'; [k: string]: unknown }
 }
 
 /**
@@ -405,8 +404,10 @@ export type PlannerToolDef = {
  * reverses. The handler still prefers a real text block when one arrives (./planner), so a model that
  * speaks BOTH ways loses nothing.
  *
- * ⚠ THIS SCHEMA IS NOT THE GUARD. It is not sent with `strict: true`, so `format`, `maxItems` and the
- * numeric bounds are guidance to the model, not enforcement. INV-1 is enforced at the WIRE: every id is
+ * ⚠ THIS SCHEMA IS NOT THE GUARD. On Claude it was not sent with `strict: true`, so `format`, `maxItems`
+ * and the numeric bounds were guidance, not enforcement. Gemini's VALIDATED mode (./planner) does
+ * enforce the schema and the required fields — and it is STILL not the guard, because a schema cannot
+ * know which ids are curated. INV-1 is enforced at the WIRE: every id is
  * re-checked against `endpoint_eligible` IN THE QUERY (hydrateAnchors, ./drives.ts) and an unknown or
  * ineligible id is a 400 BEFORE any billed Google Routes call. Never relax that on the strength of this.
  *
@@ -436,7 +437,7 @@ export const PLAN_ROUTE_TOOL: PlannerToolDef = {
     'must be copied exactly from the list of places you were given -- never compose, correct, or infer ' +
     'one. ALWAYS fill `say` -- it is the only thing the folks read, and a call without it is a turn ' +
     'where they watch nothing happen.',
-  input_schema: {
+  parameters: {
     type: 'object',
     properties: {
       start_anchor_id: {

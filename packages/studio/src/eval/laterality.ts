@@ -4,7 +4,7 @@
 // so the direction of travel is unknown at generation time. Naming a side of the road ("on your
 // left", "the right-hand side") therefore asserts a spatial place-fact the narrator was never given
 // — an ungrounded claim. (This rule OUTLIVED roam: the mode is gone, the geometry that motivates it
-// is not.) The Opus grounding judge would flag it too (the side line is NOT on the well), but this
+// is not.) The model grounding judge would flag it too (the side line is NOT on the well), but this
 // catches it for FREE and reliably, so it rides as a deterministic grounding finding that feeds the
 // same gate + the same optimize() avoid[] hook. It was an inline guard in generate-narrations.ts;
 // promoted into the panel so there is ONE loop and ONE gate.

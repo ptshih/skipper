@@ -1,4 +1,4 @@
-// curate-places — build a region's CURATED set of Google Places. SPENDS $ (Anthropic draft + Google
+// curate-places — build a region's CURATED set of Google Places. SPENDS $ (model draft + Google
 // Places resolve) + MUTATES DB on --apply.
 //
 // The offline, per-region step that builds the PLANNER's allowlist of DESTINATIONS. An LLM drafts the
@@ -19,29 +19,29 @@
 // docs/designs/places-endpoints-spec.md.
 //
 // SOP (docs/guides/ops-scripts-sop.md): PREVIEWS by default (the dry run makes NO paid calls — it just
-// explains what --apply will do); --apply spends (Anthropic + Places) and writes. FOUNDER-GATED: a paid
+// explains what --apply will do); --apply spends (model + Places) and writes. FOUNDER-GATED: a paid
 // run needs an explicit "go" (CLAUDE.md), never inferred.
 //
 // Usage:
 //   dotenvx run -f .env.development -- bun packages/studio/src/curate-places.ts
 //   ... --apply                  run it (drafts + resolves + UPSERTS `places` — never deletes)
 //   ... --region <slug>          curate a region (REQUIRED — no default; resolves to its bbox)
-//   ... --model sonnet           draft with Sonnet instead of the default Opus (cheaper A/B)
+//   ... --model sonnet           draft on the `sonnet` tier LABEL instead of the default `opus` (both Gemini today)
 //   ... --target 100             roughly how many places to draft (guidance to the model; 8-250)
 //   ... --max-cost 1             abort before any spend if the LLM estimate exceeds this
 
 import { sql } from 'drizzle-orm'
 import { db } from '@skipper/db'
 import { places } from '@skipper/db/schema'
-import Anthropic from '@anthropic-ai/sdk'
 import { announce, maxCostFlag, parseFlags } from './pipeline/ops'
 import { requireRegionBboxes, requireRegionKey, resolveRegion, type RegionBbox } from './pipeline/region'
 import { runJob } from './pipeline/job-progress'
 import { withRetry, sleep } from './pipeline/http'
 import { isAddressLike, isBusinessLike, isParkingLike, nameDisagrees, resolveCuratedPlaceInBboxes, type CuratedPlace, type PlacesBbox } from './pipeline/places'
-import { ENRICH_MODELS, getAnthropic, type EnrichModelChoice } from './models'
-import { BEDROCK, llmSpendLines, llmSpentUsd, recordModelUsage, usageUsd } from '@skipper/shared'
-import { ANTHROPIC_READY, GOOGLE_READY, requireEnv } from './config'
+import { ENRICH_MODELS, getGemini, type EnrichModelChoice } from './models'
+import { geminiUsage, VERTEX, llmSpendLines, llmSpentUsd, recordModelUsage, usageUsd } from '@skipper/shared'
+import { finishReason, forcedToolRequest, toolArgs, type ToolParameters } from './pipeline/tool-call'
+import { LLM_READY, GOOGLE_READY, requireEnv } from './config'
 
 /** The draft call's pre-run estimate, priced through the SAME `usageUsd` the real tally uses rather
  *  than a hand-kept dollar constant (pre-run estimate only; the real tally prints after).
@@ -58,12 +58,15 @@ import { ANTHROPIC_READY, GOOGLE_READY, requireEnv } from './config'
  *  costs money. */
 const EST_INPUT_TOKENS = 1_400
 const EST_TOKENS_PER_PLACE = 80
+/** Thinking bills as output and Gemini 3.8 always thinks (MEDIUM here); a flat allowance, generous for
+ *  the same reason as the figures above. */
+const EST_THINKING_TOKENS = 8_000
 
 /** ⚠ FAILS CLOSED on an unpriced model. `usageUsd` returns 0 for one it does not recognise — honest
  *  for a post-hoc tally, but as a PRE-SPEND bound a $0 estimate silently clears every `--max-cost`,
  *  which is the opposite of what this number exists for. */
 function estimateDraftUsd(modelId: string, targetN: number): number {
-  const usd = usageUsd(modelId, { input_tokens: EST_INPUT_TOKENS, output_tokens: targetN * EST_TOKENS_PER_PLACE })
+  const usd = usageUsd(modelId, { input_tokens: EST_INPUT_TOKENS, output_tokens: targetN * EST_TOKENS_PER_PLACE + EST_THINKING_TOKENS })
   if (usd === 0) {
     throw new Error(
       `curate-places: ${modelId} is not in MODEL_PRICING — refusing to estimate a paid draft at $0. Add it in @skipper/shared (spend.ts).`,
@@ -94,8 +97,8 @@ const model = ENRICH_MODELS[modelChoice]
 //     Places page now shows it — "it is in the table" is only a promise if someone can check it.
 // ⚠ THE DEFAULT WAS SIZED FOR A UI THAT NO LONGER EXISTS. 30 was right when this set fed the
 // tap-to-pick create form — a list a human THUMB-SCROLLED, where 120 is a wall. `GET /drives/anchors`
-// was deleted end to end in 1.1 and the set's only consumer is now the PLANNER's roster, which Opus
-// reads whole from a cached prefix. Thumb-scrolling stopped binding; MAX_PLAN_ANCHORS (200) and model
+// was deleted end to end in 1.1 and the set's only consumer is now the PLANNER's roster, which the
+// planner model reads whole on every turn. Thumb-scrolling stopped binding; MAX_PLAN_ANCHORS (200) and model
 // attention are what bind, and every name added is one fewer in-persona "do not know that one".
 const targetCount = Math.max(8, Math.min(250, Number(flags.value('target')) || 100))
 const maxCostUsd = maxCostFlag(flags)
@@ -114,11 +117,11 @@ interface PlaceDraft {
   rationale?: string
 }
 
-const DRAFT_TOOL: Anthropic.Tool = {
+const DRAFT_TOOL: { name: string; description: string; parameters: ToolParameters } = {
   name: 'draft_curated_places',
   description:
     'Return the curated set of real, recognizable DESTINATIONS for this region — places a drive can start at or finish at.',
-  input_schema: {
+  parameters: {
     type: 'object',
     properties: {
       places: {
@@ -253,40 +256,36 @@ async function draftCuratedPlaces(
   bbox: readonly RegionBbox[],
   targetN: number,
 ): Promise<PlaceDraft[]> {
-  // ⚠ THIS MUST STREAM, and that is a hard SDK constraint rather than a preference. For a
-  // non-streaming call the SDK computes `(60 * 60 * 1000 * max_tokens) / 128_000` and THROWS when the
-  // result exceeds its 10-minute default (`calculateNonstreamingTimeout`, verified in the installed
-  // 0.112.1 source) — so any `max_tokens` above ~21_300 fails INSTANTLY, client-side, before a request
-  // is ever sent. A 250-place draft needs more than that, which is what pushed this off `.create()`.
-  // The failure would at least have been loud and free; it is recorded here so the next raise does not
-  // have to rediscover the arithmetic. `finalMessage()` returns the same Message `.create()` did, so
-  // the truncation guard and tool-block read below are unchanged.
-  const stream = getAnthropic('curate-places needs it to draft the candidate set').messages.stream({
-    model,
-    // Sized for the LARGEST draft the clamp allows (250 places, each a name + Places query + rank +
-    // rationale), not for the default. A ceiling is not a charge — only tokens actually emitted are
-    // billed — so headroom here is free, while too little silently truncates the list.
-    max_tokens: 48_000,
-    system: draftSystem(regionName, bbox, targetN),
-    tools: [DRAFT_TOOL],
-    tool_choice: { type: 'tool', name: DRAFT_TOOL.name },
-    messages: [{ role: 'user', content: `Draft the curated places for ${regionName}.` }],
-  })
-  const response = await stream.finalMessage()
-  recordModelUsage(model, response.usage)
-  // ⚠ CHECK THIS BEFORE READING THE TOOL BLOCK. The entire candidate list is ONE tool call, so a
-  // max_tokens stop leaves a half-written JSON list that the SDK still surfaces as a `tool_use` block —
-  // HTTP 200, no error, and a SHORTER list than asked for, which is indistinguishable from the model
-  // simply being selective. That is exactly the "a run that did nothing must not settle green" trap:
-  // the operator would prune and resolve a truncated set believing it was the whole draft.
-  if (response.stop_reason === 'max_tokens') {
+  // ⚠ This streamed on Claude, because that SDK refused a non-streaming call whose max_tokens implied
+  // more than ten minutes. The Gen AI SDK has no such rule, and a forced function call's args arrive
+  // whole in one chunk anyway, so a plain generateContent is the honest shape now.
+  const response = await getGemini('curate-places needs it to draft the candidate set').models.generateContent(
+    forcedToolRequest({
+      model,
+      // Sized for the LARGEST draft the clamp allows (250 places, each a name + Places query + rank +
+      // rationale) PLUS the thinking that shares this cap, not for the default. A ceiling is not a
+      // charge — only tokens actually emitted are billed — so headroom here is free, while too little
+      // silently truncates the list. Gemini 3.8's output ceiling is 65,536.
+      maxTokens: 60_000,
+      thinkingLevel: 'MEDIUM',
+      system: draftSystem(regionName, bbox, targetN),
+      tool: DRAFT_TOOL,
+      user: `Draft the curated places for ${regionName}.`,
+    }),
+  )
+  recordModelUsage(model, geminiUsage(response.usageMetadata))
+  // ⚠ CHECK THIS BEFORE READING THE CALL. The entire candidate list is ONE function call, so a
+  // MAX_TOKENS stop can leave a shorter list than asked for — HTTP 200, no error, indistinguishable from
+  // the model simply being selective. That is exactly the "a run that did nothing must not settle green"
+  // trap: the operator would prune and resolve a truncated set believing it was the whole draft.
+  if (finishReason(response) === 'MAX_TOKENS') {
     throw new Error(
-      `curate-places: the draft was TRUNCATED at max_tokens (asked for ~${targetN} places) — the list is incomplete. Raise max_tokens or lower --target.`,
+      `curate-places: the draft was TRUNCATED at max tokens (asked for ~${targetN} places) — the list is incomplete. Raise maxTokens or lower --target.`,
     )
   }
-  const toolUse = response.content.find((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
-  if (!toolUse) throw new Error('curate-places: the draft model returned no tool call.')
-  const out = toolUse.input as { places?: PlaceDraft[] }
+  const args = toolArgs(response, DRAFT_TOOL.name)
+  if (args === undefined) throw new Error(`curate-places: the draft model returned no tool call (finish ${finishReason(response)}).`)
+  const out = (args ?? {}) as { places?: PlaceDraft[] }
   // ⚠ `rank` is validated as a NUMBER, not for truthiness — rank 0 would be falsy and a model that
   // 0-indexes its own ranking would have its best places silently dropped.
   const drafts = (out.places ?? []).filter((p) => p && p.name && p.query && typeof p.rank === 'number')
@@ -330,7 +329,7 @@ async function main(): Promise<void> {
   }
 
   // --apply spends. Fail LOUD + EARLY on missing creds rather than deep inside the draft/resolve.
-  if (!ANTHROPIC_READY()) throw new Error(`${BEDROCK.tokenEnv} is not set — \`curate-places --apply\` needs it.`)
+  if (!LLM_READY()) throw new Error(`Google Cloud model credentials are not ready (${VERTEX.projectEnv} plus ADC or a key file) — \`curate-places --apply\` needs them.`)
   if (!GOOGLE_READY()) throw new Error('GOOGLE_MAPS_API_KEY is not set — `curate-places --apply` needs Places (New) enabled on it.')
   const apiKey = requireEnv('GOOGLE_MAPS_API_KEY')
   if (estUsd > maxCostUsd) {

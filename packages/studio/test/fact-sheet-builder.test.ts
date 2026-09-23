@@ -6,8 +6,8 @@
 // leave the place un-enriched.
 
 import { describe, expect, test } from 'bun:test'
-import type Anthropic from '@anthropic-ai/sdk'
-import { buildCorpusFactSheet, type EnrichInput, type EnrichTools, type ScoutModelCall, type SourcedFacts } from '../src/pipeline/scout'
+import type { Content } from '@google/genai'
+import { buildCorpusFactSheet, type EnrichInput, type EnrichTools, type ScoutModelCall, type ScoutReply, type SourcedFacts } from '../src/pipeline/scout'
 
 const INPUT: EnrichInput = {
   name: 'Camp Richardson',
@@ -32,19 +32,38 @@ const WD: SourcedFacts = {
   attribution: { source: 'wikidata', sourceId: 'Q9', url: 'https://www.wikidata.org/wiki/Q9', license: 'CC0', retrievedAt: 't' },
 }
 
-const msg = (calls: { name: string; input: unknown }[]): Anthropic.Message =>
+/** A Gemini reply: function calls as parts (the first carrying a thought signature, as the live API
+ *  does), finish STOP even with calls present, usage in `usageMetadata`. */
+const msg = (calls: { name: string; input: unknown }[]): ScoutReply =>
   ({
-    content: calls.map((c, i) => ({ type: 'tool_use', id: `t${i}`, name: c.name, input: c.input })),
-    usage: { input_tokens: 100, output_tokens: 20 },
-  }) as unknown as Anthropic.Message
+    candidates: [
+      {
+        content: {
+          role: 'model',
+          parts: calls.map((c, i) => ({
+            functionCall: { id: `t${i}`, name: c.name, args: c.input },
+            ...(i === 0 ? { thoughtSignature: `sig-${c.name}` } : {}),
+          })),
+        },
+        finishReason: 'STOP',
+      },
+    ],
+    usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 15, thoughtsTokenCount: 5 },
+  }) as ScoutReply
 
-const textOnly = (): Anthropic.Message =>
-  ({ content: [{ type: 'text', text: 'hmm' }], usage: { input_tokens: 5, output_tokens: 5 } }) as unknown as Anthropic.Message
+const textOnly = (): ScoutReply =>
+  ({
+    candidates: [{ content: { role: 'model', parts: [{ text: 'hmm' }] }, finishReason: 'STOP' }],
+    usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 5 },
+  }) as ScoutReply
 
-const truncated = (): Anthropic.Message =>
-  ({ content: [], stop_reason: 'max_tokens', usage: { input_tokens: 5, output_tokens: 5 } }) as unknown as Anthropic.Message
+const truncated = (): ScoutReply =>
+  ({
+    candidates: [{ content: { role: 'model', parts: [] }, finishReason: 'MAX_TOKENS' }],
+    usageMetadata: { promptTokenCount: 5, candidatesTokenCount: 5 },
+  }) as ScoutReply
 
-const script = (...turns: Anthropic.Message[]): ScoutModelCall => {
+const script = (...turns: ScoutReply[]): ScoutModelCall => {
   let i = 0
   return async () => {
     if (i >= turns.length) throw new Error('buildCorpusFactSheet asked for more turns than scripted')
@@ -131,7 +150,43 @@ describe('buildCorpusFactSheet — verbatim span selection + bundle inclusion', 
     expect(await buildCorpusFactSheet(INPUT, tools(), { call })).toBeNull()
   })
 
-  test('max_tokens truncation → null', async () => {
+  // ⚠ Gemini 3 400s a follow-up turn whose earlier function call lost its thought signature (probed
+  // 2026-09-23), and it requires one functionResponse per call with the call's own id and name. So the
+  // loop must send the model's turn back UNTOUCHED — the one property a hand-rebuilt history breaks.
+  test("echoes the model's turn VERBATIM (signature included) and answers every fetch by id + name", async () => {
+    const sent: Content[][] = []
+    const turns = [
+      msg([{ name: 'fetch_geology', input: {} }, { name: 'fetch_wikidata', input: {} }]),
+      msg([{ name: 'finalize_fact_sheet', input: { keepSpanIds: [0], includeGeology: true, includeWikidata: false, reason: 'x' } }]),
+    ]
+    let i = 0
+    const call: ScoutModelCall = async ({ contents }) => {
+      sent.push(structuredClone(contents))
+      return turns[i++]!
+    }
+    await buildCorpusFactSheet(INPUT, tools(), { call })
+    const second = sent[1]!
+    expect(second).toHaveLength(3)
+    expect(second[1]).toEqual(turns[0]!.candidates![0]!.content!) // byte-for-byte, signature and all
+    expect(second[1]!.parts![0]!.thoughtSignature).toBe('sig-fetch_geology')
+    expect(second[2]!.role).toBe('user')
+    expect(second[2]!.parts!.map((p) => [p.functionResponse?.id, p.functionResponse?.name])).toEqual([
+      ['t0', 'fetch_geology'],
+      ['t1', 'fetch_wikidata'],
+    ])
+    expect(second[2]!.parts![0]!.functionResponse!.response).toEqual({ output: '- The bedrock here is granodiorite.' })
+  })
+
+  test('usage adds up across turns, thinking counted as output', async () => {
+    const call = script(
+      msg([{ name: 'fetch_geology', input: {} }]),
+      msg([{ name: 'finalize_fact_sheet', input: { keepSpanIds: [0], includeGeology: false, includeWikidata: false, reason: 'x' } }]),
+    )
+    const r = await buildCorpusFactSheet(INPUT, tools(), { call })
+    expect(r!.usage).toEqual({ inputTokens: 200, outputTokens: 40 })
+  })
+
+  test('MAX_TOKENS truncation → null', async () => {
     expect(await buildCorpusFactSheet(INPUT, tools(), { call: script(truncated()) })).toBeNull()
   })
 

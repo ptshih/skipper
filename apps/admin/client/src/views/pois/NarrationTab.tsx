@@ -42,7 +42,7 @@ export function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarrat
 
   // Regenerate = re-NARRATE this one POI from its current facts + corrections (a fresh script), then
   // re-score + re-synthesize — the single-POI form of generate_narrations (include-ids implies --force).
-  // Closes the ear-pass → fix-a-fact → re-hear loop without re-running the whole region. Spends Anthropic + TTS.
+  // Closes the ear-pass → fix-a-fact → re-hear loop without re-running the whole region. Spends model + TTS.
   const regenMut = useMutation({
     mutationFn: () =>
       api.createJob({ kind: 'generate_narrations', includeIds: [poiId], force: true, apply: true, confirm: true }),
@@ -51,7 +51,7 @@ export function NarrationTab({ poiId, hasNarration }: { poiId: string; hasNarrat
   async function handleRegenerate() {
     if (!(await confirm({
       title: 'Regenerate narration?',
-      body: 'Re-narrates this POI from its CURRENT facts + corrections (a fresh script), then re-scores and re-synthesizes. Spends Anthropic + TTS credits. Use this after a fact-edit; Re-synth only re-voices the existing script.',
+      body: 'Re-narrates this POI from its CURRENT facts + corrections (a fresh script), then re-scores and re-synthesizes. Spends model + TTS credits. Use this after a fact-edit; Re-synth only re-voices the existing script.',
       confirmLabel: 'Regenerate',
     }))) return
     regenMut.mutate()

@@ -17,10 +17,8 @@
 // every drive that reuses it (like `kind`). Empirical grounding (2026-06-19 probe of the 460 enriched POIs):
 // 460/460 resolve to a Wikidata entity, only 21 lack P31 (→ fallback), 48 are multi-P31 (→ tie-break).
 
-import type { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk'
-import Anthropic from '@anthropic-ai/sdk'
-import { CLAUDE_MODELS, type DeliveryRegister } from '@skipper/shared'
-import { recordModelUsage } from '@skipper/shared'
+import { geminiUsage, LLM_MODELS, recordModelUsage, type DeliveryRegister } from '@skipper/shared'
+import { forcedToolRequest, toolArgs, type ReplyLike, type ToolCallClient, type ToolParameters } from './tool-call'
 import { WDQS_ENDPOINT, WDQS_USER_AGENT } from '../config'
 import { fetchWithRetry } from './http'
 
@@ -161,10 +159,10 @@ const FALLBACK_SYSTEM = `You assign ONE delivery register to a place in a road-t
 - civic: a piece of infrastructure or public works — a dam, bridge, road, reservoir, power station, railway station, canal, tunnel.
 Pick the single best fit. If a place is built infrastructure AND historic, prefer civic. If it is a settlement, prefer town. Call the tool with your choice.`
 
-const FALLBACK_TOOL: Anthropic.Tool = {
+const FALLBACK_TOOL: { name: string; description: string; parameters: ToolParameters } = {
   name: 'register',
   description: 'Report the single best delivery register for this place.',
-  input_schema: {
+  parameters: {
     type: 'object',
     properties: { register: { type: 'string', enum: ['landscape', 'story', 'town', 'civic'] } },
     required: ['register'],
@@ -173,14 +171,10 @@ const FALLBACK_TOOL: Anthropic.Tool = {
 }
 
 /** One model turn — injectable for tests. */
-export type RegisterModelCall = (args: {
-  system: string
-  tools: Anthropic.Tool[]
-  messages: Anthropic.MessageParam[]
-}) => Promise<Anthropic.Message>
+export type RegisterModelCall = (args: { system: string; user: string }) => Promise<ReplyLike>
 
 /** LLM fallback for a POI that matched no structural anchor: classify from its name/kind/fact sheet
- *  with a cheap model (Haiku) forced through the `register` tool. Defaults to 'story' on any refusal/
+ *  with the cheap SUMMARY tier forced through the `register` tool. Defaults to 'story' on any refusal/
  *  malformed reply (the safest catch-all — it's the warm narration base). */
 export async function classifyRegisterLLM(
   input: { name: string; kind: string | null; factSheet: string },
@@ -188,31 +182,29 @@ export async function classifyRegisterLLM(
 ): Promise<DeliveryRegister> {
   const kindLine = input.kind ? `\nWikidata type: ${input.kind}` : ''
   const user = `Place: ${input.name}${kindLine}\n\nFACT SHEET:\n${input.factSheet}`
-  const response = await call({
-    system: FALLBACK_SYSTEM,
-    tools: [FALLBACK_TOOL],
-    messages: [{ role: 'user', content: user }],
-  })
-  const toolUse = response.content.find((c): c is Anthropic.ToolUseBlock => c.type === 'tool_use')
-  const register = (toolUse?.input as { register?: string } | undefined)?.register
+  const response = await call({ system: FALLBACK_SYSTEM, user })
+  const register = (toolArgs(response, FALLBACK_TOOL.name) as { register?: string } | undefined)?.register
   if (register === 'landscape' || register === 'town' || register === 'civic') return register
   return 'story'
 }
 
-/** The real model call backing classifyRegisterLLM (forced tool_choice so every reply classifies).
- *  `CLAUDE_MODELS.haiku` is the SUMMARY/classifier tier, not necessarily Haiku — see @skipper/shared. */
-export function makeRegisterCall(getAnthropic: () => Pick<AnthropicBedrock, 'messages'>): RegisterModelCall {
-  return async ({ system, tools, messages }) => {
-    const response = await getAnthropic().messages.create({
-      model: CLAUDE_MODELS.haiku,
-      max_tokens: 256,
-      system,
-      tools,
-      tool_choice: { type: 'tool', name: 'register' },
-      messages,
-    })
-    // Tally the Haiku spend so a paid classify run reports its cost like enrich/generate do.
-    recordModelUsage(CLAUDE_MODELS.haiku, response.usage)
+/** The real model call backing classifyRegisterLLM (a forced function call so every reply classifies).
+ *  `LLM_MODELS.summary` is the cheap classifier tier — see @skipper/shared. */
+export function makeRegisterCall(getClient: () => ToolCallClient): RegisterModelCall {
+  return async ({ system, user }) => {
+    const response = await getClient().models.generateContent(
+      forcedToolRequest({
+        model: LLM_MODELS.summary,
+        system,
+        user,
+        // One enum word of output; LOW thinking is plenty for a four-way pick, and shares this cap.
+        maxTokens: 1_024,
+        thinkingLevel: 'LOW',
+        tool: FALLBACK_TOOL,
+      }),
+    )
+    // Tally the spend so a paid classify run reports its cost like enrich/generate do.
+    recordModelUsage(LLM_MODELS.summary, geminiUsage(response.usageMetadata))
     return response
   }
 }

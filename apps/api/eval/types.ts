@@ -14,7 +14,7 @@
 // can revoke it). apps/api/Dockerfile copies ONLY `apps/api/src`, so nothing in this directory ever
 // reaches the production image — the same reason `apps/api/test` is safe to keep here.
 //
-// ⚠ IT NEVER RUNS UNDER `bun test`. A replay spends real Anthropic tokens on every turn, and
+// ⚠ IT NEVER RUNS UNDER `bun test`. A replay spends real model tokens on every turn, and
 // CLAUDE.md forbids an inferred paid run. The CLI is preview-by-default and bills only on `--apply`;
 // the pure functions in ./checks are what the unit tests exercise, with no network at all.
 
