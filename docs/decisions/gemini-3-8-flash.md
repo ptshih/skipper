@@ -1,6 +1,6 @@
 # Gemini 3.8 Flash on Vertex AI — every model call
 
-> **Status:** ✅ DECIDED + BUILT 2026-09-23 (founder: "switch it back to gcp gemini flash 3.8", scope
+> **Status:** ✅ DECIDED + BUILT + DEPLOYED 2026-09-23 (`00eef324`, canary green — § Prod canary) (founder: "switch it back to gcp gemini flash 3.8", scope
 > confirmed as ALL calls). Supersedes [bedrock-opus-4-6.md](bedrock-opus-4-6.md). Narration, every eval
 > judge, enrich, curate, the admin helpers and the LIVE PLANNER now call `gemini-3.8-flash` through
 > `@google/genai` on Vertex AI's **`us` multi-region**. The grounding gate was re-calibrated and the
@@ -100,6 +100,19 @@ a gate to turn a run green is the thing this repo refuses to do). The judge note
 slip (nautical — off-persona) in the last conversation. `durations` 1 (the known "Two hours …" detector
 shape — do not tighten it); `repeats` 23 (Opus 4.6: 28, Opus 5: 12), again mostly the place-name
 read-backs the prompt requires; echoes 9/59. Raw turns: `apps/api/eval/.runs/2026-09-23T22-09-12-253Z-mem.json`.
+
+## Prod canary (2026-09-23, after pushing `00eef324`)
+
+All three triggered builds SUCCESS (api, admin, studio; site correctly not triggered). `skipper-api-00169-x6b
+→ 00170-rt9` at 100% traffic; admin `→ 00105-4wz`. `/health` 200 in 0.25 s (baseline 0.31 s), `/version`
+200. One deliberate real `POST /drives/plan` on prod (founder go): 200 in 6.3 s, an in-persona read-back
+of Tahoe City → Emerald Bay State Park asking for the yes. Prod's own `plan_spend` line: revision
+`00170-rt9`, `model`/`served_by` `gemini-3.8-flash`, `stop_reason: STOP`, `usage_reported: true`, 132
+anchors, 11,394 in / 546 out (520 thinking), **$0.011652** — which proves the runtime service account
+reaches Vertex (the one thing that could not be proven from a laptop). Zero ERROR-severity lines on
+skipper-api or skipper-admin in the 20 minutes after the deploy (baseline: none in the prior 2 h). Not
+exercised on prod: the admin helpers (behind IAP; same forced-call shape as the drafts proven locally) and
+a studio job run (paid, and nothing to run).
 
 ## Hardened after an independent review (same day)
 

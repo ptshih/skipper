@@ -41,14 +41,9 @@ survives deleting the newest item. `/todo` takes the max of the two.
 
 Every model call moved from Opus 4.6 on Bedrock to Gemini 3.8 Flash on Vertex AI
 ([docs/decisions/gemini-3-8-flash.md](docs/decisions/gemini-3-8-flash.md)). Built, tested, calibrated and
-probed live from a laptop; NOT pushed. Cloud Run authenticates by service account, so the order matters.
+probed live; pushed as `00eef324` and canaried green the same day (the record's "Prod canary").
 
-- [ ] #81 (ops, high, founder, doing) **Push, THEN canary — the IAM grant is DONE.** `roles/aiplatform.user`
-      was granted to `skipper-api` and `skipper-admin` on 2026-09-23, before the push. Without it every
-      `POST /drives/plan` is a 403 — `plan_spend` logs `err: permission_denied` and every rider hears the
-      outage line. Canary: one real `POST /drives/plan` on prod and read its `plan_spend` line
-      (`model: gemini-3.8-flash`, `usage_reported: true`); delete this item when it is green.
-- [ ] #82 (ops, low, founder, blocked: #81) **Unset the dead model secrets after a green canary** —
+- [ ] #82 (ops, low, founder) **Unset the dead model secrets — the canary is green (2026-09-23)** —
       `AWS_BEARER_TOKEN_BEDROCK`, `AWS_REGION`, `ANTHROPIC_API_KEY` in `.env.development` AND `.env.production`
       (`dotenvx set --unset`). Read by nothing now; kept only so a `git revert` stays a one-step rollback.
 - [ ] #83 (corpus, med, paid, founder) **Ear-test narration at HIGH vs MEDIUM thinking before the next
